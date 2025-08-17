@@ -1,0 +1,882 @@
+// Deuce League Database Schema - Prisma
+// Complete schema based on ERD analysis with relationship modifications
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// =============================================
+// DIVISION MODEL
+// =============================================
+
+model Division {
+  divisionId     Int     @id @default(autoincrement()) @map("division_id")
+  seasonId       Int     @map("season_id")
+  name           String
+  maxSize        Int     @map("max_size")
+  
+  // Relations
+  season         Season          @relation(fields: [seasonId], references: [seasonId])
+  matches        Match[]
+  registrations  Registration[]
+  leaderboards   Leaderboard[]
+  threads        Thread[]
+  
+  @@map("divisions")
+}
+
+// =============================================
+// REGISTRATION MODEL
+// =============================================
+
+model Registration {
+  registrationId    Int                @id @default(autoincrement()) @map("registration_id")
+  playerId          Int?               @map("player_id")
+  teamId            Int?               @map("team_id")
+  // TODO: Add check constraint to ensure exactly one of playerId or teamId is set
+  // @@check(raw: "(player_id IS NOT NULL AND team_id IS NULL) OR (player_id IS NULL AND team_id IS NOT NULL)")
+  divisionId        Int                @map("division_id")
+  paymentId         Int                @map("payment_id")
+  registeredAt      DateTime           @default(now()) @map("registered_at")
+  registrationType  RegistrationType   @map("registration_type")
+  flags             Int
+  isActive          Boolean            @default(true) @map("is_active")
+  
+  // Relations
+  player               Player?           @relation(fields: [playerId], references: [playerId])
+  team                 Team?             @relation(fields: [teamId], references: [teamId])
+  division             Division          @relation(fields: [divisionId], references: [divisionId])
+  payment              Payment           @relation(fields: [paymentId], references: [paymentId])
+  player1Matches       Match[]           @relation("Player1Matches")
+  player2Matches       Match[]           @relation("Player2Matches")
+  walkoverWins         Match[]           @relation("WalkoverWinner")
+  requestedReschedules MatchReschedule[] @relation("RequestedReschedules")
+  qualifications       PlayerQualification[]
+  leaderboards         Leaderboard[]
+  withdrawalRequests   WithdrawalRequest[]
+  teamReplacements     TeamReplacement[]
+  
+  @@map("registrations")
+}
+
+// =============================================
+// MATCH MODEL
+// =============================================
+
+model Match {
+  matchId                 Int                   @id @default(autoincrement()) @map("match_id")
+  divisionId              Int                   @map("division_id")
+  p1RegId                 Int                   @map("p1_reg_id")
+  p2RegId                 Int                   @map("p2_reg_id")
+  location                String?
+  status                  MatchStatus           @default(SCHEDULED)
+  scheduledAt             DateTime?             @map("scheduled_at")
+  isOneSet                Boolean               @default(false) @map("is_one_set")
+  walkoverWinnerRegId     Int?                  @map("walkover_winner_reg_id")
+  walkoverReason          String?               @map("walkover_reason")
+  // TODO: Add check constraint - if walkoverWinnerRegId is set, walkoverReason should be required
+
+  // Relations
+  division                Division        @relation(fields: [divisionId], references: [divisionId])
+  player1Registration     Registration    @relation("Player1Matches", fields: [p1RegId], references: [registrationId])
+  player2Registration     Registration    @relation("Player2Matches", fields: [p2RegId], references: [registrationId])
+  walkoverWinnerReg       Registration?   @relation("WalkoverWinner", fields: [walkoverWinnerRegId], references: [registrationId])
+  
+  // Relationships
+  matchResult             MatchResult?          // One to one (optional until match is completed)
+  matchReschedules        MatchReschedule[]     // One to many
+  threads                 Thread[]              // One to many
+  matchInvites            MatchInvite[]         // One to many
+
+  @@map("matches")
+  // TODO: Consider adding indexes for performance:
+  // @@index([scheduledAt])
+  // @@index([status])
+  // @@index([divisionId])
+}
+
+// =============================================
+// MATCH RESULT MODEL
+// =============================================
+
+model MatchResult {
+  resultId      Int    @id @default(autoincrement()) @map("result_id")
+  matchId       Int    @unique @map("match_id")  // Unique to enforce one-to-one
+  numberOfSets  Int    @map("number_of_sets")
+  p1Score       Json   @map("p1_score")
+  p2Score       Json   @map("p2_score")
+  comments      String?
+  
+  // Relations
+  match         Match  @relation(fields: [matchId], references: [matchId], onDelete: Cascade)
+  
+  @@map("match_results")
+}
+
+// =============================================
+// MATCH RESCHEDULE MODEL
+// =============================================
+
+model MatchReschedule {
+  requestId           Int                    @id @default(autoincrement()) @map("request_id")
+  matchId             Int                    @map("match_id")
+  requestedByRegId    Int                    @map("requested_by_reg_id")
+  reason              String
+  newScheduledAt      DateTime               @map("new_scheduled_at")
+  status              RescheduleStatus       @default(PENDING)
+  reviewedByAdminId   Int?                   @map("reviewed_by_admin_id")
+  reviewedAt          DateTime?              @map("reviewed_at")
+  
+  // Relations
+  match               Match          @relation(fields: [matchId], references: [matchId], onDelete: Cascade)
+  requestedBy         Registration   @relation("RequestedReschedules", fields: [requestedByRegId], references: [registrationId])
+  // Note: reviewedByAdminId would need Admin model when available
+  
+  @@map("match_reschedules")
+}
+
+// =============================================
+// THREAD MODEL
+// =============================================
+
+model Thread {
+  conversationId     Int                @id @default(autoincrement()) @map("conversation_id")
+  matchId            Int?               @map("match_id")
+  divisionId         Int?               @map("division_id")
+  conversationType   ConversationType   @map("conversation_type")
+  createdAt          DateTime           @default(now()) @map("created_at")
+  
+  // Relations
+  match              Match?             @relation(fields: [matchId], references: [matchId], onDelete: SetNull)
+  division           Division?          @relation(fields: [divisionId], references: [divisionId])
+  participants       ThreadParticipants[]
+  readStatuses       ThreadReadStatus[]
+  messages           Message[]
+  notifications      Notification[]
+  
+  @@map("threads")
+}
+
+// =============================================
+// FRIENDLY MATCH MODEL
+// =============================================
+
+model FriendlyMatch {
+  friendlyMatchId   Int                    @id @default(autoincrement()) @map("friendly_match_id")
+  hostId            Int                    @map("host_id")
+  participantId     Json                   @map("participant_id")
+  scheduledAt       DateTime               @map("scheduled_at")
+  location          String
+  status            FriendlyMatchStatus    @default(PENDING)
+  createdAt         DateTime               @default(now()) @map("created_at")
+  
+  // Relations
+  host              Player                 @relation(fields: [hostId], references: [playerId])
+  
+  @@map("friendly_matches")
+}
+
+// =============================================
+// PLAYER MODEL
+// =============================================
+
+model Player {
+  playerId          Int             @id @default(autoincrement()) @map("player_id")
+  username          String          @unique @db.VarChar(50)
+  email             String          @unique @db.VarChar(100)
+  phoneNumber       String?         @map("phone_number") @db.VarChar(20)
+  passwordHash      String          @map("password_hash") @db.VarChar(255)
+  fullName          String          @map("full_name")
+  gender            Gender?
+  dateOfBirth       DateTime?       @map("date_of_birth") @db.Date
+  location          String?         @db.VarChar(255)
+  preferredSport    Json            @map("preferred_sport")
+  photoUrl          String?         @map("photo_url") @db.VarChar(255)
+  registrationDate  DateTime        @default(now()) @map("registration_date")
+  accountStatus     AccountStatus   @default(PENDING_VERIFICATION) @map("account_status")
+  // TEMPORARY: Added default value for account status - should be reviewed based on business requirements
+  
+  // Relations
+  registrations           Registration[]
+  ratings                 PlayerRating[]
+  answers                 PlayerAnswer[]
+  promoCodeAssignments    PlayerPromoCodeAssignment[]
+  createdTeams            Team[]
+  teamMemberships         TeamMember[]
+  notifications           Notification[]
+  threadParticipations    ThreadParticipants[]
+  threadReadStatuses      ThreadReadStatus[]
+  friendlyMatchesHosted   FriendlyMatch[]
+  injuryReplacements      TeamReplacement[] @relation("InjuredPlayer")
+  replacementRequests     TeamReplacement[] @relation("ReplacementPlayer")
+  
+  @@map("players")
+}
+
+// =============================================
+// PLAYER RATING MODEL
+// =============================================
+
+model PlayerRating {
+  ratingId          Int       @id @default(autoincrement()) @map("rating_id")
+  sportsId          Int       @map("sports_id")
+  playerId          Int       @map("player_id")
+  currentRating     Int       @map("current_rating")
+  lastAssessedDate  DateTime  @map("last_assessed_date")
+  
+  // Relations
+  sport             Sports             @relation(fields: [sportsId], references: [sportsId])
+  player            Player             @relation(fields: [playerId], references: [playerId])
+  ratingHistory     RatingHistory[]
+  
+  @@unique([playerId, sportsId])
+  @@map("player_ratings")
+}
+
+// =============================================
+// PLAYER ANSWER MODEL
+// =============================================
+
+model PlayerAnswer {
+  playerAnswerId    Int       @id @default(autoincrement()) @map("player_answer_id")
+  playerId          Int       @map("player_id")
+  questionId        Int       @map("question_id")
+  selectedAnswerId  Int       @map("selected_answer_id")
+  submissionDate    DateTime  @default(now()) @map("submission_date")
+  
+  // Relations
+  player            Player             @relation(fields: [playerId], references: [playerId])
+  question          Questionnaire      @relation(fields: [questionId], references: [questionId])
+  selectedAnswer    AnswerOptions      @relation(fields: [selectedAnswerId], references: [answerOptionsId])
+  
+  @@unique([playerId, questionId])
+  @@map("player_answers")
+}
+
+// =============================================
+// RATING HISTORY MODEL
+// =============================================
+
+model RatingHistory {
+  historyId     Int       @id @default(autoincrement()) @map("history_id")
+  ratingId      Int       @map("rating_id")
+  oldRating     Int       @map("old_rating")
+  newRating     Int       @map("new_rating")
+  changedAt     DateTime  @default(now()) @map("changed_at")
+  assessmentId  Int?      @map("assessment_id")
+  changeReason  String    @map("change_reason")
+  
+  // Relations
+  rating        PlayerRating       @relation(fields: [ratingId], references: [ratingId])
+  
+  @@map("rating_history")
+}
+
+// =============================================
+// PLAYER QUALIFICATION MODEL
+// =============================================
+
+model PlayerQualification {
+  qualificationId   Int   @id @default(autoincrement()) @map("qualification_id")
+  registrationId    Int   @map("registration_id")
+  playoffSeasonId   Int   @map("playoff_season_id")
+  seed              Int
+  
+  // Relations
+  registration      Registration       @relation(fields: [registrationId], references: [registrationId])
+  // playoffSeason would need PlayoffSeason model when available
+  
+  @@map("player_qualifications")
+}
+
+// =============================================
+// SEASON SPONSOR MODEL (Junction Table)
+// =============================================
+
+model SeasonSponsor {
+  seasonId    Int   @map("season_id")
+  sponsorId   Int   @map("sponsor_id")
+  
+  // Relations
+  season      Season     @relation(fields: [seasonId], references: [seasonId])
+  sponsor     Sponsor    @relation(fields: [sponsorId], references: [sponsorId])
+  
+  @@id([seasonId, sponsorId])
+  @@map("season_sponsors")
+}
+
+// =============================================
+// SPONSOR MODEL
+// =============================================
+
+model Sponsor {
+  sponsorId   Int       @id @default(autoincrement()) @map("sponsor_id")
+  name        String
+  logoUrl     String?   @map("logo_url")
+  
+  // Relations
+  seasonSponsors SeasonSponsor[]
+  
+  @@map("sponsors")
+}
+
+// =============================================
+// LEADERBOARD MODEL
+// =============================================
+
+model Leaderboard {
+  leaderboardEntryId  Int       @id @default(autoincrement()) @map("leaderboard_entry_id")
+  divisionId          Int       @map("division_id")
+  registrationId      Int       @map("registration_id")
+  winsCount           Int       @map("wins_count")
+  lossCount           Int       @map("loss_count")
+  matchesPlayed       Int       @map("matches_played")
+  totalPoints         Int       @map("total_points")
+  setsLost            Int       @map("sets_lost")
+  setsWon             Int       @map("sets_won")
+  lastUpdatedAt       DateTime  @default(now()) @updatedAt @map("last_updated_at")
+  
+  // Relations
+  division            Division           @relation(fields: [divisionId], references: [divisionId])
+  registration        Registration       @relation(fields: [registrationId], references: [registrationId])
+  
+  @@map("leaderboards")
+}
+
+// =============================================
+// SPORTS MODEL
+// =============================================
+
+model Sports {
+  sportsId          Int     @id @default(autoincrement()) @map("sports_id")
+  questionId        Int     @unique @map("question_id")
+  sportsName        String  @map("sports_name") @db.VarChar(255)
+  sportsPictureUrl  String  @map("sports_picture_url") @db.VarChar(255)
+  
+  // Relations
+  questionnaire     Questionnaire?      @relation(fields: [questionId], references: [questionId])
+  leagues           League[]
+  questionnaires    Questionnaire[]     @relation("SportQuestionnaires")
+  playerRatings     PlayerRating[]
+  // TEMPORARY: Dual relationship with Questionnaire - may need refactoring to avoid confusion
+  
+  @@map("sports")
+}
+
+// =============================================
+// LEAGUE MODEL
+// =============================================
+
+model League {
+  leagueId      Int           @id @default(autoincrement()) @map("league_id")
+  leagueName    String        @map("league_name") @db.VarChar(255)
+  sportsId      Int           @map("sports_id")
+  leagueStatus  LeagueStatus  @map("league_status")
+  
+  // Relations
+  sport         Sports        @relation(fields: [sportsId], references: [sportsId])
+  seasons       Season[]
+  
+  @@map("leagues")
+}
+
+// =============================================
+// SEASON MODEL
+// =============================================
+
+model Season {
+  seasonId            Int           @id @default(autoincrement()) @map("season_id")
+  leagueId            Int           @map("league_id")
+  name                String
+  leagueTypeId        Int           @map("league_type_id")
+  entryFee            Decimal       @map("entry_fee") @db.Decimal(10,2)
+  startDate           DateTime      @map("start_date") @db.Date
+  endDate             DateTime      @map("end_date") @db.Date
+  lastRegistration    DateTime      @map("last_registration") @db.Date
+  leagueStatus        LeagueStatus  @map("league_status")
+  createdBy           Int           @map("created_by")
+  createdAt           DateTime      @default(now()) @map("created_at")
+  
+  // Relations
+  league              League         @relation(fields: [leagueId], references: [leagueId])
+  leagueType          LeagueType     @relation(fields: [leagueTypeId], references: [leagueTypeId])
+  // createdByAdmin would need Admin model when available
+  divisions           Division[]
+  seasonSponsors      SeasonSponsor[]
+  
+  @@map("seasons")
+}
+
+// =============================================
+// LEAGUE TYPE MODEL
+// =============================================
+
+model LeagueType {
+  leagueTypeId  Int         @id @default(autoincrement()) @map("league_type_id")
+  leagueName    String      @map("league_name")
+  leagueType    PlayType    @map("league_type")
+  gender        Gender      
+  
+  // Relations
+  seasons       Season[]
+  
+  @@map("league_types")
+}
+
+// =============================================
+// QUESTIONNAIRE MODEL
+// =============================================
+
+model Questionnaire {
+  questionId      Int     @id @default(autoincrement()) @map("question_id")
+  questionText    String  @map("question_text") @db.Text
+  skillCategory   String  @map("skill_category")
+  difficultyLevel String  @map("difficulty_level")
+  sportsId        Int     @map("sports_id")
+  
+  // Relations
+  sport           Sports             @relation("SportQuestionnaires", fields: [sportsId], references: [sportsId])
+  sports          Sports?            // For the single question reference
+  answerOptions   AnswerOptions[]
+  playerAnswers   PlayerAnswer[]
+  
+  @@map("questionnaires")
+}
+
+// =============================================
+// PLAYER PROMO CODE ASSIGNMENT MODEL
+// =============================================
+
+model PlayerPromoCodeAssignment {
+  accountCodeId  Int     @id @default(autoincrement()) @map("account_code_id")
+  promoCodeId    Int     @map("promo_code_id")
+  playerId       Int     @map("player_id")
+  isUsed         Boolean @default(false) @map("is_used")
+  
+  // Relations
+  promoCode      PromoCode          @relation(fields: [promoCodeId], references: [promoCodeId])
+  player         Player             @relation(fields: [playerId], references: [playerId])
+  
+  @@map("player_promo_code_assignments")
+}
+
+// =============================================
+// PROMO CODE MODEL
+// =============================================
+
+model PromoCode {
+  promoCodeId   Int           @id @default(autoincrement()) @map("promo_code_id")
+  code          String        // TODO: Consider adding @unique constraint for business logic
+  discountType  DiscountType  @map("discount_type")
+  value         Decimal
+  validFrom     DateTime      @map("valid_from") @db.Date
+  validTo       DateTime      @map("valid_to") @db.Date
+  
+  // Relations
+  assignments   PlayerPromoCodeAssignment[]
+  payments      Payment[]
+  
+  @@map("promo_codes")
+}
+
+// =============================================
+// PAYMENT MODEL
+// =============================================
+
+model Payment {
+  paymentId     Int           @id @default(autoincrement()) @map("payment_id")
+  amount        Decimal
+  paymentDate   DateTime      @default(now()) @map("payment_date")
+  status        PaymentStatus
+  promoCodeId   Int?          @map("promo_code_id")
+  
+  // Relations
+  promoCode     PromoCode?    @relation(fields: [promoCodeId], references: [promoCodeId])
+  registrations Registration[]
+  
+  @@map("payments")
+  // TODO: Consider adding indexes for performance:
+  // @@index([paymentDate])
+  // @@index([status])
+}
+
+// =============================================
+// TEAM MODEL
+// =============================================
+
+model Team {
+  teamId        Int       @id @default(autoincrement()) @map("team_id")
+  name          String
+  createdBy     Int       @map("created_by")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @default(now()) @updatedAt @map("updated_at")
+  
+  // Relations
+  creator       Player             @relation(fields: [createdBy], references: [playerId])
+  members       TeamMember[]
+  registrations Registration[]
+  
+  @@map("teams")
+}
+
+// =============================================
+// ANSWER OPTIONS MODEL
+// =============================================
+
+model AnswerOptions {
+  answerOptionsId  Int     @id @default(autoincrement()) @map("answer_options_id")
+  questionId       Int     @map("question_id")
+  answerText       String  @map("answer_text") @db.Text
+  ratingWeight     Decimal @map("rating_weight") @db.Decimal(3,1)
+  
+  // Relations
+  question         Questionnaire      @relation(fields: [questionId], references: [questionId])
+  playerAnswers    PlayerAnswer[]
+  
+  @@map("answer_options")
+}
+
+// =============================================
+// TEAM REPLACEMENT MODEL
+// =============================================
+
+model TeamReplacement {
+  replaceRequestId    Int                    @id @default(autoincrement()) @map("replace_request_id")
+  teamRegId           Int                    @map("team_reg_id")
+  injuredPlayerId     Int                    @map("injured_player_id")
+  replacementPlayerId Int                    @map("replacement_player_id")
+  status              ReplacementStatus      @default(PENDING)
+  requestedAt         DateTime?              @map("requested_at") @db.Date
+  reviewedByAdminId   Int?                   @map("reviewed_by_admin_id")
+  reviewedAt          DateTime?              @map("reviewed_at")
+  
+  // Relations
+  teamRegistration    Registration           @relation(fields: [teamRegId], references: [registrationId])
+  injuredPlayer       Player                 @relation("InjuredPlayer", fields: [injuredPlayerId], references: [playerId])
+  replacementPlayer   Player                 @relation("ReplacementPlayer", fields: [replacementPlayerId], references: [playerId])
+  // reviewedByAdmin would need Admin model when available
+  
+  @@map("team_replacements")
+}
+
+// =============================================
+// WITHDRAWAL REQUEST MODEL
+// =============================================
+
+model WithdrawalRequest {
+  withdrawalRequestId Int                  @id @default(autoincrement()) @map("withdrawal_request_id")
+  registrationId      Int                  @map("registration_id")
+  status              WithdrawalStatus     @default(PENDING)
+  requestedAt         DateTime             @default(now()) @map("requested_at")
+  reviewedByAdminId   Int?                 @map("reviewed_by_admin_id")
+  reason              String               @db.Text
+  reviewedAt          DateTime?            @map("reviewed_at")
+  
+  // Relations
+  registration        Registration           @relation(fields: [registrationId], references: [registrationId])
+  // reviewedByAdmin would need Admin model when available
+  
+  @@map("withdrawal_requests")
+}
+
+// =============================================
+// TEAM MEMBER MODEL
+// =============================================
+
+model TeamMember {
+  memberId   Int        @id @default(autoincrement()) @map("member_id")
+  teamId     Int        @map("team_id")
+  playerId   Int        @map("player_id")
+  role       MemberRole
+  joinedAt   DateTime   @default(now()) @map("joined_at")
+  
+  // Relations
+  team       Team       @relation(fields: [teamId], references: [teamId])
+  player     Player     @relation(fields: [playerId], references: [playerId])
+  
+  @@map("team_members")
+}
+
+// =============================================
+// NOTIFICATION MODEL
+// =============================================
+
+model Notification {
+  notificationId  Int              @id @default(autoincrement()) @map("notification_id")
+  recipientId     Int              @map("recipient_id")
+  threadId        Int?             @map("thread_id")
+  type            NotificationType
+  isRead          Boolean          @default(false) @map("is_read")
+  sentAt          DateTime         @default(now()) @map("sent_at")
+  payload         Json
+  
+  // Relations
+  recipient       Player           @relation(fields: [recipientId], references: [playerId])
+  thread          Thread?          @relation(fields: [threadId], references: [conversationId])
+  
+  @@map("notifications")
+  // TODO: Consider adding indexes for performance:
+  // @@index([recipientId])
+  // @@index([sentAt])
+  // @@index([isRead])
+}
+
+// =============================================
+// THREAD PARTICIPANTS MODEL
+// =============================================
+
+model ThreadParticipants {
+  threadId   Int       @map("thread_id")
+  userId     Int       @map("user_id")
+  joinedOn   DateTime  @default(now()) @map("joined_on")
+  
+  // Relations
+  thread     Thread    @relation(fields: [threadId], references: [conversationId])
+  user       Player    @relation(fields: [userId], references: [playerId])
+  
+  @@id([threadId, userId])
+  @@map("thread_participants")
+}
+
+// =============================================
+// THREAD READ STATUS MODEL
+// =============================================
+
+model ThreadReadStatus {
+  threadId   Int       @map("thread_id")
+  playerId   Int       @map("player_id")
+  readAt     DateTime  @default(now()) @map("read_at")
+  
+  // Relations
+  thread     Thread    @relation(fields: [threadId], references: [conversationId])
+  player     Player    @relation(fields: [playerId], references: [playerId])
+  
+  @@id([threadId, playerId])
+  @@map("thread_read_status")
+}
+
+// =============================================
+// MESSAGE MODEL
+// =============================================
+
+model Message {
+  messageId    Int         @id @default(autoincrement()) @map("message_id")
+  senderId     Int         @map("sender_id")  // TEMPORARY: Polymorphic relationship - requires application-level handling
+  threadId     Int         @map("thread_id")
+  messageType  MessageType @map("message_type")
+  sentAt       DateTime    @default(now()) @map("sent_at")
+  
+  // Relations
+  thread       Thread      @relation(fields: [threadId], references: [conversationId])
+  // sender is polymorphic - could be Player or Admin
+  matchInvites MatchInvite[]
+  textMessages TextMessage[]
+  
+  @@map("messages")
+  // TODO: Consider adding indexes for performance:
+  // @@index([threadId])
+  // @@index([sentAt])
+}
+
+// =============================================
+// MATCH INVITE MODEL
+// =============================================
+
+model MatchInvite {
+  matchInviteId  Int  @id @default(autoincrement()) @map("match_invite_id")
+  matchId        Int  @map("match_id")
+  messageId      Int  @map("message_id")
+  
+  // Relations
+  match          Match    @relation(fields: [matchId], references: [matchId])
+  message        Message  @relation(fields: [messageId], references: [messageId])
+  
+  @@map("match_invites")
+}
+
+// =============================================
+// TEXT MESSAGE MODEL
+// =============================================
+
+model TextMessage {
+  textId     Int     @id @default(autoincrement()) @map("text_id")
+  messageId  Int     @map("message_id")
+  content    String  @db.Text
+  
+  // Relations
+  message    Message @relation(fields: [messageId], references: [messageId])
+  
+  @@map("text_messages")
+}
+
+// =============================================
+// ENUMS
+// =============================================
+
+enum MatchStatus {
+  SCHEDULED
+  COMPLETED
+  UNFINISHED
+  WALKOVER
+
+  @@map("match_status")
+}
+
+enum RescheduleStatus {
+  PENDING
+  APPROVED
+  DENIED
+
+  @@map("reschedule_status")
+}
+
+enum FriendlyMatchStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+  COMPLETED
+  CANCELLED
+
+  @@map("friendly_match_status")
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  MIXED
+
+  @@map("gender")
+}
+
+enum PlayType {
+  SINGLES
+  DOUBLES
+
+  @@map("play_type")
+}
+
+enum AccountStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+  PENDING_VERIFICATION
+
+  @@map("account_status")
+}
+
+enum LeagueStatus {
+  DRAFT
+  OPEN
+  ACTIVE
+  COMPLETED
+  CANCELLED
+
+  @@map("league_status")
+}
+
+enum DiscountType {
+  PERCENTAGE
+  FIXED_AMOUNT
+
+  @@map("discount_type")
+}
+
+enum PaymentStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  REFUNDED
+  CANCELLED
+
+  @@map("payment_status")
+}
+
+enum RegistrationType {
+  PLAYER
+  TEAM
+
+  @@map("registration_type")
+}
+
+enum ReplacementStatus {
+  PENDING
+  APPROVED
+  DENIED
+
+  @@map("replacement_status")
+}
+
+enum WithdrawalStatus {
+  PENDING
+  APPROVED
+  DENIED
+
+  @@map("withdrawal_status")
+}
+
+enum MemberRole {
+  LEADER
+  MEMBER
+
+  @@map("member_role")
+}
+
+enum NotificationType {
+  MESSAGE
+  MATCH_SCHEDULED
+  MATCH_RESULT
+  PAYMENT_DUE
+  REGISTRATION_CONFIRMED
+  TEAM_INVITE
+  WITHDRAWAL_APPROVED
+  REPLACEMENT_REQUEST
+
+  @@map("notification_type")
+}
+
+enum ConversationType {
+  DIRECT
+  GROUP
+
+  @@map("conversation_type")
+}
+
+enum MessageType {
+  TEXT
+  INVITE
+
+  @@map("message_type")
+}
+
+// =============================================
+// SCHEMA REFINEMENT NOTES
+// =============================================
+//
+// This schema is based on ERD analysis with custom relationship modifications.
+// The following improvements are suggested for review:
+//
+// 1. DATA INTEGRITY:
+//    - Add check constraints for Registration (playerId XOR teamId)
+//    - Add check constraints for Match walkover logic
+//    - Consider unique constraints for PromoCode.code
+//
+// 2. PERFORMANCE:
+//    - Add database indexes for frequently queried fields
+//    - Consider composite indexes for common query patterns
+//
+// 3. BUSINESS LOGIC:
+//    - Review Sports-Questionnaire dual relationship design
+//    - Document polymorphic relationship handling for Message.senderId
+//    - Validate default values align with business requirements
+//
+// 4. FUTURE CONSIDERATIONS:
+//    - Admin model for proper foreign key constraints
+//    - PlayoffSeason model for PlayerQualification
+//    - Venue model for structured location data
+//
+// All modifications marked as TEMPORARY should be reviewed with product team.
