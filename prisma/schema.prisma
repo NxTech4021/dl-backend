@@ -7,11 +7,56 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model Admin {
-  id        String   @id @unique @default(uuid())
-  fullName  String   @db.VarChar(100)
-  email     String   @unique
-  password  String
-  createdAt DateTime @default(now())
-  updatedAt DateTime? @updatedAt
+model User {
+  id              String    @id @default(cuid())
+  name            String?
+  email           String?   @unique
+  emailVerified   Boolean?  // Corrected from DateTime
+  image           String?
+  password        String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  accounts Account[]
+  sessions Session[]
+}
+
+model Account {
+  accountId         String   @id @default(cuid())
+  userId            String
+  providerId        String
+  providerAccountId String?
+  password          String?  // Redundant field required by the library
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  id                String   // Redundant field required by the library
+
+  refresh_token String?  @db.Text
+  access_token  String?  @db.Text
+  expires_at    Int?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([providerId, providerAccountId])
+}
+
+model Session {
+  token       String   @id @unique // Renamed from sessionToken and made @id
+  userId      String
+  expiresAt   DateTime // Renamed from expires
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  id          String   // Redundant field required by the library
+  ipAddress   String?
+  userAgent   String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expiresAt  DateTime // Renamed from expires
+
+  @@unique([identifier, token])
 }

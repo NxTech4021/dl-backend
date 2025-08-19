@@ -1,8 +1,14 @@
 import express from 'express';
-import { getExample } from '../controllers/authController';
+import { toNodeHandler } from 'better-auth/node';
+import { auth } from '../auth';
 
 const router = express.Router();
 
-router.get('/', getExample);
+// Convert Better Auth handler to work with Express.js
+const authHandler = toNodeHandler(auth);
+
+// Better Auth handles all authentication routes internally
+// Just pass all requests to the handler
+router.all('/*', authHandler);
 
 export default router;
