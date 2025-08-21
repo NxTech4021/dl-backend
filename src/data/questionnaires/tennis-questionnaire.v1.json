@@ -8,54 +8,58 @@
         "type": "single_choice",
         "options": [
           { "label": "Less than 6 months", "weight": -0.8 },
-          { "label": "6 months - 1 year", "weight": -0.4 },
-          { "label": "1-2 years", "weight": 0.0 },
-          { "label": "2-4 years", "weight": 0.5 },
-          { "label": "More than 4 years", "weight": 1.0 }
+          { "label": "6 months - 1 year", "weight": -0.5 },
+          { "label": "1-2 years", "weight": -0.1 },
+          { "label": "2-5 years", "weight": 0.4 },
+          { "label": "More than 5 years", "weight": 1.0 }
         ]
       },
       {
         "key": "frequency",
-        "question": "How often do you play tennis?",
+        "question": "How often do you currently play tennis?",
         "type": "single_choice",
         "options": [
-          { "label": "Less than once a week", "weight": -0.6 },
-          { "label": "1-2 times per week", "weight": -0.2 },
-          { "label": "3-4 times per week", "weight": 0.3 },
-          { "label": "5+ times per week", "weight": 0.8 }
+          { "label": "Rarely (less than once a month)", "weight": -0.6 },
+          { "label": "Monthly (1-2 times per month)", "weight": -0.2 },
+          { "label": "Weekly (1-2 times per week)", "weight": 0.3 },
+          { "label": "Regular (3-4 times per week)", "weight": 0.7 },
+          { "label": "Daily/Intensive (5+ times per week)", "weight": 1.0 }
         ]
       },
       {
         "key": "competitive_level",
-        "question": "What best describes your current competitive level?",
+        "question": "What level do you typically play at?",
         "type": "single_choice",
         "options": [
-          { "label": "Recreational only", "weight": -0.6 },
-          { "label": "Social/Club matches", "weight": -0.2 },
-          { "label": "Local competitive events", "weight": 0.3 },
-          { "label": "Regional/National competitive events", "weight": 0.8 }
+          { "label": "Recreational/social tennis with friends", "weight": -0.5 },
+          { "label": "Social/friendly matches", "weight": -0.1 },
+          { "label": "Local/small tournaments", "weight": 0.4 },
+          { "label": "Regional/state tournaments", "weight": 0.8 },
+          { "label": "National tournaments", "weight": 1.0 }
         ]
       },
       {
         "key": "coaching_background",
-        "question": "Have you received coaching or formal training?",
+        "question": "What is your experience with tennis coaching/instruction?",
         "type": "single_choice",
         "options": [
-          { "label": "No coaching", "weight": -0.4 },
-          { "label": "Few lessons", "weight": -0.1 },
-          { "label": "Regular coaching", "weight": 0.3 },
-          { "label": "High-performance/academy coaching", "weight": 0.8 }
+          { "label": "Self-taught/no formal instruction", "weight": -0.7 },
+          { "label": "Some coaching experience (group or private)", "weight": -0.3 },
+          { "label": "Regular coaching in the past or ongoing group lessons", "weight": 0.2 },
+          { "label": "Extensive private coaching experience", "weight": 0.6 },
+          { "label": "Professional/academy training background", "weight": 1.0 }
         ]
       },
       {
         "key": "tournament",
-        "question": "Have you played in tennis tournaments?",
+        "question": "What is your tournament playing experience?",
         "type": "single_choice",
         "options": [
-          { "label": "Never", "weight": -0.6 },
-          { "label": "Local tournaments", "weight": -0.1 },
-          { "label": "Regional tournaments", "weight": 0.4 },
-          { "label": "National/international tournaments", "weight": 0.9 }
+          { "label": "Never played tournaments", "weight": -0.6 },
+          { "label": "Club level tournaments", "weight": -0.1 },
+          { "label": "Regional tournaments", "weight": 0.3 },
+          { "label": "State level tournaments", "weight": 0.7 },
+          { "label": "National tournaments", "weight": 1.0 }
         ]
       },
       {
