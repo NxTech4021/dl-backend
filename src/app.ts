@@ -5,11 +5,22 @@ import { auth } from './auth';
 
 const app = express();
 
-// Set up CORS
+// This is for debugging purposes only
+app.use((req, res, next) => {
+  console.log('--- INCOMING REQUEST ---');
+  console.log('Method:', req.method);
+  console.log('URL:', req.originalUrl);
+  console.log('Origin Header:', req.headers.origin);
+  console.log('----------------------');
+  next();
+});
+
+// Set up CORS - More permissive for development
 app.use(cors({
-  origin: ['http://localhost:82', 'http://localhost:3001'],
+  origin: ['http://localhost:82', 'http://localhost:3001', 'http://localhost:8081'], // Allow nginx proxy and direct access
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
 }));
 
 // According to the official Express documentation for better-auth,
