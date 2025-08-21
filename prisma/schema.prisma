@@ -7,18 +7,65 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model Admin {
-  id        String   @id @unique @default(uuid())
-  fullName  String   @db.VarChar(100)
-  email     String   @unique
-  password  String
+model User {
+  id              String    @id @default(cuid())
+  name            String
+  username        String    @unique
+  displayUsername String?
+  email           String    @unique
+  emailVerified   Boolean   @default(false)
+  image           String?
+  accounts        Account[]
+  sessions        Session[]
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+}
+
+model Account {
+  id                    String    @id @default(cuid())
+  userId                String
+  accountId             String
+  providerId            String
+  accessToken           String?   @db.Text
+  refreshToken          String?   @db.Text
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  idToken               String?   @db.Text
+  password              String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   createdAt DateTime @default(now())
-  updatedAt DateTime? @updatedAt
+  updatedAt DateTime @updatedAt
+
+  @@unique([providerId, accountId])
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  expiresAt DateTime
+  token     String   @unique
+  ipAddress String?
+  userAgent String?
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Verification {
+  id         String   @id @default(cuid())
+  identifier String
+  value      String   @unique
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 }
 
 model QuestionnaireResponse {
   id           Int       @id @default(autoincrement())
-  userId       Int
+  userId       String    // Changed to String to match User.id type
   sport        String              // 'pickleball' | 'tennis' | 'padel'
   qVersion     Int                 // from JSON file
   qHash        String              // SHA1 of JSON contents
