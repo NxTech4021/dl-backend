@@ -1,0 +1,133 @@
+{
+    "sport": "padel",
+    "version": 1,
+    "questions": [
+      {
+        "key": "experience",
+        "question": "How long have you been playing padel?",
+        "type": "single_choice",
+        "options": [
+          { "label": "Less than 3 months", "weight": -0.8 },
+          { "label": "3-6 months", "weight": -0.4 },
+          { "label": "6 months - 1 year", "weight": 0.0 },
+          { "label": "1-2 years", "weight": 0.5 },
+          { "label": "More than 2 years", "weight": 1.0 }
+        ]
+      },
+      {
+        "key": "sports_background",
+        "question": "Do you have a background in racket/paddle sports?",
+        "type": "single_choice",
+        "options": [
+          { "label": "No prior racket/paddle sports", "weight": -0.4 },
+          { "label": "Some casual play (e.g., badminton, tennis, table tennis)", "weight": 0.0 },
+          { "label": "Regular player in another racket/paddle sport", "weight": 0.4 },
+          { "label": "Competitive background in another racket/paddle sport", "weight": 0.8 }
+        ]
+      },
+      {
+        "key": "frequency",
+        "question": "How often do you play padel?",
+        "type": "single_choice",
+        "options": [
+          { "label": "Less than once a week", "weight": -0.6 },
+          { "label": "1-2 times per week", "weight": -0.2 },
+          { "label": "3-4 times per week", "weight": 0.3 },
+          { "label": "5+ times per week", "weight": 0.8 }
+        ]
+      },
+      {
+        "key": "competitive_level",
+        "question": "What best describes your current competitive level?",
+        "type": "single_choice",
+        "options": [
+          { "label": "Recreational only", "weight": -0.6 },
+          { "label": "Social/Club matches", "weight": -0.2 },
+          { "label": "Local competitive events", "weight": 0.3 },
+          { "label": "Regional/National competitive events", "weight": 0.8 }
+        ]
+      },
+      {
+        "key": "coaching_background",
+        "question": "Have you received coaching or formal training?",
+        "type": "single_choice",
+        "options": [
+          { "label": "No coaching", "weight": -0.4 },
+          { "label": "Few lessons", "weight": -0.1 },
+          { "label": "Regular coaching", "weight": 0.3 },
+          { "label": "High-performance/academy coaching", "weight": 0.8 }
+        ]
+      },
+      {
+        "key": "tournament",
+        "question": "Have you played in padel tournaments?",
+        "type": "single_choice",
+        "options": [
+          { "label": "Never", "weight": -0.6 },
+          { "label": "Local tournaments", "weight": -0.1 },
+          { "label": "Regional tournaments", "weight": 0.4 },
+          { "label": "National/international tournaments", "weight": 0.9 }
+        ]
+      },
+      {
+        "key": "skills",
+        "question": "Rate your padel skills:",
+        "type": "skill_matrix",
+        "subQuestions": [
+          {
+            "key": "serving",
+            "question": "Serving and return",
+            "options": [
+              { "label": "Beginner (learning basic serves/returns)", "weight": -0.7 },
+              { "label": "Developing (consistent returns, basic serves)", "weight": -0.2 },
+              { "label": "Intermediate (good serve placement and returns)", "weight": 0.3 },
+              { "label": "Advanced (variety, placement, and tactical serving)", "weight": 0.8 }
+            ]
+          },
+          {
+            "key": "groundstrokes",
+            "question": "Groundstrokes",
+            "options": [
+              { "label": "Beginner (learning basic strokes)", "weight": -0.7 },
+              { "label": "Developing (can rally consistently from baseline)", "weight": -0.2 },
+              { "label": "Intermediate (good power and placement from baseline)", "weight": 0.3 },
+              { "label": "Advanced (excellent control and variety)", "weight": 0.8 }
+            ]
+          },
+          {
+            "key": "volley_wall",
+            "question": "Volleying, wall play, and net skills",
+            "options": [
+              { "label": "Beginner (learning basic volleys/wall play)", "weight": -0.7 },
+              { "label": "Developing (comfortable with basic volleys and wall shots)", "weight": -0.2 },
+              { "label": "Intermediate (good net coverage and use of walls)", "weight": 0.3 },
+              { "label": "Advanced (excellent volley/wall control and transition play)", "weight": 0.8 }
+            ]
+          },
+          {
+            "key": "positioning",
+            "question": "Court positioning and tactics",
+            "options": [
+              { "label": "Beginner (learning basic positioning)", "weight": -0.7 },
+              { "label": "Developing (understand basic tactics)", "weight": -0.2 },
+              { "label": "Intermediate (good awareness and tactics)", "weight": 0.3 },
+              { "label": "Advanced (excellent strategy and court awareness)", "weight": 0.8 }
+            ]
+          }
+        ]
+      },
+      {
+        "key": "self_rating",
+        "question": "How would you rate yourself as a padel player?",
+        "type": "single_choice",
+        "options": [
+          { "label": "Beginner: Just starting, learning the basic rules and strokes.", "weight": -0.8 },
+          { "label": "Improver: Can sustain short rallies but lacks consistency and tactical knowledge.", "weight": -0.4 },
+          { "label": "Intermediate: Can play consistently, understands basic tactics, and uses a variety of shots.", "weight": 0.0 },
+          { "label": "Advanced: Has a strong command of all major shots and a deep understanding of strategy.", "weight": 0.6 },
+          { "label": "Expert/Competitive: Plays at a high level in competitive tournaments.", "weight": 1.0 }
+        ]
+      }
+    ]
+  }
+  

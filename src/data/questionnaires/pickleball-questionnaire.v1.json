@@ -1,0 +1,184 @@
+{
+    "sport": "pickleball",
+    "version": 1,
+    "questions": [
+      {
+        "key": "has_dupr",
+        "question": "Do you have a DUPR (Dynamic Universal Pickleball Rating)?",
+        "type": "single_choice",
+        "options": [
+          { "label": "Yes", "value": true },
+          { "label": "No", "value": false },
+          { "label": "Not sure what DUPR is", "value": false }
+        ]
+      },
+      {
+        "key": "dupr_singles",
+        "question": "What is your current DUPR Singles rating?",
+        "type": "number",
+        "min": 2.0,
+        "max": 8.0,
+        "step": 0.01,
+        "optional": true,
+        "helptext": "Leave blank if you don't have a singles DUPR rating",
+        "visible_if": [
+          { "key": "has_dupr", "op": "==", "value": true }
+        ]
+      },
+      {
+        "key": "dupr_doubles",
+        "question": "What is your current DUPR Doubles rating?",
+        "type": "number",
+        "min": 2.0,
+        "max": 8.0,
+        "step": 0.01,
+        "optional": true,
+        "helptext": "Leave blank if you don't have a doubles DUPR rating",
+        "visible_if": [
+          { "key": "has_dupr", "op": "==", "value": true }
+        ]
+      },
+      {
+        "key": "dupr_singles_reliability",
+        "question": "How reliable do you think your DUPR Singles rating is?",
+        "type": "number",
+        "min": 0,
+        "max": 100,
+        "step": 1,
+        "optional": true,
+        "helptext": "0 = not reliable, 100 = perfectly reliable",
+        "visible_if": [
+          { "key": "has_dupr", "op": "==", "value": true }
+        ]
+      },
+      {
+        "key": "dupr_doubles_reliability",
+        "question": "How reliable do you think your DUPR Doubles rating is?",
+        "type": "number",
+        "min": 0,
+        "max": 100,
+        "step": 1,
+        "optional": true,
+        "helptext": "0 = not reliable, 100 = perfectly reliable",
+        "visible_if": [
+          { "key": "has_dupr", "op": "==", "value": true }
+        ]
+      },
+      {
+        "key": "experience",
+        "question": "How long have you been playing pickleball?",
+        "type": "single_choice",
+        "options": [
+          { "label": "Less than 3 months", "weight": -0.8 },
+          { "label": "3-6 months", "weight": -0.4 },
+          { "label": "6 months - 1 year", "weight": 0.0 },
+          { "label": "1-2 years", "weight": 0.5 },
+          { "label": "More than 2 years", "weight": 1.0 }
+        ]
+      },
+      {
+        "key": "sports_background",
+        "question": "Do you have a background in racket/paddle sports?",
+        "type": "single_choice",
+        "options": [
+          { "label": "No prior racket/paddle sports", "weight": -0.4 },
+          { "label": "Some casual play (e.g., badminton, tennis, table tennis)", "weight": 0.0 },
+          { "label": "Regular player in another racket/paddle sport", "weight": 0.4 },
+          { "label": "Competitive background in another racket/paddle sport", "weight": 0.8 }
+        ]
+      },
+      {
+        "key": "frequency",
+        "question": "How often do you play pickleball?",
+        "type": "single_choice",
+        "options": [
+          { "label": "Less than once a week", "weight": -0.6 },
+          { "label": "1-2 times per week", "weight": -0.2 },
+          { "label": "3-4 times per week", "weight": 0.3 },
+          { "label": "5+ times per week", "weight": 0.8 }
+        ]
+      },
+      {
+        "key": "competitive_level",
+        "question": "What best describes your current competitive level?",
+        "type": "single_choice",
+        "options": [
+          { "label": "Recreational only", "weight": -0.6 },
+          { "label": "Social/Club matches", "weight": -0.2 },
+          { "label": "Local competitive events", "weight": 0.3 },
+          { "label": "Regional/National competitive events", "weight": 0.8 }
+        ]
+      },
+      {
+        "key": "skills",
+        "question": "Rate your pickleball skills:",
+        "type": "skill_matrix",
+        "subQuestions": [
+          {
+            "key": "serving",
+            "question": "Serving accuracy and consistency",
+            "options": [
+              { "label": "Beginner (learning basic serves)", "weight": -0.7 },
+              { "label": "Developing (consistent basic serves)", "weight": -0.2 },
+              { "label": "Intermediate (can place serves)", "weight": 0.3 },
+              { "label": "Advanced (variety of controlled serves)", "weight": 0.8 }
+            ]
+          },
+          {
+            "key": "dinking",
+            "question": "Dinking and soft game",
+            "options": [
+              { "label": "Beginner (learning to dink)", "weight": -0.7 },
+              { "label": "Developing (can sustain short rallies)", "weight": -0.2 },
+              { "label": "Intermediate (good control and placement)", "weight": 0.3 },
+              { "label": "Advanced (excellent control and strategy)", "weight": 0.8 }
+            ]
+          },
+          {
+            "key": "volleys",
+            "question": "Volleys and net play",
+            "options": [
+              { "label": "Beginner (learning basic volleys)", "weight": -0.7 },
+              { "label": "Developing (can sustain volley exchanges)", "weight": -0.2 },
+              { "label": "Intermediate (good reflexes and placement)", "weight": 0.3 },
+              { "label": "Advanced (excellent reflexes and strategy)", "weight": 0.8 }
+            ]
+          },
+          {
+            "key": "positioning",
+            "question": "Court positioning and strategy",
+            "options": [
+              { "label": "Beginner (learning basic positioning)", "weight": -0.7 },
+              { "label": "Developing (understand basic strategy)", "weight": -0.2 },
+              { "label": "Intermediate (good positioning and awareness)", "weight": 0.3 },
+              { "label": "Advanced (excellent strategy and adaptability)", "weight": 0.8 }
+            ]
+          }
+        ]
+      },
+      {
+        "key": "self_rating",
+        "question": "How would you rate yourself as a pickleball player?",
+        "type": "single_choice",
+        "options": [
+          { "label": "Beginner: Just starting, learning the basic rules and strokes.", "weight": -0.8 },
+          { "label": "Improver: Can sustain short rallies but lacks consistency and tactical knowledge.", "weight": -0.4 },
+          { "label": "Intermediate: Can play consistently, understands basic tactics, and uses a variety of shots.", "weight": 0.0 },
+          { "label": "Advanced: Has a strong command of all major shots and a deep understanding of strategy.", "weight": 0.6 },
+          { "label": "Expert/Competitive: Plays at a high level in competitive tournaments.", "weight": 1.0 }
+        ]
+      },
+      {
+        "key": "tournament",
+        "question": "Have you played in pickleball tournaments?",
+        "type": "single_choice",
+        "options": [
+          { "label": "Never", "weight": -0.6 },
+          { "label": "Local tournaments", "weight": -0.1 },
+          { "label": "Regional tournaments", "weight": 0.4 },
+          { "label": "National/international tournaments", "weight": 0.9 }
+        ]
+      }
+    ]
+  }
+  
