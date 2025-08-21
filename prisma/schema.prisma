@@ -9,54 +9,56 @@ datasource db {
 
 model User {
   id              String    @id @default(cuid())
-  name            String?
-  email           String?   @unique
-  emailVerified   Boolean?  // Corrected from DateTime
+  name            String
+  username        String    @unique
+  displayUsername String?
+  email           String    @unique
+  emailVerified   Boolean   @default(false)
   image           String?
-  password        String?
+  accounts        Account[]
+  sessions        Session[]
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
-
-  accounts Account[]
-  sessions Session[]
 }
 
 model Account {
-  accountId         String   @id @default(cuid())
-  userId            String
-  providerId        String
-  providerAccountId String?
-  password          String?  // Redundant field required by the library
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-  id                String   // Redundant field required by the library
-
-  refresh_token String?  @db.Text
-  access_token  String?  @db.Text
-  expires_at    Int?
+  id                    String    @id @default(cuid())
+  userId                String
+  accountId             String
+  providerId            String
+  accessToken           String?   @db.Text
+  refreshToken          String?   @db.Text
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  idToken               String?   @db.Text
+  password              String?
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@unique([providerId, providerAccountId])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([providerId, accountId])
 }
 
 model Session {
-  token       String   @id @unique // Renamed from sessionToken and made @id
-  userId      String
-  expiresAt   DateTime // Renamed from expires
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  id          String   // Redundant field required by the library
-  ipAddress   String?
-  userAgent   String?
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id        String   @id @default(cuid())
+  userId    String
+  expiresAt DateTime
+  token     String   @unique
+  ipAddress String?
+  userAgent String?
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
-model VerificationToken {
+model Verification {
+  id         String   @id @default(cuid())
   identifier String
-  token      String   @unique
-  expiresAt  DateTime // Renamed from expires
-
-  @@unique([identifier, token])
+  value      String   @unique
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 }
