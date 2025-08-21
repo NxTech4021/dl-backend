@@ -62,3 +62,35 @@ model Verification {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 }
+
+model QuestionnaireResponse {
+  id           Int       @id @default(autoincrement())
+  userId       String    // Changed to String to match User.id type
+  sport        String              // 'pickleball' | 'tennis' | 'padel'
+  qVersion     Int                 // from JSON file
+  qHash        String              // SHA1 of JSON contents
+  answersJson  Json                // raw client payload
+  startedAt    DateTime  @default(now())
+  completedAt  DateTime?
+
+  // one-to-one
+  result       InitialRatingResult?
+
+  @@index([userId])
+  @@index([sport, qVersion])
+  @@index([qHash])
+}
+
+model InitialRatingResult {
+  id          Int       @id @default(autoincrement())
+  responseId  Int       @unique
+  source      String              // 'questionnaire' | 'dupr_conversion' | ...
+  singles     Int?
+  doubles     Int?
+  rd          Int?
+  confidence  String?
+  detail      Json?
+  createdAt   DateTime  @default(now())
+
+  response    QuestionnaireResponse @relation(fields: [responseId], references: [id], onDelete: Cascade)
+}
