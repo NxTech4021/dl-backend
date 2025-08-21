@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import { toNodeHandler } from 'better-auth/node';
 import { auth } from './auth';
+import onboardingRoutes from './routes/onboarding';
 
 const app = express();
 
@@ -30,6 +31,9 @@ app.all("/api/auth/*splat", toNodeHandler(auth));
 
 // The JSON parser for any other routes you might add later.
 app.use(express.json());
+
+// Mount onboarding routes
+app.use('/api/onboarding', onboardingRoutes);
 
 // Health check endpoint
 app.get('/health', (req, res) => {
