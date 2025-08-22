@@ -1,163 +1,502 @@
-// src/routes/onboarding.ts
+// Production-grade onboarding routes
 import express from 'express';
 import { PrismaClient } from '@prisma/client';
-import { loadQuestionnaire } from '../services/questionnaire';
+import QuestionnaireService, { loadQuestionnaire } from '../services/questionnaire';
 import { scorePickleball, scoreTennis, scorePadel } from '../services/scoring';
+import { 
+  SportType, 
+  SubmissionRequest, 
+  QuestionnaireError, 
+  ValidationError,
+  UserNotFoundError,
+  DatabaseError,
+  ScoringError,
+  Result 
+} from '../types/questionnaire';
+import ConfigurationService from '../config/questionnaire';
+import Logger from '../utils/logger';
+import QuestionnaireValidator from '../validators/questionnaire';
 
 const prisma = new PrismaClient();
 const router = express.Router();
+const logger = Logger.getInstance(ConfigurationService.getConfig().logging.level, ConfigurationService.getConfig().logging.includeStackTrace);
+const questionnaireService = new QuestionnaireService(logger);
+const validator = new QuestionnaireValidator(logger);
 
-// Serve questions directly from files
-router.get('/:sport/questions', (req, res) => {
+// Middleware for request logging and correlation ID
+router.use((req, res, next) => {
+  const requestId = req.headers['x-request-id'] as string || `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  req.requestId = requestId;
+  
+  logger.info(`${req.method} ${req.originalUrl}`, {
+    requestId,
+    userAgent: req.headers['user-agent'],
+    ip: req.ip,
+    operation: 'route_access'
+  });
+  
+  next();
+});
+
+// Error handler middleware
+function handleQuestionnaireError(error: unknown, res: express.Response): void {
+  if (error instanceof QuestionnaireError) {
+    res.status(error.statusCode).json({
+      error: error.message,
+      code: error.code,
+      success: false
+    });
+  } else if (error instanceof Error) {
+    logger.error('Unexpected error in questionnaire route', {}, error);
+    res.status(500).json({
+      error: 'Internal server error',
+      code: 'INTERNAL_ERROR',
+      success: false
+    });
+  } else {
+    logger.error('Unknown error in questionnaire route', { error });
+    res.status(500).json({
+      error: 'Internal server error',
+      code: 'UNKNOWN_ERROR',
+      success: false
+    });
+  }
+}
+
+// Input validation middleware
+function validateSportParam(req: express.Request, res: express.Response, next: express.NextFunction): void {
+  const sport = req.params.sport;
+  const validation = validator.validateSport(sport);
+  
+  if (!validation.isValid) {
+    const error = validation.errors[0];
+    return handleQuestionnaireError(error, res);
+  }
+  
+  req.sport = sport as SportType;
+  next();
+}
+
+// Add types to express Request
+declare global {
+  namespace Express {
+    interface Request {
+      requestId?: string;
+      sport?: SportType;
+    }
+  }
+}
+
+// Serve questions directly from files with proper error handling
+router.get('/:sport/questions', validateSportParam, async (req, res) => {
+  const startTime = Date.now();
+  const requestId = req.requestId!;
+  const sport = req.sport!;
+  
   try {
-    const sport = req.params.sport as 'pickleball'|'tennis'|'padel';
+    logger.questionnaireRequested(sport, requestId);
     
-    if (!['pickleball', 'tennis', 'padel'].includes(sport)) {
-      return res.status(400).json({ error: 'Invalid sport' });
+    const result = await questionnaireService.loadQuestionnaire(sport);
+    
+    if (result.isFailure()) {
+      return handleQuestionnaireError(result.getError(), res);
     }
     
-    const { def, qHash } = loadQuestionnaire(sport);
-    res.set('ETag', qHash).json(def);
+    const { definition, hash } = result.getValue();
+    
+    // Set caching headers for better performance
+    res.set({
+      'ETag': hash,
+      'Cache-Control': 'public, max-age=300', // 5 minutes cache
+      'X-Request-ID': requestId
+    });
+    
+    const duration = Date.now() - startTime;
+    logger.info('Questionnaire served successfully', {
+      sport,
+      requestId,
+      duration,
+      questionCount: definition.questions.length,
+      operation: 'get_questionnaire'
+    });
+    
+    res.json(definition);
+    
   } catch (error) {
-    console.error('Error loading questionnaire:', error);
-    res.status(500).json({ error: 'Failed to load questionnaire' });
+    const duration = Date.now() - startTime;
+    logger.error('Unexpected error serving questionnaire', {
+      sport,
+      requestId,
+      duration,
+      operation: 'get_questionnaire'
+    }, error as Error);
+    
+    handleQuestionnaireError(error, res);
   }
 });
 
-// Submit answers and save + score (single request flow)
-router.post('/:sport/submit', async (req, res) => {
+// Submit answers and save + score with proper error handling
+router.post('/:sport/submit', validateSportParam, async (req, res) => {
+  const startTime = Date.now();
+  const requestId = req.requestId!;
+  const sport = req.sport!;
+  
   try {
-    const sport = req.params.sport as 'pickleball'|'tennis'|'padel';
+    // Validate request body structure
+    const submissionRequest: SubmissionRequest = {
+      userId: req.body.userId,
+      sport,
+      answers: req.body.answers,
+      sessionId: req.body.sessionId
+    };
     
-    if (!['pickleball', 'tennis', 'padel'].includes(sport)) {
-      return res.status(400).json({ error: 'Invalid sport' });
+    const validation = validator.validateSubmissionRequest(submissionRequest);
+    if (!validation.isValid) {
+      const error = validation.errors[0];
+      logger.warn('Submission validation failed', {
+        sport,
+        userId: submissionRequest.userId,
+        requestId,
+        errors: validation.errors.map(e => ({ field: e.field, message: e.message }))
+      });
+      return handleQuestionnaireError(error, res);
     }
     
-    const { userId, answers } = req.body as { userId: string; answers: Record<string, any> };
-
-    if (!userId || !answers) {
-      return res.status(400).json({ error: 'Missing userId or answers' });
-    }
-
-    // Verify user exists
-    const user = await prisma.user.findUnique({
-      where: { id: userId }
+    // Sanitize answers to prevent injection
+    const sanitizedAnswers = validator.sanitizeAnswers(submissionRequest.answers);
+    
+    logger.info('Processing questionnaire submission', {
+      sport,
+      userId: submissionRequest.userId,
+      requestId,
+      answerCount: Object.keys(sanitizedAnswers).length,
+      operation: 'submit_questionnaire'
     });
-
+    
+    // Verify user exists with timeout
+    const userCheckStart = Date.now();
+    let user;
+    try {
+      user = await Promise.race([
+        prisma.user.findUnique({ where: { id: submissionRequest.userId } }),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('User lookup timeout')), 5000))
+      ]);
+    } catch (error) {
+      logger.error('Database timeout during user lookup', {
+        userId: submissionRequest.userId,
+        requestId,
+        duration: Date.now() - userCheckStart
+      }, error as Error);
+      return handleQuestionnaireError(new DatabaseError('User lookup failed'), res);
+    }
+    
     if (!user) {
-      return res.status(404).json({ error: 'User not found' });
+      const error = new UserNotFoundError(submissionRequest.userId);
+      logger.warn('User not found for questionnaire submission', {
+        userId: submissionRequest.userId,
+        sport,
+        requestId
+      });
+      return handleQuestionnaireError(error, res);
     }
-
-    const { version, qHash } = loadQuestionnaire(sport);
-
-    // Score
-    let result;
-    if (sport === 'pickleball') {
-      result = scorePickleball(answers);
-    } else if (sport === 'tennis') {
-      result = scoreTennis(answers);
-    } else {
-      result = scorePadel(answers);
+    
+    logger.databaseOperation('user_lookup', 'user', Date.now() - userCheckStart);
+    
+    // Load questionnaire definition
+    const questionnaireResult = await questionnaireService.loadQuestionnaire(sport);
+    if (questionnaireResult.isFailure()) {
+      return handleQuestionnaireError(questionnaireResult.getError(), res);
     }
-
-    // Check if user already has a response for this sport
-    const existingResponse = await prisma.questionnaireResponse.findFirst({
-      where: {
-        userId,
-        sport
-      },
-      include: { result: true }
-    });
-
-    let response;
-    if (existingResponse) {
-      // Update existing response
-      response = await prisma.questionnaireResponse.update({
-        where: { id: existingResponse.id },
-        data: {
-          qVersion: version,
-          qHash,
-          answersJson: answers,
-          completedAt: new Date(),
-          result: {
-            upsert: {
-              create: result,
-              update: result
-            }
+    
+    const { version, hash } = questionnaireResult.getValue();
+    
+    // Score with timeout and error handling
+    const scoringStart = Date.now();
+    let scoringResult;
+    try {
+      const scoringPromise = new Promise((resolve, reject) => {
+        try {
+          let result;
+          if (sport === 'pickleball') {
+            result = scorePickleball(sanitizedAnswers);
+          } else if (sport === 'tennis') {
+            result = scoreTennis(sanitizedAnswers);
+          } else {
+            result = scorePadel(sanitizedAnswers);
           }
-        },
-        include: { result: true }
+          resolve(result);
+        } catch (error) {
+          reject(error);
+        }
       });
-    } else {
-      // Create new response
-      response = await prisma.questionnaireResponse.create({
-        data: {
-          userId, sport, qVersion: version, qHash,
-          answersJson: answers, completedAt: new Date(),
-          result: { create: result }
-        },
-        include: { result: true }
-      });
+      
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Scoring timeout')), ConfigurationService.getConfig().scoring.timeoutMs)
+      );
+      
+      scoringResult = await Promise.race([scoringPromise, timeoutPromise]);
+      
+    } catch (error) {
+      const scoringDuration = Date.now() - scoringStart;
+      logger.error('Scoring failed', {
+        sport,
+        userId: submissionRequest.userId,
+        requestId,
+        duration: scoringDuration
+      }, error as Error);
+      return handleQuestionnaireError(new ScoringError('Failed to calculate rating'), res);
     }
-
-    res.json({ 
-      responseId: response.id, 
-      version, 
-      qHash, 
+    
+    const scoringDuration = Date.now() - scoringStart;
+    logger.scoringCompleted(sport, (scoringResult as any).singles || 0, (scoringResult as any).confidence || 'unknown', scoringDuration);
+    
+    // Database operations with proper error handling
+    const dbStart = Date.now();
+    let response;
+    try {
+      // Check for existing response
+      const existingResponse = await prisma.questionnaireResponse.findFirst({
+        where: {
+          userId: submissionRequest.userId,
+          sport
+        },
+        include: { result: true }
+      });
+      
+      if (existingResponse) {
+        // Update existing response
+        response = await prisma.questionnaireResponse.update({
+          where: { id: existingResponse.id },
+          data: {
+            qVersion: version,
+            qHash: hash,
+            answersJson: sanitizedAnswers,
+            completedAt: new Date(),
+            result: {
+              upsert: {
+                create: scoringResult,
+                update: scoringResult
+              }
+            }
+          },
+          include: { result: true }
+        });
+        
+        logger.info('Updated existing questionnaire response', {
+          responseId: response.id,
+          userId: submissionRequest.userId,
+          sport,
+          requestId
+        });
+      } else {
+        // Create new response
+        response = await prisma.questionnaireResponse.create({
+          data: {
+            userId: submissionRequest.userId,
+            sport,
+            qVersion: version,
+            qHash: hash,
+            answersJson: sanitizedAnswers,
+            completedAt: new Date(),
+            result: { create: scoringResult }
+          },
+          include: { result: true }
+        });
+        
+        logger.info('Created new questionnaire response', {
+          responseId: response.id,
+          userId: submissionRequest.userId,
+          sport,
+          requestId
+        });
+      }
+      
+    } catch (error) {
+      const dbDuration = Date.now() - dbStart;
+      logger.error('Database error during response save', {
+        userId: submissionRequest.userId,
+        sport,
+        requestId,
+        duration: dbDuration
+      }, error as Error);
+      return handleQuestionnaireError(new DatabaseError('Failed to save response'), res);
+    }
+    
+    const dbDuration = Date.now() - dbStart;
+    logger.databaseOperation('upsert_response', 'questionnaire_response', dbDuration);
+    
+    logger.responseSubmitted(submissionRequest.userId, sport, response.id);
+    
+    const totalDuration = Date.now() - startTime;
+    logger.info('Questionnaire submission completed successfully', {
+      responseId: response.id,
+      userId: submissionRequest.userId,
+      sport,
+      requestId,
+      totalDuration,
+      operation: 'submit_questionnaire'
+    });
+    
+    res.set('X-Request-ID', requestId);
+    res.json({
+      responseId: response.id,
+      version,
+      qHash: hash,
       result: response.result,
       sport,
       success: true
     });
+    
   } catch (error) {
-    console.error('Error submitting questionnaire:', error);
-    res.status(500).json({ error: 'Failed to submit questionnaire' });
+    const duration = Date.now() - startTime;
+    logger.error('Unexpected error in questionnaire submission', {
+      sport,
+      requestId,
+      duration,
+      operation: 'submit_questionnaire'
+    }, error as Error);
+    
+    handleQuestionnaireError(error, res);
   }
 });
 
-// Get user's questionnaire responses
+// Get user's questionnaire responses with validation
 router.get('/responses/:userId', async (req, res) => {
+  const startTime = Date.now();
+  const requestId = req.requestId!;
+  const { userId } = req.params;
+  
   try {
-    const { userId } = req.params;
+    // Validate userId
+    const validation = validator.validateUserId(userId);
+    if (!validation.isValid) {
+      return handleQuestionnaireError(validation.errors[0], res);
+    }
     
-    const responses = await prisma.questionnaireResponse.findMany({
-      where: { userId },
-      include: { result: true },
-      orderBy: { completedAt: 'desc' }
+    logger.info('Fetching user responses', {
+      userId,
+      requestId,
+      operation: 'get_user_responses'
     });
-
+    
+    const dbStart = Date.now();
+    const responses = await Promise.race([
+      prisma.questionnaireResponse.findMany({
+        where: { userId },
+        include: { result: true },
+        orderBy: { completedAt: 'desc' }
+      }),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('Database timeout')), 10000))
+    ]);
+    
+    const dbDuration = Date.now() - dbStart;
+    logger.databaseOperation('fetch_responses', 'questionnaire_response', dbDuration);
+    
+    const totalDuration = Date.now() - startTime;
+    logger.info('User responses fetched successfully', {
+      userId,
+      requestId,
+      responseCount: (responses as any[]).length,
+      duration: totalDuration,
+      operation: 'get_user_responses'
+    });
+    
+    res.set('X-Request-ID', requestId);
     res.json({ responses, success: true });
+    
   } catch (error) {
-    console.error('Error fetching responses:', error);
-    res.status(500).json({ error: 'Failed to fetch responses' });
+    const duration = Date.now() - startTime;
+    logger.error('Error fetching user responses', {
+      userId,
+      requestId,
+      duration,
+      operation: 'get_user_responses'
+    }, error as Error);
+    
+    handleQuestionnaireError(error, res);
   }
 });
 
-// Get specific sport response for user
+// Get specific sport response for user with validation
 router.get('/responses/:userId/:sport', async (req, res) => {
+  const startTime = Date.now();
+  const requestId = req.requestId!;
+  const { userId } = req.params;
+  const sport = req.params.sport as SportType;
+  
   try {
-    const { userId, sport } = req.params;
-    
-    if (!['pickleball', 'tennis', 'padel'].includes(sport)) {
-      return res.status(400).json({ error: 'Invalid sport' });
+    // Validate userId
+    const userValidation = validator.validateUserId(userId);
+    if (!userValidation.isValid) {
+      return handleQuestionnaireError(userValidation.errors[0], res);
     }
     
-    const response = await prisma.questionnaireResponse.findFirst({
-      where: { 
-        userId,
-        sport 
-      },
-      include: { result: true },
-      orderBy: { completedAt: 'desc' }
+    // Validate sport
+    const sportValidation = validator.validateSport(sport);
+    if (!sportValidation.isValid) {
+      return handleQuestionnaireError(sportValidation.errors[0], res);
+    }
+    
+    logger.info('Fetching sport response', {
+      userId,
+      sport,
+      requestId,
+      operation: 'get_sport_response'
     });
-
+    
+    const dbStart = Date.now();
+    const response = await Promise.race([
+      prisma.questionnaireResponse.findFirst({
+        where: {
+          userId,
+          sport
+        },
+        include: { result: true },
+        orderBy: { completedAt: 'desc' }
+      }),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('Database timeout')), 10000))
+    ]);
+    
+    const dbDuration = Date.now() - dbStart;
+    logger.databaseOperation('fetch_sport_response', 'questionnaire_response', dbDuration);
+    
     if (!response) {
-      return res.status(404).json({ error: 'No response found for this sport' });
+      logger.info('No response found for sport', {
+        userId,
+        sport,
+        requestId
+      });
+      return res.status(404).json({ 
+        error: 'No response found for this sport',
+        code: 'RESPONSE_NOT_FOUND',
+        success: false 
+      });
     }
-
+    
+    const totalDuration = Date.now() - startTime;
+    logger.info('Sport response fetched successfully', {
+      userId,
+      sport,
+      requestId,
+      responseId: response.id,
+      duration: totalDuration,
+      operation: 'get_sport_response'
+    });
+    
+    res.set('X-Request-ID', requestId);
     res.json({ response, success: true });
+    
   } catch (error) {
-    console.error('Error fetching sport response:', error);
-    res.status(500).json({ error: 'Failed to fetch sport response' });
+    const duration = Date.now() - startTime;
+    logger.error('Error fetching sport response', {
+      userId,
+      sport,
+      requestId,
+      duration,
+      operation: 'get_sport_response'
+    }, error as Error);
+    
+    handleQuestionnaireError(error, res);
   }
 });
 
