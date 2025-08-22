@@ -30,6 +30,7 @@ export const sendEmail = async (options: {
 };
 
 
+
 export const inviteEmailTemplate = (inviteLink: string) => `
   <div style="font-family: Arial, sans-serif; color: #333; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #eaeaea; border-radius: 10px;">
     <div style="text-align: center; margin-bottom: 20px;">

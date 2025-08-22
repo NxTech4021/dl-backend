@@ -150,10 +150,10 @@ export const adminLogin = async (req, res) => {
       include: { accounts: true },
     });
 
-    if (!user || !["ADMIN", "SUPERADMIN"].includes(user.role)) {
+     if (!user || ![Role.ADMIN, Role.SUPERADMIN].includes(user.role)) {
       return res
-        .status(400)
-        .json(new ApiResponse(false, 401, null, "Sorry you do not have permission"));
+        .status(403)
+        .json(new ApiResponse(false, 403, null, "Sorry you do not have permission"));
     }
 
     // Credentials account
@@ -209,6 +209,88 @@ export const adminLogin = async (req, res) => {
       .json(new ApiResponse(false, 400, null, "Something went wrong"));
   }
 };
+
+export const getInviteEmail = async (req, res) => {
+  try {
+    const { token } = req.query;
+
+    if (!token) return res.status(400).json({ message: "Token is required" });
+
+    const verification = await prisma.verification.findUnique({ where: { value: token } });
+
+    if (!verification || verification.status !== "PENDING" || verification.expiresAt < new Date()) {
+      return res.status(400).json({ message: "Invalid or expired token" });
+    }
+
+    res.json({ email: verification.identifier });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Something went wrong" });
+  }
+};
+
+
+export const registerAdmin = async (req, res) => {
+  try {
+    const { token, name, username, password, email } = req.body;
+
+    console.log("Incoming body:", req.body);
+    if (!token || !name || !username || !password) {
+      return res.status(400).json({ message: "All fields are required", status: "FAILED" });
+    }
+    const invite = await prisma.verification.findUnique({ where: { value: token, } });
+
+    if (!invite || invite.status !== "PENDING") {
+      return res.status(400).json({ message: "Invalid or already used token", status: "FAILED" });
+    }
+
+    if (invite.expiresAt < new Date()) {
+      return res.status(400).json({ message: "Invite token expired", status: "FAILED" });
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    const user = await prisma.user.create({
+      data: {
+        email: email,
+        username: username,    
+        name,
+        role: "ADMIN",
+        accounts: {
+          create: {
+            providerId: "credentials",
+            accountId: email,
+            password: hashedPassword,
+          },
+        },
+      },
+    });
+
+    await prisma.verification.update({
+      where: { value: token },
+      data: { status: "ACCEPTED" },
+    });
+
+    await prisma.verification.updateMany({
+      where: { status: "PENDING", expiresAt: { lt: new Date() } },
+      data: { status: "EXPIRED" },
+    });
+
+    res.status(201).json({ message: "Admin registered successfully", status: "SUCCESS", user });
+  } catch (error: any) {
+  
+    if (error.meta?.target?.includes("username")) {
+      return res.status(400).json({ message: "Username is already taken" });
+    }
+    if (error.meta?.target?.includes("email")) {
+      return res.status(400).json({ message: "Email is already registered" });
+  }
+
+  console.error("Error registering admin:", error);
+  res.status(500).json({ message: "Something went wrong" });
+  }
+};
+
 
 export const sendAdminInvite = async (req, res) => {
   try {

@@ -16,10 +16,11 @@ export const createAdminInvite = async (email: string) => {
     data: {
       identifier: email,
       value: token,
+      status: "PENDING",
       expiresAt,
     },
   });
 
     // return invite link
-    return `${BASE_URL}/invite/accept?token=${token}`;
+    return `${BASE_URL}/register/admin?token=${token}`;
 };
