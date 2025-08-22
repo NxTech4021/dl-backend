@@ -80,11 +80,11 @@
         "subQuestions": [
           {
             "key": "serving",
-            "question": "Serving and return",
+            "question": "Serving",
             "options": [
-              { "label": "Beginner (learning basic serves and returns)", "weight": -0.8 },
-              { "label": "Developing (consistent serves, improving returns)", "weight": -0.3 },
-              { "label": "Intermediate (good serve placement and consistent returns)", "weight": 0.3 },
+              { "label": "Beginner (learning basic underhand serve)", "weight": -0.8 },
+              { "label": "Developing (consistent serve to service box)", "weight": -0.3 },
+              { "label": "Intermediate (good placement and variety)", "weight": 0.3 },
               { "label": "Advanced (excellent placement, spin, and tactical serving)", "weight": 0.8 }
             ]
           },
@@ -132,10 +132,10 @@
             "key": "positioning",
             "question": "Court Positioning and Movement",
             "options": [
-              { "label": "Beginner (learning basic positioning)", "weight": -0.8 },
-              { "label": "Developing (understand basic court coverage)", "weight": -0.3 },
-              { "label": "Intermediate (good movement and tactical positioning)", "weight": 0.3 },
-              { "label": "Advanced (excellent anticipation and court awareness)", "weight": 0.8 }
+              { "label": "Beginner (learning basic court positions, focused on hitting the ball)", "weight": -0.8 },
+              { "label": "Developing (understand basic partner positioning)", "weight": -0.3 },
+              { "label": "Intermediate (good court coverage with partner)", "weight": 0.3 },
+              { "label": "Advanced (excellent tactical positioning and anticipation)", "weight": 0.8 }
             ]
           }
         ]
