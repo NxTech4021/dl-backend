@@ -6,6 +6,7 @@ import { sendEmail } from "../config/nodemailer";
 import { hash } from "bcryptjs";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
+import { Request, Response } from "express";
 
 const JWT_SECRET = process.env.JWT_SECRET || "supersecret";
 const prisma = new PrismaClient();
@@ -80,7 +81,7 @@ const prisma = new PrismaClient();
 // };
 
 
-export const createSuperadmin = async (req, res) => {
+export const createSuperadmin = async (req: Request, res: Response) => {
   try {
     const { name, username, email, password } = req.body;
 
@@ -134,7 +135,7 @@ export const createSuperadmin = async (req, res) => {
 };
 
 
-export const adminLogin = async (req, res) => {
+export const adminLogin = async (req: Request, res: Response) => {
   try {
     const { email, password } = req.body;
 
@@ -150,7 +151,7 @@ export const adminLogin = async (req, res) => {
       include: { accounts: true },
     });
 
-     if (!user || ![Role.ADMIN, Role.SUPERADMIN].includes(user.role)) {
+     if (!user || (user.role !== Role.ADMIN && user.role !== Role.SUPERADMIN)) {
       return res
         .status(403)
         .json(new ApiResponse(false, 403, null, "Sorry you do not have permission"));
@@ -210,13 +211,13 @@ export const adminLogin = async (req, res) => {
   }
 };
 
-export const getInviteEmail = async (req, res) => {
+export const getInviteEmail = async (req: Request, res: Response) => {
   try {
     const { token } = req.query;
 
     if (!token) return res.status(400).json({ message: "Token is required" });
 
-    const verification = await prisma.verification.findUnique({ where: { value: token } });
+    const verification = await prisma.verification.findUnique({ where: { value: token as string } });
 
     if (!verification || verification.status !== "PENDING" || verification.expiresAt < new Date()) {
       return res.status(400).json({ message: "Invalid or expired token" });
@@ -230,7 +231,7 @@ export const getInviteEmail = async (req, res) => {
 };
 
 
-export const registerAdmin = async (req, res) => {
+export const registerAdmin = async (req: Request, res: Response) => {
   try {
     const { token, name, username, password, email } = req.body;
 
@@ -292,7 +293,7 @@ export const registerAdmin = async (req, res) => {
 };
 
 
-export const sendAdminInvite = async (req, res) => {
+export const sendAdminInvite = async (req: Request, res: Response) => {
   try {
     const { email } = req.body;
     // const superadmin = req.user; // assumed from auth middleware
@@ -310,5 +311,63 @@ export const sendAdminInvite = async (req, res) => {
   } catch (err) {
     console.error("Error sending invite:", err);
     res.status(400).json({ error: "Failed to send invite." });
+  }
+};
+
+export const getAdminSession = async (req: Request, res: Response) => {
+  try {
+    const token = req.cookies.accessToken;
+    
+    if (!token) {
+      return res
+        .status(401)
+        .json(new ApiResponse(false, 401, null, "No session found"));
+    }
+
+    const decoded = jwt.verify(token, JWT_SECRET) as any;
+    
+    const user = await prisma.user.findUnique({
+      where: { id: decoded.userId },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+      },
+    });
+
+    if (!user || (user.role !== Role.ADMIN && user.role !== Role.SUPERADMIN)) {
+      return res
+        .status(403)
+        .json(new ApiResponse(false, 403, null, "Invalid session"));
+    }
+
+    res.status(200).json(
+      new ApiResponse(true, 200, { user }, "Session retrieved successfully")
+    );
+  } catch (error) {
+    console.error("Session error:", error);
+    res
+      .status(401)
+      .json(new ApiResponse(false, 401, null, "Invalid session"));
+  }
+};
+
+export const adminLogout = async (req: Request, res: Response) => {
+  try {
+    // Clear the access token cookie
+    res
+      .clearCookie("accessToken", {
+        httpOnly: true,
+        secure: false, // set to true in production with HTTPS
+        sameSite: "lax",
+      })
+      .status(200)
+      .json(new ApiResponse(true, 200, null, "Logout successful"));
+  } catch (error) {
+    console.error("Logout error:", error);
+    res
+      .status(500)
+      .json(new ApiResponse(false, 500, null, "Logout failed"));
   }
 };

@@ -1,6 +1,6 @@
 import { Router } from 'express';
 
-import { adminLogin, createSuperadmin, getInviteEmail, registerAdmin, sendAdminInvite } from '../controllers/admincontrollers';
+import { adminLogin, createSuperadmin, getInviteEmail, registerAdmin, sendAdminInvite, getAdminSession, adminLogout } from '../controllers/admincontrollers';
 
 
 const adminrouter = Router();
@@ -12,6 +12,8 @@ adminrouter.post('/register', registerAdmin);
 
 adminrouter.post('/invite', sendAdminInvite);
 adminrouter.post('/adminlogin', adminLogin);
+adminrouter.get('/session', getAdminSession);
+adminrouter.post('/logout', adminLogout);
 
 
 

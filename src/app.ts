@@ -1,5 +1,6 @@
 import express from 'express';
 import cors from 'cors';
+import cookieParser from 'cookie-parser';
 import { toNodeHandler } from 'better-auth/node';
 import { auth } from './auth';
 import onboardingRoutes from './routes/onboarding';
@@ -18,7 +19,13 @@ app.use((req, res, next) => {
 
 // Set up CORS - More permissive for development
 app.use(cors({
-  origin: [ 'http://localhost:3030', 'http://localhost:82', 'http://localhost:3001', 'http://localhost:8081'], // Allow nginx proxy and direct access
+  origin: [ 
+    'http://localhost:3030', 
+    'http://localhost:82', 
+    'http://localhost:3001', 
+    'http://localhost:8081',
+    'http://192.168.1.3:8081' // Add the IP address origin
+  ], // Allow nginx proxy and direct access
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
@@ -31,6 +38,7 @@ app.all("/api/auth/*splat", toNodeHandler(auth));
 
 // The JSON parser for any other routes you might add later.
 app.use(express.json());
+app.use(cookieParser());
 
 app.use('/api', router);
 
