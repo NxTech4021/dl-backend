@@ -7,6 +7,13 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum Role {
+  USER
+  ADMIN
+  SUPERADMIN
+}
+
+
 model User {
   id              String    @id @default(cuid())
   name            String
@@ -15,10 +22,13 @@ model User {
   email           String    @unique
   emailVerified   Boolean   @default(false)
   image           String?
+  gender          String?   // 'male' | 'female'
+  dateOfBirth     DateTime?
   accounts        Account[]
   sessions        Session[]
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
+  role            Role      @default(USER)
 }
 
 model Account {
@@ -42,6 +52,7 @@ model Account {
   @@unique([providerId, accountId])
 }
 
+
 model Session {
   id        String   @id @default(cuid())
   userId    String
@@ -54,10 +65,21 @@ model Session {
   updatedAt DateTime @updatedAt
 }
 
+// To be used later 
+model AdminInvite {
+  id        String   @id @default(cuid())
+  email     String
+  token     String   @unique
+  status    String   @default("PENDING") // PENDING, ACCEPTED, EXPIRED
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+}
+
 model Verification {
   id         String   @id @default(cuid())
   identifier String
   value      String   @unique
+  status     String   @default("PENDING") // NEW: PENDING, ACCEPTED, EXPIRED
   expiresAt  DateTime
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt

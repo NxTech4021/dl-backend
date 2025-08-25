@@ -500,4 +500,198 @@ router.get('/responses/:userId/:sport', async (req, res) => {
   }
 });
 
+// Update user profile information (name, gender, dateOfBirth)
+router.put('/profile/:userId', async (req, res) => {
+  const startTime = Date.now();
+  const requestId = req.requestId!;
+  const { userId } = req.params;
+  const { name, gender, dateOfBirth } = req.body;
+  
+  try {
+    // Validate userId
+    const userValidation = validator.validateUserId(userId);
+    if (!userValidation.isValid) {
+      return handleQuestionnaireError(userValidation.errors[0], res);
+    }
+    
+    // Validate input data
+    if (!name || typeof name !== 'string' || name.trim().length < 2) {
+      return res.status(400).json({
+        error: 'Name must be at least 2 characters long',
+        code: 'INVALID_NAME',
+        success: false
+      });
+    }
+    
+    if (!gender || (gender !== 'male' && gender !== 'female')) {
+      return res.status(400).json({
+        error: 'Gender must be either "male" or "female"',
+        code: 'INVALID_GENDER',
+        success: false
+      });
+    }
+    
+    let parsedDate = null;
+    if (dateOfBirth) {
+      parsedDate = new Date(dateOfBirth);
+      if (isNaN(parsedDate.getTime())) {
+        return res.status(400).json({
+          error: 'Invalid date format for dateOfBirth',
+          code: 'INVALID_DATE',
+          success: false
+        });
+      }
+      
+      // Check if user is at least 13 years old
+      const today = new Date();
+      const age = today.getFullYear() - parsedDate.getFullYear();
+      const monthDiff = today.getMonth() - parsedDate.getMonth();
+      const actualAge = monthDiff < 0 || (monthDiff === 0 && today.getDate() < parsedDate.getDate()) 
+        ? age - 1 
+        : age;
+      
+      if (actualAge < 13) {
+        return res.status(400).json({
+          error: 'User must be at least 13 years old',
+          code: 'USER_TOO_YOUNG',
+          success: false
+        });
+      }
+    }
+    
+    logger.info('Updating user profile', {
+      userId,
+      requestId,
+      operation: 'update_profile'
+    });
+    
+    const dbStart = Date.now();
+    
+    // Check if user exists
+    const existingUser = await prisma.user.findUnique({
+      where: { id: userId }
+    });
+    
+    if (!existingUser) {
+      const error = new UserNotFoundError(userId);
+      logger.warn('User not found for profile update', {
+        userId,
+        requestId
+      });
+      return handleQuestionnaireError(error, res);
+    }
+    
+    // Update user profile
+    const updatedUser = await prisma.user.update({
+      where: { id: userId },
+      data: {
+        name: name.trim(),
+        gender,
+        dateOfBirth: parsedDate
+      }
+    });
+    
+    const dbDuration = Date.now() - dbStart;
+    logger.databaseOperation('update_profile', 'user', dbDuration);
+    
+    const totalDuration = Date.now() - startTime;
+    logger.info('User profile updated successfully', {
+      userId,
+      requestId,
+      duration: totalDuration,
+      operation: 'update_profile'
+    });
+    
+    res.set('X-Request-ID', requestId);
+    res.json({
+      user: {
+        id: updatedUser.id,
+        name: updatedUser.name,
+        gender: updatedUser.gender,
+        dateOfBirth: updatedUser.dateOfBirth
+      },
+      success: true
+    });
+    
+  } catch (error) {
+    const duration = Date.now() - startTime;
+    logger.error('Error updating user profile', {
+      userId,
+      requestId,
+      duration,
+      operation: 'update_profile'
+    }, error as Error);
+    
+    handleQuestionnaireError(error, res);
+  }
+});
+
+// Get user profile information
+router.get('/profile/:userId', async (req, res) => {
+  const startTime = Date.now();
+  const requestId = req.requestId!;
+  const { userId } = req.params;
+  
+  try {
+    // Validate userId
+    const validation = validator.validateUserId(userId);
+    if (!validation.isValid) {
+      return handleQuestionnaireError(validation.errors[0], res);
+    }
+    
+    logger.info('Fetching user profile', {
+      userId,
+      requestId,
+      operation: 'get_profile'
+    });
+    
+    const dbStart = Date.now();
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        gender: true,
+        dateOfBirth: true,
+        createdAt: true
+      }
+    });
+    
+    const dbDuration = Date.now() - dbStart;
+    logger.databaseOperation('fetch_profile', 'user', dbDuration);
+    
+    if (!user) {
+      const error = new UserNotFoundError(userId);
+      logger.warn('User not found for profile fetch', {
+        userId,
+        requestId
+      });
+      return handleQuestionnaireError(error, res);
+    }
+    
+    const totalDuration = Date.now() - startTime;
+    logger.info('User profile fetched successfully', {
+      userId,
+      requestId,
+      duration: totalDuration,
+      operation: 'get_profile'
+    });
+    
+    res.set('X-Request-ID', requestId);
+    res.json({ user, success: true });
+    
+  } catch (error) {
+    const duration = Date.now() - startTime;
+    logger.error('Error fetching user profile', {
+      userId,
+      requestId,
+      duration,
+      operation: 'get_profile'
+    }, error as Error);
+    
+    handleQuestionnaireError(error, res);
+  }
+});
+
 export default router;

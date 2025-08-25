@@ -32,6 +32,7 @@ export const auth = betterAuth({
     "http://localhost:3001", // Backend's direct port
     "http://localhost:8081",
     "http://192.168.100.48:8081",
+    "http://192.168.1.7:3001", // Your local IP
   ],
 
   socialProviders: {
