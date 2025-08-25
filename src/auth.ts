@@ -33,6 +33,7 @@ export const auth = betterAuth({
     "http://localhost:8081",
     "http://192.168.100.48:8081",
     "http://192.168.1.7:3001", // Your local IP
+    "http://192.168.1.3:8081", // Add the current IP address origin
   ],
 
   socialProviders: {

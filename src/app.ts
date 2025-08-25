@@ -1,5 +1,6 @@
 import express from 'express';
 import cors from 'cors';
+import cookieParser from 'cookie-parser';
 import { toNodeHandler } from 'better-auth/node';
 import { auth } from './auth';
 import onboardingRoutes from './routes/onboarding';
@@ -31,6 +32,7 @@ app.all("/api/auth/*splat", toNodeHandler(auth));
 
 // The JSON parser for any other routes you might add later.
 app.use(express.json());
+app.use(cookieParser());
 
 app.use('/api', router);
 
