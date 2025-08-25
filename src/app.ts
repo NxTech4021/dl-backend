@@ -19,13 +19,7 @@ app.use((req, res, next) => {
 
 // Set up CORS - More permissive for development
 app.use(cors({
-  origin: [ 
-    'http://localhost:3030', 
-    'http://localhost:82', 
-    'http://localhost:3001', 
-    'http://localhost:8081',
-    'http://192.168.1.3:8081' // Add the IP address origin
-  ], // Allow nginx proxy and direct access
+  origin: ['http://localhost:3030', 'http://localhost:82', 'http://localhost:3001', 'http://localhost:8081', 'http://192.168.1.7:3001'], // Allow nginx proxy, direct access, and local IP
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],

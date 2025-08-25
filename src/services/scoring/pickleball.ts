@@ -203,17 +203,19 @@ function convertDuprToRating(answers: Record<string, any>) {
 function getWeightForAnswer(category: string, answer: string): number {
   const weights: Record<string, Record<string, number>> = {
     experience: {
-      "Less than 3 months": -0.8,
-      "3-6 months": -0.4,
-      "6 months - 1 year": 0.0,
+      "Less than 1 month": -0.7,
+      "1-3 months": -0.4,
+      "3-6 months": -0.1,
+      "6-12 months": 0.2,
       "1-2 years": 0.5,
       "More than 2 years": 1.0
     },
     sports_background: {
-      "No prior racket/paddle sports": -0.4,
-      "Some casual play (e.g., badminton, tennis, table tennis)": 0.0,
-      "Regular player in another racket/paddle sport": 0.4,
-      "Competitive background in another racket/paddle sport": 0.8
+      "No experience with racquet sports": -0.8,
+      "Casual/recreational player of other racquet sports": -0.3,
+      "Intermediate level in tennis, badminton, or table tennis": 0.4,
+      "Advanced/competitive player in other racquet sports": 0.9,
+      "Professional athlete in racquet sports": 1.0
     },
     frequency: {
       "Less than once a week": -0.6,
