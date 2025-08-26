@@ -13,6 +13,7 @@ enum Role {
   SUPERADMIN
 }
 
+
 model User {
   id              String        @id @default(cuid())
   name            String
@@ -25,9 +26,10 @@ model User {
   dateOfBirth     DateTime?
   accounts        Account[]
   sessions        Session[]
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
-  role            Role      @default(USER)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  role            Role          @default(USER)
+  location        UserLocation?
 }
 
 model Account {
@@ -51,6 +53,7 @@ model Account {
   @@unique([providerId, accountId])
 }
 
+
 model Session {
   id        String   @id @default(cuid())
   userId    String
@@ -71,4 +74,59 @@ model AdminInvite {
   status    String   @default("PENDING") // PENDING, ACCEPTED, EXPIRED
   createdAt DateTime @default(now())
   expiresAt DateTime
+}
+
+model Verification {
+  id         String   @id @default(cuid())
+  identifier String
+  value      String   @unique
+  status     String   @default("PENDING") // NEW: PENDING, ACCEPTED, EXPIRED
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+model QuestionnaireResponse {
+  id          Int                  @id @default(autoincrement())
+  userId      String
+  sport       String
+  qVersion    Int
+  qHash       String
+  answersJson Json
+  startedAt   DateTime             @default(now())
+  completedAt DateTime?
+  result      InitialRatingResult?
+
+  @@index([userId])
+  @@index([sport, qVersion])
+  @@index([qHash])
+}
+
+model InitialRatingResult {
+  id          Int       @id @default(autoincrement())
+  responseId  Int       @unique
+  source      String              // 'questionnaire' | 'dupr_conversion' | ...
+  singles     Int?
+  doubles     Int?
+  rd          Int?
+  confidence  String?
+  detail      Json?
+  createdAt   DateTime  @default(now())
+
+  response    QuestionnaireResponse @relation(fields: [responseId], references: [id], onDelete: Cascade)
+}
+
+model UserLocation {
+  id        Int      @id @default(autoincrement())
+  userId    String   @unique
+  country   String
+  state     String
+  city      String
+  latitude  Float?
+  longitude Float?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }

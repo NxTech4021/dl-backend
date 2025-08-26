@@ -6,6 +6,7 @@ import { auth } from './auth';
 import onboardingRoutes from './routes/onboarding';
 import router from './routes/mainRoute';
 import locationRoute from './routes/locationRoute';
+import onboardingRoute from './routes/onboarding';
 
 const app = express();
 
@@ -44,6 +45,7 @@ app.use('/api/onboarding', onboardingRoutes);
 
 // Register routes
 app.use('/api/users', locationRoute);
+app.use('/api/onboarding', onboardingRoute);
 
 // Health check endpoint
 app.get('/health', (req, res) => {
