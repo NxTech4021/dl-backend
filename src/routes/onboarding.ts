@@ -67,7 +67,7 @@ router.put('/profile/:userId', async (req, res) => {
       data: {
         name: name.trim(),
         ...(gender && { gender }),
-        ...(dateOfBirth && { birthDate: new Date(dateOfBirth) })
+        ...(dateOfBirth && { dateOfBirth: new Date(dateOfBirth) })
       },
       select: {
         id: true,
