@@ -1,8 +1,10 @@
 import express from 'express';
 import cors from 'cors';
+import cookieParser from 'cookie-parser';
 import { toNodeHandler } from 'better-auth/node';
 import { auth } from './auth';
-
+import onboardingRoutes from './routes/onboarding';
+import router from './routes/mainRoute';
 const app = express();
 
 // This is for debugging purposes only
@@ -17,7 +19,7 @@ app.use((req, res, next) => {
 
 // Set up CORS - More permissive for development
 app.use(cors({
-  origin: ['http://localhost:82', 'http://localhost:3001', 'http://localhost:8081'], // Allow nginx proxy and direct access
+  origin: ['http://localhost:3030', 'http://localhost:82', 'http://localhost:3001', 'http://localhost:8081', 'http://192.168.1.7:3001'], // Allow nginx proxy, direct access, and local IP
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
@@ -30,6 +32,13 @@ app.all("/api/auth/*splat", toNodeHandler(auth));
 
 // The JSON parser for any other routes you might add later.
 app.use(express.json());
+app.use(cookieParser());
+
+app.use('/api', router);
+
+// Mount onboarding routes 
+// TO-DO Move all the routes to one main routes file 
+app.use('/api/onboarding', onboardingRoutes);
 
 // Health check endpoint
 app.get('/health', (req, res) => {
