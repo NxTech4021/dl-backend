@@ -9,9 +9,11 @@ datasource db {
 
 model User {
   id              String    @id @default(cuid())
-  name            String?
-  email           String?   @unique
-  emailVerified   Boolean?  // Corrected from DateTime
+  name            String
+  username        String?   @unique
+  displayUsername String?
+  email           String    @unique
+  emailVerified   Boolean   @default(false)
   image           String?
   password        String?
   createdAt       DateTime  @default(now())
