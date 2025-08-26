@@ -59,8 +59,8 @@ export function scorePadel(answers: Record<string, any>) {
   // Process skills with padel-specific weighting
   if (answers.skills && typeof answers.skills === 'object') {
     const skillWeights: number[] = [];
-    const skillCategories = ['serving', 'groundstrokes', 'volley_wall', 'positioning'];
-    const padelSpecificSkills = ['volley_wall', 'positioning']; // More important for padel
+    const skillCategories = ['serving', 'wall_play', 'net_play', 'lob_smash', 'glass_play', 'positioning'];
+    const padelSpecificSkills = ['wall_play', 'glass_play', 'positioning']; // More important for padel
     
     for (const skill of skillCategories) {
       if (answers.skills[skill]) {
@@ -174,29 +174,41 @@ function getWeightForAnswer(category: string, answer: string): number {
 
 function getSkillWeight(skill: string, answer: string): number {
   const skillWeights: Record<string, number> = {
-    // Serving
-    "Beginner (learning basic serves/returns)": -0.7,
-    "Developing (consistent returns, basic serves)": -0.2,
-    "Intermediate (good serve placement and returns)": 0.3,
-    "Advanced (variety, placement, and tactical serving)": 0.8,
+    // Serving (exact match from Python)
+    "Beginner (learning basic underhand serve)": -0.8,
+    "Developing (consistent serve to service box)": -0.3,
+    "Intermediate (good placement and variety)": 0.3,
+    "Advanced (excellent placement, spin, and tactical serving)": 0.8,
     
-    // Groundstrokes
-    "Beginner (learning basic strokes)": -0.7,
-    "Developing (can rally consistently from baseline)": -0.2,
-    "Intermediate (good power and placement from baseline)": 0.3,
-    "Advanced (excellent control and variety)": 0.8,
+    // Wall Play (exact match from Python)
+    "Beginner (struggle with balls off the wall)": -0.8,
+    "Developing (can play basic shots off back wall)": -0.3,
+    "Intermediate (comfortable using walls tactically)": 0.3,
+    "Advanced (excellent wall play and court geometry understanding)": 0.8,
     
-    // Volley/Wall (padel-specific)
-    "Beginner (learning basic volleys/wall play)": -0.7,
-    "Developing (comfortable with basic volleys and wall shots)": -0.2,
-    "Intermediate (good net coverage and use of walls)": 0.3,
-    "Advanced (excellent volley/wall control and transition play)": 0.8,
+    // Net Play (exact match from Python)
+    "Beginner (basic volleys, rarely at net)": -0.8,
+    "Developing (comfortable with simple volleys)": -0.3,
+    "Intermediate (good net coverage and volley placement)": 0.3,
+    "Advanced (dominant net game with excellent positioning)": 0.8,
     
-    // Positioning (padel-specific)
-    "Beginner (learning basic positioning)": -0.7,
-    "Developing (understand basic tactics)": -0.2,
-    "Intermediate (good awareness and tactics)": 0.3,
-    "Advanced (excellent strategy and court awareness)": 0.8
+    // Lob and Smash (exact match from Python)
+    "Beginner (learning basic lobs and overheads)": -0.8,
+    "Developing (can execute basic lobs and smashes)": -0.3,
+    "Intermediate (good lob placement and overhead power)": 0.3,
+    "Advanced (excellent lob variety and smash winners)": 0.8,
+    
+    // Glass Play (exact match from Python)
+    "Beginner (struggle with balls off glass walls)": -0.8,
+    "Developing (can return balls off glass walls)": -0.3,
+    "Intermediate (use glass walls tactically)": 0.3,
+    "Advanced (master glass wall angles and spins)": 0.8,
+    
+    // Positioning (exact match from Python)
+    "Beginner (learning basic court positions, focused on hitting the ball)": -0.8,
+    "Developing (understand basic partner positioning)": -0.3,
+    "Intermediate (good court coverage with partner)": 0.3,
+    "Advanced (excellent tactical positioning and anticipation)": 0.8
   };
 
   return skillWeights[answer] || 0;

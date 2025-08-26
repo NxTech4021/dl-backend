@@ -16,57 +16,61 @@
       },
       {
         "key": "sports_background",
-        "question": "Do you have a background in racket/paddle sports?",
+        "question": "What is your background in racquet sports?",
         "type": "single_choice",
         "options": [
-          { "label": "No prior racket/paddle sports", "weight": -0.4 },
-          { "label": "Some casual play (e.g., badminton, tennis, table tennis)", "weight": 0.0 },
-          { "label": "Regular player in another racket/paddle sport", "weight": 0.4 },
-          { "label": "Competitive background in another racket/paddle sport", "weight": 0.8 }
+          { "label": "No experience with racquet sports", "weight": -0.8 },
+          { "label": "Casual player in tennis/squash/badminton", "weight": -0.2 },
+          { "label": "Intermediate level in tennis or squash", "weight": 0.4 },
+          { "label": "Advanced/competitive player in tennis or squash", "weight": 0.8 },
+          { "label": "Professional athlete in racquet sports", "weight": 1.0 }
         ]
       },
       {
         "key": "frequency",
-        "question": "How often do you play padel?",
+        "question": "How often do you currently play padel?",
         "type": "single_choice",
         "options": [
-          { "label": "Less than once a week", "weight": -0.6 },
-          { "label": "1-2 times per week", "weight": -0.2 },
-          { "label": "3-4 times per week", "weight": 0.3 },
-          { "label": "5+ times per week", "weight": 0.8 }
+          { "label": "Rarely (less than once a month)", "weight": -0.6 },
+          { "label": "Monthly (1-2 times per month)", "weight": -0.2 },
+          { "label": "Weekly (1-2 times per week)", "weight": 0.3 },
+          { "label": "Regular (3-4 times per week)", "weight": 0.7 },
+          { "label": "Daily (5+ times per week)", "weight": 1.0 }
         ]
       },
       {
         "key": "competitive_level",
-        "question": "What best describes your current competitive level?",
+        "question": "What level do you typically play at?",
         "type": "single_choice",
         "options": [
-          { "label": "Recreational only", "weight": -0.6 },
-          { "label": "Social/Club matches", "weight": -0.2 },
-          { "label": "Local competitive events", "weight": 0.3 },
-          { "label": "Regional/National competitive events", "weight": 0.8 }
+          { "label": "Social/recreational games with friends", "weight": -0.5 },
+          { "label": "Club-level matches", "weight": -0.1 },
+          { "label": "Local club-level social tournaments", "weight": 0.3 },
+          { "label": "Regional tournaments", "weight": 0.7 },
+          { "label": "Professional tournaments", "weight": 1.0 }
         ]
       },
       {
         "key": "coaching_background",
-        "question": "Have you received coaching or formal training?",
+        "question": "Have you had any padel coaching or instruction?",
         "type": "single_choice",
         "options": [
-          { "label": "No coaching", "weight": -0.4 },
-          { "label": "Few lessons", "weight": -0.1 },
-          { "label": "Regular coaching", "weight": 0.3 },
-          { "label": "High-performance/academy coaching", "weight": 0.8 }
+          { "label": "Self-taught/no formal instruction", "weight": -0.7 },
+          { "label": "Some group lessons or clinics", "weight": -0.3 },
+          { "label": "Regular group lessons", "weight": 0.2 },
+          { "label": "Consistent private coaching sessions", "weight": 0.6 },
+          { "label": "Professional/academy training", "weight": 1.0 }
         ]
       },
       {
         "key": "tournament",
-        "question": "Have you played in padel tournaments?",
+        "question": "What is your tournament playing experience?",
         "type": "single_choice",
         "options": [
-          { "label": "Never", "weight": -0.6 },
-          { "label": "Local tournaments", "weight": -0.1 },
-          { "label": "Regional tournaments", "weight": 0.4 },
-          { "label": "National/international tournaments", "weight": 0.9 }
+          { "label": "Never played tournaments", "weight": -0.6 },
+          { "label": "Social tournaments only", "weight": -0.2 },
+          { "label": "Club level beginner/novice tournaments", "weight": 0.2 },
+          { "label": "Intermediate/Advanced tournaments", "weight": 0.8 }
         ]
       },
       {
@@ -76,42 +80,62 @@
         "subQuestions": [
           {
             "key": "serving",
-            "question": "Serving and return",
+            "question": "Serving",
             "options": [
-              { "label": "Beginner (learning basic serves/returns)", "weight": -0.7 },
-              { "label": "Developing (consistent returns, basic serves)", "weight": -0.2 },
-              { "label": "Intermediate (good serve placement and returns)", "weight": 0.3 },
-              { "label": "Advanced (variety, placement, and tactical serving)", "weight": 0.8 }
+              { "label": "Beginner (learning basic underhand serve)", "weight": -0.8 },
+              { "label": "Developing (consistent serve to service box)", "weight": -0.3 },
+              { "label": "Intermediate (good placement and variety)", "weight": 0.3 },
+              { "label": "Advanced (excellent placement, spin, and tactical serving)", "weight": 0.8 }
             ]
           },
           {
-            "key": "groundstrokes",
-            "question": "Groundstrokes",
+            "key": "wall_play",
+            "question": "Wall Play (Back walls)",
             "options": [
-              { "label": "Beginner (learning basic strokes)", "weight": -0.7 },
-              { "label": "Developing (can rally consistently from baseline)", "weight": -0.2 },
-              { "label": "Intermediate (good power and placement from baseline)", "weight": 0.3 },
-              { "label": "Advanced (excellent control and variety)", "weight": 0.8 }
+              { "label": "Beginner (struggle with balls off the wall)", "weight": -0.8 },
+              { "label": "Developing (can play basic shots off back wall)", "weight": -0.3 },
+              { "label": "Intermediate (comfortable using walls tactically)", "weight": 0.3 },
+              { "label": "Advanced (excellent wall play and court geometry understanding)", "weight": 0.8 }
             ]
           },
           {
-            "key": "volley_wall",
-            "question": "Volleying, wall play, and net skills",
+            "key": "net_play",
+            "question": "Net Play (Volleys and positioning)",
             "options": [
-              { "label": "Beginner (learning basic volleys/wall play)", "weight": -0.7 },
-              { "label": "Developing (comfortable with basic volleys and wall shots)", "weight": -0.2 },
-              { "label": "Intermediate (good net coverage and use of walls)", "weight": 0.3 },
-              { "label": "Advanced (excellent volley/wall control and transition play)", "weight": 0.8 }
+              { "label": "Beginner (basic volleys, rarely at net)", "weight": -0.8 },
+              { "label": "Developing (comfortable with simple volleys)", "weight": -0.3 },
+              { "label": "Intermediate (good net coverage and volley placement)", "weight": 0.3 },
+              { "label": "Advanced (dominant net game with excellent positioning)", "weight": 0.8 }
+            ]
+          },
+          {
+            "key": "lob_smash",
+            "question": "Lob and Smash",
+            "options": [
+              { "label": "Beginner (learning basic lobs and overheads)", "weight": -0.8 },
+              { "label": "Developing (can execute basic lobs and smashes)", "weight": -0.3 },
+              { "label": "Intermediate (good lob placement and overhead power)", "weight": 0.3 },
+              { "label": "Advanced (excellent lob variety and smash winners)", "weight": 0.8 }
+            ]
+          },
+          {
+            "key": "glass_play",
+            "question": "Glass Play (Side walls)",
+            "options": [
+              { "label": "Beginner (struggle with balls off glass walls)", "weight": -0.8 },
+              { "label": "Developing (can return balls off glass walls)", "weight": -0.3 },
+              { "label": "Intermediate (use glass walls tactically)", "weight": 0.3 },
+              { "label": "Advanced (master glass wall angles and spins)", "weight": 0.8 }
             ]
           },
           {
             "key": "positioning",
-            "question": "Court positioning and tactics",
+            "question": "Court Positioning and Movement",
             "options": [
-              { "label": "Beginner (learning basic positioning)", "weight": -0.7 },
-              { "label": "Developing (understand basic tactics)", "weight": -0.2 },
-              { "label": "Intermediate (good awareness and tactics)", "weight": 0.3 },
-              { "label": "Advanced (excellent strategy and court awareness)", "weight": 0.8 }
+              { "label": "Beginner (learning basic court positions, focused on hitting the ball)", "weight": -0.8 },
+              { "label": "Developing (understand basic partner positioning)", "weight": -0.3 },
+              { "label": "Intermediate (good court coverage with partner)", "weight": 0.3 },
+              { "label": "Advanced (excellent tactical positioning and anticipation)", "weight": 0.8 }
             ]
           }
         ]

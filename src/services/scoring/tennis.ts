@@ -113,34 +113,38 @@ function getWeightForAnswer(category: string, answer: string): number {
   const weights: Record<string, Record<string, number>> = {
     experience: {
       "Less than 6 months": -0.8,
-      "6 months - 1 year": -0.4,
-      "1-2 years": 0.0,
-      "2-4 years": 0.5,
-      "More than 4 years": 1.0
+      "6 months - 1 year": -0.5,
+      "1-2 years": -0.1,
+      "2-5 years": 0.4,
+      "More than 5 years": 1.0
     },
     frequency: {
-      "Less than once a week": -0.6,
-      "1-2 times per week": -0.2,
-      "3-4 times per week": 0.3,
-      "5+ times per week": 0.8
+      "Rarely (less than once a month)": -0.6,
+      "Monthly (1-2 times per month)": -0.2,
+      "Weekly (1-2 times per week)": 0.3,
+      "Regular (3-4 times per week)": 0.7,
+      "Daily/Intensive (5+ times per week)": 1.0
     },
     competitive_level: {
-      "Recreational only": -0.6,
-      "Social/Club matches": -0.2,
-      "Local competitive events": 0.3,
-      "Regional/National competitive events": 0.8
+      "Recreational/social tennis with friends": -0.5,
+      "Social/friendly matches": -0.1,
+      "Local/small tournaments": 0.4,
+      "Regional/state tournaments": 0.8,
+      "National tournaments": 1.0
     },
     coaching_background: {
-      "No coaching": -0.4,
-      "Few lessons": -0.1,
-      "Regular coaching": 0.3,
-      "High-performance/academy coaching": 0.8
+      "Self-taught/no formal instruction": -0.7,
+      "Some coaching experience (group or private)": -0.3,
+      "Regular coaching in the past or ongoing group lessons": 0.2,
+      "Extensive private coaching experience": 0.6,
+      "Professional/academy training background": 1.0
     },
     tournament: {
-      "Never": -0.6,
-      "Local tournaments": -0.1,
-      "Regional tournaments": 0.4,
-      "National/international tournaments": 0.9
+      "Never played tournaments": -0.6,
+      "Club level tournaments": -0.1,
+      "Regional tournaments": 0.3,
+      "State level tournaments": 0.7,
+      "National tournaments": 1.0
     },
     self_rating: {
       "1.0-2.0 (Beginner)": -0.8,
