@@ -9,8 +9,10 @@ RUN npm ci
 COPY . .
 RUN npm install -g prisma
 RUN npx prisma generate
+RUN npx prisma db push
 EXPOSE 3001
-CMD ["sh", "-c", "echo 'Waiting for database...' && sleep 5 && echo 'Running Prisma migrations...' && npx prisma migrate dev && echo 'Prisma migration complete' && echo 'Starting development server...' && npm run dev"]
+CMD ["npm", "run", "dev"]
+# CMD ["sh", "-c", "echo 'Waiting for database...' && sleep 5 && echo 'Running Prisma migrations...' && npx prisma migrate dev && echo 'Prisma migration complete' && echo 'Starting development server...' && npm run dev"]
 
 FROM node:20-alpine3.17 AS builder
 WORKDIR /app
