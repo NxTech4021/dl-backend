@@ -10,7 +10,8 @@ COPY . .
 RUN npm install -g prisma
 RUN npx prisma generate
 EXPOSE 3001
-CMD ["sh", "-c", "echo 'Waiting for database...' && sleep 5 && echo 'Running Prisma migrations...' && npx prisma migrate deploy && echo 'Prisma migration complete' && echo 'Starting development server...' && npm run dev"]
+# CMD ["sh", "-c", "echo 'Waiting for database...' && sleep 5 && echo 'Running Prisma migrations...' && npx prisma migrate deploy && echo 'Prisma migration complete' && echo 'Starting development server...' && npm run dev"]
+CMD ["sh", "-c", "until pg_isready -h dl-postgres -p 5432 -U postgres; do echo 'Waiting for database...'; sleep 2; done && echo 'DB ready!' && npx prisma migrate deploy || npx prisma db push && npm run dev"]
 
 FROM node:20-alpine3.17 AS builder
 WORKDIR /app
