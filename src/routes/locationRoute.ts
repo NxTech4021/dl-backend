@@ -101,6 +101,27 @@ router.get('/:userId/location', async (req, res) => {
   }
 });
 
+// Get user city only
+router.get('/:userId/location/city', async (req, res) => {
+  try {
+    const { userId } = req.params;
+
+    const result = await (prisma as any).userLocation.findUnique({
+      where: { userId: userId },
+      select: { city: true }
+    });
+
+    if (!result) {
+      return res.status(404).json({ error: 'Location not found' });
+    }
+
+    res.json({ city: result.city });
+  } catch (error) {
+    console.error('Error getting city:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // Update user location
 router.put('/:userId/location', async (req, res) => {
   try {
