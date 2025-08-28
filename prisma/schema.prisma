@@ -15,20 +15,21 @@ enum Role {
 
 
 model User {
-  id              String    @id @default(cuid())
+  id              String        @id @default(cuid())
   name            String
-  username        String    @unique
+  username        String        @unique
   displayUsername String?
-  email           String    @unique
-  emailVerified   Boolean   @default(false)
+  email           String        @unique
+  emailVerified   Boolean       @default(false)
   image           String?
   gender          String?   // 'male' | 'female'
   dateOfBirth     DateTime?
   accounts        Account[]
   sessions        Session[]
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
-  role            Role      @default(USER)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  role            Role          @default(USER)
+  location        UserLocation?
 }
 
 model Account {
@@ -36,12 +37,12 @@ model Account {
   userId                String
   accountId             String
   providerId            String
-  accessToken           String?   @db.Text
-  refreshToken          String?   @db.Text
+  accessToken           String?
+  refreshToken          String?
   accessTokenExpiresAt  DateTime?
   refreshTokenExpiresAt DateTime?
   scope                 String?
-  idToken               String?   @db.Text
+  idToken               String?
   password              String?
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -86,17 +87,15 @@ model Verification {
 }
 
 model QuestionnaireResponse {
-  id           Int       @id @default(autoincrement())
-  userId       String    // Changed to String to match User.id type
-  sport        String              // 'pickleball' | 'tennis' | 'padel'
-  qVersion     Int                 // from JSON file
-  qHash        String              // SHA1 of JSON contents
-  answersJson  Json                // raw client payload
-  startedAt    DateTime  @default(now())
-  completedAt  DateTime?
-
-  // one-to-one
-  result       InitialRatingResult?
+  id          Int                  @id @default(autoincrement())
+  userId      String
+  sport       String
+  qVersion    Int
+  qHash       String
+  answersJson Json
+  startedAt   DateTime             @default(now())
+  completedAt DateTime?
+  result      InitialRatingResult?
 
   @@index([userId])
   @@index([sport, qVersion])
@@ -115,4 +114,19 @@ model InitialRatingResult {
   createdAt   DateTime  @default(now())
 
   response    QuestionnaireResponse @relation(fields: [responseId], references: [id], onDelete: Cascade)
+}
+
+model UserLocation {
+  id        Int      @id @default(autoincrement())
+  userId    String   @unique
+  country   String
+  state     String
+  city      String
+  latitude  Float?
+  longitude Float?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }

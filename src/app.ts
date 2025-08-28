@@ -5,6 +5,9 @@ import { toNodeHandler } from 'better-auth/node';
 import { auth } from './auth';
 import onboardingRoutes from './routes/onboarding';
 import router from './routes/mainRoute';
+import locationRoute from './routes/locationRoute';
+import onboardingRoute from './routes/onboarding';
+
 const app = express();
 
 // This is for debugging purposes only
@@ -39,6 +42,10 @@ app.use('/api', router);
 // Mount onboarding routes 
 // TO-DO Move all the routes to one main routes file 
 app.use('/api/onboarding', onboardingRoutes);
+
+// Register routes
+app.use('/api/users', locationRoute);
+app.use('/api/onboarding', onboardingRoute);
 
 // Health check endpoint
 app.get('/health', (req, res) => {
