@@ -80,7 +80,6 @@ const prisma = new PrismaClient();
 //   }
 // };
 
-
 export const createSuperadmin = async (req: Request, res: Response) => {
   try {
     const { name, username, email, password } = req.body;
@@ -134,7 +133,6 @@ export const createSuperadmin = async (req: Request, res: Response) => {
   }
 };
 
-
 export const adminLogin = async (req: Request, res: Response) => {
   try {
     const { email, password } = req.body;
@@ -142,7 +140,9 @@ export const adminLogin = async (req: Request, res: Response) => {
     if (!email || !password) {
       return res
         .status(400)
-        .json(new ApiResponse(false, 400, null, "Email and password are required"));
+        .json(
+          new ApiResponse(false, 400, null, "Email and password are required")
+        );
     }
 
     // Find user with accounts
@@ -151,10 +151,12 @@ export const adminLogin = async (req: Request, res: Response) => {
       include: { accounts: true },
     });
 
-     if (!user || (user.role !== Role.ADMIN && user.role !== Role.SUPERADMIN)) {
+    if (!user || (user.role !== Role.ADMIN && user.role !== Role.SUPERADMIN)) {
       return res
         .status(403)
-        .json(new ApiResponse(false, 403, null, "Sorry you do not have permission"));
+        .json(
+          new ApiResponse(false, 403, null, "Sorry you do not have permission")
+        );
     }
 
     // Credentials account
@@ -177,11 +179,9 @@ export const adminLogin = async (req: Request, res: Response) => {
     }
 
     // Generate JWT including userId and role
-    const token = jwt.sign(
-      { userId: user.id, role: user.role },
-      JWT_SECRET,
-      { expiresIn: "7d" }
-    );
+    const token = jwt.sign({ userId: user.id, role: user.role }, JWT_SECRET, {
+      expiresIn: "7d",
+    });
 
     // Send token in cookie + response
     res
@@ -193,15 +193,20 @@ export const adminLogin = async (req: Request, res: Response) => {
       })
       .status(200)
       .json(
-        new ApiResponse(true, 200, {
-          token,
-          user: {
-            id: user.id,
-            name: user.name,
-            email: user.email,
-            role: user.role,
+        new ApiResponse(
+          true,
+          200,
+          {
+            token,
+            user: {
+              id: user.id,
+              name: user.name,
+              email: user.email,
+              role: user.role,
+            },
           },
-        }, "Login successful")
+          "Login successful"
+        )
       );
   } catch (error) {
     console.error("Login error:", error);
@@ -217,9 +222,15 @@ export const getInviteEmail = async (req: Request, res: Response) => {
 
     if (!token) return res.status(400).json({ message: "Token is required" });
 
-    const verification = await prisma.verification.findUnique({ where: { value: token as string } });
+    const verification = await prisma.verification.findUnique({
+      where: { value: token as string },
+    });
 
-    if (!verification || verification.status !== "PENDING" || verification.expiresAt < new Date()) {
+    if (
+      !verification ||
+      verification.status !== "PENDING" ||
+      verification.expiresAt < new Date()
+    ) {
       return res.status(400).json({ message: "Invalid or expired token" });
     }
 
@@ -230,23 +241,30 @@ export const getInviteEmail = async (req: Request, res: Response) => {
   }
 };
 
-
 export const registerAdmin = async (req: Request, res: Response) => {
   try {
     const { token, name, username, password, email } = req.body;
 
     console.log("Incoming body:", req.body);
     if (!token || !name || !username || !password) {
-      return res.status(400).json({ message: "All fields are required", status: "FAILED" });
+      return res
+        .status(400)
+        .json({ message: "All fields are required", status: "FAILED" });
     }
-    const invite = await prisma.verification.findUnique({ where: { value: token, } });
+    const invite = await prisma.verification.findUnique({
+      where: { value: token },
+    });
 
     if (!invite || invite.status !== "PENDING") {
-      return res.status(400).json({ message: "Invalid or already used token", status: "FAILED" });
+      return res
+        .status(400)
+        .json({ message: "Invalid or already used token", status: "FAILED" });
     }
 
     if (invite.expiresAt < new Date()) {
-      return res.status(400).json({ message: "Invite token expired", status: "FAILED" });
+      return res
+        .status(400)
+        .json({ message: "Invite token expired", status: "FAILED" });
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
@@ -254,7 +272,7 @@ export const registerAdmin = async (req: Request, res: Response) => {
     const user = await prisma.user.create({
       data: {
         email: email,
-        username: username,    
+        username: username,
         name,
         role: "ADMIN",
         accounts: {
@@ -277,21 +295,23 @@ export const registerAdmin = async (req: Request, res: Response) => {
       data: { status: "EXPIRED" },
     });
 
-    res.status(201).json({ message: "Admin registered successfully", status: "SUCCESS", user });
+    res.status(201).json({
+      message: "Admin registered successfully",
+      status: "SUCCESS",
+      user,
+    });
   } catch (error: any) {
-  
     if (error.meta?.target?.includes("username")) {
       return res.status(400).json({ message: "Username is already taken" });
     }
     if (error.meta?.target?.includes("email")) {
       return res.status(400).json({ message: "Email is already registered" });
-  }
+    }
 
-  console.error("Error registering admin:", error);
-  res.status(500).json({ message: "Something went wrong" });
+    console.error("Error registering admin:", error);
+    res.status(500).json({ message: "Something went wrong" });
   }
 };
-
 
 export const sendAdminInvite = async (req: Request, res: Response) => {
   try {
@@ -317,7 +337,7 @@ export const sendAdminInvite = async (req: Request, res: Response) => {
 export const getAdminSession = async (req: Request, res: Response) => {
   try {
     const token = req.cookies.accessToken;
-    
+
     if (!token) {
       return res
         .status(401)
@@ -325,7 +345,7 @@ export const getAdminSession = async (req: Request, res: Response) => {
     }
 
     const decoded = jwt.verify(token, JWT_SECRET) as any;
-    
+
     const user = await prisma.user.findUnique({
       where: { id: decoded.userId },
       select: {
@@ -342,14 +362,14 @@ export const getAdminSession = async (req: Request, res: Response) => {
         .json(new ApiResponse(false, 403, null, "Invalid session"));
     }
 
-    res.status(200).json(
-      new ApiResponse(true, 200, { user }, "Session retrieved successfully")
-    );
+    res
+      .status(200)
+      .json(
+        new ApiResponse(true, 200, { user }, "Session retrieved successfully")
+      );
   } catch (error) {
     console.error("Session error:", error);
-    res
-      .status(401)
-      .json(new ApiResponse(false, 401, null, "Invalid session"));
+    res.status(401).json(new ApiResponse(false, 401, null, "Invalid session"));
   }
 };
 
@@ -366,8 +386,6 @@ export const adminLogout = async (req: Request, res: Response) => {
       .json(new ApiResponse(true, 200, null, "Logout successful"));
   } catch (error) {
     console.error("Logout error:", error);
-    res
-      .status(500)
-      .json(new ApiResponse(false, 500, null, "Logout failed"));
+    res.status(500).json(new ApiResponse(false, 500, null, "Logout failed"));
   }
 };
