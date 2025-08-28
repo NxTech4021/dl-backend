@@ -9,7 +9,7 @@ RUN npm ci
 COPY . .
 RUN npm install -g prisma
 RUN npx prisma generate
-RUN npx prisma db push
+
 EXPOSE 3001
 CMD ["npm", "run", "dev"]
 # CMD ["sh", "-c", "echo 'Waiting for database...' && sleep 5 && echo 'Running Prisma migrations...' && npx prisma migrate dev && echo 'Prisma migration complete' && echo 'Starting development server...' && npm run dev"]
