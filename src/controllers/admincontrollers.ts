@@ -11,74 +11,6 @@ import { Request, Response } from "express";
 const JWT_SECRET = process.env.JWT_SECRET || "supersecret";
 const prisma = new PrismaClient();
 
-// export const createSuperadmin = async (req, res) => {
-
-//   try {
-//     const { name, username, email } = req.body;
-
-//     // Basic validation to ensure all required fields are present.
-//     if (!name || !username || !email) {
-//       return res.status(400).json({
-//         error: 'Please provide a name, username, and email.',
-//       });
-//     }
-
-//     // Check if a user with the given email or username already exists
-//     // to prevent duplicate entries and maintain data integrity.
-//     const existingUser = await prisma.user.findFirst({
-//       where: {
-//         OR: [
-//           { username: username },
-//           { email: email }
-//         ]
-//       },
-//     });
-
-//     if (existingUser) {
-//       return res.status(409).json({
-//         error: 'A user with this username or email already exists.',
-//       });
-//     }
-
-//     // Use prisma.user.create() to insert a new user record into the database.
-//     // We explicitly set the 'role' field to Role.SUPERADMIN using the imported enum.
-//     const newSuperadmin = await prisma.user.create({
-//       data: {
-//         name,
-//         username,
-//         email,
-//         // Assuming a superadmin is immediately verified. You can change this logic.
-//         emailVerified: true,
-//         // Set the role using the enum provided in the Prisma schema.
-//         role: Role.SUPERADMIN,
-//       },
-//       // You can also select which fields to return in the response.
-//       select: {
-//         id: true,
-//         name: true,
-//         username: true,
-//         email: true,
-//         role: true,
-//         createdAt: true,
-//       },
-//     });
-
-//     // Send a success response with the newly created user data.
-//     res.status(201).json({
-//       message: 'Superadmin user created successfully!',
-//       user: newSuperadmin,
-//     });
-
-//   } catch (error) {
-//     // Log the full error for debugging purposes on the server side.
-//     console.error('Error creating superadmin:', error);
-
-//     // Send a generic 500 status code for internal server errors.
-//     res.status(500).json({
-//       error: 'An internal server error occurred.',
-//     });
-//   }
-// };
 
 export const createSuperadmin = async (req: Request, res: Response) => {
   try {
@@ -216,25 +148,91 @@ export const adminLogin = async (req: Request, res: Response) => {
   }
 };
 
+export const fetchAdmins = async (req: Request, res: Response) => {
+  try {
+    // Fetch all registered admins
+    const registeredAdmins = await prisma.user.findMany({
+      where: {
+        role: "ADMIN" 
+      },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+        createdAt: true,
+        updatedAt: true,
+        adminInviteToken: {
+          select: {
+            id: true,
+            status: true,
+            createdAt: true,
+            expiresAt: true,
+          },
+        },
+      },
+    });
+
+    // Fetch all pending invites not yet registered
+    const pendingInvites = await prisma.adminInviteToken.findMany({
+      where: { status: "PENDING" },
+      select: {
+        id: true,
+        email: true,
+        status: true,
+        createdAt: true,
+        expiresAt: true,
+        userId: true, // should be null for pending
+      },
+    });
+
+    // Return combined response
+    res.status(200).json(
+      new ApiResponse(true, 200, {
+        registeredAdmins,
+        pendingInvites,
+      }, "Admins fetched successfully")
+    );
+  } catch (error) {
+    console.error("Fetch admins error:", error);
+    return res
+      .status(500)
+      .json(new ApiResponse(false, 500, null, "Something went wrong"));
+  }
+};
+
+
 export const getInviteEmail = async (req: Request, res: Response) => {
   try {
     const { token } = req.query;
 
     if (!token) return res.status(400).json({ message: "Token is required" });
 
-    const verification = await prisma.verification.findUnique({
-      where: { value: token as string },
+    // const verification = await prisma.verification.findUnique({
+    //   where: { value: token as string },
+    // });
+
+    // if (
+    //   !verification ||
+    //   verification.status !== "PENDING" ||
+    //   verification.expiresAt < new Date()
+    // ) {
+    //   return res.status(400).json({ message: "Invalid or expired token" });
+    // }
+
+      const invite = await prisma.adminInviteToken.findUnique({
+      where: { token: token as string },
     });
 
     if (
-      !verification ||
-      verification.status !== "PENDING" ||
-      verification.expiresAt < new Date()
+      !invite ||
+      invite.status !== "PENDING" ||
+      invite.expiresAt < new Date()
     ) {
       return res.status(400).json({ message: "Invalid or expired token" });
     }
 
-    res.json({ email: verification.identifier });
+    res.json({ email: invite.email });
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: "Something went wrong" });
@@ -243,7 +241,7 @@ export const getInviteEmail = async (req: Request, res: Response) => {
 
 export const registerAdmin = async (req: Request, res: Response) => {
   try {
-    const { token, name, username, password, email } = req.body;
+    const { token, name, username, password } = req.body;
 
     console.log("Incoming body:", req.body);
     if (!token || !name || !username || !password) {
@@ -251,9 +249,12 @@ export const registerAdmin = async (req: Request, res: Response) => {
         .status(400)
         .json({ message: "All fields are required", status: "FAILED" });
     }
-    const invite = await prisma.verification.findUnique({
-      where: { value: token },
+    const invite = await prisma.adminInviteToken.findUnique({
+      where: { token },
     });
+
+
+    console.log("invite data", invite.data)
 
     if (!invite || invite.status !== "PENDING") {
       return res
@@ -269,28 +270,55 @@ export const registerAdmin = async (req: Request, res: Response) => {
 
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    const user = await prisma.user.create({
+    // const user = await prisma.user.create({
+    //   data: {
+    //     email,
+    //     username,
+    //     name,
+    //     role: "ADMIN",
+    //     accounts: {
+    //       create: {
+    //         providerId: "credentials",
+    //         accountId: email,
+    //         password: hashedPassword,
+    //       },
+    //     },
+    //     adminInviteToken: {
+    //       connect: { id: invite.id },
+    //     },
+    //   },
+    // });
+
+      const user = await prisma.user.update({
+      where: { id: invite.admin.user.id },
       data: {
-        email: email,
-        username: username,
         name,
-        role: "ADMIN",
+        username,
         accounts: {
           create: {
             providerId: "credentials",
-            accountId: email,
+            accountId: invite.email,
             password: hashedPassword,
           },
         },
       },
     });
 
-    await prisma.verification.update({
-      where: { value: token },
+    
+    // update admin status
+    await prisma.admin.update({
+      where: { id: invite.admin.id },
+      data: { status: "ACTIVE" },
+    });
+
+    // mark invite as accepted
+    await prisma.adminInviteToken.update({
+      where: { id: invite.id },
       data: { status: "ACCEPTED" },
     });
 
-    await prisma.verification.updateMany({
+    // expire old invites
+    await prisma.adminInviteToken.updateMany({
       where: { status: "PENDING", expiresAt: { lt: new Date() } },
       data: { status: "EXPIRED" },
     });
@@ -315,14 +343,11 @@ export const registerAdmin = async (req: Request, res: Response) => {
 
 export const sendAdminInvite = async (req: Request, res: Response) => {
   try {
-    const { email } = req.body;
-    // const superadmin = req.user; // assumed from auth middleware
+    const { email, name, username } = req.body;
+    // const admin = req.user; // Implement after authcontext 
 
-    // if (!superadmin || superadmin.role !== Role.SUPERADMIN) {
-    //   return res.status(403).json({ error: "Only superadmins can send invites." });
-    // }
-
-    const inviteLink = await createAdminInvite(email);
+    console.log("Body:", req.body);
+    const inviteLink = await createAdminInvite(email, name, username);
     const html = inviteEmailTemplate(inviteLink);
 
     await sendEmail(email, "You're invited to become an Admin", html);
