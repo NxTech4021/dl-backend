@@ -388,6 +388,26 @@ export const getAdminSession = async (req: Request, res: Response) => {
   }
 };
 
+export const getAdminById = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    
+    const admin = await prisma.admin.findUnique({
+      where: { userId: id },  
+      include: { user: true },
+    });
+
+    if (!admin) {
+      return res.status(404).json({ message: "Admin not found" });
+    }
+
+    return res.json(admin);
+  } catch (error) {
+    console.error("Error fetching admin:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+};
+
 export const adminLogout = async (req: Request, res: Response) => {
   try {
     // Clear the access token cookie
