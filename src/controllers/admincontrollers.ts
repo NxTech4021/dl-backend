@@ -99,7 +99,7 @@ export const adminLogin = async (req: Request, res: Response) => {
     if (!account || !account.password) {
       return res
         .status(400)
-        .json(new ApiResponse(false, 401, null, "Invalid credentials"));
+        .json(new ApiResponse(false, 401, null, "Invalid credentials No account exists"));
     }
 
     // Compare password
@@ -150,47 +150,30 @@ export const adminLogin = async (req: Request, res: Response) => {
 
 export const fetchAdmins = async (req: Request, res: Response) => {
   try {
-    // Fetch all registered admins
-    const registeredAdmins = await prisma.user.findMany({
-      where: {
-        role: "ADMIN" 
-      },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        role: true,
-        createdAt: true,
-        updatedAt: true,
-        adminInviteToken: {
-          select: {
-            id: true,
-            status: true,
-            createdAt: true,
-            expiresAt: true,
-          },
-        },
-      },
-    });
+   
+    const admins = await prisma.admin.findMany({
+    include: {
+      user: true,       
+      invite: true,    
+    },
+});
 
-    // Fetch all pending invites not yet registered
-    const pendingInvites = await prisma.adminInviteToken.findMany({
-      where: { status: "PENDING" },
-      select: {
-        id: true,
-        email: true,
-        status: true,
-        createdAt: true,
-        expiresAt: true,
-        userId: true, // should be null for pending
-      },
-    });
+    // Then map to a unified frontend format:
+    const getAllAdmins = admins.map((a) => ({
+      id: a.user?.id ?? a.id,
+      name: a.user?.name ?? a.invite?.email?.split("@")[0] ?? "",
+      email: a.user?.email ?? a.invite?.email ?? "",
+      role: a.user?.role,
+      status: a.status,
+      createdAt: a.user?.createdAt ?? a.createdAt,
+      updatedAt: a.user?.updatedAt,
+      type: a.status === "PENDING" ? "PENDING" : "ACTIVE",
+    }));
 
     // Return combined response
     res.status(200).json(
       new ApiResponse(true, 200, {
-        registeredAdmins,
-        pendingInvites,
+      getAllAdmins,
       }, "Admins fetched successfully")
     );
   } catch (error) {
@@ -250,11 +233,18 @@ export const registerAdmin = async (req: Request, res: Response) => {
         .json({ message: "All fields are required", status: "FAILED" });
     }
     const invite = await prisma.adminInviteToken.findUnique({
-      where: { token },
+    where: { token },
+      include: {
+        admin: {
+          include: {
+            user: true, 
+          },
+        },
+      },
     });
 
 
-    console.log("invite data", invite.data)
+    console.log("invite data", invite)
 
     if (!invite || invite.status !== "PENDING") {
       return res
