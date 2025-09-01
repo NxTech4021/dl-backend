@@ -15,20 +15,27 @@ enum Role {
 
 
 model User {
-  id              String    @id @default(cuid())
-  name            String
-  username        String    @unique
-  displayUsername String?
-  email           String    @unique
-  emailVerified   Boolean   @default(false)
-  image           String?
-  gender          String?   // 'male' | 'female'
-  dateOfBirth     DateTime?
-  accounts        Account[]
-  sessions        Session[]
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
-  role            Role      @default(USER)
+  id                   String    @id @default(cuid())
+  name                 String
+  username             String    @unique
+  displayUsername      String?
+  email                String    @unique
+  emailVerified        Boolean   @default(false)
+  image                String?
+  gender               String?   // 'male' | 'female'
+  dateOfBirth          DateTime?
+  area                 String?
+  status               String    @default("active")   // 'active' | 'inactive'
+  completedOnboarding  Boolean   @default(false)
+  lastLogin            DateTime?
+  lastActivityCheck    DateTime?
+  accounts             Account[]
+  sessions             Session[]
+  playerMatches        Match[]   @relation("PlayerMatches")
+  opponentMatches      Match[]   @relation("OpponentMatches")
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+  role                 Role      @default(USER)
 }
 
 model Account {
@@ -115,4 +122,51 @@ model InitialRatingResult {
   createdAt   DateTime  @default(now())
 
   response    QuestionnaireResponse @relation(fields: [responseId], references: [id], onDelete: Cascade)
+}
+
+model Match {
+  id            String      @id @default(cuid())
+  playerId      String      // Player initiating/recording the match
+  opponentId    String      // Opponent player ID
+  sport         String      // 'tennis' | 'pickleball' | 'padel'
+  matchType     String      // 'singles' | 'doubles'
+  playerScore   Int         // Player's score
+  opponentScore Int         // Opponent's score
+  outcome       String      // 'win' | 'loss' | 'draw'
+  matchDate     DateTime    @default(now())
+  location      String?     // Optional match location
+  notes         String?     // Optional match notes
+  duration      Int?        // Match duration in minutes
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  player        User        @relation("PlayerMatches", fields: [playerId], references: [id], onDelete: Cascade)
+  opponent      User        @relation("OpponentMatches", fields: [opponentId], references: [id], onDelete: Cascade)
+  stats         MatchStats?
+
+  @@index([playerId])
+  @@index([opponentId])
+  @@index([sport])
+  @@index([matchDate])
+}
+
+model MatchStats {
+  id                    String   @id @default(cuid())
+  matchId               String   @unique
+  playerAces            Int?
+  playerUnforcedErrors  Int?
+  playerWinners         Int?
+  playerDoubleFaults    Int?
+  opponentAces          Int?
+  opponentUnforcedErrors Int?
+  opponentWinners       Int?
+  opponentDoubleFaults  Int?
+  rallyCount            Int?
+  longestRally          Int?
+  breakPointsConverted  Int?
+  breakPointsTotal      Int?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  match                 Match    @relation(fields: [matchId], references: [id], onDelete: Cascade)
 }

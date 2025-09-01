@@ -6,7 +6,8 @@ import { auth } from '../auth';
 const router = express.Router();
 
 import adminrouter from './adminRoutes';
-import onboardingRoutes from './onboarding'
+import onboardingRoutes from './onboarding';
+import playerRouter from './playerRoutes';
 // import featureRouter from './featureRoutes';
 
 
@@ -27,6 +28,7 @@ router.get('/health', (req, res) => {
 
 // router.use('/chat', chatRouter);
 router.use('/admin', adminrouter);
+router.use('/players', playerRouter);
 
 
 
