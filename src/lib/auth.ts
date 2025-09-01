@@ -3,16 +3,19 @@ import { prismaAdapter } from "better-auth/adapters/prisma";
 import { PrismaClient } from "@prisma/client";
 import { createAuthMiddleware, username } from "better-auth/plugins";
 import { expo } from "@better-auth/expo";
-import { sendEmail } from "./email";
-import { getBackendBaseURL, getTrustedOrigins } from "./config/network";
+import { sendEmail } from "../utils/email";
 
 const prisma = new PrismaClient({ log: ["query", "info", "warn", "error"] });
 
 export const auth = betterAuth({
+  appName: "DeuceLeague",
+
   database: prismaAdapter(prisma, {
     provider: "postgresql",
   }),
+
   plugins: [expo(), username() as any],
+
   emailAndPassword: {
     enabled: true,
     sendResetPassword: async ({ user, url, token }, request) => {
@@ -23,21 +26,24 @@ export const auth = betterAuth({
       });
     },
     onPasswordReset: async ({ user }, request) => {
-      // your logic here
       console.log(`Password for user ${user.email} has been reset.`);
     },
   },
-  baseURL: getBackendBaseURL(),
-  trustedOrigins: getTrustedOrigins(),
 
-  socialProviders: {
-    google: {
-      clientId: process.env.GOOGLE_CLIENT_ID! as string,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET! as string ,
-    },
-    facebook: {
-      clientId: process.env.FACEBOOK_CLIENT_ID! as string,
-      clientSecret: process.env.FACEBOOK_CLIENT_SECRET! as string,
-    }
-  }
+  baseURL: process.env.BASE_URL || "http://localhost",
+
+  basePath: process.env.BETTER_AUTH_BASE_PATH || "/auth",
+
+  // trustedOrigins: getTrustedOrigins(),
+
+  // socialProviders: {
+  //   google: {
+  //     clientId: process.env.GOOGLE_CLIENT_ID! as string,
+  //     clientSecret: process.env.GOOGLE_CLIENT_SECRET! as string,
+  //   },
+  //   facebook: {
+  //     clientId: process.env.FACEBOOK_CLIENT_ID! as string,
+  //     clientSecret: process.env.FACEBOOK_CLIENT_SECRET! as string,
+  //   },
+  // },
 });

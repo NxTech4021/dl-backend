@@ -1,3 +1,4 @@
+
 generator client {
   provider = "prisma-client-js"
 }
@@ -13,7 +14,6 @@ enum Role {
   SUPERADMIN
 }
 
-
 model User {
   id              String    @id @default(cuid())
   name            String
@@ -22,13 +22,15 @@ model User {
   email           String    @unique
   emailVerified   Boolean   @default(false)
   image           String?
-  gender          String?   // 'male' | 'female'
+  gender          String? // 'male' | 'female'
   dateOfBirth     DateTime?
   accounts        Account[]
   sessions        Session[]
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
   role            Role      @default(USER)
+
+  @@map("user")
 }
 
 model Account {
@@ -50,8 +52,8 @@ model Account {
   updatedAt DateTime @updatedAt
 
   @@unique([providerId, accountId])
+  @@map("account")
 }
-
 
 model Session {
   id        String   @id @default(cuid())
@@ -63,9 +65,12 @@ model Session {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@map("session")
 }
 
 // To be used later 
+
 model AdminInvite {
   id        String   @id @default(cuid())
   email     String
@@ -83,20 +88,22 @@ model Verification {
   expiresAt  DateTime
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
+
+  @@map("verification")
 }
 
 model QuestionnaireResponse {
-  id           Int       @id @default(autoincrement())
-  userId       String    // Changed to String to match User.id type
-  sport        String              // 'pickleball' | 'tennis' | 'padel'
-  qVersion     Int                 // from JSON file
-  qHash        String              // SHA1 of JSON contents
-  answersJson  Json                // raw client payload
-  startedAt    DateTime  @default(now())
-  completedAt  DateTime?
+  id          Int       @id @default(autoincrement())
+  userId      String // Changed to String to match User.id type
+  sport       String // 'pickleball' | 'tennis' | 'padel'
+  qVersion    Int // from JSON file
+  qHash       String // SHA1 of JSON contents
+  answersJson Json // raw client payload
+  startedAt   DateTime  @default(now())
+  completedAt DateTime?
 
   // one-to-one
-  result       InitialRatingResult?
+  result InitialRatingResult?
 
   @@index([userId])
   @@index([sport, qVersion])
@@ -104,15 +111,15 @@ model QuestionnaireResponse {
 }
 
 model InitialRatingResult {
-  id          Int       @id @default(autoincrement())
-  responseId  Int       @unique
-  source      String              // 'questionnaire' | 'dupr_conversion' | ...
-  singles     Int?
-  doubles     Int?
-  rd          Int?
-  confidence  String?
-  detail      Json?
-  createdAt   DateTime  @default(now())
+  id         Int      @id @default(autoincrement())
+  responseId Int      @unique
+  source     String // 'questionnaire' | 'dupr_conversion' | ...
+  singles    Int?
+  doubles    Int?
+  rd         Int?
+  confidence String?
+  detail     Json?
+  createdAt  DateTime @default(now())
 
-  response    QuestionnaireResponse @relation(fields: [responseId], references: [id], onDelete: Cascade)
+  response QuestionnaireResponse @relation(fields: [responseId], references: [id], onDelete: Cascade)
 }
