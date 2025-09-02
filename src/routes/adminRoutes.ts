@@ -1,5 +1,5 @@
 import { Router } from "express";
-
+import { verifyJWT } from "../middlewares/auth.middleware";
 import {
   adminLogin,
   createSuperadmin,
@@ -8,12 +8,18 @@ import {
   sendAdminInvite,
   getAdminSession,
   adminLogout,
+  fetchAdmins,
+  getAdminById
 } from "../controllers/admincontrollers";
 
-const adminrouter = Router();
 
+const adminrouter = Router();
+// TO DO
+// Make them protected routes
 adminrouter.get("/get-invite", getInviteEmail);
 adminrouter.get("/session", getAdminSession);
+adminrouter.get("/getadmins", fetchAdmins);
+adminrouter.get("/profile/:id", getAdminById);
 
 adminrouter.post("/superadmin", createSuperadmin);
 adminrouter.post("/register", registerAdmin);

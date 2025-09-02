@@ -29,6 +29,7 @@ router.get('/health', (req, res) => {
 // router.use('/chat', chatRouter);
 router.use('/admin', adminrouter);
 router.use('/players', playerRouter);
+router.use("/api/admin", adminrouter);
 
 
 
