@@ -40,22 +40,26 @@ app.use(
 // According to the official Express documentation for better-auth,
 // the auth handler must be mounted BEFORE express.json().
 // The "/api/auth/*" pattern is recommended for Express v4.
-app.all("/auth/*splat", toNodeHandler(auth));
+// According to the official Express documentation for better-auth,
+// the auth handler must be mounted BEFORE express.json().
+// The "/api/auth/*" pattern is recommended for Express v4.
+// OLD: app.all("/auth/*splat", toNodeHandler(auth));
+// FIX: Updated to match frontend expectations - frontend calls /api/auth/*
+app.all("/api/auth/*splat", toNodeHandler(auth));
 
 // The JSON parser for any other routes you might add later.
 app.use(express.json());
 app.use(cookieParser());
 app.use(pino());
 
+// Keep main router at root level for health checks and other non-API routes
 app.use(router);
 
 // Mount onboarding routes
 // TO-DO Move all the routes to one main routes file
-app.use("/onboarding", onboardingRoutes);
-
-// app.post("/auth/sign-in/email", (req, res) => {
-//   console.log(req.body);
-// });
+// OLD: app.use("/onboarding", onboardingRoutes);
+// FIX: Mount at /api/onboarding to match frontend expectations
+app.use("/api/onboarding", onboardingRoutes);
 
 // Health check endpoint
 app.get("/health", (req, res) => {
