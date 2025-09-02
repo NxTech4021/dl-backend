@@ -50,15 +50,14 @@ app.use(express.json());
 app.use(cookieParser());
 app.use(pino());
 
+// Keep main router at root level for health checks and other non-API routes
 app.use(router);
 
 // Mount onboarding routes
 // TO-DO Move all the routes to one main routes file
-app.use("/onboarding", onboardingRoutes);
-
-// app.post("/auth/sign-in/email", (req, res) => {
-//   console.log(req.body);
-// });
+// OLD: app.use("/onboarding", onboardingRoutes);
+// FIX: Mount at /api/onboarding to match frontend expectations
+app.use("/api/onboarding", onboardingRoutes);
 
 // Health check endpoint
 app.get("/health", (req, res) => {
