@@ -34,7 +34,15 @@ export const auth = betterAuth({
 
   basePath: process.env.BETTER_AUTH_BASE_PATH || "/auth",
 
-  // trustedOrigins: getTrustedOrigins(),
+  trustedOrigins: [
+    "http://localhost:3030",
+    "http://localhost:82",
+    "http://localhost:3001",
+    "http://localhost:8081",
+    "http://192.168.1.7:3001",
+    "http://192.168.100.53:8081",
+    "exp://192.168.100.53:8081",
+  ],
 
   // socialProviders: {
   //   google: {
