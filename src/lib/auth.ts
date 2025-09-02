@@ -32,7 +32,9 @@ export const auth = betterAuth({
 
   baseURL: process.env.BASE_URL || "http://localhost",
 
-  basePath: process.env.BETTER_AUTH_BASE_PATH || "/auth",
+  // OLD: basePath: process.env.BETTER_AUTH_BASE_PATH || "/auth",
+  // FIX: Updated to match frontend expectations and app.ts routing
+  basePath: process.env.BETTER_AUTH_BASE_PATH || "/api/auth",
 
   // trustedOrigins: getTrustedOrigins(),
 

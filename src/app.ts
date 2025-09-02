@@ -38,7 +38,12 @@ app.use(
 // According to the official Express documentation for better-auth,
 // the auth handler must be mounted BEFORE express.json().
 // The "/api/auth/*" pattern is recommended for Express v4.
-app.all("/auth/*splat", toNodeHandler(auth));
+// According to the official Express documentation for better-auth,
+// the auth handler must be mounted BEFORE express.json().
+// The "/api/auth/*" pattern is recommended for Express v4.
+// OLD: app.all("/auth/*splat", toNodeHandler(auth));
+// FIX: Updated to match frontend expectations - frontend calls /api/auth/*
+app.all("/api/auth/*splat", toNodeHandler(auth));
 
 // The JSON parser for any other routes you might add later.
 app.use(express.json());
