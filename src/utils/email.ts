@@ -5,7 +5,7 @@ export const sendEmail = async (options: {
 }) => {
   console.log("Sending email:", options);
   // TODO: Implement email sending
-  
+
   // In a real application, you would integrate with an email service like SendGrid, AWS SES, etc.
   // For example, using Nodemailer:
   //
@@ -28,8 +28,6 @@ export const sendEmail = async (options: {
   //   text: options.text,
   // });
 };
-
-
 
 export const inviteEmailTemplate = (inviteLink: string) => `
   <div style="font-family: Arial, sans-serif; color: #333; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #eaeaea; border-radius: 10px;">

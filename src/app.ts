@@ -2,9 +2,9 @@ import express from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
 import { toNodeHandler } from "better-auth/node";
-import { auth } from "./auth";
+import { auth } from "./lib/auth";
 import onboardingRoutes from "./routes/onboarding";
-import router from "./routes/mainRoute";
+import router from "./routes/index";
 import pino from "pino-http";
 
 const app = express();
@@ -38,7 +38,7 @@ app.use(
 // According to the official Express documentation for better-auth,
 // the auth handler must be mounted BEFORE express.json().
 // The "/api/auth/*" pattern is recommended for Express v4.
-app.all("/api/auth/*splat", toNodeHandler(auth));
+app.all("/auth/*splat", toNodeHandler(auth));
 
 // The JSON parser for any other routes you might add later.
 app.use(express.json());
@@ -49,7 +49,11 @@ app.use(router);
 
 // Mount onboarding routes
 // TO-DO Move all the routes to one main routes file
-app.use("/api/onboarding", onboardingRoutes);
+app.use("/onboarding", onboardingRoutes);
+
+// app.post("/auth/sign-in/email", (req, res) => {
+//   console.log(req.body);
+// });
 
 // Health check endpoint
 app.get("/health", (req, res) => {

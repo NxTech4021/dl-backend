@@ -8,10 +8,10 @@ export const getAllPlayers = async (req: Request, res: Response) => {
   try {
     const players = await prisma.user.findMany({
       where: {
-        role: 'USER',
+        role: "USER",
       },
       orderBy: {
-        createdAt: 'desc',
+        createdAt: "desc",
       },
     });
 
@@ -21,7 +21,7 @@ export const getAllPlayers = async (req: Request, res: Response) => {
         .json(new ApiResponse(true, 200, [], "No players found"));
     }
 
-    const playerIds = players.map(p => p.id);
+    const playerIds = players.map((p) => p.id);
 
     const responses = await prisma.questionnaireResponse.findMany({
       where: {
@@ -29,8 +29,8 @@ export const getAllPlayers = async (req: Request, res: Response) => {
         completedAt: { not: null },
       },
       include: {
-        result: true, 
-      }
+        result: true,
+      },
     });
 
     const responsesByUserId = responses.reduce((acc, res) => {
@@ -40,15 +40,17 @@ export const getAllPlayers = async (req: Request, res: Response) => {
 
     const transformedPlayers = players.map((player) => {
       const userResponses = responsesByUserId[player.id] || [];
-      
-      const sports = [...new Set(userResponses.map(r => r.sport.toLowerCase()))];
-      
+
+      const sports = [
+        ...new Set(userResponses.map((r) => r.sport.toLowerCase())),
+      ];
+
       const skillRatings = userResponses.reduce((acc, res) => {
         if (res.result) {
           const rating = res.result.doubles ?? res.result.singles ?? 0;
           acc[res.sport.toLowerCase()] = {
             rating: rating / 1000,
-            confidence: res.result.confidence ?? 'N/A',
+            confidence: res.result.confidence ?? "N/A",
             rd: res.result.rd ?? 0,
           };
         }
@@ -68,7 +70,8 @@ export const getAllPlayers = async (req: Request, res: Response) => {
         registeredDate: player.createdAt,
         lastLoginDate: player.lastLogin,
         sports: sports,
-        skillRatings: Object.keys(skillRatings).length > 0 ? skillRatings : null,
+        skillRatings:
+          Object.keys(skillRatings).length > 0 ? skillRatings : null,
         status: player.status,
         completedOnboarding: player.completedOnboarding,
       };
@@ -77,7 +80,12 @@ export const getAllPlayers = async (req: Request, res: Response) => {
     return res
       .status(200)
       .json(
-        new ApiResponse(true, 200, transformedPlayers, "Players fetched successfully")
+        new ApiResponse(
+          true,
+          200,
+          transformedPlayers,
+          "Players fetched successfully"
+        )
       );
   } catch (error) {
     console.error("Error fetching players:", error);
@@ -90,19 +98,19 @@ export const getAllPlayers = async (req: Request, res: Response) => {
 export const getPlayerStats = async (req: Request, res: Response) => {
   try {
     const totalPlayers = prisma.user.count({
-      where: { role: 'USER' },
+      where: { role: "USER" },
     });
 
     const activePlayers = prisma.user.count({
-      where: { role: 'USER', status: 'active' },
+      where: { role: "USER", status: "active" },
     });
 
     const inactivePlayers = prisma.user.count({
-      where: { role: 'USER', status: 'inactive' },
+      where: { role: "USER", status: "inactive" },
     });
-    
+
     const verifiedPlayers = prisma.user.count({
-      where: { role: 'USER', emailVerified: true },
+      where: { role: "USER", emailVerified: true },
     });
 
     const [total, active, inactive, verified] = await prisma.$transaction([
@@ -121,7 +129,9 @@ export const getPlayerStats = async (req: Request, res: Response) => {
 
     return res
       .status(200)
-      .json(new ApiResponse(true, 200, stats, "Player stats fetched successfully"));
+      .json(
+        new ApiResponse(true, 200, stats, "Player stats fetched successfully")
+      );
   } catch (error) {
     console.error("Error fetching player stats:", error);
     return res
@@ -130,7 +140,6 @@ export const getPlayerStats = async (req: Request, res: Response) => {
   }
 };
 
-
 export const getPlayerById = async (req: Request, res: Response) => {
   const { id } = req.params;
 
@@ -138,23 +147,23 @@ export const getPlayerById = async (req: Request, res: Response) => {
     const player = await prisma.user.findUnique({
       where: {
         id,
-        role: 'USER',
+        role: "USER",
       },
       include: {
         accounts: {
           select: {
             providerId: true,
             createdAt: true,
-          }
+          },
         },
         sessions: {
           select: {
             ipAddress: true,
             userAgent: true,
             expiresAt: true,
-          }
+          },
         },
-      }
+      },
     });
 
     if (!player) {
@@ -171,17 +180,17 @@ export const getPlayerById = async (req: Request, res: Response) => {
         result: true,
       },
       orderBy: {
-        completedAt: 'desc',
+        completedAt: "desc",
       },
     });
-    
-    const sports = [...new Set(responses.map(r => r.sport.toLowerCase()))];
+
+    const sports = [...new Set(responses.map((r) => r.sport.toLowerCase()))];
     const skillRatings = responses.reduce((acc, res) => {
       if (res.result) {
         const rating = res.result.doubles ?? res.result.singles ?? 0;
         acc[res.sport.toLowerCase()] = {
           rating: rating / 1000,
-          confidence: res.result.confidence ?? 'N/A',
+          confidence: res.result.confidence ?? "N/A",
           rd: res.result.rd ?? 0,
         };
       }
@@ -199,13 +208,20 @@ export const getPlayerById = async (req: Request, res: Response) => {
 
     return res
       .status(200)
-      .json(new ApiResponse(true, 200, profileData, "Player profile fetched successfully"));
-
+      .json(
+        new ApiResponse(
+          true,
+          200,
+          profileData,
+          "Player profile fetched successfully"
+        )
+      );
   } catch (error) {
     console.error(`Error fetching profile for player ${id}:`, error);
     return res
       .status(500)
-      .json(new ApiResponse(false, 500, null, "Failed to fetch player profile"));
+      .json(
+        new ApiResponse(false, 500, null, "Failed to fetch player profile")
+      );
   }
 };
-

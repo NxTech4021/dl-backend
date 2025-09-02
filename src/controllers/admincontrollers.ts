@@ -1,6 +1,6 @@
 import { PrismaClient, Role } from "@prisma/client";
 import { createAdminInvite } from "../services/adminService";
-import { inviteEmailTemplate } from "../email";
+import { inviteEmailTemplate } from "../utils/email";
 import { ApiResponse } from "../utils/ApiResponse";
 import { sendEmail } from "../config/nodemailer";
 import { hash } from "bcryptjs";
