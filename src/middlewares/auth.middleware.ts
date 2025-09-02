@@ -1,10 +1,20 @@
-import jwt from "jsonwebtoken";
-import { Prisma, PrismaClient } from "@prisma/client";
-import { ApiResponse } from "../utils/ApiResponse.ts";
+import { Request, Response, NextFunction } from "express";
+import jwt, { JwtPayload } from "jsonwebtoken";
+import { PrismaClient } from "@prisma/client";
+import { ApiResponse } from "../utils/ApiResponse";
 
 const prisma = new PrismaClient();
 
-export const verifyJWT = async (req, res, next) => {
+interface DecodedToken extends JwtPayload {
+  userId: string;
+  role?: string;
+}
+
+export const verifyJWT = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void | Response> => {
   try {
     const token =
       req.cookies?.accessToken ||
@@ -16,7 +26,10 @@ export const verifyJWT = async (req, res, next) => {
         .json(new ApiResponse(false, 401, null, "Unauthorized request"));
     }
 
-    const decodedToken = jwt.verify(token, process.env.JWT_SECRET);
+    const decodedToken = jwt.verify(
+      token,
+      process.env.JWT_SECRET as string
+    ) as DecodedToken;
 
     if (!decodedToken?.userId) {
       return res
@@ -25,13 +38,12 @@ export const verifyJWT = async (req, res, next) => {
     }
 
     const user = await prisma.user.findUnique({
-      where: {
-        id: decodedToken.userId,
-      },
+      where: { id: decodedToken.userId },
       select: {
         id: true,
         name: true,
         email: true,
+        role: true, // keep role so you can check admin in controller
       },
     });
 
@@ -41,18 +53,15 @@ export const verifyJWT = async (req, res, next) => {
         .json(new ApiResponse(false, 401, null, "Invalid Access Token"));
     }
 
-    req.user = user;
-    next();
-  } catch (error) {
-    if (error?.message === "jwt expired") {
-      // res.clearCookie("accessToken", {
-      //   httpOnly: true,
-      //   secure: false, // Set to true if using HTTPS in production
-      //   sameSite: "lax",
-      // });
+    // Attach user to req object
+    (req as any).user = user;
 
-      return res.status(403).json({ message: "JWT Expired" });
+    next();
+  } catch (error: any) {
+    if (error?.message === "jwt expired") {
+      return res.status(403).json(new ApiResponse(false, 403, null, "JWT Expired"));
     }
+
     return res
       .status(401)
       .json(
