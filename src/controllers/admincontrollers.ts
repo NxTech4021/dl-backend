@@ -7,6 +7,7 @@ import { hash } from "bcryptjs";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
 import { Request, Response } from "express";
+import { auth } from "../lib/auth";
 
 const JWT_SECRET = process.env.JWT_SECRET || "supersecret";
 const prisma = new PrismaClient();
@@ -34,23 +35,27 @@ export const createSuperadmin = async (req: Request, res: Response) => {
       });
     }
 
-    const hashedPassword = await hash(password, 10);
-
-    // create user + account in one transaction
-    const newSuperadmin = await prisma.user.create({
-      data: {
-        name,
-        username,
+    // Create a user via BetterAuth so credentials are stored in the expected format
+    const signUpResult: any = await auth.api.signUpEmail({
+      body: {
         email,
-        emailVerified: true,
+        password,
+        name,
+      },
+    });
+
+    if (!signUpResult || (signUpResult as any).error) {
+      const message = (signUpResult as any)?.error?.message || "Failed to create user via auth";
+      return res.status(400).json({ error: message });
+    }
+
+    // Promote to SUPERADMIN and mark verified
+    const newSuperadmin = await prisma.user.update({
+      where: { email },
+      data: {
         role: Role.SUPERADMIN,
-        accounts: {
-          create: {
-            providerId: "credentials",
-            accountId: email,
-            password: hashedPassword,
-          },
-        },
+        emailVerified: true,
+        username,
       },
       include: { accounts: true },
     });
@@ -286,7 +291,7 @@ export const registerAdmin = async (req: Request, res: Response) => {
         username,
         accounts: {
           create: {
-            providerId: "credentials",
+            providerId: "email",
             accountId: invite.email,
             password: hashedPassword,
           },
@@ -392,8 +397,8 @@ export const getAdminById = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     
-    const admin = await prisma.admin.findUnique({
-      where: { userId: id },  
+    const admin = await prisma.admin.findFirst({
+      where: { userId: id as string },  
       include: { user: true },
     });
 
