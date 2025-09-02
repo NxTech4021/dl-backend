@@ -68,7 +68,6 @@ model AdminInviteToken {
 
   admin Admin @relation(fields: [adminId], references: [id])
 }
-}
 
 model Account {
   id                    String    @id @default(cuid())
