@@ -327,6 +327,9 @@ router.post('/:sport/submit', validateSportParam, async (req, res) => {
     
     logger.responseSubmitted(submissionRequest.userId, sport, response.id);
     
+    // Check if user should be marked as completed onboarding
+    await checkAndUpdateOnboardingCompletion(submissionRequest.userId, requestId);
+    
     const totalDuration = Date.now() - startTime;
     logger.info('Questionnaire submission completed successfully', {
       responseId: response.id,
@@ -626,6 +629,150 @@ router.put('/profile/:userId', async (req, res) => {
   }
 });
 
+// Mark onboarding as completed for a user
+router.post('/complete/:userId', async (req, res) => {
+  const startTime = Date.now();
+  const requestId = req.requestId!;
+  const { userId } = req.params;
+  
+  try {
+    // Validate userId
+    const validation = validator.validateUserId(userId);
+    if (!validation.isValid) {
+      return handleQuestionnaireError(validation.errors[0], res);
+    }
+    
+    logger.info('Marking onboarding as completed', {
+      userId,
+      requestId,
+      operation: 'complete_onboarding'
+    });
+    
+    const dbStart = Date.now();
+    
+    // Check if user exists
+    const existingUser = await prisma.user.findUnique({
+      where: { id: userId }
+    });
+    
+    if (!existingUser) {
+      const error = new UserNotFoundError(userId);
+      logger.warn('User not found for onboarding completion', {
+        userId,
+        requestId
+      });
+      return handleQuestionnaireError(error, res);
+    }
+    
+    // Update user's onboarding completion status
+    const updatedUser = await prisma.user.update({
+      where: { id: userId },
+      data: {
+        completedOnboarding: true
+      }
+    });
+    
+    const dbDuration = Date.now() - dbStart;
+    logger.databaseOperation('complete_onboarding', 'user', dbDuration);
+    
+    const totalDuration = Date.now() - startTime;
+    logger.info('Onboarding marked as completed successfully', {
+      userId,
+      requestId,
+      duration: totalDuration,
+      operation: 'complete_onboarding'
+    });
+    
+    res.set('X-Request-ID', requestId);
+    res.json({
+      userId: updatedUser.id,
+      completedOnboarding: updatedUser.completedOnboarding,
+      success: true,
+      message: 'Onboarding completed successfully'
+    });
+    
+  } catch (error) {
+    const duration = Date.now() - startTime;
+    logger.error('Error completing onboarding', {
+      userId,
+      requestId,
+      duration,
+      operation: 'complete_onboarding'
+    }, error as Error);
+    
+    handleQuestionnaireError(error, res);
+  }
+});
+
+// Check if user has completed onboarding
+router.get('/status/:userId', async (req, res) => {
+  const startTime = Date.now();
+  const requestId = req.requestId!;
+  const { userId } = req.params;
+  
+  try {
+    // Validate userId
+    const validation = validator.validateUserId(userId);
+    if (!validation.isValid) {
+      return handleQuestionnaireError(validation.errors[0], res);
+    }
+    
+    logger.info('Checking onboarding status', {
+      userId,
+      requestId,
+      operation: 'get_onboarding_status'
+    });
+    
+    const dbStart = Date.now();
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        completedOnboarding: true
+      }
+    });
+    
+    const dbDuration = Date.now() - dbStart;
+    logger.databaseOperation('fetch_onboarding_status', 'user', dbDuration);
+    
+    if (!user) {
+      const error = new UserNotFoundError(userId);
+      logger.warn('User not found for onboarding status check', {
+        userId,
+        requestId
+      });
+      return handleQuestionnaireError(error, res);
+    }
+    
+    const totalDuration = Date.now() - startTime;
+    logger.info('Onboarding status fetched successfully', {
+      userId,
+      requestId,
+      completedOnboarding: user.completedOnboarding,
+      duration: totalDuration,
+      operation: 'get_onboarding_status'
+    });
+    
+    res.set('X-Request-ID', requestId);
+    res.json({ 
+      userId: user.id,
+      completedOnboarding: user.completedOnboarding,
+      success: true 
+    });
+    
+  } catch (error) {
+    const duration = Date.now() - startTime;
+    logger.error('Error checking onboarding status', {
+      userId,
+      requestId,
+      duration,
+      operation: 'get_onboarding_status'
+    }, error as Error);
+    
+    handleQuestionnaireError(error, res);
+  }
+});
+
 // Get user profile information
 router.get('/profile/:userId', async (req, res) => {
   const startTime = Date.now();
@@ -693,5 +840,59 @@ router.get('/profile/:userId', async (req, res) => {
     handleQuestionnaireError(error, res);
   }
 });
+
+// Helper function to check if user should be marked as completed onboarding
+async function checkAndUpdateOnboardingCompletion(userId: string, requestId: string): Promise<void> {
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        completedOnboarding: true,
+        name: true,
+        gender: true,
+        dateOfBirth: true
+      }
+    });
+
+    if (!user || user.completedOnboarding) {
+      return; // User not found or already completed
+    }
+
+    // Check if user has completed at least one questionnaire
+    const questionnaireResponseCount = await prisma.questionnaireResponse.count({
+      where: {
+        userId,
+        completedAt: { not: null }
+      }
+    });
+
+    // Check if user has basic profile information
+    const hasBasicProfile = user.name && user.gender && user.dateOfBirth;
+
+    // Mark as completed if user has at least one questionnaire response and basic profile
+    if (questionnaireResponseCount > 0 && hasBasicProfile) {
+      await prisma.user.update({
+        where: { id: userId },
+        data: { completedOnboarding: true }
+      });
+
+      logger.info('User onboarding automatically marked as completed', {
+        userId,
+        requestId,
+        questionnaireCount: questionnaireResponseCount,
+        hasBasicProfile: !!hasBasicProfile,
+        operation: 'auto_complete_onboarding'
+      });
+    }
+  } catch (error) {
+    logger.error('Error checking onboarding completion', {
+      userId,
+      requestId,
+      operation: 'auto_complete_onboarding'
+    }, error as Error);
+    // Don't throw error as this is supplementary functionality
+  }
+}
 
 export default router;
