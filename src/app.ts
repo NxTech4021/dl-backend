@@ -19,7 +19,7 @@ app.use((req, res, next) => {
   next();
 });
 
-// Set up CORS - More permissive for development
+// Set up CORS
 app.use(
   cors({
     origin: [

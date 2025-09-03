@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient, Role, UserStatus } from "@prisma/client";
 import { ApiResponse } from "../utils/ApiResponse";
 import { AuthenticatedRequest } from "../middlewares/auth.middleware";
 
@@ -9,7 +9,7 @@ export const getAllPlayers = async (req: Request, res: Response) => {
   try {
     const players = await prisma.user.findMany({
       where: {
-        role: "USER",
+        role: Role.USER,
       },
       orderBy: {
         createdAt: "desc",
@@ -99,19 +99,19 @@ export const getAllPlayers = async (req: Request, res: Response) => {
 export const getPlayerStats = async (req: Request, res: Response) => {
   try {
     const totalPlayers = prisma.user.count({
-      where: { role: "USER" },
+      where: { role: Role.USER },
     });
 
     const activePlayers = prisma.user.count({
-      where: { role: "USER", status: "active" },
+      where: { role: Role.USER, status: UserStatus.ACTIVE },
     });
 
     const inactivePlayers = prisma.user.count({
-      where: { role: "USER", status: "inactive" },
+      where: { role: Role.USER, status: UserStatus.INACTIVE },
     });
 
     const verifiedPlayers = prisma.user.count({
-      where: { role: "USER", emailVerified: true },
+      where: { role: Role.USER, emailVerified: true },
     });
 
     const [total, active, inactive, verified] = await prisma.$transaction([
@@ -148,7 +148,7 @@ export const getPlayerById = async (req: Request, res: Response) => {
     const player = await prisma.user.findUnique({
       where: {
         id,
-        role: "USER",
+        role: Role.USER,
       },
       include: {
         accounts: {

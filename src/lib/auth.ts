@@ -1,9 +1,11 @@
 import { betterAuth } from "better-auth";
+import { APIError } from "better-auth/api";
 import { prismaAdapter } from "better-auth/adapters/prisma";
 import { PrismaClient } from "@prisma/client";
-import { createAuthMiddleware, username } from "better-auth/plugins";
+import { createAuthMiddleware, emailOTP, username } from "better-auth/plugins";
 import { expo } from "@better-auth/expo";
-import { sendEmail } from "../utils/email";
+import { sendEmail } from "../config/nodemailer";
+import { getBackendBaseURL, getTrustedOrigins } from "../config/network";
 
 const prisma = new PrismaClient({ log: ["query", "info", "warn", "error"] });
 
@@ -13,21 +15,56 @@ export const auth = betterAuth({
   database: prismaAdapter(prisma, {
     provider: "postgresql",
   }),
+  plugins: [
+    expo(),
+    username() as any,
+    emailOTP({
+      //TODO: Error handling
+      async sendVerificationOTP({ email, otp, type }) {
+        try {
+          let subject = "";
+          let html = "";
 
-  plugins: [expo(), username() as any],
+          if (type === "sign-in") {
+            console.log("Sending sign-in email to", email);
+            subject = "Your Sign-In Code";
+            html = `<p>Your sign-in code is: <strong>${otp}</strong>. It will expire in 10 minutes.</p>`;
+
+          } else if (type === "email-verification") {
+            console.log("Sending email verification email to", email);
+            subject = "Verify Your Email Address";
+            html = `<p>Your email verification code is: <strong>${otp}</strong>. It will expire in 10 minutes.</p>`;
+
+          } else if (type === "forget-password") {
+            console.log("Sending forget password email to", email);
+            const user = await prisma.user.findUnique({
+              where: { email },
+            });
+
+            console.log("user", user);
+
+          
+            subject = "Your Password Reset Code";
+            html = `<p>Your password reset code is: <strong>${otp}</strong>. It will expire in 10 minutes.</p>`;
+          }
+
+          if (subject && html) {
+            await sendEmail(email, subject, html);
+          }
+
+        } catch (error) {
+          console.error("Error sending email:", error);
+          throw new APIError("INTERNAL_SERVER_ERROR", {
+            message: "Failed to send email. Please try again.",
+          });
+        }
+      },
+    }),
+  ],
 
   emailAndPassword: {
     enabled: true,
-    sendResetPassword: async ({ user, url, token }, request) => {
-      await sendEmail({
-        to: user.email,
-        subject: "Reset your password",
-        text: `Click the link to reset your password: ${url}`,
-      });
-    },
-    onPasswordReset: async ({ user }, request) => {
-      console.log(`Password for user ${user.email} has been reset.`);
-    },
+    // requireEmailVerification: true,
   },
 
   baseURL: process.env.BASE_URL || "http://localhost",
@@ -51,6 +88,7 @@ export const auth = betterAuth({
   //     clientId: process.env.GOOGLE_CLIENT_ID! as string,
   //     clientSecret: process.env.GOOGLE_CLIENT_SECRET! as string,
   //   },
+
   //   facebook: {
   //     clientId: process.env.FACEBOOK_CLIENT_ID! as string,
   //     clientSecret: process.env.FACEBOOK_CLIENT_SECRET! as string,

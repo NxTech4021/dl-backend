@@ -20,6 +20,14 @@ enum AdminStatus {
   SUSPENDED
 }
 
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
+
+
 model User {
   id                   String    @id @default(cuid())
   name                 String
