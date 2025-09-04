@@ -2,14 +2,16 @@ import express from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
 import { toNodeHandler } from "better-auth/node";
-import { auth } from "./lib/auth";
+import { auth } from "./lib/auth"; // kept from first version (adjust if you want "./auth")
 import onboardingRoutes from "./routes/onboarding";
-import router from "./routes/index";
+import router from "./routes/index"; // or "./routes/mainRoute" if that's your main router
+import locationRoute from "./routes/locationRoute";
+import locationsApi from "./routes/locations";
 import pino from "pino-http";
 
 const app = express();
 
-// This is for debugging purposes only
+// Debugging middleware
 app.use((req, res, next) => {
   console.log("--- INCOMING REQUEST ---");
   console.log("Method:", req.method);
@@ -19,7 +21,7 @@ app.use((req, res, next) => {
   next();
 });
 
-// Set up CORS
+// Set up CORS (merged origins + headers from both versions)
 app.use(
   cors({
     origin: [
@@ -29,37 +31,38 @@ app.use(
       "http://localhost:8081",
       "http://192.168.1.7:3001",
       "http://192.168.100.53:8081", // Mobile app origin
-      "exp://192.168.100.53:8081", // Expo development server
-    ], // Allow nginx proxy, direct access, and local IP
+      "exp://192.168.100.53:8081", // Expo dev server
+    ],
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "expo-origin"],
+    allowedHeaders: [
+      "Content-Type",
+      "Authorization",
+      "X-Requested-With",
+      "expo-origin",
+    ],
   })
 );
 
-// According to the official Express documentation for better-auth,
-// the auth handler must be mounted BEFORE express.json().
-// The "/api/auth/*" pattern is recommended for Express v4.
-// According to the official Express documentation for better-auth,
-// the auth handler must be mounted BEFORE express.json().
-// The "/api/auth/*" pattern is recommended for Express v4.
-// OLD: app.all("/auth/*splat", toNodeHandler(auth));
-// FIX: Updated to match frontend expectations - frontend calls /api/auth/*
+// Auth handler must come BEFORE express.json()
 app.all("/api/auth/*splat", toNodeHandler(auth));
 
-// The JSON parser for any other routes you might add later.
+// Global middlewares
 app.use(express.json());
 app.use(cookieParser());
 app.use(pino());
 
-// Keep main router at root level for health checks and other non-API routes
-app.use(router);
+// Main API routes
+app.use("/api", router);
 
-// Mount onboarding routes
-// TO-DO Move all the routes to one main routes file
-// OLD: app.use("/onboarding", onboardingRoutes);
-// FIX: Mount at /api/onboarding to match frontend expectations
+// Onboarding routes (deduplicated)
 app.use("/api/onboarding", onboardingRoutes);
+
+// Location routes
+app.use("/api/users", locationRoute);
+
+// Public locations search/reverse geocode routes
+app.use("/api/locations", locationsApi);
 
 // Health check endpoint
 app.get("/health", (req, res) => {

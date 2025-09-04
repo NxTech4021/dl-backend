@@ -1,4 +1,3 @@
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -8,6 +7,9 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+//
+// ENUMS
+//
 enum Role {
   USER
   ADMIN
@@ -26,8 +28,9 @@ enum UserStatus {
   SUSPENDED
 }
 
-
-
+//
+// MODELS
+//
 model User {
   id                   String    @id @default(cuid())
   name                 String
@@ -43,22 +46,26 @@ model User {
   completedOnboarding  Boolean   @default(false)
   lastLogin            DateTime?
   lastActivityCheck    DateTime?
+
+  // Relations
   accounts             Account[]
   sessions             Session[]
   playerMatches        Match[]   @relation("PlayerMatches")
   opponentMatches      Match[]   @relation("OpponentMatches")
+  admin                Admin?
+  location             UserLocation?
+  questionnaireResponses QuestionnaireResponse[]
+
   createdAt            DateTime  @default(now())
   updatedAt            DateTime  @updatedAt
   role                 Role      @default(USER)
-
-  admin Admin?
 }
 
 model Admin {
   id         String       @id @default(cuid())
   userId     String       @unique
   status     AdminStatus  @default(PENDING)
-  invitedBy  String?     
+  invitedBy  String?
   createdAt  DateTime     @default(now())
   updatedAt  DateTime     @updatedAt
 
@@ -68,7 +75,7 @@ model Admin {
 
 model AdminInviteToken {
   id        String   @id @default(cuid())
-  adminId   String   @unique  
+  adminId   String   @unique
   email     String
   token     String   @unique
   status    String   @default("PENDING") // PENDING, ACCEPTED, EXPIRED
@@ -76,6 +83,16 @@ model AdminInviteToken {
   expiresAt DateTime
 
   admin Admin @relation(fields: [adminId], references: [id])
+}
+
+// Simpler admin invite placeholder (from 2nd schema, kept separately if needed later)
+model AdminInvite {
+  id        String   @id @default(cuid())
+  email     String
+  token     String   @unique
+  status    String   @default("PENDING") // PENDING, ACCEPTED, EXPIRED
+  createdAt DateTime @default(now())
+  expiresAt DateTime
 }
 
 model Account {
@@ -118,7 +135,7 @@ model Verification {
   id         String   @id @default(cuid())
   identifier String
   value      String   @unique
-  status     String   @default("PENDING") // NEW: PENDING, ACCEPTED, EXPIRED
+  status     String   @default("PENDING") // PENDING, ACCEPTED, EXPIRED
   expiresAt  DateTime
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
@@ -128,16 +145,19 @@ model Verification {
 
 model QuestionnaireResponse {
   id          Int       @id @default(autoincrement())
-  userId      String // Changed to String to match User.id type
-  sport       String // 'pickleball' | 'tennis' | 'padel'
-  qVersion    Int // from JSON file
-  qHash       String // SHA1 of JSON contents
-  answersJson Json // raw client payload
+  userId      String
+  sport       String
+  qVersion    Int
+  qHash       String
+  answersJson Json
   startedAt   DateTime  @default(now())
   completedAt DateTime?
 
   // one-to-one
   result InitialRatingResult?
+
+  // relation to User
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([sport, qVersion])
@@ -147,7 +167,7 @@ model QuestionnaireResponse {
 model InitialRatingResult {
   id         Int      @id @default(autoincrement())
   responseId Int      @unique
-  source     String // 'questionnaire' | 'dupr_conversion' | ...
+  source     String
   singles    Int?
   doubles    Int?
   rd         Int?
@@ -160,17 +180,17 @@ model InitialRatingResult {
 
 model Match {
   id            String      @id @default(cuid())
-  playerId      String      // Player initiating/recording the match
-  opponentId    String      // Opponent player ID
-  sport         String      // 'tennis' | 'pickleball' | 'padel'
-  matchType     String      // 'singles' | 'doubles'
-  playerScore   Int         // Player's score
-  opponentScore Int         // Opponent's score
-  outcome       String      // 'win' | 'loss' | 'draw'
+  playerId      String
+  opponentId    String
+  sport         String
+  matchType     String
+  playerScore   Int
+  opponentScore Int
+  outcome       String
   matchDate     DateTime    @default(now())
-  location      String?     // Optional match location
-  notes         String?     // Optional match notes
-  duration      Int?        // Match duration in minutes
+  location      String?
+  notes         String?
+  duration      Int?
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
 
@@ -185,22 +205,37 @@ model Match {
 }
 
 model MatchStats {
-  id                    String   @id @default(cuid())
-  matchId               String   @unique
-  playerAces            Int?
-  playerUnforcedErrors  Int?
-  playerWinners         Int?
-  playerDoubleFaults    Int?
-  opponentAces          Int?
+  id                     String   @id @default(cuid())
+  matchId                String   @unique
+  playerAces             Int?
+  playerUnforcedErrors   Int?
+  playerWinners          Int?
+  playerDoubleFaults     Int?
+  opponentAces           Int?
   opponentUnforcedErrors Int?
-  opponentWinners       Int?
-  opponentDoubleFaults  Int?
-  rallyCount            Int?
-  longestRally          Int?
-  breakPointsConverted  Int?
-  breakPointsTotal      Int?
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
+  opponentWinners        Int?
+  opponentDoubleFaults   Int?
+  rallyCount             Int?
+  longestRally           Int?
+  breakPointsConverted   Int?
+  breakPointsTotal       Int?
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
 
-  match                 Match    @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  match Match @relation(fields: [matchId], references: [id], onDelete: Cascade)
+}
+
+model UserLocation {
+  id        Int      @id @default(autoincrement())
+  userId    String   @unique
+  country   String
+  state     String
+  city      String
+  latitude  Float?
+  longitude Float?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
