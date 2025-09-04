@@ -19,7 +19,8 @@ export const auth = betterAuth({
     expo(),
     username() as any,
     emailOTP({
-      //TODO: Error handling
+      // We add Rate limit later for emails
+      overrideDefaultEmailVerification: true,
       async sendVerificationOTP({ email, otp, type }) {
         try {
           let subject = "";
@@ -40,8 +41,6 @@ export const auth = betterAuth({
             const user = await prisma.user.findUnique({
               where: { email },
             });
-
-            console.log("user", user);
 
           
             subject = "Your Password Reset Code";
@@ -64,7 +63,7 @@ export const auth = betterAuth({
 
   emailAndPassword: {
     enabled: true,
-    // requireEmailVerification: true,
+    requireEmailVerification: true,
   },
 
   baseURL: process.env.BASE_URL || "http://localhost",
