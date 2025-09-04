@@ -9,8 +9,10 @@ RUN npm ci
 COPY . .
 RUN npm install -g prisma
 RUN npx prisma generate
+
 EXPOSE 3001
-CMD [ "npm", "run", "dev" ]
+CMD ["npm", "run", "dev"]
+# CMD ["sh", "-c", "echo 'Waiting for database...' && sleep 5 && echo 'Running Prisma migrations...' && npx prisma migrate dev && echo 'Prisma migration complete' && echo 'Starting development server...' && npm run dev"]
 
 FROM node:20-alpine3.17 AS builder
 WORKDIR /app
@@ -57,7 +59,7 @@ RUN ls -l /app/dist/server.js
 # Debug: Print current working directory
 RUN pwd
 
-WORKDIR /app/dist
+WORKDIR /app
 
-# Use node to run the built server.js file
-CMD ["node", "server.js"]
+# Use shell command for production startup with migrations
+CMD ["sh", "-c", "echo 'Waiting for database...' && sleep 5 && echo 'Running Prisma migrations...' && npx prisma migrate deploy && echo 'Prisma migration complete' && echo 'Starting production server...' && cd dist && node server.js"]

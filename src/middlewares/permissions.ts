@@ -14,7 +14,7 @@
 //   };
 // }
 
-import { auth } from "../auth"; // your Better Auth instance
+import { auth } from "../lib/auth"; // your Better Auth instance
 import type { Request, Response, NextFunction } from "express";
 
 export function requireRole(roles: string[]) {
@@ -28,7 +28,6 @@ export function requireRole(roles: string[]) {
     if (!roles.includes(session.user.role)) {
       return res.status(403).json({ message: "Forbidden" });
     }
-    
 
     (req as any).user = session.user;
     next();

@@ -1,84 +1,16 @@
 import { PrismaClient, Role } from "@prisma/client";
 import { createAdminInvite } from "../services/adminService";
-import { inviteEmailTemplate } from "../email";
+import { inviteEmailTemplate } from "../utils/email";
 import { ApiResponse } from "../utils/ApiResponse";
 import { sendEmail } from "../config/nodemailer";
 import { hash } from "bcryptjs";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
 import { Request, Response } from "express";
+import { auth } from "../lib/auth";
 
 const JWT_SECRET = process.env.JWT_SECRET || "supersecret";
 const prisma = new PrismaClient();
-
-// export const createSuperadmin = async (req, res) => {
-
-//   try {
-//     const { name, username, email } = req.body;
-
-//     // Basic validation to ensure all required fields are present.
-//     if (!name || !username || !email) {
-//       return res.status(400).json({
-//         error: 'Please provide a name, username, and email.',
-//       });
-//     }
-
-//     // Check if a user with the given email or username already exists
-//     // to prevent duplicate entries and maintain data integrity.
-//     const existingUser = await prisma.user.findFirst({
-//       where: {
-//         OR: [
-//           { username: username },
-//           { email: email }
-//         ]
-//       },
-//     });
-
-//     if (existingUser) {
-//       return res.status(409).json({
-//         error: 'A user with this username or email already exists.',
-//       });
-//     }
-
-//     // Use prisma.user.create() to insert a new user record into the database.
-//     // We explicitly set the 'role' field to Role.SUPERADMIN using the imported enum.
-//     const newSuperadmin = await prisma.user.create({
-//       data: {
-//         name,
-//         username,
-//         email,
-//         // Assuming a superadmin is immediately verified. You can change this logic.
-//         emailVerified: true,
-//         // Set the role using the enum provided in the Prisma schema.
-//         role: Role.SUPERADMIN,
-//       },
-//       // You can also select which fields to return in the response.
-//       select: {
-//         id: true,
-//         name: true,
-//         username: true,
-//         email: true,
-//         role: true,
-//         createdAt: true,
-//       },
-//     });
-
-//     // Send a success response with the newly created user data.
-//     res.status(201).json({
-//       message: 'Superadmin user created successfully!',
-//       user: newSuperadmin,
-//     });
-
-//   } catch (error) {
-//     // Log the full error for debugging purposes on the server side.
-//     console.error('Error creating superadmin:', error);
-
-//     // Send a generic 500 status code for internal server errors.
-//     res.status(500).json({
-//       error: 'An internal server error occurred.',
-//     });
-//   }
-// };
 
 
 export const createSuperadmin = async (req: Request, res: Response) => {
@@ -103,23 +35,27 @@ export const createSuperadmin = async (req: Request, res: Response) => {
       });
     }
 
-    const hashedPassword = await hash(password, 10);
-
-    // create user + account in one transaction
-    const newSuperadmin = await prisma.user.create({
-      data: {
-        name,
-        username,
+    // Create a user via BetterAuth so credentials are stored in the expected format
+    const signUpResult: any = await auth.api.signUpEmail({
+      body: {
         email,
-        emailVerified: true,
+        password,
+        name,
+      },
+    });
+
+    if (!signUpResult || (signUpResult as any).error) {
+      const message = (signUpResult as any)?.error?.message || "Failed to create user via auth";
+      return res.status(400).json({ error: message });
+    }
+
+    // Promote to SUPERADMIN and mark verified
+    const newSuperadmin = await prisma.user.update({
+      where: { email },
+      data: {
         role: Role.SUPERADMIN,
-        accounts: {
-          create: {
-            providerId: "credentials",
-            accountId: email,
-            password: hashedPassword,
-          },
-        },
+        emailVerified: true,
+        username,
       },
       include: { accounts: true },
     });
@@ -134,7 +70,6 @@ export const createSuperadmin = async (req: Request, res: Response) => {
   }
 };
 
-
 export const adminLogin = async (req: Request, res: Response) => {
   try {
     const { email, password } = req.body;
@@ -142,7 +77,9 @@ export const adminLogin = async (req: Request, res: Response) => {
     if (!email || !password) {
       return res
         .status(400)
-        .json(new ApiResponse(false, 400, null, "Email and password are required"));
+        .json(
+          new ApiResponse(false, 400, null, "Email and password are required")
+        );
     }
 
     // Find user with accounts
@@ -151,10 +88,12 @@ export const adminLogin = async (req: Request, res: Response) => {
       include: { accounts: true },
     });
 
-     if (!user || (user.role !== Role.ADMIN && user.role !== Role.SUPERADMIN)) {
+    if (!user || (user.role !== Role.ADMIN && user.role !== Role.SUPERADMIN)) {
       return res
         .status(403)
-        .json(new ApiResponse(false, 403, null, "Sorry you do not have permission"));
+        .json(
+          new ApiResponse(false, 403, null, "Sorry you do not have permission")
+        );
     }
 
     // Credentials account
@@ -165,7 +104,7 @@ export const adminLogin = async (req: Request, res: Response) => {
     if (!account || !account.password) {
       return res
         .status(400)
-        .json(new ApiResponse(false, 401, null, "Invalid credentials"));
+        .json(new ApiResponse(false, 401, null, "Invalid credentials No account exists"));
     }
 
     // Compare password
@@ -177,11 +116,9 @@ export const adminLogin = async (req: Request, res: Response) => {
     }
 
     // Generate JWT including userId and role
-    const token = jwt.sign(
-      { userId: user.id, role: user.role },
-      JWT_SECRET,
-      { expiresIn: "7d" }
-    );
+    const token = jwt.sign({ userId: user.id, role: user.role }, JWT_SECRET, {
+      expiresIn: "7d",
+    });
 
     // Send token in cookie + response
     res
@@ -193,15 +130,20 @@ export const adminLogin = async (req: Request, res: Response) => {
       })
       .status(200)
       .json(
-        new ApiResponse(true, 200, {
-          token,
-          user: {
-            id: user.id,
-            name: user.name,
-            email: user.email,
-            role: user.role,
+        new ApiResponse(
+          true,
+          200,
+          {
+            token,
+            user: {
+              id: user.id,
+              name: user.name,
+              email: user.email,
+              role: user.role,
+            },
           },
-        }, "Login successful")
+          "Login successful"
+        )
       );
   } catch (error) {
     console.error("Login error:", error);
@@ -211,98 +153,196 @@ export const adminLogin = async (req: Request, res: Response) => {
   }
 };
 
+export const fetchAdmins = async (req: Request, res: Response) => {
+  try {
+   
+    const admins = await prisma.admin.findMany({
+    include: {
+      user: true,       
+      invite: true,    
+    },
+});
+
+    // Then map to a unified frontend format:
+    const getAllAdmins = admins.map((a) => ({
+      id: a.user?.id ?? a.id,
+      name: a.user?.name ?? a.invite?.email?.split("@")[0] ?? "",
+      email: a.user?.email ?? a.invite?.email ?? "",
+      role: a.user?.role,
+      status: a.status,
+      createdAt: a.user?.createdAt ?? a.createdAt,
+      updatedAt: a.user?.updatedAt,
+      type: a.status === "PENDING" ? "PENDING" : "ACTIVE",
+    }));
+
+    // Return combined response
+    res.status(200).json(
+      new ApiResponse(true, 200, {
+      getAllAdmins,
+      }, "Admins fetched successfully")
+    );
+  } catch (error) {
+    console.error("Fetch admins error:", error);
+    return res
+      .status(500)
+      .json(new ApiResponse(false, 500, null, "Something went wrong"));
+  }
+};
+
+
 export const getInviteEmail = async (req: Request, res: Response) => {
   try {
     const { token } = req.query;
 
     if (!token) return res.status(400).json({ message: "Token is required" });
 
-    const verification = await prisma.verification.findUnique({ where: { value: token as string } });
+    // const verification = await prisma.verification.findUnique({
+    //   where: { value: token as string },
+    // });
 
-    if (!verification || verification.status !== "PENDING" || verification.expiresAt < new Date()) {
+    // if (
+    //   !verification ||
+    //   verification.status !== "PENDING" ||
+    //   verification.expiresAt < new Date()
+    // ) {
+    //   return res.status(400).json({ message: "Invalid or expired token" });
+    // }
+
+      const invite = await prisma.adminInviteToken.findUnique({
+      where: { token: token as string },
+    });
+
+    if (
+      !invite ||
+      invite.status !== "PENDING" ||
+      invite.expiresAt < new Date()
+    ) {
       return res.status(400).json({ message: "Invalid or expired token" });
     }
 
-    res.json({ email: verification.identifier });
+    res.json({ email: invite.email });
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: "Something went wrong" });
   }
 };
 
-
 export const registerAdmin = async (req: Request, res: Response) => {
   try {
-    const { token, name, username, password, email } = req.body;
+    const { token, name, username, password } = req.body;
 
     console.log("Incoming body:", req.body);
     if (!token || !name || !username || !password) {
-      return res.status(400).json({ message: "All fields are required", status: "FAILED" });
+      return res
+        .status(400)
+        .json({ message: "All fields are required", status: "FAILED" });
     }
-    const invite = await prisma.verification.findUnique({ where: { value: token, } });
+    const invite = await prisma.adminInviteToken.findUnique({
+    where: { token },
+      include: {
+        admin: {
+          include: {
+            user: true, 
+          },
+        },
+      },
+    });
+
+
+    console.log("invite data", invite)
 
     if (!invite || invite.status !== "PENDING") {
-      return res.status(400).json({ message: "Invalid or already used token", status: "FAILED" });
+      return res
+        .status(400)
+        .json({ message: "Invalid or already used token", status: "FAILED" });
     }
 
     if (invite.expiresAt < new Date()) {
-      return res.status(400).json({ message: "Invite token expired", status: "FAILED" });
+      return res
+        .status(400)
+        .json({ message: "Invite token expired", status: "FAILED" });
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    const user = await prisma.user.create({
+    // const user = await prisma.user.create({
+    //   data: {
+    //     email,
+    //     username,
+    //     name,
+    //     role: "ADMIN",
+    //     accounts: {
+    //       create: {
+    //         providerId: "credentials",
+    //         accountId: email,
+    //         password: hashedPassword,
+    //       },
+    //     },
+    //     adminInviteToken: {
+    //       connect: { id: invite.id },
+    //     },
+    //   },
+    // });
+
+      const user = await prisma.user.update({
+      where: { id: invite.admin.user.id },
       data: {
-        email: email,
-        username: username,    
         name,
-        role: "ADMIN",
+        username,
         accounts: {
           create: {
-            providerId: "credentials",
-            accountId: email,
+            providerId: "email",
+            accountId: invite.email,
             password: hashedPassword,
           },
         },
       },
     });
 
-    await prisma.verification.update({
-      where: { value: token },
+    
+    // update admin status
+    await prisma.admin.update({
+      where: { id: invite.admin.id },
+      data: { status: "ACTIVE" },
+    });
+
+    // mark invite as accepted
+    await prisma.adminInviteToken.update({
+      where: { id: invite.id },
       data: { status: "ACCEPTED" },
     });
 
-    await prisma.verification.updateMany({
+    // expire old invites
+    await prisma.adminInviteToken.updateMany({
       where: { status: "PENDING", expiresAt: { lt: new Date() } },
       data: { status: "EXPIRED" },
     });
 
-    res.status(201).json({ message: "Admin registered successfully", status: "SUCCESS", user });
+    res.status(201).json({
+      message: "Admin registered successfully",
+      status: "SUCCESS",
+      user,
+    });
   } catch (error: any) {
-  
     if (error.meta?.target?.includes("username")) {
       return res.status(400).json({ message: "Username is already taken" });
     }
     if (error.meta?.target?.includes("email")) {
       return res.status(400).json({ message: "Email is already registered" });
-  }
+    }
 
-  console.error("Error registering admin:", error);
-  res.status(500).json({ message: "Something went wrong" });
+    console.error("Error registering admin:", error);
+    res.status(500).json({ message: "Something went wrong" });
   }
 };
 
-
 export const sendAdminInvite = async (req: Request, res: Response) => {
   try {
-    const { email } = req.body;
-    // const superadmin = req.user; // assumed from auth middleware
+    const { email, name, username } = req.body;
+    // const admin = req.user; // Implement after authcontext 
 
-    // if (!superadmin || superadmin.role !== Role.SUPERADMIN) {
-    //   return res.status(403).json({ error: "Only superadmins can send invites." });
-    // }
-
-    const inviteLink = await createAdminInvite(email);
+    console.log("Body:", req.body);
+    const inviteLink = await createAdminInvite(email, name, username);
     const html = inviteEmailTemplate(inviteLink);
 
     await sendEmail(email, "You're invited to become an Admin", html);
@@ -317,7 +357,7 @@ export const sendAdminInvite = async (req: Request, res: Response) => {
 export const getAdminSession = async (req: Request, res: Response) => {
   try {
     const token = req.cookies.accessToken;
-    
+
     if (!token) {
       return res
         .status(401)
@@ -325,7 +365,7 @@ export const getAdminSession = async (req: Request, res: Response) => {
     }
 
     const decoded = jwt.verify(token, JWT_SECRET) as any;
-    
+
     const user = await prisma.user.findUnique({
       where: { id: decoded.userId },
       select: {
@@ -342,14 +382,34 @@ export const getAdminSession = async (req: Request, res: Response) => {
         .json(new ApiResponse(false, 403, null, "Invalid session"));
     }
 
-    res.status(200).json(
-      new ApiResponse(true, 200, { user }, "Session retrieved successfully")
-    );
+    res
+      .status(200)
+      .json(
+        new ApiResponse(true, 200, { user }, "Session retrieved successfully")
+      );
   } catch (error) {
     console.error("Session error:", error);
-    res
-      .status(401)
-      .json(new ApiResponse(false, 401, null, "Invalid session"));
+    res.status(401).json(new ApiResponse(false, 401, null, "Invalid session"));
+  }
+};
+
+export const getAdminById = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    
+    const admin = await prisma.admin.findFirst({
+      where: { userId: id as string },  
+      include: { user: true },
+    });
+
+    if (!admin) {
+      return res.status(404).json({ message: "Admin not found" });
+    }
+
+    return res.json(admin);
+  } catch (error) {
+    console.error("Error fetching admin:", error);
+    return res.status(500).json({ message: "Internal server error" });
   }
 };
 
@@ -366,8 +426,6 @@ export const adminLogout = async (req: Request, res: Response) => {
       .json(new ApiResponse(true, 200, null, "Logout successful"));
   } catch (error) {
     console.error("Logout error:", error);
-    res
-      .status(500)
-      .json(new ApiResponse(false, 500, null, "Logout failed"));
+    res.status(500).json(new ApiResponse(false, 500, null, "Logout failed"));
   }
 };
