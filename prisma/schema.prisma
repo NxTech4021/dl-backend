@@ -39,6 +39,8 @@ model User {
   gender               String?   // 'male' | 'female'
   dateOfBirth          DateTime?
   area                 String?
+  phoneNumber          String?
+  bio                  String?
   status               String    @default("active")   // 'active' | 'inactive'
   completedOnboarding  Boolean   @default(false)
   lastLogin            DateTime?
@@ -47,6 +49,7 @@ model User {
   sessions             Session[]
   playerMatches        Match[]   @relation("PlayerMatches")
   opponentMatches      Match[]   @relation("OpponentMatches")
+  achievements         UserAchievement[]
   createdAt            DateTime  @default(now())
   updatedAt            DateTime  @updatedAt
   role                 Role      @default(USER)
@@ -203,4 +206,38 @@ model MatchStats {
   updatedAt             DateTime @updatedAt
 
   match                 Match    @relation(fields: [matchId], references: [id], onDelete: Cascade)
+}
+
+model Achievement {
+  id          String   @id @default(cuid())
+  title       String   // e.g., "First Win", "10 Match Streak"
+  description String   // e.g., "Win your first match"
+  icon        String?  // Icon identifier or emoji
+  category    String   // e.g., "match", "rating", "streak", "milestone"
+  requirement Json?    // Requirements to unlock (e.g., {matches_won: 1})
+  points      Int      @default(0) // Points awarded for achievement
+  isActive    Boolean  @default(true) // Can be earned
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  userAchievements UserAchievement[]
+
+  @@index([category])
+  @@index([isActive])
+}
+
+model UserAchievement {
+  id            String      @id @default(cuid())
+  userId        String
+  achievementId String
+  unlockedAt    DateTime    @default(now())
+  progress      Json?       // Current progress toward achievement
+  isCompleted   Boolean     @default(true)
+
+  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  achievement   Achievement @relation(fields: [achievementId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, achievementId])
+  @@index([userId])
+  @@index([achievementId])
 }
