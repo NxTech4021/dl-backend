@@ -195,19 +195,6 @@ export const getInviteEmail = async (req: Request, res: Response) => {
     const { token } = req.query;
 
     if (!token) return res.status(400).json({ message: "Token is required" });
-
-    // const verification = await prisma.verification.findUnique({
-    //   where: { value: token as string },
-    // });
-
-    // if (
-    //   !verification ||
-    //   verification.status !== "PENDING" ||
-    //   verification.expiresAt < new Date()
-    // ) {
-    //   return res.status(400).json({ message: "Invalid or expired token" });
-    // }
-
       const invite = await prisma.adminInviteToken.findUnique({
       where: { token: token as string },
     });
@@ -237,19 +224,12 @@ export const registerAdmin = async (req: Request, res: Response) => {
         .status(400)
         .json({ message: "All fields are required", status: "FAILED" });
     }
-    const invite = await prisma.adminInviteToken.findUnique({
-    where: { token },
-      include: {
-        admin: {
-          include: {
-            user: true, 
-          },
-        },
-      },
+
+
+   const invite = await prisma.adminInviteToken.findUnique({
+      where: { token },
+      include: { admin: true },
     });
-
-
-    console.log("invite data", invite)
 
     if (!invite || invite.status !== "PENDING") {
       return res
@@ -263,65 +243,46 @@ export const registerAdmin = async (req: Request, res: Response) => {
         .json({ message: "Invite token expired", status: "FAILED" });
     }
 
-    const hashedPassword = await bcrypt.hash(password, 10);
-
-    // const user = await prisma.user.create({
-    //   data: {
-    //     email,
-    //     username,
-    //     name,
-    //     role: "ADMIN",
-    //     accounts: {
-    //       create: {
-    //         providerId: "credentials",
-    //         accountId: email,
-    //         password: hashedPassword,
-    //       },
-    //     },
-    //     adminInviteToken: {
-    //       connect: { id: invite.id },
-    //     },
-    //   },
-    // });
-
-      const user = await prisma.user.update({
-      where: { id: invite.admin.user.id },
-      data: {
+    const registeredUser = await auth.api.signUpEmail({
+      body: {
+        email: invite.email,
+        password,
         name,
         username,
-        accounts: {
-          create: {
-            providerId: "email",
-            accountId: invite.email,
-            password: hashedPassword,
-          },
-        },
       },
     });
 
-    
-    // update admin status
-    await prisma.admin.update({
-      where: { id: invite.admin.id },
-      data: { status: "ACTIVE" },
+    if (!registeredUser?.user) {
+      return res
+        .status(500)
+        .json({ message: "User registration failed", status: "FAILED" });
+    }
+
+    const newadmin = registeredUser.user;
+
+    // Update role to ADMIN
+    await prisma.user.update({
+      where: { id: newadmin.id },
+      data: { role: "ADMIN" },
     });
 
-    // mark invite as accepted
+    // Update admin status
+    await prisma.admin.update({
+      where: { id: invite.admin.id },
+      data: { status: "ACTIVE", userId: newadmin.id },
+    });
+
+    // Mark invite as accepted
     await prisma.adminInviteToken.update({
       where: { id: invite.id },
       data: { status: "ACCEPTED" },
     });
 
-    // expire old invites
-    await prisma.adminInviteToken.updateMany({
-      where: { status: "PENDING", expiresAt: { lt: new Date() } },
-      data: { status: "EXPIRED" },
-    });
 
     res.status(201).json({
       message: "Admin registered successfully",
       status: "SUCCESS",
-      user,
+      newadmin,
     });
   } catch (error: any) {
     if (error.meta?.target?.includes("username")) {
@@ -338,11 +299,11 @@ export const registerAdmin = async (req: Request, res: Response) => {
 
 export const sendAdminInvite = async (req: Request, res: Response) => {
   try {
-    const { email, name, username } = req.body;
+    const { email, name } = req.body;
     // const admin = req.user; // Implement after authcontext 
 
     console.log("Body:", req.body);
-    const inviteLink = await createAdminInvite(email, name, username);
+    const inviteLink = await createAdminInvite(email, name);
     const html = inviteEmailTemplate(inviteLink);
 
     await sendEmail(email, "You're invited to become an Admin", html);

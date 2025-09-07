@@ -5,7 +5,7 @@ const prisma = new PrismaClient();
 const BASE_URL = process.env.FRONTEND_URL || "http://localhost:3030";
 
 
-export const createAdminInvite = async (email: string, name: string, username: string) => {
+export const createAdminInvite = async (email: string, name: string) => {
   // generate token
   const token = crypto.randomBytes(8).toString("hex");
 
@@ -21,30 +21,45 @@ export const createAdminInvite = async (email: string, name: string, username: s
   //   },
   // });
 
-  const admin = await prisma.admin.create({
-    data: {
-      status: "PENDING",
-      user: {
-        create: {
-          email,
-          name,
-          username,
-          role: "ADMIN",
-        },
-      },
-      invite: {
-        create: {
-          email,
-          token,
-          status: "PENDING",
-          expiresAt,
-        },
+  // const admin = await prisma.admin.create({
+  //   data: {
+  //     status: "PENDING",
+  //     user: {
+  //       create: {
+  //         email,
+  //         name,
+  //         username,
+  //         role: "ADMIN",
+  //       },
+  //     },
+  //     invite: {
+  //       create: {
+  //         email,
+  //         token,
+  //         status: "PENDING",
+  //         expiresAt,
+  //       },
+  //     },
+  //   },
+  //   include: { user: true, invite: true },
+  // });
+
+ const admin = await prisma.admin.create({
+  data: {
+    status: "PENDING",
+    invite: {
+      create: {
+        email,
+        token,
+        status: "PENDING",
+        expiresAt,
       },
     },
-    include: { user: true, invite: true },
-  });
+  },
+  include: { invite: true },
+});
 
-  console.log("Admin created", admin);
+console.log("✅ Admin + Invite created:", admin);
 
 
     // return invite link
