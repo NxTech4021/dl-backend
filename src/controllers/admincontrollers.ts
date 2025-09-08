@@ -70,88 +70,88 @@ export const createSuperadmin = async (req: Request, res: Response) => {
   }
 };
 
-export const adminLogin = async (req: Request, res: Response) => {
-  try {
-    const { email, password } = req.body;
+// export const adminLogin = async (req: Request, res: Response) => {
+//   try {
+//     const { email, password } = req.body;
 
-    if (!email || !password) {
-      return res
-        .status(400)
-        .json(
-          new ApiResponse(false, 400, null, "Email and password are required")
-        );
-    }
+//     if (!email || !password) {
+//       return res
+//         .status(400)
+//         .json(
+//           new ApiResponse(false, 400, null, "Email and password are required")
+//         );
+//     }
 
-    // Find user with accounts
-    const user = await prisma.user.findUnique({
-      where: { email },
-      include: { accounts: true },
-    });
+//     // Find user with accounts
+//     const user = await prisma.user.findUnique({
+//       where: { email },
+//       include: { accounts: true },
+//     });
 
-    if (!user || (user.role !== Role.ADMIN && user.role !== Role.SUPERADMIN)) {
-      return res
-        .status(403)
-        .json(
-          new ApiResponse(false, 403, null, "Sorry you do not have permission")
-        );
-    }
+//     if (!user || (user.role !== Role.ADMIN && user.role !== Role.SUPERADMIN)) {
+//       return res
+//         .status(403)
+//         .json(
+//           new ApiResponse(false, 403, null, "Sorry you do not have permission")
+//         );
+//     }
 
-    // Credentials account
-    const account = user.accounts.find(
-      (acc) => acc.providerId === "credentials"
-    );
+//     // Credentials account
+//     const account = user.accounts.find(
+//       (acc) => acc.providerId === "credentials"
+//     );
 
-    if (!account || !account.password) {
-      return res
-        .status(400)
-        .json(new ApiResponse(false, 401, null, "Invalid credentials No account exists"));
-    }
+//     if (!account || !account.password) {
+//       return res
+//         .status(400)
+//         .json(new ApiResponse(false, 401, null, "Invalid credentials No account exists"));
+//     }
 
-    // Compare password
-    const isPasswordValid = await bcrypt.compare(password, account.password);
-    if (!isPasswordValid) {
-      return res
-        .status(400)
-        .json(new ApiResponse(false, 401, null, "Invalid credentials"));
-    }
+//     // Compare password
+//     const isPasswordValid = await bcrypt.compare(password, account.password);
+//     if (!isPasswordValid) {
+//       return res
+//         .status(400)
+//         .json(new ApiResponse(false, 401, null, "Invalid credentials"));
+//     }
 
-    // Generate JWT including userId and role
-    const token = jwt.sign({ userId: user.id, role: user.role }, JWT_SECRET, {
-      expiresIn: "7d",
-    });
+//     // Generate JWT including userId and role
+//     const token = jwt.sign({ userId: user.id, role: user.role }, JWT_SECRET, {
+//       expiresIn: "7d",
+//     });
 
-    // Send token in cookie + response
-    res
-      .cookie("accessToken", token, {
-        httpOnly: true,
-        secure: false, // set to true in production with HTTPS
-        sameSite: "lax",
-        maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-      })
-      .status(200)
-      .json(
-        new ApiResponse(
-          true,
-          200,
-          {
-            token,
-            user: {
-              id: user.id,
-              name: user.name,
-              email: user.email,
-              role: user.role,
-            },
-          },
-          "Login successful"
-        )
-      );
-  } catch (error) {
-    console.error("Login error:", error);
-    res
-      .status(500)
-      .json(new ApiResponse(false, 400, null, "Something went wrong"));
-  }
-};
+//     // Send token in cookie + response
+//     res
+//       .cookie("accessToken", token, {
+//         httpOnly: true,
+//         secure: false, // set to true in production with HTTPS
+//         sameSite: "lax",
+//         maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+//       })
+//       .status(200)
+//       .json(
+//         new ApiResponse(
+//           true,
+//           200,
+//           {
+//             token,
+//             user: {
+//               id: user.id,
+//               name: user.name,
+//               email: user.email,
+//               role: user.role,
+//             },
+//           },
+//           "Login successful"
+//         )
+//       );
+//   } catch (error) {
+//     console.error("Login error:", error);
+//     res
+//       .status(500)
+//       .json(new ApiResponse(false, 400, null, "Something went wrong"));
+//   }
+// };
 
 export const fetchAdmins = async (req: Request, res: Response) => {
   try {
@@ -302,7 +302,7 @@ export const registerAdmin = async (req: Request, res: Response) => {
     // Update role to ADMIN
     await prisma.user.update({
       where: { id: newadmin.id },
-      data: { role: "ADMIN" },
+      data: { role: "ADMIN" , emailVerified: true},
     });
 
     // Update admin status

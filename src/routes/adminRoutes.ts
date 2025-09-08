@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { verifyJWT } from "../middlewares/auth.middleware";
 import {
-  adminLogin,
+  // adminLogin,
   createSuperadmin,
   getInviteEmail,
   registerAdmin,
@@ -26,7 +26,7 @@ adminrouter.put("/account/update", updateAdmin)
 adminrouter.post("/superadmin", createSuperadmin);
 adminrouter.post("/register", registerAdmin);
 adminrouter.post("/invite", sendAdminInvite);
-adminrouter.post("/adminlogin", adminLogin);
+// adminrouter.post("/adminlogin", adminLogin);
 // adminrouter.post("/logout", adminLogout);
 
 export default adminrouter;
