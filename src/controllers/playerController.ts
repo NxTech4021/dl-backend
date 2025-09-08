@@ -286,16 +286,17 @@ export const getPlayerProfile = async (req: AuthenticatedRequest, res: Response)
     // Process ratings
     const skillRatings = responses.reduce((acc, res) => {
       if (res.result) {
-        const rating = res.result.doubles ?? res.result.singles ?? 0;
         acc[res.sport.toLowerCase()] = {
-          rating: rating / 1000,
+          singles: res.result.singles ? res.result.singles / 1000 : null,
+          doubles: res.result.doubles ? res.result.doubles / 1000 : null,
+          rating: (res.result.doubles ?? res.result.singles ?? 0) / 1000, // Keep general rating for backward compatibility
           confidence: res.result.confidence ?? 'N/A',
           rd: res.result.rd ?? 0,
           lastUpdated: res.completedAt,
         };
       }
       return acc;
-    }, {} as Record<string, { rating: number; confidence: string; rd: number; lastUpdated: Date | null }>);
+    }, {} as Record<string, { singles: number | null; doubles: number | null; rating: number; confidence: string; rd: number; lastUpdated: Date | null }>);
 
     // Process recent matches
     const processedMatches = recentMatches.map(match => ({
@@ -324,6 +325,8 @@ export const getPlayerProfile = async (req: AuthenticatedRequest, res: Response)
       gender: player.gender,
       dateOfBirth: player.dateOfBirth,
       area: player.area,
+      phoneNumber: player.phoneNumber,
+      bio: player.bio,
       status: activityStatus,
       lastLogin: player.lastLogin,
       registeredDate: player.createdAt,
@@ -577,5 +580,162 @@ const checkPlayerActivityStatus = async (userId: string): Promise<string> => {
   } catch (error) {
     console.error("Error checking activity status:", error);
     return 'active'; // Default to active on error
+  }
+};
+
+export const updatePlayerProfile = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user.id;
+    const { name, username, email, location, image, phoneNumber, bio } = req.body;
+
+    // Validate required fields
+    if (!name || !username || !email) {
+      return res.status(400).json({
+        success: false,
+        status: 400,
+        data: null,
+        message: 'Name, username, and email are required'
+      });
+    }
+
+    // Check if username is already taken by another user
+    if (username) {
+      const existingUser = await prisma.user.findFirst({
+        where: {
+          username: username,
+          id: { not: userId } // Exclude current user
+        }
+      });
+
+      if (existingUser) {
+        return res.status(400).json({
+          success: false,
+          status: 400,
+          data: null,
+          message: 'Username is already taken'
+        });
+      }
+    }
+
+    // Check if email is already taken by another user
+    if (email) {
+      const existingEmail = await prisma.user.findFirst({
+        where: {
+          email: email,
+          id: { not: userId } // Exclude current user
+        }
+      });
+
+      if (existingEmail) {
+        return res.status(400).json({
+          success: false,
+          status: 400,
+          data: null,
+          message: 'Email is already taken'
+        });
+      }
+    }
+
+    // Update user profile
+    const updatedUser = await prisma.user.update({
+      where: { id: userId },
+      data: {
+        name: name.trim(),
+        username: username.trim(),
+        email: email.trim().toLowerCase(),
+        area: location ? location.trim() : undefined,
+        image: image || undefined,
+        phoneNumber: phoneNumber ? phoneNumber.trim() : undefined,
+        bio: bio ? bio.trim() : undefined,
+        updatedAt: new Date()
+      },
+      select: {
+        id: true,
+        name: true,
+        username: true,
+        email: true,
+        image: true,
+        area: true,
+        phoneNumber: true,
+        bio: true,
+        updatedAt: true
+      }
+    });
+
+    res.json({
+      success: true,
+      status: 200,
+      data: updatedUser,
+      message: 'Profile updated successfully'
+    });
+
+  } catch (error) {
+    console.error('Error updating player profile:', error);
+    res.status(500).json({
+      success: false,
+      status: 500,
+      data: null,
+      message: 'Failed to update profile'
+    });
+  }
+};
+
+export const getPlayerAchievements = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user.id;
+
+    // Get user's achievements with achievement details
+    const userAchievements = await prisma.userAchievement.findMany({
+      where: {
+        userId: userId,
+      },
+      include: {
+        achievement: {
+          select: {
+            id: true,
+            title: true,
+            description: true,
+            icon: true,
+            category: true,
+            points: true,
+          }
+        }
+      },
+      orderBy: {
+        unlockedAt: 'desc'
+      }
+    });
+
+    // Format the response
+    const achievements = userAchievements.map(userAchievement => ({
+      id: userAchievement.achievement.id,
+      title: userAchievement.achievement.title,
+      description: userAchievement.achievement.description,
+      icon: userAchievement.achievement.icon,
+      category: userAchievement.achievement.category,
+      points: userAchievement.achievement.points,
+      unlockedAt: userAchievement.unlockedAt,
+      isCompleted: userAchievement.isCompleted,
+    }));
+
+    res.json({
+      data: {
+        achievements,
+        totalPoints: achievements.reduce((sum, achievement) => sum + achievement.points, 0),
+        count: achievements.length
+      },
+      success: true,
+      status: 200,
+      message: achievements.length > 0 ? 'Achievements retrieved successfully' : 'No achievements yet'
+    });
+
+  } catch (error) {
+    console.error('Error fetching player achievements:', error);
+    res.status(500).json({
+      success: false,
+      status: 500,
+      data: null,
+      message: 'Failed to fetch achievements'
+    });
   }
 };
