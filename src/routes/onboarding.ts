@@ -704,6 +704,71 @@ router.post('/complete/:userId', async (req, res) => {
   }
 });
 
+// Check if user has completed any sport assessments
+router.get('/assessment-status/:userId', async (req, res) => {
+  const startTime = Date.now();
+  const requestId = req.requestId!;
+  const { userId } = req.params;
+  
+  try {
+    // Validate userId
+    const validation = validator.validateUserId(userId);
+    if (!validation.isValid) {
+      return handleQuestionnaireError(validation.errors[0], res);
+    }
+    
+    logger.info('Checking assessment status', {
+      userId,
+      requestId,
+      operation: 'get_assessment_status'
+    });
+    
+    const dbStart = Date.now();
+    
+    // Check if user has completed any sport assessments
+    const assessmentCount = await prisma.questionnaireResponse.count({
+      where: {
+        userId,
+        completedAt: { not: null }
+      }
+    });
+    
+    const dbDuration = Date.now() - dbStart;
+    logger.databaseOperation('fetch_assessment_status', 'questionnaire_response', dbDuration);
+    
+    const hasCompletedAssessment = assessmentCount > 0;
+    
+    const totalDuration = Date.now() - startTime;
+    logger.info('Assessment status fetched successfully', {
+      userId,
+      requestId,
+      hasCompletedAssessment,
+      assessmentCount,
+      duration: totalDuration,
+      operation: 'get_assessment_status'
+    });
+    
+    res.set('X-Request-ID', requestId);
+    res.json({ 
+      userId,
+      hasCompletedAssessment,
+      assessmentCount,
+      success: true 
+    });
+    
+  } catch (error) {
+    const duration = Date.now() - startTime;
+    logger.error('Error checking assessment status', {
+      userId,
+      requestId,
+      duration,
+      operation: 'get_assessment_status'
+    }, error as Error);
+    
+    handleQuestionnaireError(error, res);
+  }
+});
+
 // Check if user has completed onboarding
 router.get('/status/:userId', async (req, res) => {
   const startTime = Date.now();
@@ -767,6 +832,105 @@ router.get('/status/:userId', async (req, res) => {
       requestId,
       duration,
       operation: 'get_onboarding_status'
+    }, error as Error);
+    
+    handleQuestionnaireError(error, res);
+  }
+});
+
+// Save user location information
+router.post('/location/:userId', async (req, res) => {
+  const startTime = Date.now();
+  const requestId = req.requestId!;
+  const { userId } = req.params;
+  const { country, state, city, latitude, longitude } = req.body;
+  
+  try {
+    // Validate userId
+    const validation = validator.validateUserId(userId);
+    if (!validation.isValid) {
+      return handleQuestionnaireError(validation.errors[0], res);
+    }
+    
+    // Validate location data - at least city is required
+    if (!city || city.trim() === '') {
+      return res.status(400).json({
+        error: 'City is required',
+        code: 'MISSING_CITY_DATA',
+        success: false
+      });
+    }
+
+    // Clean the data
+    const cleanCity = city.trim();
+    const cleanState = state && state.trim() !== '' ? state.trim() : null;
+    
+    logger.info('Saving user location', {
+      userId,
+      requestId,
+      city: cleanCity,
+      state: cleanState,
+      operation: 'save_location'
+    });
+    
+    const dbStart = Date.now();
+    
+    // Check if user exists
+    const existingUser = await prisma.user.findUnique({
+      where: { id: userId }
+    });
+    
+    if (!existingUser) {
+      const error = new UserNotFoundError(userId);
+      logger.warn('User not found for location save', {
+        userId,
+        requestId
+      });
+      return handleQuestionnaireError(error, res);
+    }
+    
+    // Create location string - only include city and state if available
+    const locationString = cleanState ? `${cleanCity}, ${cleanState}` : cleanCity;
+    
+    // Update user's area field
+    const updatedUser = await prisma.user.update({
+      where: { id: userId },
+      data: {
+        area: locationString
+      }
+    });
+    
+    const dbDuration = Date.now() - dbStart;
+    logger.databaseOperation('save_location', 'user', dbDuration);
+    
+    const totalDuration = Date.now() - startTime;
+    logger.info('User location saved successfully', {
+      userId,
+      requestId,
+      duration: totalDuration,
+      location: locationString,
+      operation: 'save_location'
+    });
+    
+    res.set('X-Request-ID', requestId);
+    res.json({
+      success: true,
+      location: {
+        area: updatedUser.area,
+        city: cleanCity,
+        ...(cleanState && { state: cleanState }),
+        ...(latitude && longitude && { latitude, longitude })
+      },
+      message: 'Location saved successfully'
+    });
+    
+  } catch (error) {
+    const duration = Date.now() - startTime;
+    logger.error('Error saving user location', {
+      userId,
+      requestId,
+      duration,
+      operation: 'save_location'
     }, error as Error);
     
     handleQuestionnaireError(error, res);
@@ -869,9 +1033,12 @@ async function checkAndUpdateOnboardingCompletion(userId: string, requestId: str
 
     // Check if user has basic profile information
     const hasBasicProfile = user.name && user.gender && user.dateOfBirth;
+    
+    // Check if user has location information
+    const hasLocation = user.area;
 
-    // Mark as completed if user has at least one questionnaire response and basic profile
-    if (questionnaireResponseCount > 0 && hasBasicProfile) {
+    // Mark as completed if user has basic profile + location (questionnaire is optional)
+    if (hasBasicProfile && hasLocation) {
       await prisma.user.update({
         where: { id: userId },
         data: { completedOnboarding: true }
