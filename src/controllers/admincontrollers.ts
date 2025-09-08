@@ -1,5 +1,5 @@
 import { PrismaClient, Role } from "@prisma/client";
-import { createAdminInvite } from "../services/adminService";
+import { createAdminInvite, updateAdminService } from "../services/adminService";
 import { inviteEmailTemplate } from "../utils/email";
 import { ApiResponse } from "../utils/ApiResponse";
 import { sendEmail } from "../config/nodemailer";
@@ -189,6 +189,43 @@ export const fetchAdmins = async (req: Request, res: Response) => {
   }
 };
 
+export const updateAdmin = async (req: Request, res: Response) => {
+  try {
+    const { adminId, name, username, role } = req.body;
+
+    if (!adminId) {
+      return res.status(400).json({ message: "Admin ID is required" });
+    }
+
+    const { updatedUser, updatedAdmin } = await updateAdminService({
+      adminId,
+      name,
+      username,
+      role,
+    });
+
+    return res.status(200).json({
+      message: "Admin updated successfully",
+      status: "SUCCESS",
+      user: updatedUser,
+      admin: updatedAdmin,
+    });
+  } catch (error: any) {
+    console.error("Error updating admin:", error);
+
+    if (error.body?.code === "USERNAME_IS_INVALID") {
+      return res.status(400).json({ message: "Invalid username" });
+    }
+    if (error.body?.code === "USERNAME_ALREADY_EXISTS") {
+      return res.status(400).json({ message: "Username already taken" });
+    }
+    if (error.body?.code === "EMAIL_ALREADY_EXISTS") {
+      return res.status(400).json({ message: "Email already registered" });
+    }
+
+    return res.status(400).json({ message: error.message || "Something went wrong" });
+  }
+};
 
 export const getInviteEmail = async (req: Request, res: Response) => {
   try {
@@ -233,7 +270,7 @@ export const registerAdmin = async (req: Request, res: Response) => {
 
     if (!invite || invite.status !== "PENDING") {
       return res
-        .status(400)
+        .status(401)
         .json({ message: "Invalid or already used token", status: "FAILED" });
     }
 
@@ -286,14 +323,14 @@ export const registerAdmin = async (req: Request, res: Response) => {
     });
   } catch (error: any) {
     if (error.meta?.target?.includes("username")) {
-      return res.status(400).json({ message: "Username is already taken" });
+      return res.status(401).json({ message: "Username is already taken" });
     }
     if (error.meta?.target?.includes("email")) {
-      return res.status(400).json({ message: "Email is already registered" });
+      return res.status(403).json({ message: "Email is already registered" });
     }
 
     console.error("Error registering admin:", error);
-    res.status(500).json({ message: "Something went wrong" });
+    res.status(400).json({ message: "Something went wrong" });
   }
 };
 
@@ -317,40 +354,53 @@ export const sendAdminInvite = async (req: Request, res: Response) => {
 
 export const getAdminSession = async (req: Request, res: Response) => {
   try {
-    const token = req.cookies.accessToken;
+    const session = await auth.api.getSession({ headers: req.headers });
 
-    if (!token) {
+    if (!session) {
       return res
         .status(401)
-        .json(new ApiResponse(false, 401, null, "No session found"));
+        .json(new ApiResponse(false, 401, null, "No active session"));
     }
 
-    const decoded = jwt.verify(token, JWT_SECRET) as any;
+    
+    // const user = session.user;
 
-    const user = await prisma.user.findUnique({
-      where: { id: decoded.userId },
+  const user = await prisma.user.findUnique({
+      where: { id: session.user.id },
       select: {
         id: true,
         name: true,
         email: true,
+        username: true,
+        displayUsername: true,
         role: true,
+        image: true,
+        emailVerified: true,
+        createdAt: true,
+        updatedAt: true,
       },
     });
+    console.log("user", user)
 
-    if (!user || (user.role !== Role.ADMIN && user.role !== Role.SUPERADMIN)) {
+    if (user.role !== Role.ADMIN && user.role !== Role.SUPERADMIN) {
       return res
         .status(403)
-        .json(new ApiResponse(false, 403, null, "Invalid session"));
+        .json(new ApiResponse(false, 403, null, "Not authorized"));
     }
 
-    res
-      .status(200)
-      .json(
-        new ApiResponse(true, 200, { user }, "Session retrieved successfully")
-      );
+    return res.status(200).json(
+      new ApiResponse(
+        true,
+        200,
+        { user },
+        "Session retrieved successfully"
+      )
+    );
   } catch (error) {
-    console.error("Session error:", error);
-    res.status(401).json(new ApiResponse(false, 401, null, "Invalid session"));
+    console.error("❌ Session error:", error);
+    return res
+      .status(500)
+      .json(new ApiResponse(false, 400, null, "Failed to fetch session"));
   }
 };
 
@@ -370,7 +420,7 @@ export const getAdminById = async (req: Request, res: Response) => {
     return res.json(admin);
   } catch (error) {
     console.error("Error fetching admin:", error);
-    return res.status(500).json({ message: "Internal server error" });
+    return res.status(400).json({ message: "Internal server error" });
   }
 };
 
@@ -387,6 +437,6 @@ export const adminLogout = async (req: Request, res: Response) => {
       .json(new ApiResponse(true, 200, null, "Logout successful"));
   } catch (error) {
     console.error("Logout error:", error);
-    res.status(500).json(new ApiResponse(false, 500, null, "Logout failed"));
+    res.status(500).json(new ApiResponse(false, 400, null, "Logout failed"));
   }
 };
