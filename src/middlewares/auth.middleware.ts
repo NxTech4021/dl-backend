@@ -87,7 +87,7 @@ export const verifyJWT = async (
         id: true,
         name: true,
         email: true,
-        role: true, // keep role so you can check admin in controller
+        role: true,
       },
     });
 

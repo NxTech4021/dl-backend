@@ -191,17 +191,19 @@ export const fetchAdmins = async (req: Request, res: Response) => {
 
 export const updateAdmin = async (req: Request, res: Response) => {
   try {
-    const { adminId, name, username, role } = req.body;
+     console.log("🔹 Incoming updateAdmin request body:", req.body);
+    const { adminId, name, username, role, gender, area  } = req.body;
 
     if (!adminId) {
       return res.status(400).json({ message: "Admin ID is required" });
     }
 
-    const { updatedUser, updatedAdmin } = await updateAdminService({
+     const { updatedUser, updatedAdmin } = await updateAdminService({
       adminId,
       name,
       username,
-      role,
+      gender,
+      area,
     });
 
     return res.status(200).json({
@@ -424,19 +426,20 @@ export const getAdminById = async (req: Request, res: Response) => {
   }
 };
 
-export const adminLogout = async (req: Request, res: Response) => {
-  try {
-    // Clear the access token cookie
-    res
-      .clearCookie("accessToken", {
-        httpOnly: true,
-        secure: false, // set to true in production with HTTPS
-        sameSite: "lax",
-      })
-      .status(200)
-      .json(new ApiResponse(true, 200, null, "Logout successful"));
-  } catch (error) {
-    console.error("Logout error:", error);
-    res.status(500).json(new ApiResponse(false, 400, null, "Logout failed"));
-  }
-};
+//Not used 
+// export const adminLogout = async (req: Request, res: Response) => {
+//   try {
+   
+//     res
+//       .clearCookie("accessToken", {
+//         httpOnly: true,
+//         secure: false, 
+//         sameSite: "lax",
+//       })
+//       .status(200)
+//       .json(new ApiResponse(true, 200, null, "Logout successful"));
+//   } catch (error) {
+//     console.error("Logout error:", error);
+//     res.status(500).json(new ApiResponse(false, 400, null, "Logout failed"));
+//   }
+// };

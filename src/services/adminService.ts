@@ -7,41 +7,47 @@ const BASE_URL = process.env.FRONTEND_URL || "http://localhost:3030";
 
 
 export const updateAdminService = async ({
-  adminId,
+  adminId,   // this is the userId of the admin
   name,
   username,
-  role,
+  gender,
+  area,
 }: {
   adminId: string;
   name?: string;
   username?: string;
-  role?: string;
+  gender?: string;
+  area?: string;
 }) => {
+  // Find the admin record by linked userId
+   console.log("🔹 Service received:", { name, username, gender, area }); // 👈 Add this line
 
   const admin = await prisma.admin.findUnique({
-    where: { id: adminId },
+    where: { userId: adminId },
   });
 
-  if (!admin || !admin.userId) {
-    throw new Error("Admin not found or not linked to a user");
+  if (!admin) {
+    throw new Error("This user is not an admin");
   }
 
-  // ✅ update user in Better Auth
-  const updatedUser = await auth.api.users.updateUser({
-    userId: admin.userId,
+  // Update the user record
+  const updatedUser = await prisma.user.update({
+    where: { id: admin.userId },
     data: {
-      ...(name && { name }),
-      ...(username && { username }),
-      ...(role && { role }),
+      name: name !== undefined ? name : undefined,
+      username: username !== undefined ? username : undefined,
+      gender: gender !== undefined ? gender : undefined,
+      area: area !== undefined ? area : undefined,
     },
   });
 
+  // Update admin timestamp
   const updatedAdmin = await prisma.admin.update({
-    where: { id: adminId },
-    data: {
-      updatedAt: new Date(),
-    },
+    where: { id: admin.id },
+    data: { updatedAt: new Date() },
   });
+
+  console.log("User record", updatedUser);
 
   return { updatedUser, updatedAdmin };
 };

@@ -7,9 +7,10 @@ import {
   registerAdmin,
   sendAdminInvite,
   getAdminSession,
-  adminLogout,
+  // adminLogout,
   fetchAdmins,
-  getAdminById
+  getAdminById,
+  updateAdmin
 } from "../controllers/admincontrollers";
 
 
@@ -21,10 +22,11 @@ adminrouter.get("/session", getAdminSession);
 adminrouter.get("/getadmins", fetchAdmins);
 adminrouter.get("/profile/:id", getAdminById);
 
+adminrouter.put("/account/update", updateAdmin)
 adminrouter.post("/superadmin", createSuperadmin);
 adminrouter.post("/register", registerAdmin);
 adminrouter.post("/invite", sendAdminInvite);
 adminrouter.post("/adminlogin", adminLogin);
-adminrouter.post("/logout", adminLogout);
+// adminrouter.post("/logout", adminLogout);
 
 export default adminrouter;
