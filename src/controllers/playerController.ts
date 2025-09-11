@@ -2,6 +2,8 @@ import { Request, Response } from "express";
 import { PrismaClient, Role, UserStatus } from "@prisma/client";
 import { ApiResponse } from "../utils/ApiResponse";
 import { AuthenticatedRequest } from "../middlewares/auth.middleware";
+import { auth } from "../lib/auth";
+import * as bcrypt from "bcryptjs";
 
 const prisma = new PrismaClient();
 
@@ -676,6 +678,147 @@ export const updatePlayerProfile = async (req: Request, res: Response) => {
       status: 500,
       data: null,
       message: 'Failed to update profile'
+    });
+  }
+};
+
+export const changePlayerPassword = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user.id;
+    const { currentPassword, newPassword } = req.body;
+
+    console.log(`🔑 Password change request for user: ${userId}`);
+    console.log(`🔑 Current password provided: ${currentPassword ? 'Yes' : 'No'}`);
+    console.log(`🔑 New password provided: ${newPassword ? 'Yes' : 'No'}`);
+
+    // Validate required fields
+    if (!currentPassword || !newPassword) {
+      console.log(`❌ Missing required fields`);
+      return res.status(400).json({
+        success: false,
+        status: 400,
+        data: null,
+        message: 'Current password and new password are required'
+      });
+    }
+
+    // Validate new password strength
+    if (newPassword.length < 8) {
+      console.log(`❌ Password too short`);
+      return res.status(400).json({
+        success: false,
+        status: 400,
+        data: null,
+        message: 'New password must be at least 8 characters long'
+      });
+    }
+
+    console.log(`🔑 Attempting to change password via better-auth API...`);
+
+    try {
+      // Use better-auth's built-in password change functionality
+      const result = await auth.api.changePassword({
+        body: {
+          newPassword,
+          currentPassword,
+        },
+        headers: req.headers,
+      });
+
+      console.log(`🔑 Better-auth result:`, result);
+
+      if (result.error) {
+        console.log(`❌ Better-auth password change failed:`, result.error);
+        return res.status(400).json({
+          success: false,
+          status: 400,
+          data: null,
+          message: result.error.message || 'Failed to change password'
+        });
+      }
+    } catch (apiError) {
+      console.log(`❌ Better-auth API error:`, apiError);
+      
+      // If better-auth changePassword doesn't exist, let's try a different approach
+      if (apiError.message && apiError.message.includes('changePassword')) {
+        console.log(`🔑 Falling back to manual password update...`);
+        
+        // Get the user from the session
+        const user = await prisma.user.findUnique({
+          where: { id: userId },
+          include: { accounts: true }
+        });
+
+        if (!user) {
+          console.log(`❌ User not found: ${userId}`);
+          return res.status(404).json({
+            success: false,
+            status: 404,
+            data: null,
+            message: 'User not found'
+          });
+        }
+
+        // Find the email account
+        const emailAccount = user.accounts.find(account => account.providerId === 'credential');
+        
+        if (!emailAccount) {
+          console.log(`❌ Email account not found for user: ${userId}`);
+          return res.status(400).json({
+            success: false,
+            status: 400,
+            data: null,
+            message: 'No email account found'
+          });
+        }
+
+        // Verify current password
+        const isCurrentPasswordValid = await bcrypt.compare(currentPassword, emailAccount.password);
+        
+        if (!isCurrentPasswordValid) {
+          console.log(`❌ Current password is invalid for user: ${userId}`);
+          return res.status(400).json({
+            success: false,
+            status: 400,
+            data: null,
+            message: 'Current password is incorrect'
+          });
+        }
+
+        // Hash new password
+        const hashedNewPassword = await bcrypt.hash(newPassword, 12);
+
+        // Update password in database
+        await prisma.account.update({
+          where: { id: emailAccount.id },
+          data: { 
+            password: hashedNewPassword,
+            updatedAt: new Date()
+          }
+        });
+
+        console.log(`✅ Password manually updated for user: ${userId}`);
+      } else {
+        throw apiError;
+      }
+    }
+
+    console.log(`✅ Password changed successfully for user: ${userId}`);
+
+    res.json({
+      success: true,
+      status: 200,
+      data: null,
+      message: 'Password changed successfully'
+    });
+
+  } catch (error) {
+    console.error('❌ Error changing password:', error);
+    res.status(500).json({
+      success: false,
+      status: 500,
+      data: null,
+      message: 'Failed to change password'
     });
   }
 };
