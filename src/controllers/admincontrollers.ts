@@ -3,9 +3,6 @@ import { createAdminInvite, updateAdminService } from "../services/adminService"
 import { inviteEmailTemplate } from "../utils/email";
 import { ApiResponse } from "../utils/ApiResponse";
 import { sendEmail } from "../config/nodemailer";
-import { hash } from "bcryptjs";
-import jwt from "jsonwebtoken";
-import bcrypt from "bcryptjs";
 import { Request, Response } from "express";
 import { auth } from "../lib/auth";
 
