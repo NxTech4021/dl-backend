@@ -1,4 +1,3 @@
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -6,6 +5,208 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+}
+
+model User {
+  id                  String            @id @default(cuid())
+  name                String
+  email               String            @unique
+  emailVerified       Boolean           @default(false)
+  image               String?
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+  displayUsername     String?
+  username            String            @unique
+  role                Role              @default(USER)
+  dateOfBirth         DateTime?
+  gender              String?
+  area                String?
+  completedOnboarding Boolean           @default(false)
+  lastActivityCheck   DateTime?
+  lastLogin           DateTime?
+  status              String            @default("active")
+  bio                 String?
+  phoneNumber         String?
+  admin               Admin?
+  opponentMatches     Match[]           @relation("OpponentMatches")
+  playerMatches       Match[]           @relation("PlayerMatches")
+  achievements        UserAchievement[]
+  accounts            Account[]
+  sessions            Session[]
+}
+
+model Admin {
+  id        String            @id @default(cuid())
+  userId    String?           @unique
+  status    AdminStatus       @default(PENDING)
+  invitedBy String?
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+  user      User?             @relation(fields: [userId], references: [id])
+  invite    AdminInviteToken?
+}
+
+model AdminInviteToken {
+  id        String   @id @default(cuid())
+  adminId   String   @unique
+  email     String
+  token     String   @unique
+  status    String   @default("PENDING")
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+  admin     Admin    @relation(fields: [adminId], references: [id])
+}
+
+model Account {
+  id                    String    @id @default(cuid())
+  userId                String
+  accountId             String
+  providerId            String
+  accessToken           String?
+  refreshToken          String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  idToken               String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([providerId, accountId])
+  @@map("account")
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  expiresAt DateTime
+  token     String   @unique
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("session")
+}
+
+model Verification {
+  id         String   @id @default(cuid())
+  identifier String
+  value      String   @unique
+  status     String   @default("PENDING")
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@map("verification")
+}
+
+model QuestionnaireResponse {
+  id          Int                  @id @default(autoincrement())
+  userId      String
+  sport       String
+  qVersion    Int
+  qHash       String
+  answersJson Json
+  startedAt   DateTime             @default(now())
+  completedAt DateTime?
+  result      InitialRatingResult?
+
+  @@index([userId])
+  @@index([sport, qVersion])
+  @@index([qHash])
+}
+
+model InitialRatingResult {
+  id         Int                   @id @default(autoincrement())
+  responseId Int                   @unique
+  source     String
+  singles    Int?
+  doubles    Int?
+  rd         Int?
+  confidence String?
+  detail     Json?
+  createdAt  DateTime              @default(now())
+  response   QuestionnaireResponse @relation(fields: [responseId], references: [id], onDelete: Cascade)
+}
+
+model Match {
+  id            String      @id @default(cuid())
+  playerId      String
+  opponentId    String
+  sport         String
+  matchType     String
+  playerScore   Int
+  opponentScore Int
+  outcome       String
+  matchDate     DateTime    @default(now())
+  location      String?
+  notes         String?
+  duration      Int?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  opponent      User        @relation("OpponentMatches", fields: [opponentId], references: [id], onDelete: Cascade)
+  player        User        @relation("PlayerMatches", fields: [playerId], references: [id], onDelete: Cascade)
+  stats         MatchStats?
+
+  @@index([playerId])
+  @@index([opponentId])
+  @@index([sport])
+  @@index([matchDate])
+}
+
+model MatchStats {
+  id                     String   @id @default(cuid())
+  matchId                String   @unique
+  playerAces             Int?
+  playerUnforcedErrors   Int?
+  playerWinners          Int?
+  playerDoubleFaults     Int?
+  opponentAces           Int?
+  opponentUnforcedErrors Int?
+  opponentWinners        Int?
+  opponentDoubleFaults   Int?
+  rallyCount             Int?
+  longestRally           Int?
+  breakPointsConverted   Int?
+  breakPointsTotal       Int?
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+  match                  Match    @relation(fields: [matchId], references: [id], onDelete: Cascade)
+}
+
+model Achievement {
+  id               String            @id @default(cuid())
+  title            String
+  description      String
+  icon             String?
+  category         String
+  requirement      Json?
+  points           Int               @default(0)
+  isActive         Boolean           @default(true)
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  userAchievements UserAchievement[]
+
+  @@index([category])
+  @@index([isActive])
+}
+
+model UserAchievement {
+  id            String      @id @default(cuid())
+  userId        String
+  achievementId String
+  unlockedAt    DateTime    @default(now())
+  progress      Json?
+  isCompleted   Boolean     @default(true)
+  achievement   Achievement @relation(fields: [achievementId], references: [id], onDelete: Cascade)
+  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, achievementId])
+  @@index([userId])
+  @@index([achievementId])
 }
 
 enum Role {
@@ -24,220 +225,4 @@ enum UserStatus {
   ACTIVE
   INACTIVE
   SUSPENDED
-}
-
-
-
-model User {
-  id                   String    @id @default(cuid())
-  name                 String
-  username             String    @unique
-  displayUsername      String?
-  email                String    @unique
-  emailVerified        Boolean   @default(false)
-  image                String?
-  gender               String?   // 'male' | 'female'
-  dateOfBirth          DateTime?
-  area                 String?
-  phoneNumber          String?
-  bio                  String?
-  status               String    @default("active")   // 'active' | 'inactive'
-  completedOnboarding  Boolean   @default(false)
-  lastLogin            DateTime?
-  lastActivityCheck    DateTime?
-  accounts             Account[]
-  sessions             Session[]
-  playerMatches        Match[]   @relation("PlayerMatches")
-  opponentMatches      Match[]   @relation("OpponentMatches")
-  achievements         UserAchievement[]
-  createdAt            DateTime  @default(now())
-  updatedAt            DateTime  @updatedAt
-  role                 Role      @default(USER)
-
-  admin Admin?
-}
-
-model Admin {
-  id         String       @id @default(cuid())
-  userId     String?      @unique
-  status     AdminStatus  @default(PENDING)
-  invitedBy  String?     
-  createdAt  DateTime     @default(now())
-  updatedAt  DateTime     @updatedAt
-
-  user   User?   @relation(fields: [userId], references: [id])
-  invite AdminInviteToken?
-}
-
-model AdminInviteToken {
-  id        String   @id @default(cuid())
-  adminId   String   @unique  
-  email     String
-  token     String   @unique
-  status    String   @default("PENDING") // PENDING, ACCEPTED, EXPIRED
-  createdAt DateTime @default(now())
-  expiresAt DateTime
-
-  admin Admin @relation(fields: [adminId], references: [id])
-}
-
-model Account {
-  id                    String    @id @default(cuid())
-  userId                String
-  accountId             String
-  providerId            String
-  accessToken           String?   @db.Text
-  refreshToken          String?   @db.Text
-  accessTokenExpiresAt  DateTime?
-  refreshTokenExpiresAt DateTime?
-  scope                 String?
-  idToken               String?   @db.Text
-  password              String?
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@unique([providerId, accountId])
-  @@map("account")
-}
-
-model Session {
-  id        String   @id @default(cuid())
-  userId    String
-  expiresAt DateTime
-  token     String   @unique
-  ipAddress String?
-  userAgent String?
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@map("session")
-}
-
-model Verification {
-  id         String   @id @default(cuid())
-  identifier String
-  value      String   @unique
-  status     String   @default("PENDING") // NEW: PENDING, ACCEPTED, EXPIRED
-  expiresAt  DateTime
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
-
-  @@map("verification")
-}
-
-model QuestionnaireResponse {
-  id          Int       @id @default(autoincrement())
-  userId      String // Changed to String to match User.id type
-  sport       String // 'pickleball' | 'tennis' | 'padel'
-  qVersion    Int // from JSON file
-  qHash       String // SHA1 of JSON contents
-  answersJson Json // raw client payload
-  startedAt   DateTime  @default(now())
-  completedAt DateTime?
-
-  // one-to-one
-  result InitialRatingResult?
-
-  @@index([userId])
-  @@index([sport, qVersion])
-  @@index([qHash])
-}
-
-model InitialRatingResult {
-  id         Int      @id @default(autoincrement())
-  responseId Int      @unique
-  source     String // 'questionnaire' | 'dupr_conversion' | ...
-  singles    Int?
-  doubles    Int?
-  rd         Int?
-  confidence String?
-  detail     Json?
-  createdAt  DateTime @default(now())
-
-  response QuestionnaireResponse @relation(fields: [responseId], references: [id], onDelete: Cascade)
-}
-
-model Match {
-  id            String      @id @default(cuid())
-  playerId      String      // Player initiating/recording the match
-  opponentId    String      // Opponent player ID
-  sport         String      // 'tennis' | 'pickleball' | 'padel'
-  matchType     String      // 'singles' | 'doubles'
-  playerScore   Int         // Player's score
-  opponentScore Int         // Opponent's score
-  outcome       String      // 'win' | 'loss' | 'draw'
-  matchDate     DateTime    @default(now())
-  location      String?     // Optional match location
-  notes         String?     // Optional match notes
-  duration      Int?        // Match duration in minutes
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
-
-  player        User        @relation("PlayerMatches", fields: [playerId], references: [id], onDelete: Cascade)
-  opponent      User        @relation("OpponentMatches", fields: [opponentId], references: [id], onDelete: Cascade)
-  stats         MatchStats?
-
-  @@index([playerId])
-  @@index([opponentId])
-  @@index([sport])
-  @@index([matchDate])
-}
-
-model MatchStats {
-  id                    String   @id @default(cuid())
-  matchId               String   @unique
-  playerAces            Int?
-  playerUnforcedErrors  Int?
-  playerWinners         Int?
-  playerDoubleFaults    Int?
-  opponentAces          Int?
-  opponentUnforcedErrors Int?
-  opponentWinners       Int?
-  opponentDoubleFaults  Int?
-  rallyCount            Int?
-  longestRally          Int?
-  breakPointsConverted  Int?
-  breakPointsTotal      Int?
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
-
-  match                 Match    @relation(fields: [matchId], references: [id], onDelete: Cascade)
-}
-
-model Achievement {
-  id          String   @id @default(cuid())
-  title       String   // e.g., "First Win", "10 Match Streak"
-  description String   // e.g., "Win your first match"
-  icon        String?  // Icon identifier or emoji
-  category    String   // e.g., "match", "rating", "streak", "milestone"
-  requirement Json?    // Requirements to unlock (e.g., {matches_won: 1})
-  points      Int      @default(0) // Points awarded for achievement
-  isActive    Boolean  @default(true) // Can be earned
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  userAchievements UserAchievement[]
-
-  @@index([category])
-  @@index([isActive])
-}
-
-model UserAchievement {
-  id            String      @id @default(cuid())
-  userId        String
-  achievementId String
-  unlockedAt    DateTime    @default(now())
-  progress      Json?       // Current progress toward achievement
-  isCompleted   Boolean     @default(true)
-
-  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  achievement   Achievement @relation(fields: [achievementId], references: [id], onDelete: Cascade)
-
-  @@unique([userId, achievementId])
-  @@index([userId])
-  @@index([achievementId])
 }
