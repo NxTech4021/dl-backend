@@ -1015,7 +1015,8 @@ async function checkAndUpdateOnboardingCompletion(userId: string, requestId: str
         completedOnboarding: true,
         name: true,
         gender: true,
-        dateOfBirth: true
+        dateOfBirth: true,
+        area: true
       }
     });
 
