@@ -4,8 +4,45 @@ import { ApiResponse } from "../utils/ApiResponse";
 import { AuthenticatedRequest } from "../middlewares/auth.middleware";
 import { auth } from "../lib/auth";
 import * as bcrypt from "bcryptjs";
+import multer from "multer";
+import { uploadProfileImage as uploadToStorage, deleteProfileImage } from "../config/cloudStorage.config";
+import path from "path";
+import fs from "fs";
 
 const prisma = new PrismaClient();
+
+// Configure multer for file uploads
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const uploadDir = path.join(__dirname, '../../uploads');
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+    cb(null, uploadDir);
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, 'profile-' + uniqueSuffix + path.extname(file.originalname));
+  }
+});
+
+export const upload = multer({
+  storage: storage,
+  limits: {
+    fileSize: 5 * 1024 * 1024, // 5MB limit
+  },
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = /jpeg|jpg|png|gif|webp/;
+    const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
+    const mimetype = allowedTypes.test(file.mimetype);
+
+    if (mimetype && extname) {
+      return cb(null, true);
+    } else {
+      cb(new Error('Only image files are allowed!'));
+    }
+  }
+});
 
 export const getAllPlayers = async (req: Request, res: Response) => {
   try {
@@ -879,6 +916,98 @@ export const getPlayerAchievements = async (req: Request, res: Response) => {
       status: 500,
       data: null,
       message: 'Failed to fetch achievements'
+    });
+  }
+};
+
+export const uploadProfileImage = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        status: 401,
+        data: null,
+        message: 'User not authenticated'
+      });
+    }
+
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        status: 400,
+        data: null,
+        message: 'No image file provided'
+      });
+    }
+
+    // Get current user to check for existing image
+    const currentUser = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { image: true }
+    });
+
+    // Delete old profile image if it exists
+    if (currentUser?.image) {
+      try {
+        await deleteProfileImage(currentUser.image);
+      } catch (error) {
+        console.log('Could not delete old profile image:', error);
+        // Continue with upload even if deletion fails
+      }
+    }
+
+    // Upload new image to cloud storage
+    const imageUrl = await uploadToStorage(req.file.path, userId);
+
+    // Update user's image URL in database
+    const updatedUser = await prisma.user.update({
+      where: { id: userId },
+      data: { image: imageUrl },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        image: true,
+        username: true,
+        displayUsername: true
+      }
+    });
+
+    // Clean up temporary file
+    try {
+      fs.unlinkSync(req.file.path);
+    } catch (error) {
+      console.log('Could not delete temporary file:', error);
+    }
+
+    res.status(200).json({
+      success: true,
+      status: 200,
+      data: {
+        user: updatedUser,
+        imageUrl: imageUrl
+      },
+      message: 'Profile image uploaded successfully'
+    });
+
+  } catch (error) {
+    console.error('Error uploading profile image:', error);
+    
+    // Clean up temporary file on error
+    if (req.file?.path) {
+      try {
+        fs.unlinkSync(req.file.path);
+      } catch (cleanupError) {
+        console.log('Could not delete temporary file:', cleanupError);
+      }
+    }
+
+    res.status(500).json({
+      success: false,
+      status: 500,
+      data: null,
+      message: 'Failed to upload profile image'
     });
   }
 };

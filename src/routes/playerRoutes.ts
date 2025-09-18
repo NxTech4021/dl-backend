@@ -10,7 +10,9 @@ import {
   getPlayerMatchHistory,
   getMatchDetails,
   getPlayerAchievements,
-  changePlayerPassword
+  changePlayerPassword,
+  uploadProfileImage,
+  upload
 } from '../controllers/playerController';
 
 const playerRouter = Router();
@@ -26,6 +28,7 @@ playerRouter.put('/profile/me', verifyAuth, updatePlayerProfile);
 playerRouter.put('/profile/password', verifyAuth, changePlayerPassword);
 playerRouter.get('/profile/matches', verifyAuth, getPlayerMatchHistory);
 playerRouter.get('/profile/achievements', verifyAuth, getPlayerAchievements);
+playerRouter.post('/profile/upload-image', verifyAuth, upload.single('image'), uploadProfileImage);
 playerRouter.get('/matches/:matchId', verifyAuth, getMatchDetails);
 
 export default playerRouter;

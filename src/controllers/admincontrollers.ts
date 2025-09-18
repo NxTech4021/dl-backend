@@ -41,6 +41,7 @@ export const createSuperadmin = async (req: Request, res: Response) => {
         email,
         password,
         name,
+        username, // Include username in the signup request
       },
     });
 
@@ -55,7 +56,6 @@ export const createSuperadmin = async (req: Request, res: Response) => {
       data: {
         role: Role.SUPERADMIN,
         emailVerified: true,
-        username,
       },
       include: { accounts: true },
     });
