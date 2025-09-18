@@ -10,7 +10,8 @@ import {
   // adminLogout,
   fetchAdmins,
   getAdminById,
-  updateAdmin
+  updateAdmin,
+  updatePassword
 } from "../controllers/admincontrollers";
 
 
@@ -26,7 +27,7 @@ adminrouter.put("/account/update", updateAdmin)
 adminrouter.post("/superadmin", createSuperadmin);
 adminrouter.post("/register", registerAdmin);
 adminrouter.post("/invite", sendAdminInvite);
-// adminrouter.post("/adminlogin", adminLogin);
+adminrouter.post("/updatepassword", updatePassword);
 // adminrouter.post("/logout", adminLogout);
 
 export default adminrouter;
