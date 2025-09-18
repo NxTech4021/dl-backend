@@ -6,7 +6,6 @@ import { sendEmail } from "../config/nodemailer";
 import { Request, Response } from "express";
 import { auth } from "../lib/auth";
 
-const JWT_SECRET = process.env.JWT_SECRET || "supersecret";
 const prisma = new PrismaClient();
 
 const toWebHeaders = (headers: Request["headers"]): Headers => {
@@ -292,80 +291,6 @@ export const registerAdmin = async (req: Request, res: Response) => {
     res.status(400).json({ message: "Something went wrong" });
   }
 };
-
-// export const sendAdminInvite = async (req: Request, res: Response) => {
-//   try {
-//     const { email, name, adminId } = req.body;
-
-//     let inviteLink: string;
-
-//     // If adminId is provided, it's a resend
-//     if (adminId) {
-//       const admin = await prisma.admin.findUnique({
-//         where: { id: adminId },
-//         include: { invite: true, user: true },
-//       });
-
-//       if (!admin) {
-//         return res.status(404).json({ error: "Admin not found." });
-//       }
-
-//       if (admin.status && admin.status !== "PENDING") {
-//         return res
-//           .status(400)
-//           .json({ error: "Cannot resend invite to active or suspended admin." });
-//       }
-
-//       const targetEmail = admin.user?.email ?? admin.invite?.email!;
-//       const targetName = admin.user?.name ?? admin.invite?.email?.split("@")[0]!;
-
-//       inviteLink = await createAdminInvite(targetEmail, targetName);
-//     } else {
-//       // Initial invite
-//       if (!email || !name) {
-//         return res.status(400).json({ error: "Email and name are required." });
-//       }
-
-//       inviteLink = await createAdminInvite(email, name);
-//     }
-
-//     // Send email
-//     const html = inviteEmailTemplate(inviteLink);
-//     await sendEmail(email ?? inviteLink.split("token=")[0], "You're invited to become an Admin", html);
-
-//     res.status(200).json({ message: "Invite sent successfully!", status: "SUCCESS" });
-//   } catch (err) {
-//     console.error("Error sending invite:", err);
-//     res.status(400).json({ error: "Failed to send invite.", status: "FAILED" });
-//   }
-// };
-
-// export const sendAdminInvite = async (req: Request, res: Response) => {
-//   try {
-//     const { email, name, adminId } = req.body;
-
-//     let inviteLink: string;
-
-//     if (adminId) {
-//       // Resend for PENDING admin
-//       inviteLink = await resendAdminInvite(adminId);
-//     } else {
-//       if (!email || !name) {
-//         return res.status(400).json({ error: "Email and name are required." });
-//       }
-//       inviteLink = await createAdminInvite(email, name);
-//     }
-
-//     // Send email
-//     const html = inviteEmailTemplate(inviteLink);
-//     await sendEmail(email ?? inviteLink.split("token=")[0], "You're invited to become an Admin", html);
-
-//     res.status(200).json({ message: "Invite sent successfully!", status: "SUCCESS" });
-//   } catch (err: any) {
-//     console.error("Error sending invite:", err);
-//     res.status(400).json({ error: err.message || "Failed to send invite.", status: "FAILED" });
-//   }
-// };
 
 export const sendAdminInvite = async (req: Request, res: Response) => {
   try {
