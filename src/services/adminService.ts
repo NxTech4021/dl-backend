@@ -1,9 +1,8 @@
 import { PrismaClient } from "@prisma/client";
-import { auth } from "../lib/auth";
 import crypto from "crypto";
 
 const prisma = new PrismaClient();
-const BASE_URL = process.env.FRONTEND_URL || "http://localhost:3030";
+const BASE_URL = process.env.BASE_URL || "http://localhost:82";
 
 
 export const updateAdminService = async ({
@@ -19,8 +18,8 @@ export const updateAdminService = async ({
   gender?: string;
   area?: string;
 }) => {
-  // Find the admin record by linked userId
-   console.log("🔹 Service received:", { name, username, gender, area }); // 👈 Add this line
+
+   console.log("🔹 Service received:", { name, username, gender, area }); 
 
   const admin = await prisma.admin.findUnique({
     where: { userId: adminId },
@@ -40,7 +39,6 @@ export const updateAdminService = async ({
       area: area !== undefined ? area : undefined,
     },
   });
-
   // Update admin timestamp
   const updatedAdmin = await prisma.admin.update({
     where: { id: admin.id },
@@ -52,30 +50,89 @@ export const updateAdminService = async ({
   return { updatedUser, updatedAdmin };
 };
 
+// export const createAdminInvite = async (email: string, name: string) => {
+//   // generate token
+//   const token = crypto.randomBytes(8).toString("hex");
+
+//   const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 Days 
+
+//  const admin = await prisma.admin.create({
+//   data: {
+//     status: "PENDING",
+//     invite: {
+//       create: {
+//         email,
+//         token,
+//         status: "PENDING",
+//         expiresAt,
+//       },
+//     },
+//   },
+//   include: { invite: true },
+// });
+
+// console.log("✅ Admin + Invite created:", admin);
+
+
+//     // return invite link
+//     return `${BASE_URL}/register/admin?token=${token}`;
+// };
+
 export const createAdminInvite = async (email: string, name: string) => {
-  // generate token
+  // Check if email already has a PENDING admin
+  const existingAdmin = await prisma.admin.findFirst({
+    where: {
+      OR: [
+        { user: { email } },      
+        { invite: { email } },    
+      ],
+    },
+    include: { invite: true, user: true },
+  });
+
+  if (existingAdmin) {
+    throw new Error("This email already has a pending or active admin");
+  }
+
   const token = crypto.randomBytes(8).toString("hex");
+  const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
 
-  const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
-
- const admin = await prisma.admin.create({
-  data: {
-    status: "PENDING",
-    invite: {
-      create: {
-        email,
-        token,
-        status: "PENDING",
-        expiresAt,
+  const admin = await prisma.admin.create({
+    data: {
+      status: "PENDING",
+      invite: {
+        create: {
+          email,
+          token,
+          status: "PENDING",
+          expiresAt,
+        },
       },
     },
-  },
-  include: { invite: true },
-});
+    include: { invite: true },
+  });
 
-console.log("✅ Admin + Invite created:", admin);
+  return `${BASE_URL}/register/admin?token=${token}`;
+};
 
+export const resendAdminInvite = async (adminId: string) => {
+  const admin = await prisma.admin.findUnique({
+    where: { id: adminId },
+    include: { invite: true, user: true },
+  });
 
-    // return invite link
-    return `${BASE_URL}/register/admin?token=${token}`;
+  if (!admin) throw new Error("Admin not found");
+  if (admin.status !== "PENDING") throw new Error("Cannot resend invite to active or suspended admin");
+
+  // Generate new token and update invite
+  const token = crypto.randomBytes(8).toString("hex");
+  const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+
+  await prisma.adminInviteToken.update({
+    where: { id: admin.invite!.id },
+    data: { token, expiresAt, status: "PENDING" },
+  });
+
+  const targetEmail = admin.user?.email ?? admin.invite?.email!;
+  return `${BASE_URL}/register/admin?token=${token}`;
 };
