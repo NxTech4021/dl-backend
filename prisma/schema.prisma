@@ -33,6 +33,8 @@ model User {
   achievements        UserAchievement[]
   accounts            Account[]
   sessions            Session[]
+  payments            Payment[]
+  leagueRegistrations LeagueRegistration[]
 }
 
 model Admin {
@@ -219,6 +221,113 @@ enum AdminStatus {
   PENDING
   ACTIVE
   SUSPENDED
+}
+
+model League {
+  id          String             @id @default(cuid())
+  name        String
+  sport       String
+  location    String?
+  description String?
+  isActive    Boolean            @default(true)
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+  seasons     LeagueSeason[]
+
+  @@index([sport])
+  @@index([isActive])
+}
+
+model LeagueSeason {
+  id               String              @id @default(cuid())
+  leagueId         String
+  name             String
+  startDate        DateTime
+  endDate          DateTime
+  registrationEnd  DateTime
+  entryFee         Float
+  maxParticipants  Int?
+  category         String              // Men's Single, Men's Doubles, Mixed Doubles
+  status           LeagueSeasonStatus  @default(UPCOMING)
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+  league           League              @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  registrations    LeagueRegistration[]
+
+  @@index([leagueId])
+  @@index([status])
+  @@index([category])
+}
+
+model LeagueRegistration {
+  id             String             @id @default(cuid())
+  userId         String
+  seasonId       String
+  registeredAt   DateTime           @default(now())
+  status         RegistrationStatus @default(PENDING)
+  paymentId      String?
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+  user           User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  season         LeagueSeason       @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  payment        Payment?           @relation(fields: [paymentId], references: [id])
+
+  @@unique([userId, seasonId])
+  @@index([userId])
+  @@index([seasonId])
+  @@index([status])
+}
+
+model Payment {
+  id                String               @id @default(cuid())
+  userId            String
+  orderId           String               @unique
+  amount            Float
+  currency          String               @default("MYR")
+  status            PaymentStatus        @default(PENDING)
+  paymentMethod     String?
+  transactionId     String?
+  authCode          String?
+  fiuuResponse      Json?
+  billName          String
+  billEmail         String
+  billMobile        String?
+  billDesc          String
+  leagueId          String?
+  seasonId          String?
+  paymentUrl        String?
+  paidAt            DateTime?
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+  user              User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  registrations     LeagueRegistration[]
+
+  @@index([userId])
+  @@index([status])
+  @@index([orderId])
+}
+
+enum LeagueSeasonStatus {
+  UPCOMING
+  OPEN_REGISTRATION
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum RegistrationStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+  PAYMENT_FAILED
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCESS
+  FAILED
+  CANCELLED
+  REFUNDED
 }
 
 enum UserStatus {
