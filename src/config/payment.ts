@@ -4,9 +4,9 @@ export const fiuuConfig = {
   password: process.env.FIUU_PASSWORD || '',
   verifyKey: process.env.FIUU_VERIFY_KEY || '',
   privateKey: process.env.FIUU_PRIVATE_KEY || '',
-  // Correct Fiuu sandbox URLs as per official documentation
-  sandboxUrl: process.env.FIUU_SANDBOX_URL || 'https://pg-sandbox.e2pay.co.id',
-  portalUrl: process.env.FIUU_PORTAL_URL || 'https://portal-sandbox.e2pay.co.id',
+  // Current Fiuu RMS sandbox host (developer advisory Sept 2025)
+  sandboxUrl: process.env.FIUU_SANDBOX_URL || 'https://sandbox.fiuu.com',
+  portalUrl: process.env.FIUU_PORTAL_URL || 'https://sandbox-portal.fiuu.com',
 };
 
 export const paymentConfig = {

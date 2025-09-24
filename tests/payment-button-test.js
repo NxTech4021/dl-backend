@@ -13,8 +13,8 @@ const FIUU_CONFIG = {
   email: 'nick@deuceleague.com',
   verifyKey: 'a9951daa34d91fe1806fe6e57c00e1bf',
   privateKey: 'e8027554fab1fee54b513a984535aff0',
-  // Correct Fiuu sandbox URL as per official documentation
-  sandboxUrl: 'https://pg-sandbox.e2pay.co.id',
+  // Current Fiuu sandbox host (developer advisory Sept 2025)
+  sandboxUrl: 'https://sandbox.fiuu.com',
 };
 
 // Payment Configuration

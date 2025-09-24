@@ -8,7 +8,7 @@ describe('Payment Service Unit Tests', () => {
     password: 'sNChOUJc',
     verifyKey: 'a9951daa34d91fe1806fe6e57c00e1bf',
     privateKey: 'e8027554fab1fee54b513a984535aff0',
-    sandboxUrl: 'https://sandbox-pg.fiuu.com',
+    sandboxUrl: 'https://sandbox.fiuu.com',
     portalUrl: 'https://sandbox-portal.fiuu.com',
   };
 
@@ -136,7 +136,7 @@ describe('Payment Service Unit Tests', () => {
       const paymentUrl = `${basePaymentUrl}?${queryString}`;
 
       // Validate URL structure
-      expect(paymentUrl).toContain('https://sandbox-pg.fiuu.com');
+      expect(paymentUrl).toContain('https://sandbox.fiuu.com');
       expect(paymentUrl).toContain('MerchantID=SB_deuceleaguesdnb');
       expect(paymentUrl).toContain(`RefNo=${orderId}`);
       expect(paymentUrl).toContain(`Amount=${amount}`);
