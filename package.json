@@ -34,7 +34,10 @@
     "jsonwebtoken": "^9.0.2",
     "multer": "^2.0.2",
     "nodemailer": "^7.0.5",
-    "pino-http": "^10.5.0"
+    "pino-http": "^10.5.0",
+    "express-rate-limit": "^7.1.5",
+    "helmet": "^7.1.0",
+    "express-mongo-sanitize": "^2.2.0"
   },
   "devDependencies": {
     "@types/cors": "^2.8.19",

@@ -6,8 +6,17 @@ import { auth } from "./lib/auth";
 import onboardingRoutes from "./routes/onboarding";
 import router from "./routes/index";
 import pino from "pino-http";
+import { securityHeaders, sanitizeInput, preventSQLInjection, ipBlocker } from "./middleware/security";
+import { generalLimiter, authLimiter, onboardingLimiter } from "./middleware/rateLimiter";
 
 const app = express();
+
+// Apply security middlewares first
+app.use(securityHeaders);
+app.use(ipBlocker);
+app.use(generalLimiter);
+app.use(sanitizeInput);
+app.use(preventSQLInjection);
 
 // This is for debugging purposes only
 app.use((req, res, next) => {
@@ -30,6 +39,8 @@ app.use(
       "http://192.168.1.7:3001",
       "http://192.168.100.53:8081", // Mobile app origin
       "exp://192.168.100.53:8081", // Expo development server
+      "http://172.20.10.3:8081", // New mobile app origin
+      "exp://172.20.10.3:8081", // New Expo development server
     ], // Allow nginx proxy, direct access, and local IP
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
@@ -37,14 +48,12 @@ app.use(
   })
 );
 
+// Apply auth rate limiter to authentication routes
+app.use("/api/auth/*", authLimiter);
+
 // According to the official Express documentation for better-auth,
 // the auth handler must be mounted BEFORE express.json().
 // The "/api/auth/*" pattern is recommended for Express v4.
-// According to the official Express documentation for better-auth,
-// the auth handler must be mounted BEFORE express.json().
-// The "/api/auth/*" pattern is recommended for Express v4.
-// OLD: app.all("/auth/*splat", toNodeHandler(auth));
-// FIX: Updated to match frontend expectations - frontend calls /api/auth/*
 app.all("/api/auth/*splat", toNodeHandler(auth));
 
 // The JSON parser for any other routes you might add later.
@@ -55,11 +64,8 @@ app.use(pino());
 // Keep main router at root level for health checks and other non-API routes
 app.use(router);
 
-// Mount onboarding routes
-// TO-DO Move all the routes to one main routes file
-// OLD: app.use("/onboarding", onboardingRoutes);
-// FIX: Mount at /api/onboarding to match frontend expectations
-app.use("/api/onboarding", onboardingRoutes);
+// Mount onboarding routes with rate limiting
+app.use("/api/onboarding", onboardingLimiter, onboardingRoutes);
 
 // Health check endpoint
 app.get("/health", (req, res) => {
