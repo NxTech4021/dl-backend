@@ -14,7 +14,7 @@ const app = express();
 // Apply security middlewares first
 app.use(securityHeaders);
 app.use(ipBlocker);
-app.use(generalLimiter);
+// app.use(generalLimiter); // Commented out for development
 app.use(sanitizeInput);
 app.use(preventSQLInjection);
 
@@ -36,6 +36,7 @@ app.use(
       "http://localhost:82",
       "http://localhost:3001",
       "http://localhost:8081",
+      "http://192.168.1.3:3001", // Added current IP from logs
       "http://192.168.1.7:3001",
       "http://192.168.100.53:8081", // Mobile app origin
       "exp://192.168.100.53:8081", // Expo development server
@@ -49,12 +50,20 @@ app.use(
 );
 
 // Apply auth rate limiter to authentication routes
-app.use("/api/auth/*", authLimiter);
+// app.use("/api/auth/{*any}", authLimiter); // Commented out for development
 
 // According to the official Express documentation for better-auth,
 // the auth handler must be mounted BEFORE express.json().
-// The "/api/auth/*" pattern is recommended for Express v4.
-app.all("/api/auth/*splat", toNodeHandler(auth));
+// Express v5 requires the {*any} syntax for wildcard routes.
+app.all("/api/auth/{*any}", (req, res, next) => {
+  console.log(`🔐 Auth request: ${req.method} ${req.path}`);
+  try {
+    toNodeHandler(auth)(req, res, next);
+  } catch (error) {
+    console.error("❌ Auth handler error:", error);
+    res.status(500).json({ error: "Authentication error" });
+  }
+});
 
 // The JSON parser for any other routes you might add later.
 app.use(express.json());

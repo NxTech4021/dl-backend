@@ -733,10 +733,27 @@ router.get('/assessment-status/:userId', async (req, res) => {
       }
     });
     
+    // Check if user has any sports selected (even if questionnaires not completed)
+    const sportsCount = await prisma.questionnaireResponse.count({
+      where: {
+        userId
+      }
+    });
+    
+    // Also check if user has completed onboarding (which means they've made a decision about assessment)
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { completedOnboarding: true }
+    });
+    
     const dbDuration = Date.now() - dbStart;
     logger.databaseOperation('fetch_assessment_status', 'questionnaire_response', dbDuration);
     
-    const hasCompletedAssessment = assessmentCount > 0;
+    // Assessment is considered complete if:
+    // 1. User has completed at least one questionnaire, OR
+    // 2. User has completed onboarding (meaning they've made a decision about assessment, even if they chose to skip), OR
+    // 3. User has selected sports (even if they skipped questionnaires)
+    const hasCompletedAssessment = assessmentCount > 0 || user?.completedOnboarding === true || sportsCount > 0;
     
     const totalDuration = Date.now() - startTime;
     logger.info('Assessment status fetched successfully', {
@@ -744,6 +761,8 @@ router.get('/assessment-status/:userId', async (req, res) => {
       requestId,
       hasCompletedAssessment,
       assessmentCount,
+      sportsCount,
+      completedOnboarding: user?.completedOnboarding,
       duration: totalDuration,
       operation: 'get_assessment_status'
     });
@@ -832,6 +851,128 @@ router.get('/status/:userId', async (req, res) => {
       requestId,
       duration,
       operation: 'get_onboarding_status'
+    }, error as Error);
+    
+    handleQuestionnaireError(error, res);
+  }
+});
+
+// Save user sports selection
+router.post('/sports/:userId', async (req, res) => {
+  const startTime = Date.now();
+  const requestId = req.requestId!;
+  const { userId } = req.params;
+  const { sports } = req.body;
+  
+  try {
+    // Validate userId
+    const validation = validator.validateUserId(userId);
+    if (!validation.isValid) {
+      return handleQuestionnaireError(validation.errors[0], res);
+    }
+    
+    // Validate sports data - should be an array of strings
+    if (!Array.isArray(sports) || sports.length === 0) {
+      return res.status(400).json({
+        error: 'Sports array is required and must not be empty',
+        code: 'MISSING_SPORTS_DATA',
+        success: false
+      });
+    }
+
+    // Validate each sport is a valid sport type
+    const validSports = ['pickleball', 'tennis', 'padel'];
+    const invalidSports = sports.filter(sport => !validSports.includes(sport));
+    if (invalidSports.length > 0) {
+      return res.status(400).json({
+        error: `Invalid sports: ${invalidSports.join(', ')}. Valid sports are: ${validSports.join(', ')}`,
+        code: 'INVALID_SPORTS_DATA',
+        success: false
+      });
+    }
+    
+    logger.info('Saving user sport preferences', {
+      userId,
+      requestId,
+      sports,
+      operation: 'save_sports'
+    });
+    
+    const dbStart = Date.now();
+    
+    // Check if user exists
+    const existingUser = await prisma.user.findUnique({
+      where: { id: userId }
+    });
+    
+    if (!existingUser) {
+      const error = new UserNotFoundError(userId);
+      logger.warn('User not found for sports save', {
+        userId,
+        requestId
+      });
+      return handleQuestionnaireError(error, res);
+    }
+    
+    // Create questionnaire responses for each sport with empty answers
+    // This allows the sports to be tracked even if user skips questionnaires
+    const sportsToSave = [];
+    
+    for (const sport of sports) {
+      // Check if response already exists for this sport
+      const existingResponse = await prisma.questionnaireResponse.findFirst({
+        where: {
+          userId,
+          sport
+        }
+      });
+      
+      if (!existingResponse) {
+        // Create a placeholder response with empty answers
+        const response = await prisma.questionnaireResponse.create({
+          data: {
+            userId,
+            sport,
+            qVersion: 1, // Default version
+            qHash: 'placeholder', // Placeholder hash
+            answersJson: {}, // Empty answers
+            startedAt: new Date(),
+            completedAt: null // Not completed since they skipped
+          }
+        });
+        sportsToSave.push(response);
+      }
+    }
+    
+    const dbDuration = Date.now() - dbStart;
+    logger.databaseOperation('save_sports', 'questionnaire_response', dbDuration);
+    
+    const totalDuration = Date.now() - startTime;
+    logger.info('User sport preferences saved successfully', {
+      userId,
+      requestId,
+      sports,
+      savedCount: sportsToSave.length,
+      duration: totalDuration,
+      operation: 'save_sports'
+    });
+    
+    res.set('X-Request-ID', requestId);
+    res.json({ 
+      userId,
+      sports,
+      savedCount: sportsToSave.length,
+      success: true,
+      message: 'Sport preferences saved successfully'
+    });
+    
+  } catch (error) {
+    const duration = Date.now() - startTime;
+    logger.error('Error saving sport preferences', {
+      userId,
+      requestId,
+      duration,
+      operation: 'save_sports'
     }, error as Error);
     
     handleQuestionnaireError(error, res);

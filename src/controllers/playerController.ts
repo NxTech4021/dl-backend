@@ -66,7 +66,6 @@ export const getAllPlayers = async (req: Request, res: Response) => {
     const responses = await prisma.questionnaireResponse.findMany({
       where: {
         userId: { in: playerIds },
-        completedAt: { not: null },
       },
       include: {
         result: true,
@@ -81,12 +80,14 @@ export const getAllPlayers = async (req: Request, res: Response) => {
     const transformedPlayers = players.map((player) => {
       const userResponses = responsesByUserId[player.id] || [];
 
+      // Extract sports from ALL questionnaires (both completed and incomplete)
       const sports = [
         ...new Set(userResponses.map((r) => r.sport.toLowerCase())),
       ];
 
+      // Only create skill ratings from COMPLETED questionnaires with results
       const skillRatings = userResponses.reduce((acc, res) => {
-        if (res.result) {
+        if (res.result && res.completedAt) {
           const rating = res.result.doubles ?? res.result.singles ?? 0;
           acc[res.sport.toLowerCase()] = {
             rating: rating / 1000,
@@ -286,18 +287,18 @@ export const getPlayerProfile = async (req: AuthenticatedRequest, res: Response)
         .json(new ApiResponse(false, 404, null, "Player not found"));
     }
 
-    // Get questionnaire responses with ratings
+    // Get all questionnaire responses (including placeholder entries for skipped questionnaires)
     const responses = await prisma.questionnaireResponse.findMany({
       where: {
         userId: userId,
-        completedAt: { not: null },
       },
       include: {
         result: true,
       },
-      orderBy: {
-        completedAt: 'desc',
-      },
+      orderBy: [
+        { completedAt: { sort: 'desc', nulls: 'last' } }, // Completed responses first
+        { startedAt: 'desc' }, // Then by start date for placeholder entries
+      ],
     });
 
     // Get recent match history
@@ -322,9 +323,12 @@ export const getPlayerProfile = async (req: AuthenticatedRequest, res: Response)
       take: 5,
     });
 
-    // Process ratings
+    // Extract all sports (including those from placeholder entries)
+    const allSports = [...new Set(responses.map(r => r.sport.toLowerCase()))];
+    
+    // Process ratings (only from completed questionnaires)
     const skillRatings = responses.reduce((acc, res) => {
-      if (res.result) {
+      if (res.result && res.completedAt) { // Only include completed questionnaires with results
         acc[res.sport.toLowerCase()] = {
           singles: res.result.singles ? res.result.singles / 1000 : null,
           doubles: res.result.doubles ? res.result.doubles / 1000 : null,
@@ -369,6 +373,7 @@ export const getPlayerProfile = async (req: AuthenticatedRequest, res: Response)
       status: activityStatus,
       lastLogin: player.lastLogin,
       registeredDate: player.createdAt,
+      sports: allSports, // Include all sports (both completed and placeholder)
       skillRatings: Object.keys(skillRatings).length > 0 ? skillRatings : null,
       recentMatches: processedMatches,
       totalMatches: await prisma.match.count({
