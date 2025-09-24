@@ -44,7 +44,7 @@ app.use(
     ], // Allow nginx proxy, direct access, and local IP
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "expo-origin"],
+    allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "expo-origin", "Cache-Control"],
   })
 );
 
