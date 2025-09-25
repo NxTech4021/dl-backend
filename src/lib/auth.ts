@@ -46,6 +46,18 @@ export const auth = betterAuth({
   database: prismaAdapter(prisma, {
     provider: "postgresql",
   }),
+  
+  // Configure user schema to include phoneNumber as an additional field
+  user: {
+    additionalFields: {
+      phoneNumber: {
+        type: "string",
+        required: false,
+        input: true, // Allow this field to be set during user creation
+      },
+    },
+  },
+  
   plugins: [
     expo(),
     username() as any,
