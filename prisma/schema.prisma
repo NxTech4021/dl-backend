@@ -33,6 +33,7 @@ model User {
   achievements        UserAchievement[]
   accounts            Account[]
   sessions            Session[]
+  seasonMemberships   SeasonMembership[]
 
   @@index([email])
   @@index([username])
@@ -146,10 +147,11 @@ model Season {
   name            String        
   startDate       DateTime
   endDate         DateTime
+  regiDeadline    DateTime
   description     String?
   sportType       String? 
   seasonType      String?         // single or double         
-  status          SeasonStatus   @default("UPCOMING") // 'UPCOMING' | 'ACTIVE' | 'COMPLETED'
+  status          SeasonStatus @default(UPCOMING)
   current         Boolean        @default(false)     // Quick flag for the current active season
   divisions       Division[]
   memberships     SeasonMembership[]
@@ -183,7 +185,6 @@ model Division {
   
   @@unique([seasonId, name]) 
   @@index([seasonId])
-  @@index([divisionType])
 }
 
 model SeasonMembership {
