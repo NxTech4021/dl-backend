@@ -60,6 +60,7 @@ export const createSeason = async (req: any, res: any) => {
     }
 };
 
+
 export const getSeasons = async (req: any, res: any) => {
     const { id } = req.params;
     const { current } = req.query; 
@@ -81,7 +82,8 @@ export const getSeasons = async (req: any, res: any) => {
         if (current === 'true') {
             // Fetch the currently active season
             const currentSeason = await prisma.season.findFirst({
-                where: { current: true, status: 'ACTIVE' },
+                // Assuming 'ACTIVE' is an enum value, otherwise ensure it's a string
+                where: { current: true, status: 'ACTIVE' }, 
                 include: { divisions: { select: { id: true, name: true } } }
             });
             
@@ -94,20 +96,31 @@ export const getSeasons = async (req: any, res: any) => {
         // Fetch all seasons, ordered by start date (most recent first)
         const seasons = await prisma.season.findMany({
             orderBy: { startDate: 'desc' },
-            select: { id: true, name: true, startDate: true, endDate: true, status: true, sport: true, current: true } 
+            select: { 
+                id: true, 
+                name: true, 
+                startDate: true, 
+                endDate: true, 
+                regiDeadline: true, // <-- NEW FIELD ADDED
+                status: true, 
+                // FIX: Renamed 'sport' to 'sportType'
+                sportType: true, 
+                seasonType: true,   // <-- NEW FIELD ADDED
+                current: true 
+            } 
         });
 
         res.status(200).json(seasons);
     } catch (error: any) {
         console.error("Error fetching seasons:", error);
 
+        // We use instanceof Prisma.PrismaClientValidationError for cleaner error handling
         if (error instanceof Prisma.PrismaClientValidationError) {
-            return res.status(400).json({ error: "Invalid query parameters for fetching seasons." });
+            return res.status(400).json({ error: "Invalid query parameters or field selection for fetching seasons." });
         }
         res.status(500).json({ error: "Failed to fetch seasons. Please try again later." });
     }
 };
-
 
 export const updateSeason = async (req: any, res: any) => {
   const { id } = req.params;
