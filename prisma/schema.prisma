@@ -145,9 +145,9 @@ model InitialRatingResult {
 model Season {
   id              String         @id @default(cuid())
   name            String        
-  startDate       DateTime
-  endDate         DateTime
-  regiDeadline    DateTime
+  startDate       DateTime?
+  endDate         DateTime?
+  regiDeadline    DateTime?
   description     String?
   sportType       String? 
   seasonType      String?         // single or double         
@@ -305,7 +305,7 @@ enum UserStatus {
 
 enum SeasonStatus {
   UPCOMING
-  ONGOING
+  ACTIVE
   FINISHED
   CANCELLED
 }
