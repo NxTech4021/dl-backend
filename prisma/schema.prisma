@@ -253,6 +253,7 @@ model UserAchievement {
 model Thread {
   id          String       @id @default(cuid())
   name        String?      // Only for group chats
+  avatarUrl   String? 
   isGroup     Boolean      @default(false)
   members     UserThread[]
   messages    Message[]
@@ -273,15 +274,31 @@ model UserThread {
 }
 
 model Message {
-  id        String   @id @default(cuid())
-  thread     Thread     @relation(fields: [threadId], references: [id])
-  threadId   String
-  sender    User     @relation(fields: [senderId], references: [id])
-  senderId  String
-  content   String
-  readBy    MessageReadBy[]
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id          String         @id @default(cuid())
+  thread      Thread         @relation(fields: [threadId], references: [id])
+  threadId    String
+  sender      User           @relation(fields: [senderId], references: [id])
+  senderId    String
+  
+  // Content and Type
+  type        MediaType      @default(TEXT) 
+  content     String?       
+  files       File[]         // New relation for multimedia files
+  
+  // Reply/Quote/Forwarding
+  repliesToId String?       
+  repliesTo   Message?       @relation("Replies", fields: [repliesToId], references: [id], onDelete: SetNull)
+  repliedBy   Message[]      @relation("Replies") 
+  
+  // Message Management
+  isEdited    Boolean        @default(false)
+  isDeleted   Boolean        @default(false)
+  
+  readBy      MessageReadBy[]
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  @@index([threadId, createdAt])
 }
 
 model MessageReadBy {
@@ -293,3 +310,31 @@ model MessageReadBy {
 
   @@unique([messageId, userId])
 }
+
+model File {
+  id          String   @id @default(cuid())
+  message     Message  @relation(fields: [messageId], references: [id])
+  messageId   String
+  
+  url         String  
+  mimeType    String  
+  sizeKB      Int      // File size in kilobytes for preview/management
+  
+  fileName    String?  
+  isMedia     Boolean  @default(false) // True for images/videos, false for documents
+  
+  createdAt   DateTime @default(now())
+  
+  @@index([messageId])
+}
+
+enum MediaType {
+  TEXT     
+  IMAGE
+  VIDEO
+  VOICE_NOTE
+  DOCUMENT
+  SYSTEM    // For messages like 'User X joined'
+}
+
+
