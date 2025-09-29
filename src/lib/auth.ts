@@ -104,6 +104,11 @@ export const auth = betterAuth({
     }),
   ],
 
+  // automatic sign-in after email verification
+  emailVerification: {
+    autoSignInAfterVerification: true,
+  },
+
   emailAndPassword: {
     enabled: true,
     requireEmailVerification: true,
