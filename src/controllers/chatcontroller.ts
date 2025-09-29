@@ -26,6 +26,13 @@ export const createThread = async (req: Request, res: Response) => {
       include: { members: { include: { user: true } } },
     });
 
+
+      // 💡 SOCKET INTEGRATION: Tell users to join the new thread room
+      // Iterate over members and send a notification to their personal room (userId)
+        userIds.forEach(userId => {
+             req.io.to(userId).emit('new_thread', thread); 
+        });
+
     return res.status(201).json(thread);
   } catch (error) {
     console.error("Error creating thread:", error);
@@ -59,25 +66,30 @@ export const getThreads = async (req: Request, res: Response) => {
 
 // Send a message in a thread
 export const sendMessage = async (req: Request, res: Response) => {
-  try {
     const { threadId } = req.params;
-    const { senderId, content } = req.body;
+    const { senderId, content } = req.body; // Assuming type/file logic is handled separately for simplicity here
 
     if (!senderId || !content) {
-      return res.status(400).json({ error: "Sender ID and content are required" });
+        return res.status(400).json({ error: "Sender ID and content are required" });
     }
 
-    const message = await prisma.message.create({
-      data: { threadId, senderId, content },
-      include: { sender: true },
-    });
+    try {
+        const message = await prisma.message.create({
+            data: { threadId, senderId, content },
+            include: { sender: true },
+        });
 
-    return res.status(201).json(message);
-  } catch (error) {
-    console.error("Error sending message:", error);
-    return res.status(500).json({ error: "Failed to send message" });
-  }
+        // 💡 SOCKET INTEGRATION: Broadcast the new message to the thread room
+        // This is the core Real-Time Texting feature!
+        req.io.to(threadId).emit('new_message', message);
+
+        return res.status(201).json(message);
+    } catch (error) {
+        console.error("Error sending message:", error);
+        return res.status(500).json({ error: "Failed to send message" });
+    }
 };
+
 
 // Get all messages in a thread
 export const getMessages = async (req: Request, res: Response) => {
@@ -99,23 +111,41 @@ export const getMessages = async (req: Request, res: Response) => {
 
 // Mark a message as read
 export const markAsRead = async (req: Request, res: Response) => {
-  try {
     const { messageId } = req.params;
-    const { userId } = req.body;
+    const { userId: readerId } = req.body; // Using readerId for clarity
 
-    if (!userId) {
-      return res.status(400).json({ error: "User ID is required" });
+    if (!readerId) {
+        return res.status(400).json({ error: "User ID is required" });
     }
 
-    const readReceipt = await prisma.messageReadBy.upsert({
-      where: { messageId_userId: { messageId, userId } },
-      update: {},
-      create: { messageId, userId },
-    });
+    try {
+        // Find the threadId before the update
+        const messageInfo = await prisma.message.findUnique({
+            where: { id: messageId },
+            select: { threadId: true, senderId: true } 
+        });
 
-    return res.json(readReceipt);
-  } catch (error) {
-    console.error("Error marking message as read:", error);
-    return res.status(500).json({ error: "Failed to mark message as read" });
-  }
+        if (!messageInfo) {
+            return res.status(404).json({ error: "Message not found" });
+        }
+        
+        // Upsert the read receipt
+        const readReceipt = await prisma.messageReadBy.upsert({
+            where: { messageId_userId: { messageId, userId: readerId } },
+            update: {},
+            create: { messageId, userId: readerId },
+        });
+
+        // 💡 SOCKET INTEGRATION: Broadcast the read receipt to the thread room
+        req.io.to(messageInfo.threadId).emit('message_read', { 
+            messageId, 
+            threadId: messageInfo.threadId, 
+            readerId 
+        });
+
+        return res.json(readReceipt);
+    } catch (error) {
+        console.error("Error marking message as read:", error);
+        return res.status(500).json({ error: "Failed to mark message as read" });
+    }
 };
