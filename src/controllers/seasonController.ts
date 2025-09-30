@@ -36,7 +36,7 @@ export const createSeason = async (req: any, res: any) => {
                 name,
                 startDate: new Date(startDate),
                 endDate: new Date(endDate),
-                regiDeadline: new Date(endDate),
+                regiDeadline: regiDeadline ? new Date(regiDeadline) : new Date(endDate),
                 sportType,
                 seasonType,
                 description,
@@ -101,12 +101,14 @@ export const getSeasons = async (req: any, res: any) => {
                 name: true, 
                 startDate: true, 
                 endDate: true, 
-                regiDeadline: true, // <-- NEW FIELD ADDED
+                regiDeadline: true,
+                description: true,
                 status: true, 
-                // FIX: Renamed 'sport' to 'sportType'
                 sportType: true, 
-                seasonType: true,   // <-- NEW FIELD ADDED
-                current: true 
+                seasonType: true,
+                current: true,
+                createdAt: true,
+                updatedAt: true
             } 
         });
 
@@ -201,5 +203,53 @@ export const updateSeason = async (req: any, res: any) => {
     }
 
     res.status(500).json({ error: "Failed to update season. Please try again later." });
+  }
+};
+
+export const deleteSeason = async (req: any, res: any) => {
+  const { id } = req.params;
+
+  if (!id) {
+    return res.status(400).json({ error: "Missing required parameter: id." });
+  }
+
+  try {
+    // Check if season exists
+    const existingSeason = await prisma.season.findUnique({
+      where: { id },
+      include: { memberships: true }
+    });
+
+    if (!existingSeason) {
+      return res.status(404).json({ error: "Season not found." });
+    }
+
+    // Check if season has active memberships
+    const activeMemberships = existingSeason.memberships.filter(
+      membership => membership.status === "ACTIVE"
+    );
+
+    if (activeMemberships.length > 0) {
+      return res.status(400).json({ 
+        error: "Cannot delete season with active memberships. Please remove all members first." 
+      });
+    }
+
+    // Delete the season
+    await prisma.season.delete({
+      where: { id }
+    });
+
+    res.status(200).json({ message: "Season deleted successfully." });
+  } catch (error: any) {
+    console.error("Error deleting season:", error);
+
+    if (error instanceof Prisma.PrismaClientKnownRequestError) {
+      if (error.code === 'P2025') {
+        return res.status(404).json({ error: "Season not found for deletion." });
+      }
+    }
+
+    res.status(500).json({ error: "Failed to delete season. Please try again later." });
   }
 };
