@@ -1078,6 +1078,129 @@ router.post('/location/:userId', async (req, res) => {
   }
 });
 
+// Search locations using Nominatim (OpenStreetMap)
+router.get('/locations/search', async (req, res) => {
+  const startTime = Date.now();
+  const requestId = req.requestId!;
+  const { q: query, limit = 5 } = req.query;
+
+  try {
+    // Validate query parameter
+    if (!query || typeof query !== 'string' || query.trim().length < 2) {
+      return res.status(400).json({
+        error: 'Query parameter "q" is required and must be at least 2 characters',
+        code: 'INVALID_QUERY',
+        success: false
+      });
+    }
+
+    const searchLimit = Math.min(parseInt(limit as string) || 5, 10);
+
+    logger.info('Searching locations', {
+      query,
+      limit: searchLimit,
+      requestId,
+      operation: 'search_locations'
+    });
+
+    // Call Nominatim API
+    const nominatimUrl = `https://nominatim.openstreetmap.org/search?` +
+      `q=${encodeURIComponent(query.trim())}&` +
+      `format=json&` +
+      `addressdetails=1&` +
+      `limit=${searchLimit}&` +
+      `countrycodes=my`; // Restrict to Malaysia
+
+    const response = await fetch(nominatimUrl, {
+      headers: {
+        'User-Agent': 'DeuceLeague/1.0', // Required by Nominatim
+        'Accept-Language': 'en'
+      }
+    });
+
+    if (!response.ok) {
+      logger.error('Nominatim API error', {
+        status: response.status,
+        requestId,
+        operation: 'search_locations'
+      });
+      return res.status(500).json({
+        error: 'Location search service unavailable',
+        code: 'SERVICE_ERROR',
+        success: false
+      });
+    }
+
+    const data = await response.json();
+
+    // Transform Nominatim response to our format
+    const results = data.map((place: any) => {
+      const address = place.address || {};
+      const city = address.city || address.town || address.village || address.suburb || '';
+      const postcode = address.postcode || '';
+      const state = address.state || '';
+
+      // Format: "City, Postcode State"
+      let formattedAddress = '';
+      if (city && postcode && state) {
+        formattedAddress = `${city}, ${postcode} ${state}`;
+      } else if (city && state) {
+        formattedAddress = `${city}, ${state}`;
+      } else {
+        formattedAddress = place.display_name;
+      }
+
+      return {
+        id: place.place_id.toString(),
+        formatted_address: formattedAddress,
+        geometry: {
+          location: {
+            lat: parseFloat(place.lat),
+            lng: parseFloat(place.lon)
+          }
+        },
+        components: {
+          city,
+          postcode,
+          state
+        },
+        display_name: place.display_name
+      };
+    });
+
+    const totalDuration = Date.now() - startTime;
+    logger.info('Location search completed', {
+      query,
+      resultCount: results.length,
+      duration: totalDuration,
+      requestId,
+      operation: 'search_locations'
+    });
+
+    res.set('X-Request-ID', requestId);
+    res.json({
+      success: true,
+      results,
+      count: results.length
+    });
+
+  } catch (error) {
+    const duration = Date.now() - startTime;
+    logger.error('Error searching locations', {
+      query,
+      requestId,
+      duration,
+      operation: 'search_locations'
+    }, error as Error);
+
+    res.status(500).json({
+      error: 'Failed to search locations',
+      code: 'SEARCH_ERROR',
+      success: false
+    });
+  }
+});
+
 // Get user profile information
 router.get('/profile/:userId', async (req, res) => {
   const startTime = Date.now();
