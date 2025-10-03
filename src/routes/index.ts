@@ -2,6 +2,9 @@ import express from "express";
 import adminRouter from "./adminRoutes";
 import playerRouter from "./playerRoutes";
 import seasonRouter from "./seasonRoutes";
+import divisionRoutes from "./divisionRoutes";
+import matchRoutes from "./matchRoutes";
+
 
 const router = express.Router();
 
@@ -15,8 +18,8 @@ router.use("/api/player", playerRouter);
 // Divisions, Leagues,  Matches & Seasons
 
 // router.use("/api/league", playerRouter);
-// router.use("/api/division", playerRouter);
-// router.use("/api/match", playerRouter);
+router.use("/api/division", divisionRoutes);
+router.use("/api/match", matchRoutes);
 router.use("/api/season", seasonRouter);
 
 // LeaderBoard 
