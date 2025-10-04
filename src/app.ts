@@ -6,8 +6,17 @@ import { auth } from "./lib/auth";
 import onboardingRoutes from "./routes/onboarding";
 import router from "./routes/index";
 import pino from "pino-http";
-import { securityHeaders, sanitizeInput, preventSQLInjection, ipBlocker } from "./middleware/security";
-import { generalLimiter, authLimiter, onboardingLimiter } from "./middleware/rateLimiter";
+import {
+  securityHeaders,
+  sanitizeInput,
+  preventSQLInjection,
+  ipBlocker,
+} from "./middleware/security";
+import {
+  generalLimiter,
+  authLimiter,
+  onboardingLimiter,
+} from "./middleware/rateLimiter";
 
 const app = express();
 
@@ -34,6 +43,7 @@ app.use(
     origin: [
       "http://localhost:3030",
       "http://localhost:82",
+      "http://localhost",
       "http://localhost:3001",
       "http://localhost:8081",
       "http://192.168.1.3:3001", // Added current IP from logs
@@ -45,17 +55,23 @@ app.use(
     ], // Allow nginx proxy, direct access, and local IP
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "expo-origin", "Cache-Control"],
+    allowedHeaders: [
+      "Content-Type",
+      "Authorization",
+      "X-Requested-With",
+      "expo-origin",
+      "Cache-Control",
+    ],
   })
 );
 
 // Apply auth rate limiter to authentication routes
 // app.use("/api/auth/{*any}", authLimiter); // Commented out for development
 
-// According to the official Express documentation for better-auth,
+// According to the official Express documentaticlon for better-auth,
 // the auth handler must be mounted BEFORE express.json().
 // Express v5 requires the {*any} syntax for wildcard routes.
-app.all("/api/auth/{*any}", (req, res, next) => {
+app.all("/auth/{*any}", (req, res, next) => {
   console.log(`🔐 Auth request: ${req.method} ${req.path}`);
   try {
     toNodeHandler(auth)(req, res, next);

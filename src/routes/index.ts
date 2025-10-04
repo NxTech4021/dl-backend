@@ -9,25 +9,23 @@ router.get("/health", (req, res) => {
   res.json({ status: "OK", message: "Server is running" });
 });
 
-router.use("/api/admin", adminRouter);
-router.use("/api/player", playerRouter);
+router.use("/admin", adminRouter);
+router.use("/player", playerRouter);
 
 // Divisions, Leagues,  Matches & Seasons
 
 // router.use("/api/league", playerRouter);
 // router.use("/api/division", playerRouter);
 // router.use("/api/match", playerRouter);
-router.use("/api/season", seasonRouter);
+router.use("/season", seasonRouter);
 
-// LeaderBoard 
+// LeaderBoard
 
-// Chat 
+// Chat
 
-
-// Settings 
+// Settings
 
 // Notification?
-
 
 // router.post("/api/")
 
