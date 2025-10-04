@@ -1,10 +1,10 @@
-import nodemailer from 'nodemailer';
-import dotenv from 'dotenv';
+import nodemailer from "nodemailer";
+import dotenv from "dotenv";
 
 dotenv.config();
 
 export const transporter = nodemailer.createTransport({
-  service: 'Gmail', 
+  service: "Gmail",
   auth: {
     user: process.env.EMAIL_USER,
     pass: process.env.EMAIL_PASS,
@@ -13,7 +13,7 @@ export const transporter = nodemailer.createTransport({
 
 export const sendEmail = async (to: string, subject: string, html: string) => {
   console.log("Sending email:", to, subject, html);
-  await transporter.sendMail({
+  return await transporter.sendMail({
     from: `"DeuceLeague" <${process.env.EMAIL_USER}>`,
     to,
     subject,
