@@ -139,6 +139,7 @@ export const auth = betterAuth({
     "exp://192.168.100.53:8081",
     "http://172.20.10.3:8081",
     "exp://172.20.10.3:8081",
+    "https://staging.appdevelopers.my",
   ],
 
   // Session configuration for mobile/Expo compatibility
