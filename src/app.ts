@@ -20,6 +20,32 @@ import {
 
 const app = express();
 
+const baseAllowedOrigins = [
+  "http://localhost:3030",
+  "http://localhost:82",
+  "http://localhost",
+  "http://localhost:3001",
+  "http://localhost:8081",
+  "http://192.168.0.197:3030",
+  "http://192.168.1.3:3001", // Added current IP from logs
+  "http://192.168.1.7:3001",
+  "http://192.168.100.53:8081", // Mobile app origin
+  "exp://192.168.100.53:8081", // Expo development server
+  "http://172.20.10.3:8081", // New mobile app origin
+  "exp://172.20.10.3:8081", // New Expo development server
+  "https://staging.appdevelopers.my",
+];
+
+const extraAllowedOrigins = process.env.CORS_EXTRA_ORIGINS
+  ? process.env.CORS_EXTRA_ORIGINS.split(",")
+      .map((origin) => origin.trim())
+      .filter((origin) => origin.length > 0)
+  : [];
+
+const allowedOrigins = new Set([...baseAllowedOrigins, ...extraAllowedOrigins]);
+
+console.log('[CORS] Allowed origins:', Array.from(allowedOrigins));
+
 // Apply security middlewares first
 app.use(securityHeaders);
 app.use(ipBlocker);
@@ -40,20 +66,14 @@ app.use((req, res, next) => {
 // Set up CORS
 app.use(
   cors({
-    origin: [
-      "http://localhost:3030",
-      "http://localhost:82",
-      "http://localhost",
-      "http://localhost:3001",
-      "http://localhost:8081",
-      "http://192.168.1.3:3001", // Added current IP from logs
-      "http://192.168.1.7:3001",
-      "http://192.168.100.53:8081", // Mobile app origin
-      "exp://192.168.100.53:8081", // Expo development server
-      "http://172.20.10.3:8081", // New mobile app origin
-      "exp://172.20.10.3:8081", // New Expo development server
-      "https://staging.appdevelopers.my",
-    ], // Allow nginx proxy, direct access, and local IP
+    origin: (origin, callback) => {
+      if (!origin || allowedOrigins.has(origin)) {
+        return callback(null, true);
+      }
+
+      console.warn(`[CORS] Blocked origin attempt: ${origin}`);
+      return callback(new Error("Not allowed by CORS"));
+    }, // Allow nginx proxy, direct access, and local IP
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allowedHeaders: [
@@ -72,12 +92,12 @@ app.use(
 // According to the official Express documentaticlon for better-auth,
 // the auth handler must be mounted BEFORE express.json().
 // Express v5 requires the {*any} syntax for wildcard routes.
-app.all("/auth/{*any}", (req, res, next) => {
-  console.log(`🔐 Auth request: ${req.method} ${req.path}`);
+app.all("/api/auth/{*any}", (req, res, next) => {
+  console.log(`[AUTH] Request: ${req.method} ${req.path}`);
   try {
     toNodeHandler(auth)(req, res, next);
   } catch (error) {
-    console.error("❌ Auth handler error:", error);
+    console.error("[AUTH] Handler error:", error);
     res.status(500).json({ error: "Authentication error" });
   }
 });

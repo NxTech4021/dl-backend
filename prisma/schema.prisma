@@ -35,6 +35,10 @@ model User {
   accounts            Account[]
   sessions            Session[]
   seasonMemberships   SeasonMembership[]
+  leagueSettingsAudits LeagueSettingsAudit[] @relation("LeagueSettingsAuditAdmin")
+  leagueJoinRequests   LeagueJoinRequest[]   @relation("LeagueJoinRequestUser")
+  leagueJoinDecisions  LeagueJoinRequest[]   @relation("LeagueJoinRequestDecider")
+  leagueTemplates      LeagueTemplate[]      @relation("LeagueTemplateCreator")
 
   @@index([email])
   @@index([username])
@@ -144,8 +148,107 @@ model InitialRatingResult {
   response   QuestionnaireResponse @relation(fields: [responseId], references: [id], onDelete: Cascade)
 }
 
+
+model League {
+  id                   String                @id @default(cuid())
+  name                 String
+  sport                String
+  status               LeagueStatus          @default(DRAFT)
+  location             String
+  description          String?
+  brandingLogoUrl      String?
+  brandingPrimaryColor String?
+  brandingSecondaryColor String?
+  theme                String?
+  isArchived           Boolean               @default(false)
+  archivedAt           DateTime?
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+  seasons              Season[]
+  settings             LeagueSettings?
+  joinRequests         LeagueJoinRequest[]
+}
+
+model LeagueSettings {
+  id                       String                 @id @default(cuid())
+  leagueId                 String                 @unique
+  durationUnit             LeagueDurationUnit     @default(WEEKS)
+  durationValue            Int?
+  minPlayersPerDivision    Int?
+  maxPlayersPerDivision    Int?
+  registrationDeadlineDays Int?
+  paymentSettings          Json?
+  divisionRules            Json?
+  playoffConfiguration     Json?
+  finalsConfiguration      Json?
+  workflowConfiguration    Json?
+  templates                Json?
+  customRulesText          String?
+  branding                 Json?
+  integrationSettings      Json?
+  bulkOperations           Json?
+  archiveRetentionMonths   Int?
+  validationRules          Json?
+  errorHandling            Json?
+  previewPayload           Json?
+  previewExpiresAt         DateTime?
+  createdAt                DateTime               @default(now())
+  updatedAt                DateTime               @updatedAt
+  league                   League                 @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  audits                   LeagueSettingsAudit[]
+}
+
+model LeagueSettingsAudit {
+  id         String   @id @default(cuid())
+  settingsId String
+  adminId    String?
+  changes    Json
+  createdAt  DateTime @default(now())
+  settings   LeagueSettings @relation(fields: [settingsId], references: [id], onDelete: Cascade)
+  admin      User?    @relation("LeagueSettingsAuditAdmin", fields: [adminId], references: [id])
+
+  @@index([settingsId])
+  @@index([adminId])
+}
+
+model LeagueJoinRequest {
+  id             String                   @id @default(cuid())
+  leagueId       String
+  userId         String
+  status         LeagueJoinRequestStatus  @default(PENDING)
+  notes          String?
+  decisionReason String?
+  decidedById    String?
+  decidedAt      DateTime?
+  createdAt      DateTime                 @default(now())
+  updatedAt      DateTime                 @updatedAt
+  league         League                   @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  user           User                     @relation("LeagueJoinRequestUser", fields: [userId], references: [id], onDelete: Cascade)
+  decidedBy      User?                    @relation("LeagueJoinRequestDecider", fields: [decidedById], references: [id])
+
+  @@unique([leagueId, userId])
+  @@index([leagueId])
+  @@index([userId])
+  @@index([status])
+}
+
+model LeagueTemplate {
+  id          String   @id @default(cuid())
+  name        String
+  sport       String
+  description String?
+  settings    Json?
+  createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  createdBy   User?    @relation("LeagueTemplateCreator", fields: [createdById], references: [id])
+
+  @@index([sport])
+}
+
 model Season {
   id           String             @id @default(cuid())
+  leagueId     String?
   name         String
   startDate    DateTime?
   endDate      DateTime?
@@ -157,6 +260,7 @@ model Season {
   current      Boolean            @default(false) // Quick flag for the current active season
   divisions    Division[]
   memberships  SeasonMembership[]
+  league       League?            @relation(fields: [leagueId], references: [id], onDelete: SetNull)
   // Future link up with matches 
   // matches         Match[] 
   createdAt    DateTime           @default(now())
@@ -165,6 +269,7 @@ model Season {
   @@index([sportType])
   @@index([status])
   @@index([current])
+  @@index([leagueId])
 }
 
 // Represents the divisions within a specific season.
@@ -281,6 +386,25 @@ model UserAchievement {
   @@unique([userId, achievementId])
   @@index([userId])
   @@index([achievementId])
+}
+
+enum LeagueStatus {
+  DRAFT
+  REGISTRATION
+  ACTIVE
+  COMPLETED
+  ARCHIVED
+}
+
+enum LeagueDurationUnit {
+  WEEKS
+  MONTHS
+}
+
+enum LeagueJoinRequestStatus {
+  PENDING
+  APPROVED
+  DENIED
 }
 
 enum Role {

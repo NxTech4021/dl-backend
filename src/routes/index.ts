@@ -1,7 +1,8 @@
-import express from "express";
+﻿import express from "express";
 import adminRouter from "./adminRoutes";
 import playerRouter from "./playerRoutes";
 import seasonRouter from "./seasonRoutes";
+import leagueRouter from "./leagueRoutes";
 
 const router = express.Router();
 
@@ -11,6 +12,7 @@ router.get("/health", (req, res) => {
 
 router.use("/admin", adminRouter);
 router.use("/player", playerRouter);
+router.use("/league", leagueRouter);
 
 // Divisions, Leagues,  Matches & Seasons
 
