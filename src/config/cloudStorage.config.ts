@@ -22,14 +22,24 @@ export const uploadProfileImage = async (tempFilePath: string, userId: string): 
     const fileName = `profile-${userId}-${timestamp}${fileExtension}`;
     const destination = `profile-pictures/${fileName}`;
 
+    // Determine content type based on file extension
+    const contentTypeMap: { [key: string]: string } = {
+      '.jpg': 'image/jpeg',
+      '.jpeg': 'image/jpeg',
+      '.png': 'image/png',
+      '.gif': 'image/gif',
+      '.webp': 'image/webp',
+    };
+    const contentType = contentTypeMap[fileExtension.toLowerCase()] || 'image/jpeg';
+
     const bucket = storage.bucket(bucketName);
-    
-    // Upload the file
+
+    // Upload the file with correct content type
     await bucket.upload(tempFilePath, {
       destination: destination,
       metadata: {
         cacheControl: 'public, max-age=31536000',
-        contentType: 'image/jpeg', // Default to JPEG, could be made dynamic
+        contentType: contentType,
       },
     });
 
