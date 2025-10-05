@@ -3,11 +3,20 @@ import cors from "cors";
 import cookieParser from "cookie-parser";
 import { toNodeHandler } from "better-auth/node";
 import { auth } from "./lib/auth";
-import onboardingRoutes from "./routes/onboarding";
+
 import router from "./routes/index";
 import pino from "pino-http";
-import { securityHeaders, sanitizeInput, preventSQLInjection, ipBlocker } from "./middleware/security";
-import { generalLimiter, authLimiter, onboardingLimiter } from "./middleware/rateLimiter";
+import {
+  securityHeaders,
+  sanitizeInput,
+  preventSQLInjection,
+  ipBlocker,
+} from "./middleware/security";
+import {
+  generalLimiter,
+  authLimiter,
+  onboardingLimiter,
+} from "./middleware/rateLimiter";
 
 const app = express();
 
@@ -34,6 +43,7 @@ app.use(
     origin: [
       "http://localhost:3030",
       "http://localhost:82",
+      "http://localhost",
       "http://localhost:3001",
       "http://localhost:8081",
       "http://192.168.1.3:3001", // Added current IP from logs
@@ -42,20 +52,27 @@ app.use(
       "exp://192.168.100.53:8081", // Expo development server
       "http://172.20.10.3:8081", // New mobile app origin
       "exp://172.20.10.3:8081", // New Expo development server
+      "https://staging.appdevelopers.my",
     ], // Allow nginx proxy, direct access, and local IP
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "expo-origin", "Cache-Control"],
+    allowedHeaders: [
+      "Content-Type",
+      "Authorization",
+      "X-Requested-With",
+      "expo-origin",
+      "Cache-Control",
+    ],
   })
 );
 
 // Apply auth rate limiter to authentication routes
 // app.use("/api/auth/{*any}", authLimiter); // Commented out for development
 
-// According to the official Express documentation for better-auth,
+// According to the official Express documentaticlon for better-auth,
 // the auth handler must be mounted BEFORE express.json().
 // Express v5 requires the {*any} syntax for wildcard routes.
-app.all("/api/auth/{*any}", (req, res, next) => {
+app.all("/auth/{*any}", (req, res, next) => {
   console.log(`🔐 Auth request: ${req.method} ${req.path}`);
   try {
     toNodeHandler(auth)(req, res, next);
@@ -72,9 +89,6 @@ app.use(pino());
 
 // Keep main router at root level for health checks and other non-API routes
 app.use(router);
-
-// Mount onboarding routes with rate limiting
-app.use("/api/onboarding", onboardingLimiter, onboardingRoutes);
 
 // Health check endpoint
 app.get("/health", (req, res) => {
