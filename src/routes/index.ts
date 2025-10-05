@@ -2,6 +2,7 @@ import express from "express";
 import adminRouter from "./adminRoutes";
 import playerRouter from "./playerRoutes";
 import seasonRouter from "./seasonRoutes";
+import onboardingRoutes from "./onboarding";
 
 const router = express.Router();
 
@@ -10,14 +11,12 @@ router.get("/health", (req, res) => {
 });
 
 router.use("/admin", adminRouter);
+
 router.use("/player", playerRouter);
 
-// Divisions, Leagues,  Matches & Seasons
-
-// router.use("/api/league", playerRouter);
-// router.use("/api/division", playerRouter);
-// router.use("/api/match", playerRouter);
 router.use("/season", seasonRouter);
+
+router.use("/onboarding", onboardingRoutes);
 
 // LeaderBoard
 

@@ -3,7 +3,7 @@ import cors from "cors";
 import cookieParser from "cookie-parser";
 import { toNodeHandler } from "better-auth/node";
 import { auth } from "./lib/auth";
-import onboardingRoutes from "./routes/onboarding";
+
 import router from "./routes/index";
 import pino from "pino-http";
 import {
@@ -89,9 +89,6 @@ app.use(pino());
 
 // Keep main router at root level for health checks and other non-API routes
 app.use(router);
-
-// Mount onboarding routes with rate limiting
-app.use("/api/onboarding", onboardingLimiter, onboardingRoutes);
 
 // Health check endpoint
 app.get("/health", (req, res) => {
