@@ -12,7 +12,7 @@ const leagueRoutes = Router();
 // Public routes for all users
 leagueRoutes.get('/', getLeagues);                         
 // leagueRoutes.get('/sport/:sportId', getLeaguesBySport);  
-// leagueRoutes.get('/:id', getLeagueById);               
+leagueRoutes.get('/:id', getLeagueById);               
 
 // Public routes - View sports at a league
 // leagueRoutes.get('/:leagueId/sport', getSportsAtLeague); 

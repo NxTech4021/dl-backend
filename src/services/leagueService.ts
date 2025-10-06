@@ -110,63 +110,18 @@ interface LeagueData {
 //   return prisma.leagueSport.delete({ where: { leagueId_sportId: { leagueId, sportId } } });
 // };
 
-/**
- * Get all leagues with optional filters
- * Public endpoint - users browse leagues
- */
-export const getAllLeagues = async (filters: LeagueFilters) => {
-  const { name, sportId, location, status } = filters;
 
-  const where: any = {};
-  
-  // Filter by league name
-  if (name) {
-    where.name = { contains: name, mode: 'insensitive' };
-  }
-  
-  // Filter by location
-  if (location) {
-    where.location = { contains: location, mode: 'insensitive' };
-  }
-  
-  // Filter by status
-  if (status) {
-    where.status = status;
-  }
-  
-  // Filter by sport (via LeagueSport junction)
-  if (sportId) {
-    where.leagueSports = {
-      some: {
-        sportId: sportId,
-        isActive: true
-      }
-    };
-  }
-
+export const getAllLeagues = async () => {
   return prisma.league.findMany({
-    where,
     include: {
-      leagueSports: {
-        where: { isActive: true },
-        include: {
-          sport: {
-            select: {
-              id: true,
-              name: true,
-              pic_url: true
-            }
-          }
-        },
-        orderBy: {
-          sortOrder: 'asc'
-        }
+      sponsorships: {
+        include: { company: true }
       },
       _count: {
-        select: { 
-          seasons: true,
-          leagueSports: true
-        }
+        select: { seasons: true }
+      },
+      createdBy: {
+        select: { id: true}
       }
     },
     orderBy: {
@@ -175,57 +130,27 @@ export const getAllLeagues = async (filters: LeagueFilters) => {
   });
 };
 
-/**
- * Get league by ID
- * Public endpoint - view league details
- */
-export const getLeagueById = async (id: number) => {
+
+export const getLeagueById = async (id: string) => {
   const league = await prisma.league.findUnique({
     where: { id },
     include: {
-      leagueSports: {
-        where: { isActive: true },
-        include: {
-          sport: {
-            select: {
-              id: true,
-              name: true,
-              pic_url: true
-            }
-          },
-          _count: {
-            select: { seasons: true }
-          }
-        },
-        orderBy: {
-          sortOrder: 'asc'
-        }
+      // Include sponsorships and their company info
+      sponsorships: {
+        include: { company: true }
       },
-      seasons: {
-        where: {
-          status: {
-            in: ['UPCOMING', 'REGISTRATION_OPEN', 'IN_PROGRESS']
-          }
-        },
+      // Include admin info
+      createdBy: {
         select: {
           id: true,
-          name: true,
-          status: true,
-          startDate: true,
-          endDate: true,
-          _count: {
-            select: { registrations: true }
-          }
-        },
-        orderBy: {
-          startDate: 'asc'
-        },
-        take: 5  // Show next 5 upcoming/active seasons
+          // name: true,
+        }
       },
+      // Count total seasons and sponsorships
       _count: {
-        select: { 
+        select: {
           seasons: true,
-          leagueSports: true
+          sponsorships: true
         }
       }
     }
@@ -237,6 +162,7 @@ export const getLeagueById = async (id: number) => {
 
   return league;
 };
+
 
 export const createLeague = async (data: LeagueData) => {
   const { name, location, description, status, sportType, registrationType, gameType, sponsorships, existingSponsorshipIds } = data;
@@ -417,43 +343,43 @@ export const deleteLeague = async (id: string) => {
  * Get leagues offering a specific sport
  * Public endpoint - user searches by sport
  */
-export const getLeaguesBySport = async (sportId: number, location?: string) => {
-  const where: any = {
-    leagueSports: {
-      some: {
-        sportId: sportId,
-        isActive: true
-      }
-    }
-  };
+// export const getLeaguesBySport = async (sportId: number, location?: string) => {
+//   const where: any = {
+//     leagueSports: {
+//       some: {
+//         sportId: sportId,
+//         isActive: true
+//       }
+//     }
+//   };
 
-  // Optionally filter by location
-  if (location) {
-    where.location = { contains: location, mode: 'insensitive' };
-  }
+//   // Optionally filter by location
+//   if (location) {
+//     where.location = { contains: location, mode: 'insensitive' };
+//   }
 
-  return prisma.league.findMany({
-    where,
-    include: {
-      leagueSports: {
-        where: {
-          sportId: sportId,
-          isActive: true
-        },
-        include: {
-          sport: true,
-          _count: {
-            select: { seasons: true }
-          }
-        }
-      },
-      _count: {
-        select: { seasons: true }
-      }
-    },
-    orderBy: {
-      // Later add smart sorting - user's location first (maybe)
-      createdAt: 'desc'
-    }
-  });
-};
+//   return prisma.league.findMany({
+//     where,
+//     include: {
+//       leagueSports: {
+//         where: {
+//           sportId: sportId,
+//           isActive: true
+//         },
+//         include: {
+//           sport: true,
+//           _count: {
+//             select: { seasons: true }
+//           }
+//         }
+//       },
+//       _count: {
+//         select: { seasons: true }
+//       }
+//     },
+//     orderBy: {
+//       // Later add smart sorting - user's location first (maybe)
+//       createdAt: 'desc'
+//     }
+//   });
+// };

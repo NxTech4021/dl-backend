@@ -4,23 +4,12 @@ import { Statuses, PrismaClient, Prisma } from '@prisma/client';
 import { ApiResponse } from '../utils/ApiResponse';
 
 const prisma = new PrismaClient();
-/**
- * Get all leagues with optional filters
- * Public endpoint
- */
+
+
 export const getLeagues = async (req: Request, res: Response) => {
   try {
-    const { name, sportId, location, status } = req.query;
+    const leagues = await leagueService.getAllLeagues();
 
-    const filters = {
-      name: name as string | undefined,
-      sportId: sportId ? Number(sportId) : undefined,
-      location: location as string | undefined,
-      status: status as string | undefined,
-    };
-
-    const leagues = await leagueService.getAllLeagues(filters);
-    
     return res.status(200).json(
       new ApiResponse(
         true,
@@ -43,36 +32,34 @@ export const getLeaguePlayerCount = async (leagueId: string) => {
     where: { leagueId }
   });
 };
+export const getLeagueById = async (req: Request, res: Response) => {
+  try {
+    const id = req.params.id;
 
-// export const getLeagueById = async (req: Request, res: Response) => {
-//   try {
-//     const id = parseInt(req.params.id, 10);
-    
-//     if (isNaN(id)) {
-//       return res.status(400).json(
-//         new ApiResponse(false, 400, null, "Invalid league ID")
-//       );
-//     }
+    if (!id) {
+      return res.status(400).json(
+        new ApiResponse(false, 400, null, "League ID is required")
+      );
+    }
 
-//     const league = await leagueService.getLeagueById(id);
-    
-//     return res.status(200).json(
-//       new ApiResponse(true, 200, { league }, "League fetched successfully")
-//     );
-//   } catch (error: any) {
-//     console.error("Error fetching league:", error);
-    
-//     if (error.message.includes('not found')) {
-//       return res.status(404).json(
-//         new ApiResponse(false, 404, null, error.message)
-//       );
-//     }
-    
-//     return res.status(500).json(
-//       new ApiResponse(false, 500, null, "Error fetching league")
-//     );
-//   }
-// };
+    const league = await leagueService.getLeagueById(id);
+
+    if (!league) {
+      return res.status(404).json(
+        new ApiResponse(false, 404, null, "League not found")
+      );
+    }
+
+    return res.status(200).json(
+      new ApiResponse(true, 200, { league }, "League fetched successfully")
+    );
+  } catch (error) {
+    console.error("Error fetching league:", error);
+    return res.status(500).json(
+      new ApiResponse(false, 500, null, "Error fetching league")
+    );
+  }
+};
 
 
 export const createLeague = async (req: Request, res: Response) => {
