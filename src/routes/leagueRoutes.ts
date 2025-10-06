@@ -5,31 +5,26 @@ import {
   createLeague,
   updateLeague,
   deleteLeague,
-  getLeaguesBySport,
-  addSportToLeague,
-  getSportsAtLeague,
-  updateLeagueSport,
-  removeSportFromLeague
 } from '../controllers/leagueController';
 
-const router = Router();
+const leagueRoutes = Router();
 
 // Public routes for all users
-router.get('/', getLeagues);                         // GET /api/league
-router.get('/sport/:sportId', getLeaguesBySport);   // GET /api/league/sport/:sportId
-router.get('/:id', getLeagueById);                  // GET /api/league/:id
+leagueRoutes.get('/', getLeagues);                         
+// leagueRoutes.get('/sport/:sportId', getLeaguesBySport);  
+// leagueRoutes.get('/:id', getLeagueById);               
 
 // Public routes - View sports at a league
-router.get('/:leagueId/sport', getSportsAtLeague); // GET /api/league/:leagueId/sport
+// leagueRoutes.get('/:leagueId/sport', getSportsAtLeague); 
 
 // Admin routes
-router.post('/', createLeague);                      // POST /api/league
-router.put('/:id', updateLeague);                    // PUT /api/league/:id
-router.delete('/:id', deleteLeague);                 // DELETE /api/league/:id
+leagueRoutes.post('/create', createLeague);                     
+leagueRoutes.put('/:id', updateLeague);                  
+leagueRoutes.delete('/:id', deleteLeague);               
 
 // Admin routes - LeagueSport management
-router.post('/:leagueId/sport', addSportToLeague);          // POST /api/league/:leagueId/sport
-router.put('/:leagueId/sport/:sportId', updateLeagueSport); // PUT /api/league/:leagueId/sport/:sportId
-router.delete('/:leagueId/sport/:sportId', removeSportFromLeague); // DELETE /api/league/:leagueId/sport/:sportId
+// leagueRoutes.post('/:leagueId/sport', addSportToLeague);          // POST /api/league/:leagueId/sport
+// leagueRoutes.put('/:leagueId/sport/:sportId', updateLeagueSport); // PUT /api/league/:leagueId/sport/:sportId
+// leagueRoutes.delete('/:leagueId/sport/:sportId', removeSportFromLeague); // DELETE /api/league/:leagueId/sport/:sportId
 
-export default router;
+export default leagueRoutes;
