@@ -124,6 +124,41 @@ export const getSeasons = async (req: any, res: any) => {
     }
 };
 
+export const getSeasonById = async (req: any, res: any) => {
+  const { id } = req.params;
+
+  if (!id) {
+    return res.status(400).json({ error: "Season ID is required." });
+  }
+
+  try {
+    const season = await prisma.season.findUnique({
+      where: { id },
+      include: {
+        divisions: {
+          select: { id: true, name: true } // Include more relations if needed
+        }
+      }
+    });
+
+    if (!season) {
+      return res.status(404).json({ error: "Season not found." });
+    }
+
+    return res.status(200).json(season);
+
+  } catch (error: any) {
+    console.error("Error fetching season by ID:", error);
+
+    if (error instanceof Prisma.PrismaClientValidationError) {
+      return res.status(400).json({ error: "Invalid Season ID format." });
+    }
+
+    return res.status(500).json({ error: "Failed to fetch season. Please try again later." });
+  }
+};
+
+
 export const updateSeason = async (req: any, res: any) => {
   const { id } = req.params;
   const { 
