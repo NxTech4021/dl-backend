@@ -54,7 +54,9 @@ model Admin {
   user      User?             @relation(fields: [userId], references: [id])
   invite    AdminInviteToken?
 
-  leagues   League[]        
+  leagues   League[]      
+  company   Company[] 
+  sponsor   Sponsorship[] 
 }
 
 model AdminInviteToken {
@@ -147,7 +149,7 @@ model InitialRatingResult {
 }
 
 model League {
-  id            String        @id @default(autoincrement())
+  id            String        @id @default(cuid())
   name          String        @db.VarChar(255)
   location      String?
   description   String?
@@ -157,8 +159,8 @@ model League {
   registrationType  LeagueRegistration
   gameType      GameType
 
-  createdById   String?    
-  createdBy     Admin?        @relation(fields: [createdByAdminId], references: [id]) 
+  createdById      String?    
+  createdBy        Admin?       @relation(fields: [createdById], references: [id])
 
   seasons       Season[]
   sponsorships  Sponsorship[]
@@ -168,6 +170,46 @@ model League {
   @@index([status])
 }
 
+model Company {
+  id              String        @id @default(cuid()) 
+  name            String        @db.VarChar(255)
+  contactEmail    String?       @unique
+  website         String?
+  logoUrl         String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  
+  createdById     String?       // Admin who created the company
+  createdBy       Admin?        @relation(fields: [createdById], references: [id])
+  sponsorshipDeals Sponsorship[] 
+  
+  @@map("company")
+}
+
+model Sponsorship {
+  id                      String        @id @default(cuid()) 
+  leagueId                String?     
+  companyId               String?      
+  packageTier             TierType      
+  contractAmount          Decimal       @db.Decimal(10, 2) 
+  sponsoredName           String?       
+  startDate               DateTime
+  endDate                 DateTime?
+  isActive                Boolean       @default(true)         
+  createdById             String?
+  createdAt               DateTime      @default(now())
+  updatedAt               DateTime      @updatedAt
+
+  // Relationships
+  league         League?       @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  company        Company?      @relation(fields: [companyId], references: [id])
+  createdBy   Admin?          @relation(fields: [createdById], references: [id])
+
+  @@unique([leagueId, companyId, packageTier])
+  @@index([leagueId])
+  @@index([companyId])
+  @@map("sponsorship")
+}
 
 model Season {
   id              String         @id @default(cuid())
@@ -175,15 +217,17 @@ model Season {
   startDate       DateTime?
   endDate         DateTime?
   regiDeadline    DateTime?
-  entryFee        Int?
+  entryFee        Decimal        @db.Decimal(10, 2) 
   description     String?
   sportType       String? 
-  seasonType      String?         // single or double         
+  seasonType      GameType       // single or double         
   status          SeasonStatus   @default(UPCOMING)
   current         Boolean        @default(false)     
  
   divisions       Division[]
   memberships     SeasonMembership[]
+  leagueId  String
+  league    League   @relation(fields: [leagueId], references: [id])
  
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
@@ -203,16 +247,13 @@ model Division {
   // Settings 
   divisionLevel   DivisionLevel     
   gameType        GameType          
-  gender          Gender
+  category          Gender
 
   maxSingles        Int?
   maxDoublesTeams   Int?
 
   isActive        Boolean      @default(true)
 
-  // Future sponsor feature
-  //sponsorId        String?          // Could reference an Admin or Sponsor table later
-  //sponsorName      String?
 
   // Relations
   season          Season         @relation(fields: [seasonId], references: [id], onDelete: Cascade)
@@ -385,6 +426,12 @@ enum Statuses {
   CANCELLED
 }
 
+enum LeagueRegistration{
+  open
+  invite_only
+  manual
+}
+
 enum DivisionLevel {
   beginner
   intermediate
@@ -396,15 +443,22 @@ enum GameType {
   doubles
 }
 
-enum SportType{
+enum SportType {
   paddle
   pickleball
   tennis
 }
 
-enum Gender{
+enum Gender {
   male
   female
   mixed
+}
+
+enum TierType{
+  bronze
+  silver
+  gold 
+  platinum
 }
 
