@@ -7,14 +7,14 @@ import {
   deleteSeason 
 } from '../controllers/seasonController';
 
-const router = Router();
+const seasonRoutes = Router();
 
-router.get('/', getSeasons);
-router.get('/:id', getSeasonById);
-router.post('/', createSeason);
-router.put('/:id', updateSeason);
-router.delete('/:id', deleteSeason);
+seasonRoutes.get('/', getSeasons);
+seasonRoutes.get('/:id', getSeasonById);
+seasonRoutes.post('/', createSeason);
+seasonRoutes.put('/:id', updateSeason);
+seasonRoutes.delete('/:id', deleteSeason);
 
-export default router;
+export default seasonRoutes;
 
 

@@ -2,7 +2,12 @@ import express from "express";
 import adminRouter from "./adminRoutes";
 import playerRouter from "./playerRoutes";
 import seasonRouter from "./seasonRoutes";
-import onboardingRoutes from "./onboarding";
+import divisionRoutes from "./divisionRoutes";
+import leagueRoutes from "./leagueRoutes";
+import sponsorRoutes from "./sponsorRoutes";
+import categoryRoutes from "./categoryRoutes";
+// import matchRoutes from "./matchRoutes";
+
 
 const router = express.Router();
 
@@ -14,13 +19,18 @@ router.use("/admin", adminRouter);
 
 router.use("/player", playerRouter);
 
+router.use("/league", leagueRoutes);
+router.use("/division", divisionRoutes);
 router.use("/season", seasonRouter);
+router.use("/sponsor", sponsorRoutes);
+router.use("/category", categoryRoutes);
 
-router.use("/onboarding", onboardingRoutes);
+// router.use("/match", matchRoutes);
 
 // LeaderBoard
 
 // Chat
+// router.use("/chat", chatRoutes);
 
 // Settings
 

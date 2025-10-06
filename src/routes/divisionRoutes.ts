@@ -1,20 +1,13 @@
-import { Router } from 'express';
-import { 
-  getDivisions, 
-  getDivisionById, 
-  createDivision, 
-  updateDivision, 
-  deleteDivision 
-} from '../controllers/divisionController';
+import { Router } from "express";
+import { createDivision, getDivisionById, getDivisions, updateDivision, deleteDivision } from "../controllers/divisionController";
 
-const router = Router();
+const divisionRoutes = Router();
 
-router.get('/', getDivisions);
-router.get('/:id', getDivisionById);
-router.post('/', createDivision);
-router.put('/:id', updateDivision);
-router.delete('/:id', deleteDivision);
-
-export default router;
+divisionRoutes.post("/create", createDivision);
+divisionRoutes.get('/', getDivisions);
+divisionRoutes.get('/:id', getDivisionById); 
+divisionRoutes.put('/:id', updateDivision);
+divisionRoutes.delete('/delete/:id', deleteDivision);
 
 
+export default divisionRoutes;

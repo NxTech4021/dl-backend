@@ -1,13 +1,11 @@
 import { Router } from "express";
-import { verifyJWT } from "../middlewares/auth.middleware";
+import { verifyAuth } from "../middlewares/auth.middleware";
 import {
-  // adminLogin,
   createSuperadmin,
   getInviteEmail,
   registerAdmin,
   sendAdminInvite,
   getAdminSession,
-  // adminLogout,
   fetchAdmins,
   getAdminById,
   updateAdmin,
@@ -28,6 +26,6 @@ adminRouter.post("/superadmin", createSuperadmin);
 adminRouter.post("/register", registerAdmin);
 adminRouter.post("/invite", sendAdminInvite);
 adminRouter.post("/updatepassword", updatePassword);
-// adminRouter.post("/logout", adminLogout);
+
 
 export default adminRouter;
