@@ -46,7 +46,7 @@ class EmailService {
     };
 
     if (smtpConfig.auth.user && smtpConfig.auth.pass) {
-      this.transporter = nodemailer.createTransporter(smtpConfig);
+      this.transporter = nodemailer.createTransport(smtpConfig);
       console.log("Email service initialized with SMTP");
     } else {
       console.warn("No email configuration found. Email notifications will be logged only.");
@@ -67,13 +67,19 @@ class EmailService {
 
       // Use Resend if available
       if (this.resend) {
-        await this.resend.emails.send({
+        const emailPayload: any = {
           from: data.from || this.fromEmail,
           to: Array.isArray(data.to) ? data.to : [data.to],
           subject: data.subject,
-          text: data.text,
-          html: data.html,
-        });
+        };
+
+        if (data.html) {
+          emailPayload.html = data.html;
+        } else if (data.text) {
+          emailPayload.text = data.text;
+        }
+
+        await this.resend.emails.send(emailPayload);
         console.log(`✅ Email sent via Resend to: ${data.to}`);
         return true;
       }

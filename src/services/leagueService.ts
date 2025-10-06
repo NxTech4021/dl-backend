@@ -88,8 +88,8 @@ export class LeagueService {
     items: (League & { settings: LeagueSettings | null; _count: { seasons: number; joinRequests: number } })[];
     meta: { total: number; page: number; pageSize: number; totalPages: number };
   }> {
-    const pageNumber = Math.max(parseInt(filters.page, 10) || 1, 1);
-    const take = Math.min(Math.max(parseInt(filters.pageSize, 10) || 20, 1), 100);
+    const pageNumber = Math.max(parseInt(filters.page || "1", 10) || 1, 1);
+    const take = Math.min(Math.max(parseInt(filters.pageSize || "20", 10) || 20, 1), 100);
     const skip = (pageNumber - 1) * take;
 
     const where: Prisma.LeagueWhereInput = {};
@@ -290,7 +290,6 @@ export class LeagueService {
             "finalsConfiguration",
             "workflowConfiguration",
             "templates",
-            "branding",
             "integrationSettings",
             "bulkOperations",
             "validationRules",
@@ -318,7 +317,7 @@ export class LeagueService {
     await prisma.leagueSettingsAudit.create({
       data: {
         settingsId: updated.id,
-        adminId,
+        adminId: adminId || null,
         changes: {
           updatedFields: Object.keys(updates),
           appliedAt: new Date().toISOString(),
@@ -402,7 +401,7 @@ export class LeagueService {
       data: {
         leagueId,
         userId: data.userId,
-        notes: data.notes,
+        notes: data.notes || null,
         status: "PENDING",
       },
     });
@@ -430,8 +429,8 @@ export class LeagueService {
       where: { id: requestRecord.id },
       data: {
         status: data.status,
-        decisionReason: data.status === "DENIED" ? data.decisionReason : requestRecord.decisionReason,
-        decidedById: adminId,
+        decisionReason: data.status === "DENIED" ? (data.decisionReason || null) : requestRecord.decisionReason,
+        decidedById: adminId || null,
         decidedAt: new Date(),
       },
       include: {
@@ -489,7 +488,7 @@ export class LeagueService {
     return await prisma.leagueTemplate.create({
       data: {
         ...data,
-        createdById: adminId,
+        createdById: adminId || null,
       },
     });
   }
@@ -558,19 +557,18 @@ export class LeagueService {
         minPlayersPerDivision: sourceSettings.minPlayersPerDivision,
         maxPlayersPerDivision: sourceSettings.maxPlayersPerDivision,
         registrationDeadlineDays: sourceSettings.registrationDeadlineDays,
-        paymentSettings: sourceSettings.paymentSettings,
-        divisionRules: sourceSettings.divisionRules,
-        playoffConfiguration: sourceSettings.playoffConfiguration,
-        finalsConfiguration: sourceSettings.finalsConfiguration,
-        workflowConfiguration: sourceSettings.workflowConfiguration,
-        templates: sourceSettings.templates,
+        paymentSettings: sourceSettings.paymentSettings as Prisma.InputJsonValue,
+        divisionRules: sourceSettings.divisionRules as Prisma.InputJsonValue,
+        playoffConfiguration: sourceSettings.playoffConfiguration as Prisma.InputJsonValue,
+        finalsConfiguration: sourceSettings.finalsConfiguration as Prisma.InputJsonValue,
+        workflowConfiguration: sourceSettings.workflowConfiguration as Prisma.InputJsonValue,
+        templates: sourceSettings.templates as Prisma.InputJsonValue,
         customRulesText: sourceSettings.customRulesText,
-        branding: sourceSettings.branding,
-        integrationSettings: sourceSettings.integrationSettings,
-        bulkOperations: sourceSettings.bulkOperations,
+        integrationSettings: sourceSettings.integrationSettings as Prisma.InputJsonValue,
+        bulkOperations: sourceSettings.bulkOperations as Prisma.InputJsonValue,
         archiveRetentionMonths: sourceSettings.archiveRetentionMonths,
-        validationRules: sourceSettings.validationRules,
-        errorHandling: sourceSettings.errorHandling,
+        validationRules: sourceSettings.validationRules as Prisma.InputJsonValue,
+        errorHandling: sourceSettings.errorHandling as Prisma.InputJsonValue,
       },
       create: {
         leagueId: targetLeagueId,
@@ -579,19 +577,18 @@ export class LeagueService {
         minPlayersPerDivision: sourceSettings.minPlayersPerDivision,
         maxPlayersPerDivision: sourceSettings.maxPlayersPerDivision,
         registrationDeadlineDays: sourceSettings.registrationDeadlineDays,
-        paymentSettings: sourceSettings.paymentSettings,
-        divisionRules: sourceSettings.divisionRules,
-        playoffConfiguration: sourceSettings.playoffConfiguration,
-        finalsConfiguration: sourceSettings.finalsConfiguration,
-        workflowConfiguration: sourceSettings.workflowConfiguration,
-        templates: sourceSettings.templates,
+        paymentSettings: sourceSettings.paymentSettings as Prisma.InputJsonValue,
+        divisionRules: sourceSettings.divisionRules as Prisma.InputJsonValue,
+        playoffConfiguration: sourceSettings.playoffConfiguration as Prisma.InputJsonValue,
+        finalsConfiguration: sourceSettings.finalsConfiguration as Prisma.InputJsonValue,
+        workflowConfiguration: sourceSettings.workflowConfiguration as Prisma.InputJsonValue,
+        templates: sourceSettings.templates as Prisma.InputJsonValue,
         customRulesText: sourceSettings.customRulesText,
-        branding: sourceSettings.branding,
-        integrationSettings: sourceSettings.integrationSettings,
-        bulkOperations: sourceSettings.bulkOperations,
+        integrationSettings: sourceSettings.integrationSettings as Prisma.InputJsonValue,
+        bulkOperations: sourceSettings.bulkOperations as Prisma.InputJsonValue,
         archiveRetentionMonths: sourceSettings.archiveRetentionMonths,
-        validationRules: sourceSettings.validationRules,
-        errorHandling: sourceSettings.errorHandling,
+        validationRules: sourceSettings.validationRules as Prisma.InputJsonValue,
+        errorHandling: sourceSettings.errorHandling as Prisma.InputJsonValue,
       },
     });
   }

@@ -412,7 +412,6 @@ export interface LeagueSettingsInput {
   workflowConfiguration?: any;
   templates?: any;
   customRulesText?: string;
-  branding?: any;
   integrationSettings?: any;
   bulkOperations?: any;
   archiveRetentionMonths?: number;

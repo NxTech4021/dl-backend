@@ -107,8 +107,8 @@ app.use(express.json());
 app.use(cookieParser());
 app.use(pino());
 
-// Keep main router at root level for health checks and other non-API routes
-app.use(router);
+// Mount main router at /api prefix
+app.use("/api", router);
 
 // Health check endpoint
 app.get("/health", (req, res) => {

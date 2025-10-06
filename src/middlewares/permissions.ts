@@ -21,7 +21,7 @@ import { ApiResponse } from "../utils/ApiResponse";
 export function requireRole(roles: string[]) {
   return async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const session = await auth.api.getSession({ headers: req.headers });
+      const session = await auth.api.getSession({ headers: req.headers as any });
 
       if (!session?.user) {
         return res.status(401).json(
@@ -29,7 +29,7 @@ export function requireRole(roles: string[]) {
         );
       }
 
-      if (!roles.includes(session.user.role)) {
+      if (!roles.includes((session.user as any).role)) {
         return res.status(403).json(
           new ApiResponse(false, 403, null, "Insufficient permissions")
         );
@@ -59,7 +59,7 @@ export const requireLeagueAdmin = requireRole(["ADMIN", "SUPERADMIN"]);
 export function optionalAuth() {
   return async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const session = await auth.api.getSession({ headers: req.headers });
+      const session = await auth.api.getSession({ headers: req.headers as any });
       if (session?.user) {
         (req as any).user = session.user;
       }

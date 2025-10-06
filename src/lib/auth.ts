@@ -58,13 +58,18 @@ export const auth = betterAuth({
     provider: "postgresql",
   }),
 
-  // Configure user schema to include phoneNumber as an additional field
+  // Configure user schema to include phoneNumber and role as additional fields
   user: {
     additionalFields: {
       phoneNumber: {
         type: "string",
         required: false,
         input: true, // Allow this field to be set during user creation
+      },
+      role: {
+        type: "string",
+        required: false,
+        input: false, // Role is managed internally, not set during user creation
       },
     },
   },

@@ -330,20 +330,30 @@ class SportLocationService {
   // Get dropdown options for frontend
   async getSportOptions(): Promise<Array<{ value: string; label: string; description?: string }>> {
     const sports = await this.getActiveSports();
-    return sports.map(sport => ({
-      value: sport.name,
-      label: sport.name,
-      description: sport.description,
-    }));
+    return sports.map(sport => {
+      const option: { value: string; label: string; description?: string } = {
+        value: sport.name,
+        label: sport.name,
+      };
+      if (sport.description) {
+        option.description = sport.description;
+      }
+      return option;
+    });
   }
 
   async getLocationOptions(): Promise<Array<{ value: string; label: string; address?: string }>> {
     const locations = await this.getActiveLocations();
-    return locations.map(location => ({
-      value: location.name,
-      label: location.name,
-      address: location.address,
-    }));
+    return locations.map(location => {
+      const option: { value: string; label: string; address?: string } = {
+        value: location.name,
+        label: location.name,
+      };
+      if (location.address) {
+        option.address = location.address;
+      }
+      return option;
+    });
   }
 
   // Future: When we add Sport and Location tables to the database schema

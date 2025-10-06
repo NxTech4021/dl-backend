@@ -1,4 +1,4 @@
-﻿import express from "express";
+import express from "express";
 import adminRouter from "./adminRoutes";
 import playerRouter from "./playerRoutes";
 import seasonRouter from "./seasonRoutes";

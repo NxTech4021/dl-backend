@@ -1,4 +1,4 @@
-﻿import { Router } from "express";
+import { Router } from "express";
 import {
   createLeague,
   listLeagues,
@@ -30,14 +30,20 @@ leagueRouter.get("/sports", getSportOptions);
 leagueRouter.get("/locations", getLocationOptions);
 leagueRouter.get("/sports/search", searchSports);
 leagueRouter.get("/locations/search", searchLocations);
-leagueRouter.get("/:leagueId", optionalAuth(), getLeagueById);
 
-// Admin-only routes for templates
+// Admin-only routes for templates (must be before /:leagueId to avoid param matching)
 leagueRouter.get("/templates", requireLeagueAdmin, listLeagueTemplates);
 leagueRouter.post("/templates", requireLeagueAdmin, validateAdminId(), createLeagueTemplate);
 
+// Admin-only bulk operations (must be before /:leagueId to avoid param matching)
+leagueRouter.post("/bulk/create", requireLeagueAdmin, validateAdminId(), bulkCreateLeagues);
+leagueRouter.post("/bulk/copy-settings", requireLeagueAdmin, validateAdminId(), copyLeagueSettings);
+
 // Admin-only routes for league management
 leagueRouter.post("/", requireLeagueAdmin, validateAdminId(), createLeague);
+
+// Specific ID routes (must be after more specific routes like /templates and /bulk)
+leagueRouter.get("/:leagueId", optionalAuth(), getLeagueById);
 leagueRouter.put("/:leagueId", requireLeagueAdmin, validateAdminId(), updateLeague);
 leagueRouter.delete("/:leagueId", requireLeagueAdmin, validateAdminId(), deleteLeague);
 
@@ -50,9 +56,5 @@ leagueRouter.post("/:leagueId/settings/preview", requireLeagueAdmin, previewLeag
 leagueRouter.get("/:leagueId/join-requests", requireLeagueAdmin, listLeagueJoinRequests);
 leagueRouter.post("/:leagueId/join-requests", optionalAuth(), createLeagueJoinRequest); // Players can create requests
 leagueRouter.patch("/:leagueId/join-requests/:requestId", requireLeagueAdmin, validateAdminId(), updateLeagueJoinRequestStatus);
-
-// Admin-only bulk operations
-leagueRouter.post("/bulk/create", requireLeagueAdmin, validateAdminId(), bulkCreateLeagues);
-leagueRouter.post("/bulk/copy-settings", requireLeagueAdmin, validateAdminId(), copyLeagueSettings);
 
 export default leagueRouter;
