@@ -1,4 +1,3 @@
-// src/controllers/division.controller.ts
 import { Request, Response } from "express";
 import { PrismaClient} from "@prisma/client";
 import * as divisionService from '../services/divisionService';

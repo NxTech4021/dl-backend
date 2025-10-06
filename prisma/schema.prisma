@@ -53,6 +53,8 @@ model Admin {
   updatedAt DateTime          @updatedAt
   user      User?             @relation(fields: [userId], references: [id])
   invite    AdminInviteToken?
+
+  leagues   League[]        
 }
 
 model AdminInviteToken {
@@ -144,17 +146,42 @@ model InitialRatingResult {
   response   QuestionnaireResponse @relation(fields: [responseId], references: [id], onDelete: Cascade)
 }
 
+model League {
+  id            String        @id @default(autoincrement())
+  name          String        @db.VarChar(255)
+  location      String?
+  description   String?
+
+  status        Statuses       @default(UPCOMING)
+  sportType     SportType
+  registrationType  LeagueRegistration
+  gameType      GameType
+
+  createdById   String?    
+  createdBy     Admin?        @relation(fields: [createdByAdminId], references: [id]) 
+
+  seasons       Season[]
+  sponsorships  Sponsorship[]
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  @@index([location])
+  @@index([status])
+}
+
+
 model Season {
   id              String         @id @default(cuid())
   name            String        
   startDate       DateTime?
   endDate         DateTime?
   regiDeadline    DateTime?
+  entryFee        Int?
   description     String?
   sportType       String? 
   seasonType      String?         // single or double         
-  status          SeasonStatus @default(UPCOMING)
-  current         Boolean        @default(false)     // Quick flag for the current active season
+  status          SeasonStatus   @default(UPCOMING)
+  current         Boolean        @default(false)     
+ 
   divisions       Division[]
   memberships     SeasonMembership[]
  
@@ -176,7 +203,7 @@ model Division {
   // Settings 
   divisionLevel   DivisionLevel     
   gameType        GameType          
-  genderCategory  GenderCategory 
+  gender          Gender
 
   maxSingles        Int?
   maxDoublesTeams   Int?
@@ -369,7 +396,13 @@ enum GameType {
   doubles
 }
 
-enum GenderCategory {
+enum SportType{
+  paddle
+  pickleball
+  tennis
+}
+
+enum Gender{
   male
   female
   mixed
