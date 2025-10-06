@@ -34,6 +34,7 @@ model User {
   accounts            Account[]
   sessions            Session[]
   seasonMemberships   SeasonMembership[]
+  leagueMemberships   LeagueMembership[]
   matchParticipants   MatchParticipant[]
 
   @@index([email])
@@ -156,7 +157,7 @@ model League {
 
   status        Statuses       @default(UPCOMING)
   sportType     SportType
-  registrationType  LeagueRegistration
+  registrationType  LeagueRegistration   // join_type 
   gameType      GameType
 
   createdById      String?    
@@ -164,12 +165,61 @@ model League {
 
   seasons       Season[]
   sponsorships  Sponsorship[]
+  memberships   LeagueMembership[] 
+  categories    Category []
+
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
   @@index([location])
   @@index([status])
 }
 
+
+model LeagueMembership {
+  id        String   @id @default(cuid())
+  userId    String
+  leagueId  String
+  joinedAt  DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id])
+  league    League   @relation(fields: [leagueId], references: [id])
+
+  @@unique([userId, leagueId])
+  @@index([leagueId])
+  @@index([userId])
+}
+
+
+model Category {
+  id                  String              @id @default(cuid())  // 'category_id'
+  leagueId            String?            
+  name                String?              @db.VarChar(255)    
+  
+  // Restrictions and Format
+  genderRestriction   GenderRestriction   @default(OPEN)       // 'gender_restriction' enum
+  matchFormat         String?                                  // 'match_format' e.g., Best of 3 sets
+  maxPlayers          Int?                                     // 'max_players' (for individual/singles)
+  maxTeams            Int?                                     // 'max_teams' (for doubles/team events)
+  
+
+  isActive            Boolean             @default(true)       // 'is_active'
+  categoryOrder       Int                 @default(0)          // 'category_order' for display
+
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+ 
+  league              League?              @relation(fields: [leagueId], references: [id])
+  seasons           Season[] 
+
+  //seasonCategories    SeasonCategory[]
+  
+  // Indexes for efficient querying
+  
+  @@index([leagueId])
+  @@index([isActive])
+}
+
+//Not using now 
 model Company {
   id              String        @id @default(cuid()) 
   name            String        @db.VarChar(255)
@@ -191,11 +241,9 @@ model Sponsorship {
   leagueId                String?     
   companyId               String?      
   packageTier             TierType      
-  contractAmount          Decimal       @db.Decimal(10, 2) 
+  contractAmount          Decimal?       @db.Decimal(10, 2) 
+  sponsorRevenue          Decimal?      @db.Decimal(10, 2) 
   sponsoredName           String?       
-  startDate               DateTime
-  endDate                 DateTime?
-  isActive                Boolean       @default(true)         
   createdById             String?
   createdAt               DateTime      @default(now())
   updatedAt               DateTime      @updatedAt
@@ -203,7 +251,7 @@ model Sponsorship {
   // Relationships
   league         League?       @relation(fields: [leagueId], references: [id], onDelete: Cascade)
   company        Company?      @relation(fields: [companyId], references: [id])
-  createdBy   Admin?          @relation(fields: [createdById], references: [id])
+  createdBy      Admin?          @relation(fields: [createdById], references: [id])
 
   @@unique([leagueId, companyId, packageTier])
   @@index([leagueId])
@@ -226,8 +274,12 @@ model Season {
  
   divisions       Division[]
   memberships     SeasonMembership[]
-  leagueId  String
-  league    League   @relation(fields: [leagueId], references: [id])
+ 
+  leagueId        String
+  league          League    @relation(fields: [leagueId], references: [id])
+
+  categoryId      String
+  category        Category  @relation(fields: [categoryId], references: [id])
  
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
@@ -406,6 +458,13 @@ enum SeasonStatus {
   CANCELLED
 }
 
+enum GenderRestriction {
+  MALE
+  FEMALE
+  MIXED
+  OPEN
+}
+
 enum MembershipStatus {
   PENDING
   ACTIVE
@@ -413,8 +472,6 @@ enum MembershipStatus {
   INACTIVE
   REMOVED
 }
-
-// Future - use one status enum for matches/divisions/leagues
 
 enum Statuses {
   ACTIVE
@@ -427,38 +484,38 @@ enum Statuses {
 }
 
 enum LeagueRegistration{
-  open
-  invite_only
-  manual
+  OPEN
+  INVITE_ONLY
+  MANUAL
 }
 
 enum DivisionLevel {
-  beginner
-  intermediate
-  advanced
+  BEGINNER
+  INTERMEDIATE
+  ADVANCED
 }
 
 enum GameType {
-  singles
-  doubles
+  SINGLES
+  DOUBLES
 }
 
 enum SportType {
-  paddle
-  pickleball
-  tennis
+  PADDLE
+  PICKLEBALL
+  TENNIS
 }
 
 enum Gender {
-  male
-  female
-  mixed
+  MALE
+  FEMALE
+  MIXED
 }
 
 enum TierType{
-  bronze
-  silver
-  gold 
-  platinum
+  BRONZE
+  SILVER
+  GOLD
+  PLATINUM
 }
 
