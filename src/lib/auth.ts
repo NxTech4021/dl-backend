@@ -10,14 +10,14 @@ import { getBackendBaseURL, getTrustedOrigins } from "../config/network";
 const prisma = new PrismaClient({ log: ["query", "info", "warn", "error"] });
 
 // Debug environment variables
-console.log("🔐 Better Auth Environment Check:");
+console.log("[AUTH] Environment Check:");
 console.log(
   `   BETTER_AUTH_SECRET: ${
-    process.env.BETTER_AUTH_SECRET ? "✅ Set" : "❌ Missing"
+    process.env.BETTER_AUTH_SECRET ? "OK" : "Missing"
   }`
 );
 console.log(
-  `   DATABASE_URL: ${process.env.DATABASE_URL ? "✅ Set" : "❌ Missing"}`
+  `   DATABASE_URL: ${process.env.DATABASE_URL ? "OK" : "Missing"}`
 );
 console.log(
   `   BASE_URL: ${
@@ -30,22 +30,22 @@ console.log(`   BETTER_AUTH_BASE_PATH: Using hardcoded: /api/auth`);
 prisma
   .$connect()
   .then(() => {
-    console.log("✅ Database connection successful");
+    console.log("[AUTH] Database connection successful");
   })
   .catch((error) => {
-    console.error("❌ Database connection failed:", error);
+    console.error("[AUTH] Database connection failed:", error);
   });
 
 // Add query logging to debug verification issues
 prisma.$on("query", (e) => {
   if (e.query.includes("verification")) {
-    console.log("🔍 Verification Query:", e.query);
-    console.log("🔍 Verification Params:", e.params);
-    console.log("🔍 Verification Duration:", e.duration + "ms");
+    console.log("[AUTH] Verification Query:", e.query);
+    console.log("[AUTH] Verification Params:", e.params);
+    console.log("[AUTH] Verification Duration:", e.duration + "ms");
 
     // Add specific debugging for verification lookups
     if (e.query.includes("SELECT") && e.query.includes("verification")) {
-      console.log("🔍 Looking up verification records for:", e.params[0]);
+      console.log("[AUTH] Looking up verification records for:", e.params[0]);
     }
   }
 });
@@ -125,7 +125,7 @@ export const auth = betterAuth({
 
   // OLD: basePath: process.env.BETTER_AUTH_BASE_PATH || "/auth",
   // FIX: Updated to match frontend expectations and app.ts routing
-  basePath: "/auth",
+  basePath: "/api/auth",
 
   trustedOrigins: [
     "http://localhost:3030",
@@ -133,6 +133,7 @@ export const auth = betterAuth({
     "http://localhost:82",
     "http://localhost:3001",
     "http://localhost:8081",
+    "http://192.168.0.197:3030",
     "http://192.168.1.3:3001", // Added current IP from logs
     "http://192.168.1.7:3001",
     "http://192.168.100.53:8081",
