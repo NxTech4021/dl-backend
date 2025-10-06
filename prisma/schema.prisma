@@ -1,3 +1,4 @@
+
 generator client {
   provider = "prisma-client-js"
 }
@@ -8,37 +9,39 @@ datasource db {
 }
 
 model User {
-  id                  String            @id @default(cuid())
+  id                  String             @id @default(cuid())
   name                String
-  email               String            @unique
-  emailVerified       Boolean           @default(false)
+  email               String             @unique
+  emailVerified       Boolean            @default(false)
   image               String?
-  createdAt           DateTime          @default(now())
-  updatedAt           DateTime          @updatedAt
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
   displayUsername     String?
-  username            String            @unique
-  role                Role              @default(USER)
+  username            String             @unique
+  role                Role               @default(USER)
   dateOfBirth         DateTime?
   gender              String?
   area                String?
-  completedOnboarding Boolean           @default(false)
+  completedOnboarding Boolean            @default(false)
   lastActivityCheck   DateTime?
   lastLogin           DateTime?
-  status              String            @default("active")
+  status              String             @default("active")
   bio                 String?
   phoneNumber         String?
   admin               Admin?
-  opponentMatches     Match[]           @relation("OpponentMatches")
-  playerMatches       Match[]           @relation("PlayerMatches")
+  opponentMatches     Match[]            @relation("OpponentMatches")
+  playerMatches       Match[]            @relation("PlayerMatches")
   achievements        UserAchievement[]
   accounts            Account[]
   sessions            Session[]
+  seasonMemberships   SeasonMembership[]
 
   @@index([email])
   @@index([username])
   @@index([status])
   @@index([completedOnboarding])
   @@index([createdAt])
+  @@map("user")
 }
 
 model Admin {
@@ -141,6 +144,68 @@ model InitialRatingResult {
   response   QuestionnaireResponse @relation(fields: [responseId], references: [id], onDelete: Cascade)
 }
 
+model Season {
+  id           String             @id @default(cuid())
+  name         String
+  startDate    DateTime?
+  endDate      DateTime?
+  regiDeadline DateTime?
+  description  String?
+  sportType    String?
+  seasonType   String? // single or double         
+  status       SeasonStatus       @default(UPCOMING)
+  current      Boolean            @default(false) // Quick flag for the current active season
+  divisions    Division[]
+  memberships  SeasonMembership[]
+  // Future link up with matches 
+  // matches         Match[] 
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+  // Highly useful for fast lookup of the current season
+  @@index([sportType])
+  @@index([status])
+  @@index([current])
+}
+
+// Represents the divisions within a specific season.
+
+model Division {
+  id          String             @id @default(cuid())
+  seasonId    String
+  name        String
+  description String?
+  minRating   Float?
+  maxRating   Float?
+  threshold   Int? // Relations
+  season      Season             @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  memberships SeasonMembership[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([seasonId, name])
+  @@index([seasonId])
+}
+
+model SeasonMembership {
+  id               String   @id @default(cuid())
+  userId           String
+  seasonId         String
+  divisionId       String
+  status           String   @default("ACTIVE") // 'ACTIVE' | 'INACTIVE' | 'FLAGGED' | 'REMOVED'
+  joinedAt         DateTime @default(now())
+  withdrawalReason String? // For handling "View Withdrawal Request"
+  // Relations
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  season           Season   @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  division         Division @relation(fields: [divisionId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, seasonId, divisionId])
+  @@index([userId])
+  @@index([seasonId])
+  @@index([divisionId, status])
+}
+
 model Match {
   id            String      @id @default(cuid())
   playerId      String
@@ -235,3 +300,32 @@ enum UserStatus {
   INACTIVE
   SUSPENDED
 }
+
+enum SeasonStatus {
+  UPCOMING
+  ACTIVE
+  FINISHED
+  CANCELLED
+}
+
+enum MembershipStatus {
+  PENDING
+  ACTIVE
+  FLAGGED
+  INACTIVE
+  REMOVED
+}
+
+// Future - use one status enum for matches/divisions/leagues
+
+enum Statuses {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+  UPCOMING
+  ONGOING
+  FINISHED
+  CANCELLED
+}
+
+

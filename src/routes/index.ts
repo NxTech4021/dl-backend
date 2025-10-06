@@ -1,18 +1,30 @@
 import express from "express";
-
-import { auth } from "../lib/auth";
+import adminRouter from "./adminRoutes";
+import playerRouter from "./playerRoutes";
+import seasonRouter from "./seasonRoutes";
+import onboardingRoutes from "./onboarding";
 
 const router = express.Router();
-
-import adminrouter from "./adminRoutes";
-import playerRouter from "./playerRoutes";
 
 router.get("/health", (req, res) => {
   res.json({ status: "OK", message: "Server is running" });
 });
 
-router.use("/api/admin", adminrouter);
-router.use("/api/player", playerRouter);
+router.use("/admin", adminRouter);
+
+router.use("/player", playerRouter);
+
+router.use("/season", seasonRouter);
+
+router.use("/onboarding", onboardingRoutes);
+
+// LeaderBoard
+
+// Chat
+
+// Settings
+
+// Notification?
 
 // router.post("/api/")
 

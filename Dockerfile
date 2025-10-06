@@ -5,7 +5,7 @@ COPY package-lock.json ./
 
 FROM base AS development
 ENV NODE_ENV=development
-RUN npm ci
+RUN npm i
 COPY . .
 RUN npm install -g prisma
 RUN npx prisma generate
