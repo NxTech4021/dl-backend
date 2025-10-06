@@ -1,15 +1,35 @@
 // src/controllers/division.controller.ts
 import { Request, Response } from "express";
 import { PrismaClient} from "@prisma/client";
+import type { Division, Season, Match } from "@prisma/client";
+
+// Type for Division with related season and matches
+type DivisionWithRelations = Division & {
+  season: Season;
+  matches: Match[];
+};
 
 
 const prisma = new PrismaClient();
 
 export const createDivision = async (req: Request, res: Response) => {
-  const { seasonId, name, description, threshold } = req.body;
+  const { 
+    seasonId,
+    name,
+    description,
+    threshold,
+    divisionLevel,
+    gameType,
+    genderCategory,
+    maxSingles,
+    maxDoublesTeams,
+    isActive = true,
+  } = req.body;
 
-  if (!seasonId || !name) {
-    return res.status(400).json({ error: "seasonId and name are required." });
+  if (!seasonId || !name || !divisionLevel || !gameType || !genderCategory) {
+    return res.status(400).json({
+      error: "seasonId, name, divisionLevel, gameType, and genderCategory are required.",
+    });
   }
 
   try {
@@ -19,11 +39,24 @@ export const createDivision = async (req: Request, res: Response) => {
     const existingDivision = await prisma.division.findFirst({
       where: { seasonId, name },
     });
-    if (existingDivision) return res.status(409).json({ error: "Division name already exists in this season." });
+    if (existingDivision)
+      return res.status(409).json({ error: "Division name already exists in this season." });
 
     const division = await prisma.division.create({
-      data: { seasonId, name, description, threshold },
+      data: {
+        seasonId,
+        name,
+        description,
+        threshold,
+        divisionLevel,   
+        gameType,       
+        genderCategory, 
+        maxSingles,
+        maxDoublesTeams,
+        isActive,
+      },
     });
+
     res.status(201).json(division);
   } catch (err: any) {
     console.error("Create Division Error:", err);
@@ -34,15 +67,20 @@ export const createDivision = async (req: Request, res: Response) => {
 export const getDivisions = async (req: Request, res: Response) => {
   try {
     const divisions = await prisma.division.findMany({
-      include: { season: true, matches: true },
+      include: {
+        season: true,
+        matches: true,
+      },
       orderBy: { createdAt: "desc" },
     });
-    res.json(divisions);
+
+    res.status(200).json(divisions);
   } catch (err: any) {
     console.error("Get Divisions Error:", err);
     res.status(500).json({ error: "Failed to retrieve divisions." });
   }
 };
+
 
 export const getDivisionById = async (req: Request, res: Response) => {
   const { id } = req.params;
@@ -51,10 +89,15 @@ export const getDivisionById = async (req: Request, res: Response) => {
   try {
     const division = await prisma.division.findUnique({
       where: { id },
-      include: { season: true, matches: true },
+      include: {
+        season: true,
+        matches: true,
+      },
     });
+
     if (!division) return res.status(404).json({ error: "Division not found." });
-    res.json(division);
+
+    res.status(200).json(division);
   } catch (err: any) {
     console.error("Get Division By ID Error:", err);
     res.status(500).json({ error: "Failed to retrieve division." });

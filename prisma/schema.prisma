@@ -171,6 +171,20 @@ model Division {
   description     String?
   threshold       Int?           
   
+  // Settings 
+  divisionLevel   DivisionLevel     
+  gameType        GameType          
+  genderCategory  GenderCategory 
+
+  maxSingles        Int?
+  maxDoublesTeams   Int?
+
+  isActive        Boolean      @default(true)
+
+  // Future sponsor feature
+  //sponsorId        String?          // Could reference an Admin or Sponsor table later
+  //sponsorName      String?
+
   // Relations
   season          Season         @relation(fields: [seasonId], references: [id], onDelete: Cascade)
   memberships     SeasonMembership[]
@@ -181,6 +195,8 @@ model Division {
   @@unique([seasonId, name]) 
   @@index([seasonId])
 }
+
+
 
 model SeasonMembership {
   id              String         @id @default(cuid())
@@ -338,5 +354,22 @@ enum Statuses {
   ONGOING
   FINISHED
   CANCELLED
+}
+
+enum DivisionLevel {
+  beginner
+  intermediate
+  advanced
+}
+
+enum GameType {
+  singles
+  doubles
+}
+
+enum GenderCategory {
+  male
+  female
+  mixed
 }
 
