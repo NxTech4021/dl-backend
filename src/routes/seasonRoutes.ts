@@ -1,14 +1,20 @@
-import { Router } from "express";
-import { createSeason, getSeasons, updateSeason, deleteSeason} from "../controllers/seasonController";
+import { Router } from 'express';
+import { 
+  getSeasons, 
+  getSeasonById, 
+  createSeason, 
+  updateSeason, 
+  deleteSeason 
+} from '../controllers/seasonController';
+
+const router = Router();
+
+router.get('/', getSeasons);
+router.get('/:id', getSeasonById);
+router.post('/', createSeason);
+router.put('/:id', updateSeason);
+router.delete('/:id', deleteSeason);
+
+export default router;
 
 
-const seasonRouter = Router();
-
-seasonRouter.post("/create", createSeason);
-seasonRouter.get('/getall', getSeasons);
-seasonRouter.get('/:id', getSeasons); 
-seasonRouter.put('/:id', updateSeason);
-seasonRouter.delete('/:id', deleteSeason);
-
-
-export default seasonRouter;
