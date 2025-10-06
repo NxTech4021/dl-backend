@@ -5,6 +5,7 @@ import seasonRouter from "./seasonRoutes";
 import divisionRoutes from "./divisionRoutes";
 import leagueRoutes from "./leagueRoutes";
 import sponsorRoutes from "./sponsorRoutes";
+import categoryRoutes from "./categoryRoutes";
 // import matchRoutes from "./matchRoutes";
 
 
@@ -21,7 +22,8 @@ router.use("/player", playerRouter);
 router.use("/league", leagueRoutes);
 router.use("/division", divisionRoutes);
 router.use("/season", seasonRouter);
-router.use("/sponsor", sponsorRoutes)
+router.use("/sponsor", sponsorRoutes);
+router.use("/category", categoryRoutes);
 
 // router.use("/match", matchRoutes);
 
