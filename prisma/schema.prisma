@@ -290,34 +290,47 @@ model Season {
 }
 
 model Division {
-  id              String         @id @default(cuid())
-  seasonId        String
-  name            String         
-  description     String?
-  threshold       Int?           
-  
-  // Settings 
-  divisionLevel   DivisionLevel     
-  gameType        GameType          
-  category          Gender
+  id                      String   @id @default(cuid())                 // division_id
+  seasonId                String                                       // season_id
+  season                  Season   @relation(fields: [seasonId], references: [id], onDelete: Cascade)
 
-  maxSingles        Int?
-  maxDoublesTeams   Int?
+  leagueId                String                                       // league_id
+  league                  League   @relation(fields: [leagueId], references: [id], onDelete: Cascade)
 
-  isActive        Boolean      @default(true)
+  name                    String                                       // division_name
+  level                   DivisionLevel?                               // division_level
+  gameType                GameType                                     // game_type
+  genderCategory          Gender?                                      // gender_category
 
+  // capacities
+  maxSinglesPlayers       Int?
+  maxDoublesTeams         Int?
 
-  // Relations
-  season          Season         @relation(fields: [seasonId], references: [id], onDelete: Cascade)
-  memberships     SeasonMembership[]
-  matches         Match[] 
-  createdAt       DateTime       @default(now())
-  updatedAt       DateTime       @updatedAt
-  
-  @@unique([seasonId, name]) 
+  // denormalized counts
+  currentSinglesCount     Int?      @default(0)
+  currentDoublesCount     Int?      @default(0)
+
+  autoAssignmentEnabled   Boolean   @default(false)
+  isActiveDivision        Boolean   @default(true)
+
+  // audit — Admin FKs
+  createdByAdminId        String?
+  createdByAdmin          Admin?    @relation("DivisionCreatedBy", fields: [createdByAdminId], references: [id], onDelete: SetNull)
+  lastUpdatedByAdminId    String?
+  lastUpdatedByAdmin      Admin?    @relation("DivisionUpdatedBy", fields: [lastUpdatedByAdminId], references: [id], onDelete: SetNull)
+
+  // keep matches (exists in your schema)
+  matches                 Match[]
+
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
+
+  @@unique([seasonId, name])
   @@index([seasonId])
+  @@index([leagueId])
+  @@index([isActiveDivision])
+  @@map("division")
 }
-
 
 
 model SeasonMembership {
