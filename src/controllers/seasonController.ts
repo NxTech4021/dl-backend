@@ -1,290 +1,317 @@
-import { PrismaClient, Prisma,  SeasonStatus } from '@prisma/client';
-
-const prisma = new PrismaClient(); 
-
-export const createSeason = async (req: any, res: any) => {
-     const { 
-        name, 
-        startDate, 
-        endDate, 
-        regiDeadline,       
-        sportType,        
-        seasonType,         
-        description 
-    } = req.body;
-
-    // Basic validation
-    if (!name || !startDate || !endDate || !sportType) {
-        return res.status(400).json({ error: "Missing required fields: name, startDate, endDate, and sport." });
-    }
-
-    try {
-        // FIX: Use findFirst() instead of findUnique() for compound unique keys
-        const existingSeason = await prisma.season.findFirst({
-            where: { 
-                name: name, 
-                sportType: sportType 
-            } 
-        });
-
-        if (existingSeason) {
-            // Return 409 Conflict, since the record effectively exists
-            return res.status(409).json({ error: "A season with this name and sport type already exists." });
-        }
-        const newSeason = await prisma.season.create({
-            data: {
-                name,
-                startDate: new Date(startDate),
-                endDate: new Date(endDate),
-                regiDeadline: regiDeadline ? new Date(regiDeadline) : new Date(endDate),
-                sportType,
-                seasonType,
-                description,
-                status: 'UPCOMING', 
-            },
-        });
-
-        res.status(201).json(newSeason);
-    } catch (error: any) {
-        console.error("Error creating season:", error);
-
-        if (error instanceof Prisma.PrismaClientKnownRequestError) {
-            if (error.code === 'P2002') {
-                return res.status(409).json({ error: "Unique constraint failed. A season with this name and sport already exists." });
-            }
-        }
-        if (error instanceof Prisma.PrismaClientValidationError) {
-            return res.status(400).json({ error: "Invalid data format for season creation." });
-        }
-        res.status(500).json({ error: "Failed to create season. Please try again later." });
-    }
-};
+import { Request, Response } from "express";
+import { PrismaClient, Prisma } from "@prisma/client";
+import { ApiResponse } from "../utils/ApiResponse";
+import {
+  getActiveSeasonService,
+  getSeasonByIdService,
+  getAllSeasonsService,
+  createSeasonService,
+  updateSeasonStatusService,
+  updateSeasonService,
+  deleteSeasonService,
+} from "../services/seasonService";
 
 
-export const getSeasons = async (req: any, res: any) => {
-    const { id } = req.params;
-    const { current } = req.query; 
+const prisma = new PrismaClient();
 
-    try {
-        if (id) {
-            // Fetch a single season by ID
-            const season = await prisma.season.findUnique({
-                where: { id },
-                include: { divisions: true }
-            });
+export const createSeason = async (req: Request, res: Response) => {
+  const {
+    name,
+    startDate,
+    endDate,
+    regiDeadline,
+    sportType,
+    seasonType,
+    description,
+    entryFee,
+    leagueId,
+    categoryId,
+    isActive,
+    paymentRequired,
+    promoCodeSupported,
+    withdrawalEnabled,
+  } = req.body;
 
-            if (!season) {
-                return res.status(404).json({ error: "Season not found." });
-            }
-            return res.status(200).json(season);
-        }
-        
-        if (current === 'true') {
-            // Fetch the currently active season
-            const currentSeason = await prisma.season.findFirst({
-                // Assuming 'ACTIVE' is an enum value, otherwise ensure it's a string
-                where: { current: true, status: 'ACTIVE' }, 
-                include: { divisions: { select: { id: true, name: true } } }
-            });
-            
-            if (!currentSeason) {
-                return res.status(404).json({ error: "No active season found." });
-            }
-            return res.status(200).json(currentSeason);
-        }
-
-        // Fetch all seasons, ordered by start date (most recent first)
-        const seasons = await prisma.season.findMany({
-            orderBy: { startDate: 'desc' },
-            select: { 
-                id: true, 
-                name: true, 
-                startDate: true, 
-                endDate: true, 
-                regiDeadline: true,
-                description: true,
-                status: true, 
-                sportType: true, 
-                seasonType: true,
-                current: true,
-                createdAt: true,
-                updatedAt: true
-            } 
-        });
-
-        res.status(200).json(seasons);
-    } catch (error: any) {
-        console.error("Error fetching seasons:", error);
-
-        // We use instanceof Prisma.PrismaClientValidationError for cleaner error handling
-        if (error instanceof Prisma.PrismaClientValidationError) {
-            return res.status(400).json({ error: "Invalid query parameters or field selection for fetching seasons." });
-        }
-        res.status(500).json({ error: "Failed to fetch seasons. Please try again later." });
-    }
-};
-
-export const getSeasonById = async (req: any, res: any) => {
-  const { id } = req.params;
-
-  if (!id) {
-    return res.status(400).json({ error: "Season ID is required." });
+  // Basic validation
+  if (
+    !name ||
+    !startDate ||
+    !endDate ||
+    !sportType ||
+    !leagueId ||
+    !categoryId ||
+    !entryFee
+  ) {
+    return res
+      .status(400)
+      .json(new ApiResponse(false, 400, null, "Missing required fields"));
   }
 
   try {
-    const season = await prisma.season.findUnique({
-      where: { id },
-      include: {
-        divisions: {
-          select: { id: true, name: true } // Include more relations if needed
-        }
-      }
+    const newSeason = await createSeasonService({
+      name,
+      startDate,
+      endDate,
+      regiDeadline,
+      sportType,
+      seasonType,
+      description,
+      entryFee,
+      leagueId,
+      categoryId,
+      isActive,
+      paymentRequired,
+      promoCodeSupported,
+      withdrawalEnabled,
     });
 
+    return res
+      .status(201)
+      .json(
+        new ApiResponse(true, 201, newSeason, "Season created successfully")
+      );
+  } catch (error: any) {
+    console.error("Error creating season:", error);
+
+    if (error.message.includes("already exists")) {
+      return res
+        .status(409)
+        .json(new ApiResponse(false, 409, null, error.message));
+    }
+
+    if (error instanceof Prisma.PrismaClientKnownRequestError) {
+      if (error.code === "P2003") {
+        return res
+          .status(400)
+          .json(
+            new ApiResponse(false, 400, null, "Invalid leagueId or categoryId")
+          );
+      }
+    }
+
+    return res
+      .status(500)
+      .json(new ApiResponse(false, 500, null, "Failed to create season"));
+  }
+};
+
+export const getSeasons = async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const { active } = req.query;
+
+  if (!id) {
+  return res.status(400).json({ error: "Season ID is required." });
+  }
+
+  try {
+    if (id) {
+      const season = await getSeasonByIdService(id);
+      if (!season) return res.status(404).json({ error: "Season not found." });
+      return res.status(200).json(season);
+    }
+
+    if (active === "true") {
+      const activeSeason = await getActiveSeasonService();
+      if (!activeSeason)
+        return res.status(404).json({ error: "No active season found." });
+      return res.status(200).json(activeSeason);
+    }
+
+    const seasons = await getAllSeasonsService();
+    res.status(200).json(seasons);
+  } catch (error: any) {
+    console.error("Error fetching seasons:", error);
+
+    if (error instanceof Prisma.PrismaClientValidationError) {
+      return res
+        .status(400)
+        .json({ error: "Invalid query parameters or field selection." });
+    }
+
+    res
+      .status(500)
+      .json({ error: "Failed to fetch seasons. Try again later." });
+  }
+};
+
+export const getSeasonById = async (req: Request, res: Response) => {
+  const { id } = req.params;
+
+  if (!id) {
+  return res.status(400).json({ error: "Season ID is required." });
+  
+}
+  try {
+    const season = await getSeasonByIdService(id);
     if (!season) {
       return res.status(404).json({ error: "Season not found." });
     }
 
-    return res.status(200).json(season);
-
+    res.status(200).json(season);
   } catch (error: any) {
-    console.error("Error fetching season by ID:", error);
-
-    if (error instanceof Prisma.PrismaClientValidationError) {
-      return res.status(400).json({ error: "Invalid Season ID format." });
-    }
-
-    return res.status(500).json({ error: "Failed to fetch season. Please try again later." });
+    console.error(`Error fetching season ${id}:`, error);
+    res.status(500).json({ error: "Failed to retrieve season details." });
   }
 };
 
-
-export const updateSeason = async (req: any, res: any) => {
+// Only Updates the status of season - Lightweight api call
+export const updateSeasonStatus = async (req: Request, res: Response) => {
   const { id } = req.params;
-  const { 
-    name, 
-    startDate, 
-    endDate, 
-    regiDeadline,       
-    sportType,        
-    seasonType,         
-    description,
-    status,
-    current
-  } = req.body;
+  const { status, isActive } = req.body;
 
   if (!id) {
-    return res.status(400).json({ error: "Missing required parameter: id." });
+  return res.status(400).json({ error: "Season ID is required." });
+  } 
+
+  if (!status && typeof isActive === "undefined") {
+    return res
+      .status(400)
+      .json({ error: "Provide either status or isActive." });
   }
 
-  
+  try {
+    const season = await updateSeasonStatusService(id, { status, isActive });
+    return res
+      .status(200)
+      .json({ message: "Season updated successfully", season });
+  } catch (error: any) {
+    console.error("Error updating season status:", error);
+    return res.status(500).json({ error: "Failed to update season status." });
+  }
+};
+
+// Updates All information of a seaon - api contains all fields
+export const updateSeason = async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const seasonData = req.body;
+
+  if (!id) {
+  return res.status(400).json({ error: "Season ID is required." });
+  }
 
   try {
-    const updateData: any = {};
-
-    if (name !== undefined) updateData.name = name;
-    if (description !== undefined) updateData.description = description;
-    if (status !== undefined) updateData.status = status;
-    if (current !== undefined) updateData.current = Boolean(current);
-
-    if (startDate) updateData.startDate = new Date(startDate);
-    if (endDate) updateData.endDate = new Date(endDate);
-    if (regiDeadline) updateData.regiDeadline = new Date(regiDeadline);
-
-    if (sportType !== undefined) updateData.sportType = sportType;
-    if (seasonType !== undefined) updateData.seasonType = seasonType;
-
-    if (status !== undefined) {
-    switch (status.toUpperCase()) {
-        case "UPCOMING":
-        updateData.status = SeasonStatus.UPCOMING;
-        break;
-        case "ACTIVE":
-        updateData.status = SeasonStatus.ACTIVE;
-        break;
-        case "FINISHED":
-        updateData.status = SeasonStatus.FINISHED;
-        break;
-        case "CANCELLED":
-        updateData.status = SeasonStatus.CANCELLED;
-        break;
-        default:
-        return res.status(400).json({ 
-            error: `Invalid status value. Must be one of: UPCOMING, ACTIVE, FINISHED OR CANCELLED` 
-        });
-    }
-    }
-
-    const updatedSeason = await prisma.season.update({
-      where: { id },
-      data: updateData,
-    });
-
-    res.status(200).json(updatedSeason);
+    const season = await updateSeasonService(id, seasonData);
+    return res
+      .status(200)
+      .json({ message: "Season updated successfully", season });
   } catch (error: any) {
     console.error("Error updating season:", error);
-
-    if (error instanceof Prisma.PrismaClientKnownRequestError) {
-      if (error.code === 'P2025') {
-        return res.status(404).json({ error: "Season not found for update." });
-      }
-      if (error.code === 'P2002') {
-        return res.status(409).json({ error: "Unique constraint failed. A season with this name and sport already exists." });
-      }
-    }
-
-    if (error instanceof Prisma.PrismaClientValidationError) {
-      return res.status(400).json({ error: "Invalid data format for season update." });
-    }
-
-    res.status(500).json({ error: "Failed to update season. Please try again later." });
+    return res.status(500).json({ error: "Failed to update season." });
   }
 };
 
-export const deleteSeason = async (req: any, res: any) => {
+export const deleteSeason = async (req: Request, res: Response) => {
   const { id } = req.params;
 
   if (!id) {
-    return res.status(400).json({ error: "Missing required parameter: id." });
+    return res
+      .status(400)
+      .json({ error: "Season ID is required for deletion." });
   }
 
   try {
-    // Check if season exists
-    const existingSeason = await prisma.season.findUnique({
-      where: { id },
-      include: { memberships: true }
+    const deletedSeason = await deleteSeasonService(id);
+    res.status(200).json({
+      success: true,
+      message: `Season "${deletedSeason.name}" deleted successfully.`,
+      data: deletedSeason,
     });
-
-    if (!existingSeason) {
-      return res.status(404).json({ error: "Season not found." });
-    }
-
-    // Check if season has active memberships
-    const activeMemberships = existingSeason.memberships.filter(
-      membership => membership.status === "ACTIVE"
-    );
-
-    if (activeMemberships.length > 0) {
-      return res.status(400).json({ 
-        error: "Cannot delete season with active memberships. Please remove all members first." 
-      });
-    }
-
-    // Delete the season
-    await prisma.season.delete({
-      where: { id }
-    });
-
-    res.status(200).json({ message: "Season deleted successfully." });
   } catch (error: any) {
-    console.error("Error deleting season:", error);
+    console.error("Error deleting season:", error.message);
+
+    if (error.message.includes("Cannot delete season")) {
+      return res.status(400).json({ error: error.message });
+    }
+
+    if (error.message.includes("not found")) {
+      return res.status(404).json({ error: error.message });
+    }
+
+    res.status(500).json({ error: "Failed to delete season." });
+  }
+};
+
+// POST /api/withdrawals (User submits a request)
+export const submitWithdrawalRequest = async (req: any, res: any) => {
+  // NOTE: Replace req.user.id with your actual authenticated user retrieval method
+  const userId = req.body.userId || "placeholder-user-id"; // MUST be obtained from auth
+  const { seasonId, reason } = req.body;
+
+  if (!seasonId || !reason || !userId) {
+    return res
+      .status(400)
+      .json({
+        error:
+          "Missing required fields: seasonId, reason, and authenticated userId.",
+      });
+  }
+
+  try {
+    const season = await prisma.season.findUnique({ where: { id: seasonId } });
+
+    if (!season || !season.withdrawalEnabled) {
+      return res
+        .status(400)
+        .json({ error: "Withdrawal is not enabled for this season." });
+    }
+
+    const newRequest = await prisma.withdrawalRequest.create({
+      data: {
+        seasonId,
+        userId,
+        reason,
+        status: "PENDING", // Uses the WithdrawalStatus enum
+      },
+    });
+    res.status(201).json(newRequest);
+  } catch (error: any) {
+    console.error("Error submitting withdrawal request:", error);
+    if (error instanceof Prisma.PrismaClientValidationError) {
+      return res
+        .status(400)
+        .json({ error: "Invalid data format or type for withdrawal request." });
+    }
+    res.status(500).json({ error: "Failed to submit withdrawal request." });
+  }
+};
+
+// PUT /api/withdrawals/:id/process (Admin processes the request)
+export const processWithdrawalRequest = async (req: any, res: any) => {
+  const { id } = req.params;
+  // NOTE: Replace req.admin.id with your actual authenticated admin ID retrieval method
+  const processedByAdminId = req.body.adminId || "placeholder-admin-id"; // MUST be obtained from auth
+  const { status } = req.body; // Expects 'APPROVED' or 'REJECTED'
+
+  if (!["APPROVED", "REJECTED"].includes(status) || !processedByAdminId) {
+    return res
+      .status(400)
+      .json({ error: "Invalid status or missing admin ID." });
+  }
+
+  try {
+    const updatedRequest = await prisma.withdrawalRequest.update({
+      where: { id },
+      data: {
+        status: status,
+        processedByAdminId: processedByAdminId,
+      },
+      include: {
+        processedByAdmin: { select: { name: true, role: true } },
+      },
+    });
+
+    // NOTE: Here you would add business logic for refunds/waitlist promotion, etc.
+
+    res.status(200).json(updatedRequest);
+  } catch (error: any) {
+    console.error(`Error processing withdrawal request ${id}:`, error);
 
     if (error instanceof Prisma.PrismaClientKnownRequestError) {
-      if (error.code === 'P2025') {
-        return res.status(404).json({ error: "Season not found for deletion." });
+      // P2025: Record to update not found
+      if (error.code === "P2025") {
+        return res.status(404).json({ error: "Withdrawal request not found." });
       }
     }
-
-    res.status(500).json({ error: "Failed to delete season. Please try again later." });
+    res.status(500).json({ error: "Failed to process withdrawal request." });
   }
 };

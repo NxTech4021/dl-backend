@@ -1,4 +1,4 @@
-import { PrismaClient, Statuses, SportType, LeagueRegistration, GameType, TierType } from '@prisma/client';
+import { PrismaClient, Statuses, SportType, LeagueType, GameType, TierType } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
@@ -16,7 +16,7 @@ interface LeagueData {
   description?: string;
   status?: Statuses;
   sportType?: SportType;
-  registrationType?: LeagueRegistration;
+  joinType?: LeagueType;
   gameType?: GameType;
   createCompany?: boolean; 
   company?: {
@@ -165,7 +165,7 @@ export const getLeagueById = async (id: string) => {
 
 
 export const createLeague = async (data: LeagueData) => {
-  const { name, location, description, status, sportType, registrationType, gameType, sponsorships, existingSponsorshipIds } = data;
+  const { name, location, description, status, sportType, joinType, gameType, sponsorships, existingSponsorshipIds } = data;
 
   const existingLeague = await prisma.league.findFirst({
     where: {
@@ -177,19 +177,6 @@ export const createLeague = async (data: LeagueData) => {
   if (existingLeague) {
     throw new Error(`A league with name "${name}" already exists in "${location}".`);
   }
-
-  // const sponsorshipCreate = sponsorships?.length
-  //   ? {
-  //       create: sponsorships.map((s: any) => ({
-  //         companyId: s.companyId ?? null,
-  //         packageTier: s.packageTier,
-  //         contractAmount: s.contractAmount ?? null,
-  //         sponsorRevenue: s.sponsorRevenue ?? null,
-  //         sponsoredName: s.sponsoredName ?? null,
-  //         createdById: s.createdById ?? null,
-  //       })),
-  //     }
-  //   : undefined;
 
    // Prepare create object for new sponsorships
   const sponsorshipCreate = sponsorships?.length
@@ -229,7 +216,7 @@ export const createLeague = async (data: LeagueData) => {
       description,
       status,
       sportType,
-      registrationType,
+      joinType,
       gameType,
       sponsorships: sponsorshipData
     },
@@ -292,7 +279,6 @@ export const updateLeague = async (id: string, data: LeagueData) => {
         : undefined,
     },
     include: {
-      leagueSports: { include: { sport: true } },
       sponsorships: true,
     },
   });
@@ -307,8 +293,9 @@ export const deleteLeague = async (id: string) => {
       _count: {
         select: {
           seasons: true,
-          leagueSports: true,
-          sponsorships: true, // optional count for reference
+          sponsorships: true, 
+          memberships: true, 
+          categories: true, 
         }
       }
     }
@@ -322,6 +309,13 @@ export const deleteLeague = async (id: string) => {
   if (league._count.seasons > 0) {
     throw new Error(
       `Cannot delete league "${league.name}". It has ${league._count.seasons} season(s). Please delete all seasons first.`
+    );
+  }
+
+  // Prevent deletion if players are joined
+  if (league._count.memberships > 0) {
+    throw new Error(
+      `Cannot delete league "${league.name}". It has ${league._count.memberships} joined player(s). Please remove all memberships first.`
     );
   }
 
