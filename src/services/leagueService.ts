@@ -1,4 +1,4 @@
-import { PrismaClient, Statuses, SportType, LeagueRegistration, GameType, TierType } from '@prisma/client';
+import { PrismaClient, Statuses, SportType, LeagueType, GameType, TierType } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
@@ -16,7 +16,7 @@ interface LeagueData {
   description?: string;
   status?: Statuses;
   sportType?: SportType;
-  registrationType?: LeagueRegistration;
+  joinType?: LeagueType;
   gameType?: GameType;
   createCompany?: boolean; 
   company?: {
@@ -165,7 +165,7 @@ export const getLeagueById = async (id: string) => {
 
 
 export const createLeague = async (data: LeagueData) => {
-  const { name, location, description, status, sportType, registrationType, gameType, sponsorships, existingSponsorshipIds } = data;
+  const { name, location, description, status, sportType, joinType, gameType, sponsorships, existingSponsorshipIds } = data;
 
   const existingLeague = await prisma.league.findFirst({
     where: {
@@ -216,7 +216,7 @@ export const createLeague = async (data: LeagueData) => {
       description,
       status,
       sportType,
-      registrationType,
+      joinType,
       gameType,
       sponsorships: sponsorshipData
     },
@@ -279,7 +279,6 @@ export const updateLeague = async (id: string, data: LeagueData) => {
         : undefined,
     },
     include: {
-      leagueSports: { include: { sport: true } },
       sponsorships: true,
     },
   });

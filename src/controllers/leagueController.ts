@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import * as leagueService from '../services/leagueService';
-import { Statuses, PrismaClient, Prisma } from '@prisma/client';
+import { Statuses, PrismaClient, Prisma, LeagueType } from '@prisma/client';
 import { ApiResponse } from '../utils/ApiResponse';
 import crypto from "crypto";
 
@@ -282,14 +282,16 @@ export const joinLeague = async (req: Request, res: Response) => {
       return res.status(404).json({ message: "League not found" });
     }
 
-    // Handle registration types
-    if (league.joinType === "INVITE_ONLY") {
+    const joinType: LeagueType = league.joinType ?? "OPEN";
+
+    // Handle join types
+    if (joinType === "INVITE_ONLY") {
       return res.status(403).json({
         message: "This league is invite-only. You cannot join without an invitation.",
       });
     }
 
-    if (league.joinType === "OPEN" || league.joinType === "MANUAL") {
+    if (joinType === "OPEN" || joinType === "MANUAL") {
       // Check if already a member
       const existingMembership = await prisma.leagueMembership.findUnique({
         where: {
@@ -318,8 +320,8 @@ export const joinLeague = async (req: Request, res: Response) => {
       });
     }
 
-    // fallback for unexpected registration types
-    return res.status(400).json({ message: "Invalid registration type." });
+    // fallback for unexpected join types
+    return res.status(400).json({ message: "Invalid join type." });
   } catch (error) {
     console.error("Error joining league:", error);
     return res.status(500).json({ message: "Internal server error" });
@@ -353,7 +355,7 @@ export const joinLeague = async (req: Request, res: Response) => {
 //       return res.status(404).json({ message: "League not found" });
 //     }
 
-//     if (league.registrationType !== "INVITE_ONLY") {
+//     if (league.joinType !== "INVITE_ONLY") {
 //       return res.status(400).json({
 //         message: "This league does not require invitations.",
 //       });
