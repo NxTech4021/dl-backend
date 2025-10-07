@@ -178,19 +178,6 @@ export const createLeague = async (data: LeagueData) => {
     throw new Error(`A league with name "${name}" already exists in "${location}".`);
   }
 
-  // const sponsorshipCreate = sponsorships?.length
-  //   ? {
-  //       create: sponsorships.map((s: any) => ({
-  //         companyId: s.companyId ?? null,
-  //         packageTier: s.packageTier,
-  //         contractAmount: s.contractAmount ?? null,
-  //         sponsorRevenue: s.sponsorRevenue ?? null,
-  //         sponsoredName: s.sponsoredName ?? null,
-  //         createdById: s.createdById ?? null,
-  //       })),
-  //     }
-  //   : undefined;
-
    // Prepare create object for new sponsorships
   const sponsorshipCreate = sponsorships?.length
     ? {
@@ -307,8 +294,9 @@ export const deleteLeague = async (id: string) => {
       _count: {
         select: {
           seasons: true,
-          leagueSports: true,
-          sponsorships: true, // optional count for reference
+          sponsorships: true, 
+          memberships: true, 
+          categories: true, 
         }
       }
     }
@@ -322,6 +310,13 @@ export const deleteLeague = async (id: string) => {
   if (league._count.seasons > 0) {
     throw new Error(
       `Cannot delete league "${league.name}". It has ${league._count.seasons} season(s). Please delete all seasons first.`
+    );
+  }
+
+  // Prevent deletion if players are joined
+  if (league._count.memberships > 0) {
+    throw new Error(
+      `Cannot delete league "${league.name}". It has ${league._count.memberships} joined player(s). Please remove all memberships first.`
     );
   }
 

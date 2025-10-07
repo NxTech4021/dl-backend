@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import * as leagueService from '../services/leagueService';
 import { Statuses, PrismaClient, Prisma } from '@prisma/client';
 import { ApiResponse } from '../utils/ApiResponse';
+import crypto from "crypto";
 
 const prisma = new PrismaClient();
 
@@ -64,7 +65,7 @@ export const getLeagueById = async (req: Request, res: Response) => {
 
 export const createLeague = async (req: Request, res: Response) => {
   try {
-   const { name, location, description, status, sportType, registrationType, gameType, sponsorships, existingSponsorshipIds } = req.body;
+   const { name, location, description, status, sportType, joinType, gameType, sponsorships, existingSponsorshipIds } = req.body;
 
     // Validation
     if (!name || !name.trim()) {
@@ -102,7 +103,7 @@ export const createLeague = async (req: Request, res: Response) => {
       description,
       status,
       sportType,
-      registrationType,
+      joinType,
       gameType,
       sponsorships: sponsorships?.map((s: any) => ({ ...s, createdById: req.user?.id })),
       existingSponsorshipIds
@@ -262,238 +263,120 @@ export const deleteLeague = async (req: Request, res: Response) => {
     );
   }
 };
-/**
- * Get leagues offering a specific sport
- * Public endpoint - for user browsing by sport
- */
-// export const getLeaguesBySport = async (req: Request, res: Response) => {
+
+
+export const joinLeague = async (req: Request, res: Response) => {
+  try {
+    const { leagueId, userId } = req.body;
+
+    if (!leagueId || !userId) {
+      return res.status(400).json({ message: "leagueId and userId are required" });
+    }
+
+    // Check if league exists
+    const league = await prisma.league.findUnique({
+      where: { id: leagueId },
+    });
+
+    if (!league) {
+      return res.status(404).json({ message: "League not found" });
+    }
+
+    // Handle registration types
+    if (league.joinType === "INVITE_ONLY") {
+      return res.status(403).json({
+        message: "This league is invite-only. You cannot join without an invitation.",
+      });
+    }
+
+    if (league.joinType === "OPEN" || league.joinType === "MANUAL") {
+      // Check if already a member
+      const existingMembership = await prisma.leagueMembership.findUnique({
+        where: {
+          userId_leagueId: {
+            userId,
+            leagueId,
+          },
+        },
+      });
+
+      if (existingMembership) {
+        return res.status(409).json({ message: "You have already joined this league." });
+      }
+
+      // Create membership
+      const membership = await prisma.leagueMembership.create({
+        data: {
+          userId,
+          leagueId,
+        },
+      });
+
+      return res.status(201).json({
+        message: "Successfully joined the league!",
+        membership,
+      });
+    }
+
+    // fallback for unexpected registration types
+    return res.status(400).json({ message: "Invalid registration type." });
+  } catch (error) {
+    console.error("Error joining league:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+
+//TODO SOON
+// export const sendLeagueInvite = async (req: Request, res: Response) => {
 //   try {
-//     const sportId = parseInt(req.params.sportId, 10);
-//     const { location } = req.query;
-    
-//     if (isNaN(sportId)) {
-//       return res.status(400).json(
-//         new ApiResponse(false, 400, null, "Invalid sport ID")
-//       );
+//     const { leagueId, email, invitedById } = req.body;
+
+//     if (!leagueId || !email || !invitedById) {
+//       return res.status(400).json({ message: "leagueId, email, and invitedById are required" });
 //     }
 
-//     const leagues = await leagueService.getLeaguesBySport(
-//       sportId,
-//       location as string | undefined
-//     );
-    
-//     return res.status(200).json(
-//       new ApiResponse(
-//         true,
-//         200,
-//         { leagues },
-//         `Found ${leagues.length} league(s) offering this sport`
-//       )
-//     );
-//   } catch (error) {
-//     console.error("Error fetching leagues by sport:", error);
-//     return res.status(500).json(
-//       new ApiResponse(false, 500, null, "Error fetching leagues")
-//     );
-//   }
-// };
-
-/**
- * Add sport to league
- * Admin only - POST /api/league/:leagueId/sport
- */
-// export const addSportToLeague = async (req: Request, res: Response) => {
-//   try {
-//     const leagueId = parseInt(req.params.leagueId, 10);
-//     const { sportId, isActive, sortOrder } = req.body;
-
-//     if (isNaN(leagueId)) {
-//       return res.status(400).json(
-//         new ApiResponse(false, 400, null, "Invalid league ID")
-//       );
-//     }
-
-//     if (!sportId || isNaN(parseInt(sportId))) {
-//       return res.status(400).json(
-//         new ApiResponse(false, 400, null, "Sport ID is required and must be a number")
-//       );
-//     }
-
-//     const leagueSport = await leagueService.addSportToLeague({
-//       leagueId,
-//       sportId: parseInt(sportId),
-//       isActive,
-//       sortOrder
+//     // Check if inviter exists and is an admin
+//     const admin = await prisma.admin.findUnique({
+//       where: { id: invitedById },
 //     });
 
-//     return res.status(201).json(
-//       new ApiResponse(
-//         true,
-//         201,
-//         { leagueSport },
-//         "Sport added to league successfully"
-//       )
-//     );
-//   } catch (error: any) {
-//     console.error("Error adding sport to league:", error);
-
-//     if (error.message.includes('not found')) {
-//       return res.status(404).json(
-//         new ApiResponse(false, 404, null, error.message)
-//       );
+//     if (!admin) {
+//       return res.status(404).json({ message: "Inviting admin not found" });
 //     }
 
-//     if (error.message.includes('already added')) {
-//       return res.status(409).json(
-//         new ApiResponse(false, 409, null, error.message)
-//       );
+//     const league = await prisma.league.findUnique({
+//       where: { id: leagueId },
+//     });
+
+//     if (!league) {
+//       return res.status(404).json({ message: "League not found" });
 //     }
 
-//     return res.status(500).json(
-//       new ApiResponse(false, 500, null, "Error adding sport to league")
-//     );
-//   }
-// };
-
-/**
- * Get sports at a league
- * Public endpoint - GET /api/league/:leagueId/sport
- */
-// export const getSportsAtLeague = async (req: Request, res: Response) => {
-//   try {
-//     const leagueId = parseInt(req.params.leagueId, 10);
-//     const includeInactive = req.query.includeInactive === 'true';
-
-//     if (isNaN(leagueId)) {
-//       return res.status(400).json(
-//         new ApiResponse(false, 400, null, "Invalid league ID")
-//       );
+//     if (league.registrationType !== "INVITE_ONLY") {
+//       return res.status(400).json({
+//         message: "This league does not require invitations.",
+//       });
 //     }
 
-//     const sports = await leagueService.getSportsAtLeague(
-//       leagueId,
-//       includeInactive
-//     );
+//     // Generate unique token
+//     const token = crypto.randomBytes(16).toString("hex");
 
-//     return res.status(200).json(
-//       new ApiResponse(
-//         true,
-//         200,
-//         { sports },
-//         `Found ${sports.length} sport(s) at this league`
-//       )
-//     );
+//     const invite = await prisma.leagueInvite.create({
+//       data: {
+//         leagueId,
+//         email,
+//         token,
+//         invitedById: admin.id,
+//       },
+//     });
+
+//     return res.status(201).json({
+//       message: "Invitation created successfully.",
+//       invite,
+//     });
 //   } catch (error) {
-//     console.error("Error fetching sports at league:", error);
-//     return res.status(500).json(
-//       new ApiResponse(false, 500, null, "Error fetching sports")
-//     );
-//   }
-// };
-
-/**
- * Update LeagueSport (activate/deactivate, reorder)
- * Admin only - PUT /api/league/:leagueId/sport/:sportId
- */
-// export const updateLeagueSport = async (req: Request, res: Response) => {
-//   try {
-//     const leagueId = parseInt(req.params.leagueId, 10);
-//     const sportId = parseInt(req.params.sportId, 10);
-//     const { isActive, sortOrder } = req.body;
-
-//     if (isNaN(leagueId) || isNaN(sportId)) {
-//       return res.status(400).json(
-//         new ApiResponse(false, 400, null, "Invalid league ID or sport ID")
-//       );
-//     }
-
-//     if (isActive !== undefined && typeof isActive !== 'boolean') {
-//       return res.status(400).json(
-//         new ApiResponse(false, 400, null, "isActive must be a boolean")
-//       );
-//     }
-
-//     if (sortOrder !== undefined && isNaN(parseInt(sortOrder))) {
-//       return res.status(400).json(
-//         new ApiResponse(false, 400, null, "sortOrder must be a number")
-//       );
-//     }
-
-//     const leagueSport = await leagueService.updateLeagueSport(
-//       leagueId,
-//       sportId,
-//       { 
-//         isActive, 
-//         sortOrder: sortOrder !== undefined ? parseInt(sortOrder) : undefined 
-//       }
-//     );
-
-//     return res.status(200).json(
-//       new ApiResponse(
-//         true,
-//         200,
-//         { leagueSport },
-//         "LeagueSport updated successfully"
-//       )
-//     );
-//   } catch (error: any) {
-//     console.error("Error updating LeagueSport:", error);
-
-//     if (error.message.includes('not offered')) {
-//       return res.status(404).json(
-//         new ApiResponse(false, 404, null, error.message)
-//       );
-//     }
-
-//     if (error.message.includes('Cannot deactivate')) {
-//       return res.status(400).json(
-//         new ApiResponse(false, 400, null, error.message)
-//       );
-//     }
-
-//     return res.status(500).json(
-//       new ApiResponse(false, 500, null, "Error updating LeagueSport")
-//     );
-//   }
-// };
-
-/**
- * Remove sport from league
- * Admin only - DELETE /api/league/:leagueId/sport/:sportId
- */
-// export const removeSportFromLeague = async (req: Request, res: Response) => {
-//   try {
-//     const leagueId = parseInt(req.params.leagueId, 10);
-//     const sportId = parseInt(req.params.sportId, 10);
-
-//     if (isNaN(leagueId) || isNaN(sportId)) {
-//       return res.status(400).json(
-//         new ApiResponse(false, 400, null, "Invalid league ID or sport ID")
-//       );
-//     }
-
-//     await leagueService.removeSportFromLeague(leagueId, sportId);
-
-//     return res.status(200).json(
-//       new ApiResponse(true, 200, null, "Sport removed from league successfully")
-//     );
-//   } catch (error: any) {
-//     console.error("Error removing sport from league:", error);
-
-//     if (error.message.includes('not offered')) {
-//       return res.status(404).json(
-//         new ApiResponse(false, 404, null, error.message)
-//       );
-//     }
-
-//     if (error.message.includes('Cannot remove')) {
-//       return res.status(400).json(
-//         new ApiResponse(false, 400, null, error.message)
-//       );
-//     }
-
-//     return res.status(500).json(
-//       new ApiResponse(false, 500, null, "Error removing sport from league")
-//     );
+//     console.error("Error sending invite:", error);
+//     return res.status(500).json({ message: "Internal server error" });
 //   }
 // };
