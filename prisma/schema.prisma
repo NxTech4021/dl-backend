@@ -36,6 +36,8 @@ model User {
   seasonMemberships   SeasonMembership[]
   leagueMemberships   LeagueMembership[]
   matchParticipants   MatchParticipant[]
+  processedRequests     WithdrawalRequest[] @relation("ProcessedByAdmin")
+
 
   @@index([email])
   @@index([username])
@@ -226,7 +228,7 @@ model Category {
   updatedAt           DateTime            @updatedAt
  
   league              League?              @relation(fields: [leagueId], references: [id])
-  seasons           Season[] 
+  seasons             Season[] 
 
   //seasonCategories    SeasonCategory[]
   
@@ -285,25 +287,96 @@ model Season {
   entryFee        Decimal        @db.Decimal(10, 2) 
   description     String?
   sportType       String? 
-  seasonType      GameType       // single or double         
-  status          SeasonStatus   @default(UPCOMING)
-  current         Boolean        @default(false)     
- 
+  seasonType      GameType          
+  registeredUserCount   Int               @default(0)
+
+  //Bools
+  status          SeasonStatus   @default(UPCOMING)    
+  isActive              Boolean           @default(false)
+  paymentRequired       Boolean           @default(false)
+  promoCodeSupported    Boolean           @default(false)
+  withdrawalEnabled     Boolean           @default(false)
+
+  
+  //Relations
   divisions       Division[]
   memberships     SeasonMembership[]
- 
+  promoCodes            PromoCode[]       @relation("SeasonPromoCodes") 
+  withdrawalRequests    WithdrawalRequest[] 
+
   leagueId        String
   league          League    @relation(fields: [leagueId], references: [id])
 
   categoryId      String
   category        Category  @relation(fields: [categoryId], references: [id])
+  
+  waitlistId             String?
+   waitlist              Waitlist?         @relation
+  
  
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
   
   @@index([sportType])
   @@index([status])
-  @@index([current])
+  @@index([isActive])
+}
+
+model Waitlist {
+  id                 String                 @id @default(cuid())
+  seasonId              String              @unique
+  season                Season              @relation(fields: [seasonId], references: [id])
+  enabled            Boolean                @default(false)
+  maxParticipants    Int?
+  waitlistedUsers     WaitlistUser[]
+
+  createdAt          DateTime               @default(now())
+  updatedAt          DateTime               @updatedAt
+}
+
+model WaitlistUser {
+  id                 String                 @id @default(cuid())
+  waitlistId         String
+  userId             String
+  waitlistDate       DateTime               @default(now())
+  promotedToRegistered Boolean              @default(false)
+
+  waitlist           Waitlist               @relation(fields: [waitlistId], references: [id])
+  
+  @@unique([waitlistId, userId])
+  @@index([userId])
+}
+
+model PromoCode {
+  id              String            @id @default(cuid())
+  code            String            @unique // e.g., "OFF50"
+  description     String?           // For internal clarity
+  discountValue   Decimal           @db.Decimal(10, 2) // e.g., 50.00 (dollars or percentage)
+  isPercentage    Boolean           @default(false) // True for %, false for fixed amount
+  isActive        Boolean           @default(true)
+  expiresAt       DateTime?         // Optional expiration date
+
+  // Many-to-Many relation to Season
+  seasons         Season[]          @relation("SeasonPromoCodes")
+
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+}
+
+model WithdrawalRequest {
+  id                    String              @id @default(cuid())
+  userId                String
+  reason                String
+  requestDate           DateTime            @default(now())
+  status                WithdrawalStatus    @default(PENDING)
+  processedByAdminId String? 
+
+  processedByAdmin      User?               @relation("ProcessedByAdmin", fields: [processedByAdminId], references: [id])
+  seasonId              String
+  season                Season              @relation(fields: [seasonId], references: [id])
+
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
 }
 
 model Division {
@@ -498,6 +571,12 @@ enum Statuses {
   ONGOING
   FINISHED
   CANCELLED
+}
+
+enum WithdrawalStatus {
+  PENDING
+  APPROVED
+  REJECTED
 }
 
 enum LeagueType{
