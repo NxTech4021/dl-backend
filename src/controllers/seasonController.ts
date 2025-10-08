@@ -99,10 +99,6 @@ export const getSeasons = async (req: Request, res: Response) => {
   const { id } = req.params;
   const { active } = req.query;
 
-  if (!id) {
-  return res.status(400).json({ error: "Season ID is required." });
-  }
-
   try {
     if (id) {
       const season = await getSeasonByIdService(id);
@@ -140,7 +136,7 @@ export const getSeasonById = async (req: Request, res: Response) => {
   if (!id) {
   return res.status(400).json({ error: "Season ID is required." });
   
-}
+  }
   try {
     const season = await getSeasonByIdService(id);
     if (!season) {

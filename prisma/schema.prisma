@@ -425,7 +425,8 @@ model Division {
   // Relations
   matches                 Match[]
   assignments             DivisionAssignment[]                         // Player assignments tracking
-
+  seasonMemberships       SeasonMembership[]   @relation("SeasonMembershipDivision")
+  
   createdAt               DateTime  @default(now())
   updatedAt               DateTime  @updatedAt
 
