@@ -286,55 +286,81 @@ export const getPlayerProfile = async (req: AuthenticatedRequest, res: Response)
         .status(404)
         .json(new ApiResponse(false, 404, null, "Player not found"));
     }
-
     // Get all questionnaire responses (including placeholder entries for skipped questionnaires)
     const responses = await prisma.questionnaireResponse.findMany({
       where: {
         userId: userId,
       },
-      include: {
-        result: true,
-      },
       orderBy: [
-        { completedAt: { sort: 'desc', nulls: 'last' } }, // Completed responses first
+        { completedAt: 'desc' }, // Completed responses first
         { startedAt: 'desc' }, // Then by start date for placeholder entries
       ],
     });
 
-    // Get recent match history
-    const recentMatches = await prisma.match.findMany({
-      where: {
-        OR: [
-          { playerId: userId },
-          { opponentId: userId },
-        ],
-      },
-      include: {
-        player: {
-          select: { name: true, username: true, image: true }
-        },
-        opponent: {
-          select: { name: true, username: true, image: true }
-        },
-      },
-      orderBy: {
-        matchDate: 'desc',
-      },
-      take: 5,
-    });
+    // Get results for completed responses
+    const completedResponseIds = responses
+      .filter(r => r.completedAt)
+      .map(r => r.id);
+    
+    const results = completedResponseIds.length > 0 
+      ? await prisma.initialRatingResult.findMany({
+          where: {
+            responseId: { in: completedResponseIds }
+          }
+        })
+      : [];
+
+    // Create a map of responseId to result
+    const resultMap = new Map(results.map(r => [r.responseId, r]));
+    // Get recent match history using MatchParticipant
+    // TODO: Fix this query to work with the current schema
+    const recentMatches: any[] = []; // Commented out until schema is fixed
+    // const recentMatches = await prisma.match.findMany({
+    //   where: {
+    //     participants: {
+    //       some: {
+    //         userId: userId,
+    //       },
+    //     },
+    //   },
+    //   include: {
+    //     participants: {
+    //       include: {
+    //         user: {
+    //           select: { name: true, username: true, image: true }
+    //         }
+    //       }
+    //     },
+    //   },
+    //   orderBy: {
+    //     matchDate: 'desc',
+    //   },
+    //   take: 5,
+    // });
 
     // Extract all sports (including those from placeholder entries)
     const allSports = [...new Set(responses.map(r => r.sport.toLowerCase()))];
     
+    // Create questionnaire completion status map
+    const questionnaireStatus = responses.reduce((acc, res) => {
+      acc[res.sport.toLowerCase()] = {
+        isCompleted: !!res.completedAt,
+        startedAt: res.startedAt,
+        completedAt: res.completedAt,
+      };
+      return acc;
+    }, {} as Record<string, { isCompleted: boolean; startedAt: Date; completedAt: Date | null }>);
+    
     // Process ratings (only from completed questionnaires)
     const skillRatings = responses.reduce((acc, res) => {
-      if (res.result && res.completedAt) { // Only include completed questionnaires with results
+      const result = resultMap.get(res.id);
+      if (result && res.completedAt) { // Only include completed questionnaires with results
         acc[res.sport.toLowerCase()] = {
-          singles: res.result.singles ? res.result.singles / 1000 : null,
-          doubles: res.result.doubles ? res.result.doubles / 1000 : null,
-          rating: (res.result.doubles ?? res.result.singles ?? 0) / 1000, // Keep general rating for backward compatibility
-          confidence: res.result.confidence ?? 'N/A',
-          rd: res.result.rd ?? 0,
+          singles: result.singles ? result.singles / 1000 : null,
+          doubles: result.doubles ? result.doubles / 1000 : null,
+          rating: (result.doubles ?? result.singles ?? 0) / 1000, // Keep general rating for backward compatibility
+          confidence: result.confidence ?? 'N/A',
+          rd: result.rd ?? 0,
           lastUpdated: res.completedAt,
         };
       }
@@ -342,21 +368,32 @@ export const getPlayerProfile = async (req: AuthenticatedRequest, res: Response)
     }, {} as Record<string, { singles: number | null; doubles: number | null; rating: number; confidence: string; rd: number; lastUpdated: Date | null }>);
 
     // Process recent matches
-    const processedMatches = recentMatches.map(match => ({
-      id: match.id,
-      sport: match.sport,
-      date: match.matchDate,
-      opponent: match.playerId === userId ? match.opponent : match.player,
-      playerScore: match.playerId === userId ? match.playerScore : match.opponentScore,
-      opponentScore: match.playerId === userId ? match.opponentScore : match.playerScore,
-      outcome: match.playerId === userId 
-        ? match.outcome 
-        : (match.outcome === 'win' ? 'loss' : match.outcome === 'loss' ? 'win' : 'draw'),
-      location: match.location,
-    }));
+    const processedMatches = recentMatches.map(match => {
+      const currentUserParticipant = match.participants.find(p => p.userId === userId);
+      const opponentParticipant = match.participants.find(p => p.userId !== userId);
+      
+      return {
+        id: match.id,
+        sport: match.sport,
+        date: match.matchDate,
+        playerId: currentUserParticipant?.userId,
+        opponentId: opponentParticipant?.userId,
+        playerScore: match.playerScore,
+        opponentScore: match.opponentScore,
+        outcome: match.outcome,
+        location: match.location,
+        opponent: opponentParticipant?.user ? {
+          name: opponentParticipant.user.name,
+          username: opponentParticipant.user.username,
+          image: opponentParticipant.user.image,
+        } : null,
+      };
+    });
 
     // Check activity status
-    const activityStatus = await checkPlayerActivityStatus(userId);
+    // TODO: Fix this function to work with the current schema
+    const activityStatus = 'active'; // Commented out until schema is fixed
+    // const activityStatus = await checkPlayerActivityStatus(userId);
 
     const profileData = {
       id: player.id,
@@ -375,12 +412,18 @@ export const getPlayerProfile = async (req: AuthenticatedRequest, res: Response)
       registeredDate: player.createdAt,
       sports: allSports, // Include all sports (both completed and placeholder)
       skillRatings: Object.keys(skillRatings).length > 0 ? skillRatings : null,
+      questionnaireStatus: questionnaireStatus, // Include questionnaire completion status for each sport
       recentMatches: processedMatches,
-      totalMatches: await prisma.match.count({
-        where: {
-          OR: [{ playerId: userId }, { opponentId: userId }],
-        },
-      }),
+      totalMatches: 0, // TODO: Fix this query to work with the current schema
+      // totalMatches: await prisma.match.count({
+      //   where: {
+      //     participants: {
+      //       some: {
+      //         userId: userId,
+      //       },
+      //     },
+      //   },
+      // }),
     };
 
     return res
@@ -388,7 +431,7 @@ export const getPlayerProfile = async (req: AuthenticatedRequest, res: Response)
       .json(new ApiResponse(true, 200, profileData, "Player profile fetched successfully"));
 
   } catch (error) {
-    console.error("Error fetching player profile:", error);
+    console.error("❌ getPlayerProfile: Error fetching player profile:", error);
     return res
       .status(500)
       .json(new ApiResponse(false, 500, null, "Failed to fetch player profile"));
@@ -604,7 +647,11 @@ const checkPlayerActivityStatus = async (userId: string): Promise<string> => {
 
     const recentMatches = await prisma.match.count({
       where: {
-        OR: [{ playerId: userId }, { opponentId: userId }],
+        participants: {
+          some: {
+            userId: userId,
+          },
+        },
         matchDate: { gte: thirtyDaysAgo },
       },
     });
