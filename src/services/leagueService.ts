@@ -19,6 +19,7 @@ interface LeagueData {
   joinType?: LeagueType;
   gameType?: GameType;
   createCompany?: boolean; 
+  createdById?: string;
   company?: {
     name: string;
     contactEmail?: string;
@@ -182,14 +183,13 @@ export const createLeague = async (data: LeagueData) => {
   const sponsorshipCreate = sponsorships?.length
     ? {
         create: sponsorships.map((s: any) => ({
-          companyId: s.companyId ?? null,
           packageTier: s.packageTier,
           contractAmount: s.contractAmount ?? null,
           sponsorRevenue: s.sponsorRevenue ?? null,
           sponsoredName: s.sponsoredName ?? null,
-          startDate: s.startDate,
-          endDate: s.endDate ?? null,
-          isActive: s.isActive ?? true,
+          // startDate: s.startDate,
+          // endDate: s.endDate ?? null,
+          // isActive: s.isActive ?? true,
           createdById: s.createdById ?? null
         })),
       }
@@ -208,6 +208,7 @@ export const createLeague = async (data: LeagueData) => {
       ? { ...sponsorshipCreate, ...sponsorshipConnect }
       : sponsorshipCreate ?? sponsorshipConnect;
 
+  console.log("Sponsorship data being sent to Prisma:", JSON.stringify(sponsorshipData, null, 2));
 
   return prisma.league.create({
     data: {
@@ -218,6 +219,7 @@ export const createLeague = async (data: LeagueData) => {
       sportType,
       joinType,
       gameType,
+      createdById: data.createdById, 
       sponsorships: sponsorshipData
     },
     include: {

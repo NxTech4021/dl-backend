@@ -65,6 +65,11 @@ export const getLeagueById = async (req: Request, res: Response) => {
 
 export const createLeague = async (req: Request, res: Response) => {
   try {
+
+    console.log("Params:", JSON.stringify(req.params, null, 2));
+    console.log("Body:", JSON.stringify(req.body, null, 2));
+    console.log("User (from auth):", JSON.stringify(req.user, null, 2));
+
    const { name, location, description, status, sportType, joinType, gameType, sponsorships, existingSponsorshipIds } = req.body;
 
     // Validation
