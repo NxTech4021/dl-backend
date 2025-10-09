@@ -292,9 +292,7 @@ model Season {
   endDate         DateTime?
   regiDeadline    DateTime?
   entryFee        Decimal        @db.Decimal(10, 2) 
-  description     String?
-  sportType       String? 
-  seasonType      GameType          
+  description     String?       
   registeredUserCount   Int               @default(0)
 
   //Bools
@@ -324,7 +322,6 @@ model Season {
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
   
-  @@index([sportType])
   @@index([status])
   @@index([isActive])
 }
