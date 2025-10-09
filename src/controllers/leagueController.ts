@@ -33,6 +33,7 @@ export const getLeaguePlayerCount = async (leagueId: string) => {
     where: { leagueId }
   });
 };
+
 export const getLeagueById = async (req: Request, res: Response) => {
   try {
     const id = req.params.id;
@@ -65,6 +66,11 @@ export const getLeagueById = async (req: Request, res: Response) => {
 
 export const createLeague = async (req: Request, res: Response) => {
   try {
+
+    console.log("Params:", JSON.stringify(req.params, null, 2));
+    console.log("Body:", JSON.stringify(req.body, null, 2));
+    console.log("User (from auth):", JSON.stringify(req.user, null, 2));
+
    const { name, location, description, status, sportType, joinType, gameType, sponsorships, existingSponsorshipIds } = req.body;
 
     // Validation
@@ -146,9 +152,15 @@ export const createLeague = async (req: Request, res: Response) => {
  * Admin only
  */
 export const updateLeague = async (req: Request, res: Response) => {
+    
+    console.log("---- updateLeague called ----");
+  console.log("Request params:", req.params);
+  console.log("Request body:", req.body);
+  console.log("Request user:", req.user?.id);
+
   try {
-    const id = req.params.id; // STRING now
-    const { name, location, description, status, sponsorships } = req.body;
+    const id = req.params.id;
+    const { name, location, description, status} = req.body;
     
     if (!id) {
       return res.status(400).json(
@@ -158,7 +170,7 @@ export const updateLeague = async (req: Request, res: Response) => {
 
   
 
- // Validation
+    // Validation
     if (name !== undefined && (!name.trim() || name.length > 255)) {
       return res.status(400).json(
         new ApiResponse(false, 400, null, "League name must be between 1 and 255 characters")
@@ -185,18 +197,6 @@ export const updateLeague = async (req: Request, res: Response) => {
       location,
       description,
       status: status as Statuses,
-      
-      sponsorships: sponsorships?.map((s: any) => ({
-        id: s.id, 
-        companyId: s.companyId,
-        packageTier: s.packageTier,
-        contractAmount: s.contractAmount,
-        sponsoredName: s.sponsoredName,
-        startDate: s.startDate,
-        endDate: s.endDate,
-        isActive: s.isActive ?? true,
-        createdById: req.user?.id
-      })),
     });
 
     return res.status(200).json(

@@ -19,6 +19,7 @@ interface LeagueData {
   joinType?: LeagueType;
   gameType?: GameType;
   createCompany?: boolean; 
+  createdById?: string;
   company?: {
     name: string;
     contactEmail?: string;
@@ -130,30 +131,60 @@ export const getAllLeagues = async () => {
   });
 };
 
-
 export const getLeagueById = async (id: string) => {
   const league = await prisma.league.findUnique({
     where: { id },
     include: {
       // Include sponsorships and their company info
       sponsorships: {
-        include: { company: true }
+        include: { company: true },
       },
+
+      // Include memberships and their related users (players/admins)
+      memberships: {
+        include: {
+          user: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              role: true,
+              image: true,
+            },
+          },
+        },
+      },
+
+      // Include categories for this league
+      categories: true,
+
+      // Include seasons under this league
+      seasons: {
+        include: {
+          // optionally include related divisions or matches
+          divisions: true,
+        },
+      },
+
       // Include admin info
       createdBy: {
         select: {
           id: true,
           // name: true,
-        }
+          // email: true,
+        },
       },
-      // Count total seasons and sponsorships
+
+      // Count totals
       _count: {
         select: {
           seasons: true,
-          sponsorships: true
-        }
-      }
-    }
+          sponsorships: true,
+          categories: true,
+          memberships: true,
+        },
+      },
+    },
   });
 
   if (!league) {
@@ -162,6 +193,7 @@ export const getLeagueById = async (id: string) => {
 
   return league;
 };
+
 
 
 export const createLeague = async (data: LeagueData) => {
@@ -182,14 +214,13 @@ export const createLeague = async (data: LeagueData) => {
   const sponsorshipCreate = sponsorships?.length
     ? {
         create: sponsorships.map((s: any) => ({
-          companyId: s.companyId ?? null,
           packageTier: s.packageTier,
           contractAmount: s.contractAmount ?? null,
           sponsorRevenue: s.sponsorRevenue ?? null,
           sponsoredName: s.sponsoredName ?? null,
-          startDate: s.startDate,
-          endDate: s.endDate ?? null,
-          isActive: s.isActive ?? true,
+          // startDate: s.startDate,
+          // endDate: s.endDate ?? null,
+          // isActive: s.isActive ?? true,
           createdById: s.createdById ?? null
         })),
       }
@@ -208,6 +239,7 @@ export const createLeague = async (data: LeagueData) => {
       ? { ...sponsorshipCreate, ...sponsorshipConnect }
       : sponsorshipCreate ?? sponsorshipConnect;
 
+  console.log("Sponsorship data being sent to Prisma:", JSON.stringify(sponsorshipData, null, 2));
 
   return prisma.league.create({
     data: {
@@ -218,6 +250,7 @@ export const createLeague = async (data: LeagueData) => {
       sportType,
       joinType,
       gameType,
+      createdById: data.createdById, 
       sponsorships: sponsorshipData
     },
     include: {
@@ -229,6 +262,7 @@ export const createLeague = async (data: LeagueData) => {
 
 
 export const updateLeague = async (id: string, data: LeagueData) => {
+  
   const league = await prisma.league.findUnique({ where: { id } });
   if (!league) throw new Error(`League with ID ${id} not found.`);
 
@@ -250,33 +284,6 @@ export const updateLeague = async (id: string, data: LeagueData) => {
       location: data.location?.trim(),
       description: data.description?.trim(),
       status: data.status,
-      sponsorships: data.sponsorships?.length
-        ? {
-            upsert: data.sponsorships.map((s: any) => ({
-              where: { id: s.id || '' }, 
-              update: {
-                companyId: s.companyId,
-                packageTier: s.packageTier,
-                contractAmount: s.contractAmount,
-                sponsoredName: s.sponsoredName,
-                startDate: s.startDate,
-                endDate: s.endDate,
-                isActive: s.isActive ?? true,
-                createdById: s.createdById,
-              },
-              create: {
-                companyId: s.companyId,
-                packageTier: s.packageTier,
-                contractAmount: s.contractAmount,
-                sponsoredName: s.sponsoredName,
-                startDate: s.startDate,
-                endDate: s.endDate,
-                isActive: s.isActive ?? true,
-                createdById: s.createdById,
-              },
-            })),
-          }
-        : undefined,
     },
     include: {
       sponsorships: true,

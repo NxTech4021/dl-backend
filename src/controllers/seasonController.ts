@@ -1,6 +1,5 @@
 import { Request, Response } from "express";
 import { PrismaClient, Prisma } from "@prisma/client";
-import { ApiResponse } from "../utils/ApiResponse";
 import {
   getActiveSeasonService,
   getSeasonByIdService,
@@ -20,8 +19,6 @@ export const createSeason = async (req: Request, res: Response) => {
     startDate,
     endDate,
     regiDeadline,
-    sportType,
-    seasonType,
     description,
     entryFee,
     leagueId,
@@ -32,19 +29,12 @@ export const createSeason = async (req: Request, res: Response) => {
     withdrawalEnabled,
   } = req.body;
 
-  // Basic validation
-  if (
-    !name ||
-    !startDate ||
-    !endDate ||
-    !sportType ||
-    !leagueId ||
-    !categoryId ||
-    !entryFee
-  ) {
-    return res
-      .status(400)
-      .json(new ApiResponse(false, 400, null, "Missing required fields"));
+  // Basic validation for required fields
+  if (!name || !startDate || !endDate || !entryFee || !leagueId || !categoryId) {
+    return res.status(400).json({
+      success: false,
+      error: "Missing required fields",
+    });
   }
 
   try {
@@ -53,45 +43,55 @@ export const createSeason = async (req: Request, res: Response) => {
       startDate,
       endDate,
       regiDeadline,
-      sportType,
-      seasonType,
       description,
       entryFee,
       leagueId,
       categoryId,
-      isActive,
-      paymentRequired,
-      promoCodeSupported,
-      withdrawalEnabled,
+      isActive: isActive ?? false,
+      paymentRequired: paymentRequired ?? false,
+      promoCodeSupported: promoCodeSupported ?? false,
+      withdrawalEnabled: withdrawalEnabled ?? false,
     });
 
-    return res
-      .status(201)
-      .json(
-        new ApiResponse(true, 201, newSeason, "Season created successfully")
-      );
+    return res.status(201).json({
+      success: true,
+      message: "Season created successfully",
+      data: newSeason,
+    });
+
   } catch (error: any) {
     console.error("Error creating season:", error);
 
-    if (error.message.includes("already exists")) {
-      return res
-        .status(409)
-        .json(new ApiResponse(false, 409, null, error.message));
-    }
-
     if (error instanceof Prisma.PrismaClientKnownRequestError) {
+      // Handle unique constraint violations
+      if (error.code === "P2002") {
+        return res.status(409).json({
+          success: false,
+          error: "A season with this name already exists",
+        });
+      }
+
+      // Handle foreign key constraints
       if (error.code === "P2003") {
-        return res
-          .status(400)
-          .json(
-            new ApiResponse(false, 400, null, "Invalid leagueId or categoryId")
-          );
+        return res.status(400).json({
+          success: false,
+          error: "Invalid leagueId or categoryId provided",
+        });
       }
     }
 
-    return res
-      .status(500)
-      .json(new ApiResponse(false, 500, null, "Failed to create season"));
+    if (error instanceof Prisma.PrismaClientValidationError) {
+      return res.status(400).json({
+        success: false,
+        error: "Invalid data format for season creation",
+      });
+    }
+
+    // Generic error handler
+    return res.status(500).json({
+      success: false,
+      error: "Failed to create season. Please try again later.",
+    });
   }
 };
 

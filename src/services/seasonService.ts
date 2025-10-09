@@ -8,8 +8,6 @@ interface CreateSeasonData {
   startDate: string | Date;
   endDate: string | Date;
   regiDeadline?: string | Date;
-  sportType: string;
-  seasonType: string;
   description?: string;
   entryFee: string | number;
   leagueId: string;
@@ -27,8 +25,6 @@ interface SeasonUpdateData {
   endDate?: string;
   regiDeadline?: string;
   entryFee?: number;
-  sportType?: string;
-  seasonType?: string;
   description?: string;
   leagueId?: string;
   categoryId?: string;
@@ -50,8 +46,6 @@ export const createSeasonService = async (data: CreateSeasonData) => {
     startDate,
     endDate,
     regiDeadline,
-    sportType,
-    seasonType,
     description,
     entryFee,
     leagueId,
@@ -64,7 +58,7 @@ export const createSeasonService = async (data: CreateSeasonData) => {
 
   // Check for existing season by name + sportType
   const existingSeason = await prisma.season.findFirst({
-    where: { name, sportType },
+    where: { name},
   });
   if (existingSeason) {
     throw new Error("A season with this name and sport type already exists.");
@@ -78,8 +72,6 @@ export const createSeasonService = async (data: CreateSeasonData) => {
       endDate: new Date(endDate),
       regiDeadline: regiDeadline ? new Date(regiDeadline) : new Date(endDate),
       entryFee: new Prisma.Decimal(entryFee),
-      sportType,
-      seasonType,
       description,
       leagueId,
       categoryId,
