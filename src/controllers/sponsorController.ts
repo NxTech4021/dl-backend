@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-import { PrismaClient, TierType } from "@prisma/client";
+import { PrismaClient, TierType, Prisma } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
@@ -92,16 +92,24 @@ export const updateSponsorship = async (req: Request, res: Response) => {
     const { id } = req.params;
     const { leagueId, companyId, packageTier, contractAmount, sponsorRevenue, sponsoredName } = req.body;
 
+    // Convert string/number to Prisma.Decimal if provided
+    const dataToUpdate: any = {
+      leagueId: leagueId ?? undefined,
+      companyId: companyId ?? undefined,
+      packageTier: packageTier ? (packageTier as TierType) : undefined,
+      sponsoredName: sponsoredName ?? undefined,
+    };
+
+    if (contractAmount !== undefined && contractAmount !== null) {
+      dataToUpdate.contractAmount = new Prisma.Decimal(contractAmount);
+    }
+    if (sponsorRevenue !== undefined && sponsorRevenue !== null) {
+      dataToUpdate.sponsorRevenue = new Prisma.Decimal(sponsorRevenue);
+    }
+
     const sponsorship = await prisma.sponsorship.update({
       where: { id },
-      data: {
-        leagueId: leagueId ?? undefined,
-        companyId: companyId ?? undefined,
-        packageTier: packageTier ? (packageTier as TierType) : undefined,
-        contractAmount: contractAmount ?? undefined,
-        sponsorRevenue: sponsorRevenue ?? undefined,
-        sponsoredName: sponsoredName ?? undefined,
-      },
+      data: dataToUpdate,
     });
 
     return res.json(sponsorship);
@@ -109,6 +117,7 @@ export const updateSponsorship = async (req: Request, res: Response) => {
     if (error.code === "P2002") {
       return res.status(400).json({ message: "Sponsorship with this leagueId, companyId, and packageTier already exists" });
     }
+    console.error("Failed to update sponsorship:", error);
     return res.status(500).json({ message: error.message });
   }
 };
