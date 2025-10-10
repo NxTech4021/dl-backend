@@ -45,7 +45,7 @@ model User {
   @@index([status])
   @@index([completedOnboarding])
   @@index([createdAt])
-  @@map("user")
+  @@map("User")
 }
 
 model Admin {
@@ -392,6 +392,7 @@ model Division {
   league                  League   @relation(fields: [leagueId], references: [id], onDelete: Cascade)
 
   name                    String                                       // division_name
+  description             String?
   level                   DivisionLevel?                               // division_level
   gameType                GameType                                     // game_type
   genderCategory          Gender?                                      // gender_category
@@ -406,6 +407,7 @@ model Division {
 
   autoAssignmentEnabled   Boolean   @default(false)
   isActiveDivision        Boolean   @default(true)
+  pointsThreshold         Int?
 
   // Sponsorship fields (from Excel spec)
   divisionSponsorId       String?                                      // division_sponsor_id

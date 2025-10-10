@@ -1,20 +1,94 @@
+import {
+  DivisionLevel,
+  GameType,
+  Gender,
+  Prisma,
+  PrismaClient,
+} from "@prisma/client";
 import { Request, Response } from "express";
-import { PrismaClient} from "@prisma/client";
-import * as divisionService from '../services/divisionService';
-import { ApiResponse } from '../utils/ApiResponse';
-import type { Division, Season, Match } from "@prisma/client";
-
-// Type for Division with related season and matches
-type DivisionWithRelations = Division & {
-  season: Season;
-  matches: Match[];
-};
-
 
 const prisma = new PrismaClient();
 
+const toEnum = <T extends DivisionLevel | GameType | Gender>(
+  value: string | undefined,
+  enumType: Record<string, T>
+): T | undefined => {
+  if (!value) return undefined;
+  const normalized = value.toUpperCase();
+  return enumType[normalized as keyof typeof enumType];
+};
+
+const FALLBACK_DATE_ISO = new Date(0).toISOString();
+
+const toISODateString = (input: unknown): string => {
+  if (!input) return FALLBACK_DATE_ISO;
+  const date = input instanceof Date ? input : new Date(input as any);
+  return Number.isNaN(date.getTime()) ? FALLBACK_DATE_ISO : date.toISOString();
+};
+
+const toISODateStringOrNull = (input: unknown): string | null => {
+  if (input === null || input === undefined) return null;
+  const date = input instanceof Date ? input : new Date(input as any);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+};
+
+const formatSeason = (season: any) => ({
+  id: season?.id ?? "",
+  name: season?.name ?? "",
+  sportType: season?.sportType ?? null,
+  seasonType: season?.seasonType ?? null,
+  description: season?.description ?? null,
+  startDate: toISODateStringOrNull(season?.startDate),
+  endDate: toISODateStringOrNull(season?.endDate),
+  regiDeadline: toISODateStringOrNull(season?.regiDeadline),
+  status: season?.status ?? "UPCOMING",
+  current:
+    season && "current" in season
+      ? Boolean(season.current)
+      : Boolean(season?.isActive),
+  createdAt: toISODateString(season?.createdAt),
+  updatedAt: toISODateString(season?.updatedAt),
+  memberships: [],
+  withdrawalRequests: [],
+});
+
+const formatDivision = (division: any) => ({
+  id: division.id,
+  seasonId: division.seasonId,
+  name: division.name,
+  description: division.description ?? null,
+  threshold:
+    division.pointsThreshold !== null && division.pointsThreshold !== undefined
+      ? Number(division.pointsThreshold)
+      : null,
+  divisionLevel: division.level
+    ? division.level.toLowerCase()
+    : "beginner",
+  gameType: division.gameType ? division.gameType.toLowerCase() : "singles",
+  genderCategory: division.genderCategory
+    ? division.genderCategory.toLowerCase()
+    : "mixed",
+  maxSingles:
+    division.maxSinglesPlayers !== null && division.maxSinglesPlayers !== undefined
+      ? Number(division.maxSinglesPlayers)
+      : null,
+  maxDoublesTeams:
+    division.maxDoublesTeams !== null && division.maxDoublesTeams !== undefined
+      ? Number(division.maxDoublesTeams)
+      : null,
+  autoAssignmentEnabled: division.autoAssignmentEnabled,
+  isActive: division.isActiveDivision,
+  prizePoolTotal: division.prizePoolTotal
+    ? Number(division.prizePoolTotal)
+    : null,
+  sponsoredDivisionName: division.sponsoredDivisionName ?? null,
+  season: formatSeason(division.season),
+  createdAt: toISODateString(division.createdAt),
+  updatedAt: toISODateString(division.updatedAt),
+});
+
 export const createDivision = async (req: Request, res: Response) => {
-  const { 
+  const {
     seasonId,
     name,
     description,
@@ -22,397 +96,275 @@ export const createDivision = async (req: Request, res: Response) => {
     divisionLevel,
     gameType,
     genderCategory,
-    maxSingles,
+    maxSinglesPlayers,
     maxDoublesTeams,
+    autoAssignmentEnabled = false,
     isActive = true,
+    prizePoolTotal,
+    sponsorName,
   } = req.body;
 
-  // add rank, maxParticipants
-
-  if (!seasonId || !name || !divisionLevel || !gameType || !genderCategory) {
+  if (!seasonId || !name || !divisionLevel || !gameType) {
     return res.status(400).json({
-      error: "seasonId, name, divisionLevel, gameType, and genderCategory are required.",
+      error:
+        "seasonId, name, divisionLevel, and gameType are required fields.",
+    });
+  }
+
+  const levelEnum = toEnum(divisionLevel, DivisionLevel);
+  const gameTypeEnum = toEnum(gameType, GameType);
+  const genderEnum = toEnum(genderCategory, Gender);
+
+  if (!levelEnum) {
+    return res.status(400).json({ error: "Invalid divisionLevel value." });
+  }
+  if (!gameTypeEnum) {
+    return res.status(400).json({ error: "Invalid gameType value." });
+  }
+
+  if (
+    gameTypeEnum === GameType.SINGLES &&
+    (maxSinglesPlayers === null || maxSinglesPlayers === undefined)
+  ) {
+    return res.status(400).json({
+      error: "maxSinglesPlayers is required when gameType is singles.",
+    });
+  }
+
+  if (
+    gameTypeEnum === GameType.DOUBLES &&
+    (maxDoublesTeams === null || maxDoublesTeams === undefined)
+  ) {
+    return res.status(400).json({
+      error: "maxDoublesTeams is required when gameType is doubles.",
     });
   }
 
   try {
-    const seasonExists = await prisma.season.findUnique({ where: { id: seasonId } });
-    if (!seasonExists) return res.status(404).json({ error: "Season not found." });
-
-    const existingDivision = await prisma.division.findFirst({
-      where: { seasonId, name },
+    const season = await prisma.season.findUnique({
+      where: { id: seasonId },
+      select: { id: true, name: true, leagueId: true },
     });
-    if (existingDivision)
-      return res.status(409).json({ error: "Division name already exists in this season." });
+
+    if (!season) {
+      return res.status(404).json({ error: "Season not found." });
+    }
+
+    const duplicate = await prisma.division.findFirst({
+      where: { seasonId, name },
+      select: { id: true },
+    });
+
+    if (duplicate) {
+      return res.status(409).json({
+        error: "A division with this name already exists in the season.",
+      });
+    }
 
     const division = await prisma.division.create({
       data: {
         seasonId,
+        leagueId: season.leagueId,
         name,
         description,
-        threshold,
-        divisionLevel,   
-        gameType,       
-        genderCategory, 
-        maxSingles,
-        maxDoublesTeams,
-        isActive,
+        pointsThreshold:
+          threshold !== undefined && threshold !== null
+            ? Number(threshold)
+            : null,
+        level: levelEnum,
+        gameType: gameTypeEnum,
+        genderCategory: genderEnum,
+        maxSinglesPlayers:
+          maxSinglesPlayers !== undefined && maxSinglesPlayers !== null
+            ? Number(maxSinglesPlayers)
+            : null,
+        maxDoublesTeams:
+          maxDoublesTeams !== undefined && maxDoublesTeams !== null
+            ? Number(maxDoublesTeams)
+            : null,
+        autoAssignmentEnabled: Boolean(autoAssignmentEnabled),
+        isActiveDivision: Boolean(isActive),
+        prizePoolTotal:
+          prizePoolTotal !== undefined && prizePoolTotal !== null
+            ? new Prisma.Decimal(prizePoolTotal)
+            : null,
+        sponsoredDivisionName: sponsorName ?? null,
+      },
+      include: {
+        season: true,
       },
     });
 
-    res.status(201).json(division);
-  } catch (err: any) {
-    console.error("Create Division Error:", err);
-    res.status(500).json({ error: "An error occurred while creating the division." });
+    return res.status(201).json({
+      data: formatDivision(division),
+      message: "Division created successfully",
+    });
+  } catch (error) {
+    console.error("Create Division Error:", error);
+    return res
+      .status(500)
+      .json({ error: "An error occurred while creating the division." });
   }
 };
 
-export const getDivisions = async (req: Request, res: Response) => {
+export const getDivisions = async (_req: Request, res: Response) => {
   try {
     const divisions = await prisma.division.findMany({
-      include: {
-        season: true,
-        matches: true,
-      },
+      include: { season: true },
       orderBy: { createdAt: "desc" },
     });
 
-    res.status(200).json(divisions);
-  } catch (err: any) {
-    console.error("Get Divisions Error:", err);
-    res.status(500).json({ error: "Failed to retrieve divisions." });
+    return res.json(divisions.map(formatDivision));
+  } catch (error) {
+    console.error("Get Divisions Error:", error);
+    return res.status(500).json({ error: "Failed to retrieve divisions." });
   }
 };
 
-
 export const getDivisionById = async (req: Request, res: Response) => {
   const { id } = req.params;
-  if (!id) return res.status(400).json({ error: "Division ID is required." });
+  if (!id) {
+    return res.status(400).json({ error: "Division ID is required." });
+  }
 
   try {
     const division = await prisma.division.findUnique({
       where: { id },
-      include: {
-        season: true,
-        matches: true,
-      },
+      include: { season: true },
     });
 
-    if (!division) return res.status(404).json({ error: "Division not found." });
+    if (!division) {
+      return res.status(404).json({ error: "Division not found." });
+    }
 
-    res.status(200).json(division);
-  } catch (err: any) {
-    console.error("Get Division By ID Error:", err);
-    res.status(500).json({ error: "Failed to retrieve division." });
+    return res.json(formatDivision(division));
+  } catch (error) {
+    console.error("Get Division By ID Error:", error);
+    return res.status(500).json({ error: "Failed to retrieve division." });
   }
 };
 
 export const updateDivision = async (req: Request, res: Response) => {
   const { id } = req.params;
-  const { name, description, threshold } = req.body;
+  if (!id) {
+    return res.status(400).json({ error: "Division ID is required." });
+  }
 
-  if (!id) return res.status(400).json({ error: "Division ID is required." });
+  const {
+    name,
+    description,
+    threshold,
+    divisionLevel,
+    gameType,
+    genderCategory,
+    maxSinglesPlayers,
+    maxDoublesTeams,
+    autoAssignmentEnabled,
+    isActive,
+    prizePoolTotal,
+    sponsorName,
+  } = req.body;
 
   try {
-    const existingDivision = await prisma.division.findUnique({ where: { id } });
-    if (!existingDivision) return res.status(404).json({ error: "Division not found." });
+    const existing = await prisma.division.findUnique({
+      where: { id },
+      include: { season: true },
+    });
+
+    if (!existing) {
+      return res.status(404).json({ error: "Division not found." });
+    }
+
+    const data: Prisma.DivisionUpdateInput = {};
+
+    if (name !== undefined) data.name = name;
+    if (description !== undefined) data.description = description;
+    if (threshold !== undefined)
+      data.pointsThreshold =
+        threshold !== null ? Number(threshold) : (null as any);
+
+    if (divisionLevel !== undefined) {
+      const levelEnum = toEnum(divisionLevel, DivisionLevel);
+      if (!levelEnum) {
+        return res.status(400).json({ error: "Invalid divisionLevel value." });
+      }
+      data.level = levelEnum;
+    }
+
+    if (gameType !== undefined) {
+      const gameTypeEnum = toEnum(gameType, GameType);
+      if (!gameTypeEnum) {
+        return res.status(400).json({ error: "Invalid gameType value." });
+      }
+      data.gameType = gameTypeEnum;
+    }
+
+    if (genderCategory !== undefined) {
+      const genderEnum = toEnum(genderCategory, Gender);
+      if (!genderEnum) {
+        return res
+          .status(400)
+          .json({ error: "Invalid genderCategory value." });
+      }
+      data.genderCategory = genderEnum;
+    }
+
+    if (maxSinglesPlayers !== undefined) {
+      data.maxSinglesPlayers =
+        maxSinglesPlayers !== null ? Number(maxSinglesPlayers) : null;
+    }
+
+    if (maxDoublesTeams !== undefined) {
+      data.maxDoublesTeams =
+        maxDoublesTeams !== null ? Number(maxDoublesTeams) : null;
+    }
+
+    if (autoAssignmentEnabled !== undefined) {
+      data.autoAssignmentEnabled = Boolean(autoAssignmentEnabled);
+    }
+
+    if (isActive !== undefined) {
+      data.isActiveDivision = Boolean(isActive);
+    }
+
+    if (prizePoolTotal !== undefined) {
+      data.prizePoolTotal =
+        prizePoolTotal !== null
+          ? new Prisma.Decimal(prizePoolTotal)
+          : (null as any);
+    }
+
+    if (sponsorName !== undefined) {
+      data.sponsoredDivisionName = sponsorName;
+    }
 
     const division = await prisma.division.update({
       where: { id },
-      data: { name, description, threshold },
+      data,
+      include: { season: true },
     });
-    res.json(division);
-  } catch (err: any) {
-    console.error("Update Division Error:", err);
-    res.status(500).json({ error: "Failed to update division." });
+
+    return res.json({
+      data: formatDivision(division),
+      message: "Division updated successfully",
+    });
+  } catch (error) {
+    console.error("Update Division Error:", error);
+    return res.status(500).json({ error: "Failed to update division." });
   }
 };
 
 export const deleteDivision = async (req: Request, res: Response) => {
   const { id } = req.params;
-  if (!id) return res.status(400).json({ error: "Division ID is required." });
+  if (!id) {
+    return res.status(400).json({ error: "Division ID is required." });
+  }
 
   try {
-    const existingDivision = await prisma.division.findUnique({ where: { id } });
-    if (!existingDivision) return res.status(404).json({ error: "Division not found." });
-
     await prisma.division.delete({ where: { id } });
-    res.json({ message: "Division deleted successfully." });
-  } catch (err: any) {
-    console.error("Delete Division Error:", err);
-    res.status(500).json({ error: "Failed to delete division." });
+    return res.json({ message: "Division deleted successfully" });
+  } catch (error) {
+    console.error("Delete Division Error:", error);
+    return res.status(500).json({ error: "Failed to delete division." });
   }
 };
-
-
-// GO THROUGH AND ADD SERVICES IN THE FUTURE 
-
-// export const getDivisions = async (req: Request, res: Response) => {
-//   try {
-//     const { seasonId, name } = req.query;
-
-//     // Build where clause
-//     const where: any = {};
-//     if (seasonId) where.seasonId = Number(seasonId);
-//     if (name) {
-//       where.name = { contains: name as string, mode: 'insensitive' };
-//     }
-
-//     const divisions = await prisma.division.findMany({
-//       where,
-//       include: {
-//         season: {
-//           select: {
-//             id: true,
-//             name: true,
-//             league: {
-//               select: {
-//                 name: true
-//               }
-//             }
-//           }
-//         },
-//         _count: {
-//           select: {
-//             registrations: true
-//           }
-//         }
-//       },
-//       orderBy: [
-//         { seasonId: 'desc' },
-//         { rank: 'asc' }
-//       ]
-//     });
-
-//     // Transform for frontend
-//     const transformedDivisions = divisions.map(division => ({
-//       id: division.id,
-//       rank: division.rank,
-//       name: division.name,
-//       description: division.description,
-//       season: division.season,
-//       maxParticipants: division.maxParticipants,
-//       minRating: division.minRating,
-//       maxRating: division.maxRating,
-//       registrationCount: division._count.registrations,
-//       createdAt: division.createdAt,
-//       updatedAt: division.updatedAt
-//     }));
-
-//     if (transformedDivisions.length === 0) {
-//       return res.status(200).json(
-//         new ApiResponse(true, 200, [], "No divisions found")
-//       );
-//     }
-
-//     return res.status(200).json(
-//       new ApiResponse(true, 200, transformedDivisions, "Divisions fetched successfully")
-//     );
-//   } catch (error) {
-//     console.error("Error fetching divisions:", error);
-//     return res.status(500).json(
-//       new ApiResponse(false, 500, null, "Error fetching divisions")
-//     );
-//   }
-// };
-
-// export const getDivisionById = async (req: Request, res: Response) => {
-//   try {
-//     const id = parseInt(req.params.id, 10);
-//     if (isNaN(id)) {
-//       return res.status(400).json(
-//         new ApiResponse(false, 400, null, 'Invalid division ID')
-//       );
-//     }
-
-//     const division = await prisma.division.findUnique({
-//       where: { id },
-//       include: {
-//         season: {
-//           select: {
-//             id: true,
-//             name: true,
-//             league: {
-//               select: {
-//                 name: true,
-//                 sport: {
-//                   select: {
-//                     name: true
-//                   }
-//                 }
-//               }
-//             }
-//           }
-//         },
-//         registrations: {
-//           include: {
-//             player: {
-//               select: {
-//                 name: true,
-//                 email: true
-//               }
-//             },
-//             team: {
-//               select: {
-//                 name: true
-//               }
-//             },
-//             payment: {
-//               select: {
-//                 status: true
-//               }
-//             }
-//           },
-//           orderBy: {
-//             registeredAt: 'desc'
-//           }
-//         }
-//       }
-//     });
-
-//     if (!division) {
-//       return res.status(404).json(
-//         new ApiResponse(false, 404, null, 'Division not found')
-//       );
-//     }
-
-//     // Transform for detailed view
-//     const transformedDivision = {
-//       id: division.id,
-//       rank: division.rank,
-//       name: division.name,
-//       description: division.description,
-//       season: division.season,
-//       maxParticipants: division.maxParticipants,
-//       minRating: division.minRating,
-//       maxRating: division.maxRating,
-//       registrations: division.registrations,
-//       registrationCount: division.registrations.length,
-//       createdAt: division.createdAt,
-//       updatedAt: division.updatedAt
-//     };
-
-//     return res.status(200).json(
-//       new ApiResponse(true, 200, transformedDivision, "Division details fetched successfully")
-//     );
-//   } catch (error: any) {
-//     console.error("Error fetching division:", error);
-//     return res.status(500).json(
-//       new ApiResponse(false, 500, null, "Error fetching division")
-//     );
-//   }
-// };
-
-// export const createDivision = async (req: Request, res: Response) => {
-//   try {
-//     const {
-//       rank,
-//       name,
-//       description,
-//       seasonId,
-//       maxParticipants,
-//       minRating,
-//       maxRating
-//     } = req.body;
-
-//     if (!rank || !name || !seasonId) {
-//       return res.status(400).json(
-//         new ApiResponse(false, 400, null, 'Missing required fields: rank, name, seasonId')
-//       );
-//     }
-
-//     // Use service for business logic
-//     const newDivision = await divisionService.createDivision({
-//       rank: parseInt(rank),
-//       name,
-//       description,
-//       seasonId: parseInt(seasonId),
-//       maxParticipants: maxParticipants ? parseInt(maxParticipants) : undefined,
-//       minRating: minRating ? parseInt(minRating) : undefined,
-//       maxRating: maxRating ? parseInt(maxRating) : undefined,
-//     });
-
-//     return res.status(201).json(
-//       new ApiResponse(true, 201, newDivision, "Division created successfully")
-//     );
-//   } catch (error: any) {
-//     console.error("Create division error:", error);
-//     if (error.message.includes('not found')) {
-//       return res.status(404).json(
-//         new ApiResponse(false, 404, null, error.message)
-//       );
-//     }
-//     return res.status(500).json(
-//       new ApiResponse(false, 500, null, "Error creating division")
-//     );
-//   }
-// };
-
-// export const updateDivision = async (req: Request, res: Response) => {
-//   try {
-//     const id = parseInt(req.params.id, 10);
-//     if (isNaN(id)) {
-//       return res.status(400).json(
-//         new ApiResponse(false, 400, null, 'Invalid division ID')
-//       );
-//     }
-
-//     const updateData = { ...req.body };
-    
-//     // Convert numeric fields
-//     if (updateData.rank) updateData.rank = parseInt(updateData.rank);
-//     if (updateData.maxParticipants) updateData.maxParticipants = parseInt(updateData.maxParticipants);
-//     if (updateData.minRating) updateData.minRating = parseInt(updateData.minRating);
-//     if (updateData.maxRating) updateData.maxRating = parseInt(updateData.maxRating);
-
-//     // Use service for business logic
-//     const updatedDivision = await divisionService.updateDivision(id, updateData);
-    
-//     return res.status(200).json(
-//       new ApiResponse(true, 200, updatedDivision, "Division updated successfully")
-//     );
-//   } catch (error: any) {
-//     console.error("Error updating division:", error);
-//     if (error.message.includes('not found')) {
-//       return res.status(404).json(
-//         new ApiResponse(false, 404, null, error.message)
-//       );
-//     }
-//     return res.status(500).json(
-//       new ApiResponse(false, 500, null, "Error updating division")
-//     );
-//   }
-// };
-
-// export const deleteDivision = async (req: Request, res: Response) => {
-//   try {
-//     const id = parseInt(req.params.id, 10);
-//     if (isNaN(id)) {
-//       return res.status(400).json(
-//         new ApiResponse(false, 400, null, 'Invalid division ID')
-//       );
-//     }
-
-//     // Use service for business logic
-//     await divisionService.deleteDivision(id);
-    
-//     return res.status(200).json(
-//       new ApiResponse(true, 200, null, "Division deleted successfully")
-//     );
-//   } catch (error: any) {
-//     console.error("Error deleting division:", error);
-//     if (error.message.includes('Cannot delete')) {
-//       return res.status(400).json(
-//         new ApiResponse(false, 400, null, error.message)
-//       );
-//     } else if (error.message.includes('not found')) {
-//       return res.status(404).json(
-//         new ApiResponse(false, 404, null, error.message)
-//       );
-//     } else {
-//       return res.status(500).json(
-//         new ApiResponse(false, 500, null, "Error deleting division")
-//       );
-//     }
-//   }
-// };
