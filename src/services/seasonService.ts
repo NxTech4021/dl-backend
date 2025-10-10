@@ -166,8 +166,6 @@ export const getAllSeasonsService = async () => {
       regiDeadline: true,
       description: true,
       entryFee: true,
-      sportType: true,
-      seasonType: true,
       isActive: true,
       paymentRequired: true,
       promoCodeSupported: true,
@@ -176,6 +174,8 @@ export const getAllSeasonsService = async () => {
       registeredUserCount: true,
       createdAt: true,
       updatedAt: true,
+      leagueId: true,
+      categoryId: true,
     },
   });
 };

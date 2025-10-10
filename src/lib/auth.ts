@@ -24,7 +24,41 @@ console.log(
     process.env.BASE_URL || "Using default: http://192.168.1.3:3001"
   }`
 );
-console.log(`   BETTER_AUTH_BASE_PATH: Using hardcoded: /api/auth`);
+const authBasePath = process.env.BETTER_AUTH_BASE_PATH || "/api/auth";
+console.log(`   BETTER_AUTH_BASE_PATH: ${authBasePath}`);
+const defaultTrustedOrigins = [
+  "http://localhost:3030",
+  "http://localhost",
+  "http://localhost:82",
+  "http://localhost:3001",
+  "http://localhost:8081",
+  "http://192.168.1.3:3001",
+  "http://192.168.1.7:3001",
+  "http://192.168.100.53:8081",
+  "exp://192.168.100.53:8081",
+  "http://172.20.10.3:8081",
+  "exp://172.20.10.3:8081",
+  "https://staging.appdevelopers.my",
+];
+const envTrustedOrigins = [
+  ...(process.env.BETTER_AUTH_TRUSTED_ORIGINS || "")
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean),
+];
+const corsAllowedOrigins = (process.env.CORS_ALLOWED_ORIGINS || "")
+  .split(",")
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+const combinedTrustedOrigins = Array.from(
+  new Set([
+    ...defaultTrustedOrigins,
+    ...envTrustedOrigins,
+    ...corsAllowedOrigins,
+    ...getTrustedOrigins(),
+  ])
+);
+console.log("   Trusted origins:", combinedTrustedOrigins);
 
 // Test database connection
 prisma
@@ -121,26 +155,9 @@ export const auth = betterAuth({
     requireEmailVerification: true,
   },
 
-  // baseURL: process.env.BASE_URL || "http://192.168.1.3:3001",
+  basePath: authBasePath,
 
-  // OLD: basePath: process.env.BETTER_AUTH_BASE_PATH || "/auth",
-  // FIX: Updated to match frontend expectations and app.ts routing
-  basePath: "/auth",
-
-  trustedOrigins: [
-    "http://localhost:3030",
-    "http://localhost",
-    "http://localhost:82",
-    "http://localhost:3001",
-    "http://localhost:8081",
-    "http://192.168.1.3:3001", // Added current IP from logs
-    "http://192.168.1.7:3001",
-    "http://192.168.100.53:8081",
-    "exp://192.168.100.53:8081",
-    "http://172.20.10.3:8081",
-    "exp://172.20.10.3:8081",
-    "https://staging.appdevelopers.my",
-  ],
+  trustedOrigins: combinedTrustedOrigins,
 
   // Session configuration for mobile/Expo compatibility
   session: {
