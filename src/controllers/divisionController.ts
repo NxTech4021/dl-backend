@@ -76,6 +76,14 @@ const formatDivision = (division: any) => ({
     division.maxDoublesTeams !== null && division.maxDoublesTeams !== undefined
       ? Number(division.maxDoublesTeams)
       : null,
+  currentSinglesCount:
+    division.currentSinglesCount !== null && division.currentSinglesCount !== undefined
+      ? Number(division.currentSinglesCount)
+      : null,
+  currentDoublesCount:
+    division.currentDoublesCount !== null && division.currentDoublesCount !== undefined
+      ? Number(division.currentDoublesCount)
+      : null,
   autoAssignmentEnabled: division.autoAssignmentEnabled,
   isActive: division.isActiveDivision,
   prizePoolTotal: division.prizePoolTotal
