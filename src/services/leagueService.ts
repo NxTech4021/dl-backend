@@ -113,23 +113,23 @@ interface LeagueData {
 
 
 export const getAllLeagues = async () => {
-  return prisma.league.findMany({
+  const leagues = await prisma.league.findMany({
     include: {
-      sponsorships: {
-        include: { company: true }
-      },
+      sponsorships: { include: { company: true } },
       _count: {
-        select: { seasons: true }
+        select: { seasons: true, memberships: true, categories: true },
       },
-      createdBy: {
-        select: { id: true}
-      }
+      createdBy: { select: { id: true } },
     },
-    orderBy: {
-      createdAt: 'desc'
-    }
+    orderBy: { createdAt: 'desc' },
   });
+
+  const totalMembers = leagues.reduce((sum, league) => sum + (league._count.memberships || 0), 0);
+  const totalCategories = leagues.reduce((sum, league) => sum + (league._count.categories || 0), 0);
+
+  return { leagues, totalMembers, totalCategories };
 };
+
 
 export const getLeagueById = async (id: string) => {
   const league = await prisma.league.findUnique({

@@ -69,8 +69,12 @@ export const updateCategory = async (req: Request, res: Response) => {
     const id = req.params.id;
     const data = req.body;
 
+    if (!id) {
+      return res.status(400).json(new ApiResponse(false, 400, null, "Category ID is required"));
+    }
+
     const updatedCategory = await prisma.category.update({
-      where: { id },
+      where: { id: id as string },
       data
     });
 
@@ -80,22 +84,67 @@ export const updateCategory = async (req: Request, res: Response) => {
     return res.status(500).json(new ApiResponse(false, 500, null, "Error updating category"));
   }
 };
-
-
-/**
- * Delete Category
- */
 export const deleteCategory = async (req: Request, res: Response) => {
   try {
-    const id = req.params.id;
+    const { id } = req.params;
 
-    await prisma.category.delete({
-      where: { id }
+    if (!id) {
+      return res.status(400).json(
+        new ApiResponse(false, 400, null, "Category ID is required")
+      );
+    }
+
+    const existingCategory = await prisma.category.findUnique({
+      where: { id },
     });
 
-    return res.status(200).json(new ApiResponse(true, 200, null, "Category deleted successfully"));
+    if (!existingCategory) {
+      console.log("❌ No category found with ID:", id);
+      return res.status(404).json(
+        new ApiResponse(false, 404, null, "Category not found")
+      );
+    }
+
+    const seasonsUsingCategory = await prisma.season.findMany({
+      where: { categoryId: id },
+    });
+
+    if (seasonsUsingCategory.length > 0) {
+      return res.status(400).json(
+        new ApiResponse(
+          false,
+          400,
+          null,
+          "Cannot delete category: It is being used in Seasons"
+        )
+      );
+    }
+    await prisma.category.delete({
+      where: { id },
+    });
+
+    return res
+      .status(200)
+      .json(new ApiResponse(true, 200, null, "Category deleted successfully"));
   } catch (error: any) {
-    console.error("Error deleting category:", error);
-    return res.status(500).json(new ApiResponse(false, 500, null, "Error deleting category"));
+    console.error("🔥 Error deleting category:", error);
+
+    if (error.code === "P2003") {
+      console.log("❌ Prisma foreign key constraint error:", error);
+      return res.status(400).json(
+        new ApiResponse(
+          false,
+          400,
+          null,
+          "Cannot delete category: It is being used in Seasons"
+        )
+      );
+    }
+
+    console.log("❌ General server error while deleting category");
+    return res
+      .status(500)
+      .json(new ApiResponse(false, 500, null, "Error deleting category"));
   }
 };
+
