@@ -84,77 +84,6 @@ export const createSeasonService = async (data: CreateSeasonData) => {
   });
 };
 
-// export const closeSeasonRegistration = async (id: number) => {
-//   const season = await prisma.season.findUnique({
-//     where: { id },
-//   });
-
-//   if (!season) {
-//     throw new Error(`Season with ID ${id} not found.`);
-//   }
-
-//   if (season.status !== 'REGISTRATION_OPEN') {
-//     throw new Error('Can only close registration for seasons with open registration.');
-//   }
-
-//   return prisma.season.update({
-//     where: { id },
-//     data: { status: 'REGISTRATION_CLOSED' },
-//   });
-// };
-
-// export const startSeason = async (id: number) => {
-//   const season = await prisma.season.findUnique({
-//     where: { id },
-//     include: {
-//       _count: {
-//         select: { registrations: true }
-//       }
-//     }
-//   });
-
-//   if (!season) {
-//     throw new Error(`Season with ID ${id} not found.`);
-//   }
-
-//   if (season.status !== 'REGISTRATION_CLOSED') {
-//     throw new Error('Season must have closed registration before it can start.');
-//   }
-
-//   if (season._count.registrations === 0) {
-//     throw new Error('Cannot start a season with no registrations.');
-//   }
-
-//   const now = new Date();
-//   if (now < season.startDate) {
-//     throw new Error('Cannot start season before the scheduled start date.');
-//   }
-
-//   return prisma.season.update({
-//     where: { id },
-//     data: { status: 'IN_PROGRESS' },
-//   });
-// };
-
-// export const completeSeason = async (id: number) => {
-//   const season = await prisma.season.findUnique({
-//     where: { id },
-//   });
-
-//   if (!season) {
-//     throw new Error(`Season with ID ${id} not found.`);
-//   }
-
-//   if (season.status !== 'IN_PROGRESS') {
-//     throw new Error('Can only complete seasons that are in progress.');
-//   }
-
-//   return prisma.season.update({
-//     where: { id },
-//     data: { status: 'COMPLETED' },
-//   });
-// };
-
 export const getAllSeasonsService = async () => {
   return await prisma.season.findMany({
     orderBy: { startDate: "desc" },
@@ -176,6 +105,7 @@ export const getAllSeasonsService = async () => {
       updatedAt: true,
       leagueId: true,
       categoryId: true,
+      league: { select: { id: true, name: true, sportType: true, gameType: true } },
     },
   });
 };
@@ -196,7 +126,7 @@ export const getSeasonByIdService = async (id: string) => {
           waitlistedUsers: true, 
         },
       },
-      league: true,
+      league: { select: { id: true, name: true, sportType: true, gameType: true  } },
       category: true,
     },
   });
@@ -238,8 +168,6 @@ export const updateSeasonService = async (id: string, data: SeasonUpdateData) =>
       endDate: data.endDate ? new Date(data.endDate) : undefined,
       regiDeadline: data.regiDeadline ? new Date(data.regiDeadline) : undefined,
       entryFee: typeof data.entryFee === "number" ? new Prisma.Decimal(data.entryFee) : undefined,
-      // sportType: data.sportType,
-      // seasonType: data.seasonType,
       description: data.description,
       leagueId: data.leagueId,
       categoryId: data.categoryId,
