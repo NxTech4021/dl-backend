@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import { PrismaClient, TierType, Prisma } from "@prisma/client";
+import { ApiResponse } from "../utils/ApiResponse";
 
 const prisma = new PrismaClient();
 
@@ -74,6 +75,10 @@ export const getSponsorships = async (_req: Request, res: Response) => {
 export const getSponsorshipById = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
+   
+    if (!id) {
+      return res.status(400).json(new ApiResponse(false, 400, null, "Sponsorship ID is required"));
+    }
     const sponsorship = await prisma.sponsorship.findUnique({
       where: { id },
       include: { company: true, league: true, createdBy: true },
@@ -107,6 +112,10 @@ export const updateSponsorship = async (req: Request, res: Response) => {
       dataToUpdate.sponsorRevenue = new Prisma.Decimal(sponsorRevenue);
     }
 
+    if (!id) {
+          return res.status(400).json(new ApiResponse(false, 400, null, "Sponsorship ID is required"));
+        }
+
     const sponsorship = await prisma.sponsorship.update({
       where: { id },
       data: dataToUpdate,
@@ -122,13 +131,25 @@ export const updateSponsorship = async (req: Request, res: Response) => {
   }
 };
 
-// Delete sponsorship by ID
 export const deleteSponsorship = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
+
+    if (!id) {
+      return res
+        .status(400)
+        .json(new ApiResponse(false, 400, null, "Sponsorship ID is required"));
+    }
+
     await prisma.sponsorship.delete({ where: { id } });
-    return res.json({ message: "Sponsorship deleted successfully" });
+
+    return res.json(
+      new ApiResponse(true, 200, null, "Sponsorship deleted successfully")
+    );
   } catch (error: any) {
-    return res.status(500).json({ message: error.message });
+    console.error("Failed to delete sponsorship:", error);
+    return res
+      .status(400)
+      .json(new ApiResponse(false, 400, null, error.message || "Failed to delete sponsorship"));
   }
 };
