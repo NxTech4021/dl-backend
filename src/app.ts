@@ -37,45 +37,23 @@ app.use((req, res, next) => {
   next();
 });
 
-const defaultCorsOrigins = [
-  "http://localhost:3030",
-  "http://localhost:82",
-  "http://localhost",
-  "http://localhost:3001",
-  "http://localhost:8081",
-  "http://192.168.1.3:3001",
-  "http://192.168.1.7:3001",
-  "http://192.168.100.53:8081",
-  "exp://192.168.100.53:8081",
-  "http://172.20.10.3:8081",
-  "exp://172.20.10.3:8081",
-  "https://staging.appdevelopers.my",
-];
-
-const envCorsOrigins = process.env.CORS_ALLOWED_ORIGINS
-  ? process.env.CORS_ALLOWED_ORIGINS.split(",").map((origin) => origin.trim())
-  : [];
-
-const allowedCorsOrigins = [
-  ...new Set([...defaultCorsOrigins, ...envCorsOrigins.filter(Boolean)]),
-];
-
 // Set up CORS
 app.use(
   cors({
-    origin(origin, callback) {
-      if (!origin) {
-        callback(null, true);
-        return;
-      }
-
-      if (allowedCorsOrigins.includes(origin)) {
-        callback(null, true);
-      } else {
-        console.warn(`CORS blocked origin: ${origin}`);
-        callback(new Error(`Origin ${origin} not allowed by CORS`));
-      }
-    },
+    origin: [
+      "http://localhost:3030",
+      "http://localhost:82",
+      "http://localhost",
+      "http://localhost:3001",
+      "http://localhost:8081",
+      "http://192.168.1.3:3001", // Added current IP from logs
+      "http://192.168.1.7:3001",
+      "http://192.168.100.53:8081", // Mobile app origin
+      "exp://192.168.100.53:8081", // Expo development server
+      "http://172.20.10.3:8081", // New mobile app origin
+      "exp://172.20.10.3:8081", // New Expo development server
+      "https://staging.appdevelopers.my",
+    ], // Allow nginx proxy, direct access, and local IP
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allowedHeaders: [
@@ -94,7 +72,7 @@ app.use(
 // According to the official Express documentaticlon for better-auth,
 // the auth handler must be mounted BEFORE express.json().
 // Express v5 requires the {*any} syntax for wildcard routes.
-app.all(["/api/auth/{*any}", "/auth/{*any}"], (req, res, next) => {
+app.all("/api/auth/{*any}", (req, res, next) => {
   console.log(`🔐 Auth request: ${req.method} ${req.path}`);
   try {
     toNodeHandler(auth)(req, res, next);
@@ -109,9 +87,8 @@ app.use(express.json());
 app.use(cookieParser());
 app.use(pino());
 
-// Expose API routes under /api as well as legacy root paths
+// Mount API routes under /api prefix
 app.use("/api", router);
-app.use(router);
 
 // Health check endpoint
 app.get("/health", (req, res) => {
