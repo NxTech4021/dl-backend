@@ -9,13 +9,13 @@ const prisma = new PrismaClient();
 
 export const getLeagues = async (req: Request, res: Response) => {
   try {
-    const leagues = await leagueService.getAllLeagues();
+    const { leagues, totalMembers, totalCategories } = await leagueService.getAllLeagues();
 
     return res.status(200).json(
       new ApiResponse(
         true,
         200,
-        { leagues },
+        { leagues, totalMembers, totalCategories },
         `Found ${leagues.length} league(s)`
       )
     );

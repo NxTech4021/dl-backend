@@ -103,7 +103,16 @@ export const getSeasons = async (req: Request, res: Response) => {
     if (id) {
       const season = await getSeasonByIdService(id);
       if (!season) return res.status(404).json({ error: "Season not found." });
-      return res.status(200).json(season);
+      
+      const result = {
+        ...season,
+        league: season.league
+          ? { id: season.league.id, name: season.league.name }
+          : null,
+      };
+
+      return res.status(200).json(result);
+
     }
 
     if (active === "true") {
