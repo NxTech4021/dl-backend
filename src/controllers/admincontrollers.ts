@@ -68,9 +68,17 @@ export const createSuperadmin = async (req: Request, res: Response) => {
       include: { accounts: true },
     });
 
+     const adminRecord = await prisma.admin.create({
+      data: {
+        userId: newSuperadmin.id,
+        status: "ACTIVE",
+      },
+    });
+
     res.status(201).json({
       message: "Superadmin user created successfully!",
       user: newSuperadmin,
+      admin:adminRecord,
     });
   } catch (error) {
     console.error("Error creating superadmin:", error);

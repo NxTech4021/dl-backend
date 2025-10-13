@@ -4,19 +4,25 @@ import { ApiResponse } from '../utils/ApiResponse';
 
 
 const prisma = new PrismaClient();
-/**
- * Create Category
- */
+
 export const createCategory = async (req: Request, res: Response) => {
   try {
-    const { leagueId, name, genderRestriction, matchFormat, maxPlayers, maxTeams, categoryOrder } = req.body;
+    const { leagueId, name, genderRestriction, matchFormat, maxPlayers, maxTeams, categoryOrder, game_type, gender_category } = req.body;
 
+    console.log(" payload received", req.body)
     if (!leagueId) {
       return res.status(400).json(new ApiResponse(false, 400, null, "League ID is required"));
     }
     if (!name) {
       return res.status(400).json(new ApiResponse(false, 400, null, "Category name is required"));
     }
+
+      const mappedGenderCategory =
+      gender_category === "MEN"
+        ? "MALE"
+        : gender_category === "WOMEN"
+        ? "FEMALE"
+        : "MIXED";
 
     const newCategory = await prisma.category.create({
       data: {
@@ -26,7 +32,9 @@ export const createCategory = async (req: Request, res: Response) => {
         matchFormat,
         maxPlayers,
         maxTeams,
-        categoryOrder
+        categoryOrder,
+        game_type,          
+        gender_category: mappedGenderCategory
       }
     });
 
@@ -37,10 +45,6 @@ export const createCategory = async (req: Request, res: Response) => {
   }
 };
 
-
-/**
- * Get Categories by League
- */
 export const getCategoriesByLeague = async (req: Request, res: Response) => {
   try {
     const leagueId = req.params.leagueId;
@@ -60,22 +64,29 @@ export const getCategoriesByLeague = async (req: Request, res: Response) => {
   }
 };
 
-
-/**
- * Update Category
- */
 export const updateCategory = async (req: Request, res: Response) => {
   try {
     const id = req.params.id;
     const data = req.body;
 
+
     if (!id) {
       return res.status(400).json(new ApiResponse(false, 400, null, "Category ID is required"));
     }
 
+    const mappedGenderCategory =
+      data.gender_category === "MEN"
+        ? "MALE"
+        : data.gender_category === "WOMEN"
+        ? "FEMALE"
+        : data.gender_category;
+
     const updatedCategory = await prisma.category.update({
       where: { id: id as string },
-      data
+        data: {
+        ...data,
+        gender_category: mappedGenderCategory,
+      },
     });
 
     return res.status(200).json(new ApiResponse(true, 200, updatedCategory, "Category updated successfully"));
@@ -84,6 +95,7 @@ export const updateCategory = async (req: Request, res: Response) => {
     return res.status(500).json(new ApiResponse(false, 500, null, "Error updating category"));
   }
 };
+
 export const deleteCategory = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
