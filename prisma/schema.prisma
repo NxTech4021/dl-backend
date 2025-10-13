@@ -45,7 +45,7 @@ model User {
   @@index([status])
   @@index([completedOnboarding])
   @@index([createdAt])
-  @@map("User")
+  @@map("user")
 }
 
 model Admin {

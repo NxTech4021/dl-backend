@@ -6,6 +6,8 @@ import divisionRoutes from "./divisionRoutes";
 import leagueRoutes from "./leagueRoutes";
 import sponsorRoutes from "./sponsorRoutes";
 import categoryRoutes from "./categoryRoutes";
+import pairingRouter from "./pairingRoutes";
+import onboardingRouter from "./onboarding";
 // import matchRoutes from "./matchRoutes";
 
 
@@ -18,12 +20,14 @@ router.get("/health", (req, res) => {
 router.use("/admin", adminRouter);
 
 router.use("/player", playerRouter);
+router.use("/onboarding", onboardingRouter);
 
 router.use("/league", leagueRoutes);
 router.use("/division", divisionRoutes);
 router.use("/season", seasonRouter);
 router.use("/sponsor", sponsorRoutes);
 router.use("/category", categoryRoutes);
+router.use("/pairing", pairingRouter);
 
 // router.use("/match", matchRoutes);
 

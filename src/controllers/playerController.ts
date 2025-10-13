@@ -1063,3 +1063,534 @@ export const uploadProfileImage = async (req: AuthenticatedRequest, res: Respons
     });
   }
 };
+
+// ============================================
+// PHASE 2: PLAYER DISCOVERY & SOCIAL FEATURES
+// ============================================
+
+/**
+ * Search for players by name or username
+ * GET /api/player/search?q=searchTerm&sport=tennis
+ */
+export const searchPlayers = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { q, sport } = req.query;
+    const currentUserId = req.user?.id;
+
+    if (!q || typeof q !== 'string' || q.trim().length < 2) {
+      return res.status(400).json(
+        new ApiResponse(false, 400, null, 'Search query must be at least 2 characters')
+      );
+    }
+
+    const searchTerm = q.trim();
+
+    // Build where clause
+    const whereClause: any = {
+      id: { not: currentUserId }, // Exclude current user
+      role: Role.USER,
+      status: 'active',
+      OR: [
+        { name: { contains: searchTerm, mode: 'insensitive' } },
+        { username: { contains: searchTerm, mode: 'insensitive' } },
+        { displayUsername: { contains: searchTerm, mode: 'insensitive' } },
+      ],
+    };
+
+    const players = await prisma.user.findMany({
+      where: whereClause,
+      select: {
+        id: true,
+        name: true,
+        username: true,
+        displayUsername: true,
+        image: true,
+        bio: true,
+        area: true,
+        gender: true,
+      },
+      take: 20, // Limit results
+    });
+
+    // Fetch sports and ratings for each player
+    const playersWithDetails = await Promise.all(
+      players.map(async (player) => {
+        const responses = await prisma.questionnaireResponse.findMany({
+          where: { userId: player.id, completedAt: { not: null } },
+          include: { result: true },
+        });
+
+        const sports = [...new Set(responses.map((r) => r.sport.toLowerCase()))];
+
+        // Get ratings
+        const skillRatings: any = {};
+        responses.forEach((res) => {
+          if (res.result) {
+            skillRatings[res.sport.toLowerCase()] = {
+              singles: res.result.singles ? res.result.singles / 1000 : null,
+              doubles: res.result.doubles ? res.result.doubles / 1000 : null,
+              rating: (res.result.doubles ?? res.result.singles ?? 0) / 1000,
+            };
+          }
+        });
+
+        return {
+          ...player,
+          sports,
+          skillRatings,
+        };
+      })
+    );
+
+    // Filter by sport if provided
+    const filteredPlayers = sport
+      ? playersWithDetails.filter((p) => p.sports.includes((sport as string).toLowerCase()))
+      : playersWithDetails;
+
+    return res.status(200).json(
+      new ApiResponse(true, 200, filteredPlayers, 'Players found successfully')
+    );
+  } catch (error) {
+    console.error('Error searching players:', error);
+    return res.status(500).json(
+      new ApiResponse(false, 500, null, 'Failed to search players')
+    );
+  }
+};
+
+/**
+ * Get available players for a season (not yet registered, not paired)
+ * GET /api/player/discover/:seasonId
+ */
+export const getAvailablePlayersForSeason = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { seasonId } = req.params;
+    const currentUserId = req.user?.id;
+
+    if (!seasonId) {
+      return res.status(400).json(
+        new ApiResponse(false, 400, null, 'Season ID is required')
+      );
+    }
+
+    // Get already registered player IDs
+    const registrations = await prisma.seasonRegistration.findMany({
+      where: { seasonId, isActive: true },
+      select: { playerId: true, teamId: true },
+    });
+
+    const registeredPlayerIds = registrations
+      .map((r) => r.playerId)
+      .filter((id): id is string => id !== null);
+
+    // Get players in active pairs for this season
+    const activePairs = await prisma.partnership.findMany({
+      where: { seasonId, status: 'ACTIVE' },
+      select: { player1Id: true, player2Id: true },
+    });
+
+    const pairedPlayerIds = [
+      ...activePairs.map((p) => p.player1Id),
+      ...activePairs.map((p) => p.player2Id),
+    ];
+
+    // Combine all unavailable IDs
+    const unavailableIds = [
+      ...new Set([...registeredPlayerIds, ...pairedPlayerIds, currentUserId]),
+    ].filter((id): id is string => id !== undefined);
+
+    // Get available players
+    const availablePlayers = await prisma.user.findMany({
+      where: {
+        id: { notIn: unavailableIds },
+        role: Role.USER,
+        status: 'active',
+      },
+      select: {
+        id: true,
+        name: true,
+        username: true,
+        displayUsername: true,
+        image: true,
+        bio: true,
+        area: true,
+        gender: true,
+      },
+    });
+
+    // Add sports and ratings
+    const playersWithDetails = await Promise.all(
+      availablePlayers.map(async (player) => {
+        const responses = await prisma.questionnaireResponse.findMany({
+          where: { userId: player.id, completedAt: { not: null } },
+          include: { result: true },
+        });
+
+        const sports = [...new Set(responses.map((r) => r.sport.toLowerCase()))];
+
+        const skillRatings: any = {};
+        responses.forEach((res) => {
+          if (res.result) {
+            skillRatings[res.sport.toLowerCase()] = {
+              singles: res.result.singles ? res.result.singles / 1000 : null,
+              doubles: res.result.doubles ? res.result.doubles / 1000 : null,
+              rating: (res.result.doubles ?? res.result.singles ?? 0) / 1000,
+            };
+          }
+        });
+
+        return {
+          ...player,
+          sports,
+          skillRatings,
+        };
+      })
+    );
+
+    return res.status(200).json(
+      new ApiResponse(true, 200, playersWithDetails, 'Available players retrieved successfully')
+    );
+  } catch (error) {
+    console.error('Error getting available players:', error);
+    return res.status(500).json(
+      new ApiResponse(false, 500, null, 'Failed to get available players')
+    );
+  }
+};
+
+/**
+ * Get user's favorites list
+ * GET /api/player/favorites
+ */
+export const getFavorites = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const userId = req.user?.id;
+
+    if (!userId) {
+      return res.status(401).json(
+        new ApiResponse(false, 401, null, 'Unauthorized')
+      );
+    }
+
+    const favorites = await prisma.favorite.findMany({
+      where: { userId },
+      include: {
+        favorited: {
+          select: {
+            id: true,
+            name: true,
+            username: true,
+            displayUsername: true,
+            image: true,
+            bio: true,
+            area: true,
+            gender: true,
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    // Add sports and ratings to each favorited user
+    const favoritesWithDetails = await Promise.all(
+      favorites.map(async (fav) => {
+        const responses = await prisma.questionnaireResponse.findMany({
+          where: { userId: fav.favoritedId, completedAt: { not: null } },
+          include: { result: true },
+        });
+
+        const sports = [...new Set(responses.map((r) => r.sport.toLowerCase()))];
+
+        const skillRatings: any = {};
+        responses.forEach((res) => {
+          if (res.result) {
+            skillRatings[res.sport.toLowerCase()] = {
+              singles: res.result.singles ? res.result.singles / 1000 : null,
+              doubles: res.result.doubles ? res.result.doubles / 1000 : null,
+              rating: (res.result.doubles ?? res.result.singles ?? 0) / 1000,
+            };
+          }
+        });
+
+        return {
+          ...fav.favorited,
+          favoritedAt: fav.createdAt,
+          sports,
+          skillRatings,
+        };
+      })
+    );
+
+    return res.status(200).json(
+      new ApiResponse(true, 200, favoritesWithDetails, 'Favorites retrieved successfully')
+    );
+  } catch (error) {
+    console.error('Error getting favorites:', error);
+    return res.status(500).json(
+      new ApiResponse(false, 500, null, 'Failed to get favorites')
+    );
+  }
+};
+
+/**
+ * Add a user to favorites
+ * POST /api/player/favorites/:userId
+ */
+export const addFavorite = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    const { userId: favoritedId } = req.params;
+
+    if (!userId) {
+      return res.status(401).json(
+        new ApiResponse(false, 401, null, 'Unauthorized')
+      );
+    }
+
+    if (!favoritedId) {
+      return res.status(400).json(
+        new ApiResponse(false, 400, null, 'User ID is required')
+      );
+    }
+
+    if (userId === favoritedId) {
+      return res.status(400).json(
+        new ApiResponse(false, 400, null, 'Cannot favorite yourself')
+      );
+    }
+
+    // Check if user exists
+    const userToFavorite = await prisma.user.findUnique({
+      where: { id: favoritedId, role: Role.USER, status: 'active' },
+    });
+
+    if (!userToFavorite) {
+      return res.status(404).json(
+        new ApiResponse(false, 404, null, 'User not found')
+      );
+    }
+
+    // Check if already favorited
+    const existingFavorite = await prisma.favorite.findUnique({
+      where: {
+        userId_favoritedId: {
+          userId,
+          favoritedId,
+        },
+      },
+    });
+
+    if (existingFavorite) {
+      return res.status(400).json(
+        new ApiResponse(false, 400, null, 'User already in favorites')
+      );
+    }
+
+    // Create favorite
+    const favorite = await prisma.favorite.create({
+      data: {
+        userId,
+        favoritedId,
+      },
+      include: {
+        favorited: {
+          select: {
+            id: true,
+            name: true,
+            username: true,
+            displayUsername: true,
+            image: true,
+          },
+        },
+      },
+    });
+
+    return res.status(201).json(
+      new ApiResponse(true, 201, favorite, 'User added to favorites successfully')
+    );
+  } catch (error) {
+    console.error('Error adding favorite:', error);
+    return res.status(500).json(
+      new ApiResponse(false, 500, null, 'Failed to add favorite')
+    );
+  }
+};
+
+/**
+ * Remove a user from favorites
+ * DELETE /api/player/favorites/:userId
+ */
+export const removeFavorite = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    const { userId: favoritedId } = req.params;
+
+    if (!userId) {
+      return res.status(401).json(
+        new ApiResponse(false, 401, null, 'Unauthorized')
+      );
+    }
+
+    if (!favoritedId) {
+      return res.status(400).json(
+        new ApiResponse(false, 400, null, 'User ID is required')
+      );
+    }
+
+    // Check if favorite exists
+    const existingFavorite = await prisma.favorite.findUnique({
+      where: {
+        userId_favoritedId: {
+          userId,
+          favoritedId,
+        },
+      },
+    });
+
+    if (!existingFavorite) {
+      return res.status(404).json(
+        new ApiResponse(false, 404, null, 'Favorite not found')
+      );
+    }
+
+    // Delete favorite
+    await prisma.favorite.delete({
+      where: {
+        userId_favoritedId: {
+          userId,
+          favoritedId,
+        },
+      },
+    });
+
+    return res.status(200).json(
+      new ApiResponse(true, 200, null, 'User removed from favorites successfully')
+    );
+  } catch (error) {
+    console.error('Error removing favorite:', error);
+    return res.status(500).json(
+      new ApiResponse(false, 500, null, 'Failed to remove favorite')
+    );
+  }
+};
+
+/**
+ * Get public player profile (for viewing other users)
+ * GET /api/player/profile/public/:userId
+ */
+export const getPublicPlayerProfile = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { userId } = req.params;
+    const currentUserId = req.user?.id;
+
+    if (!userId) {
+      return res.status(400).json(
+        new ApiResponse(false, 400, null, 'User ID is required')
+      );
+    }
+
+    // Get player basic info (exclude sensitive data)
+    const player = await prisma.user.findUnique({
+      where: { id: userId, role: Role.USER },
+      select: {
+        id: true,
+        name: true,
+        username: true,
+        displayUsername: true,
+        image: true,
+        bio: true,
+        area: true,
+        gender: true,
+        createdAt: true,
+        // Exclude: email, phoneNumber, etc.
+      },
+    });
+
+    if (!player) {
+      return res.status(404).json(
+        new ApiResponse(false, 404, null, 'Player not found')
+      );
+    }
+
+    // Get sports and ratings
+    const responses = await prisma.questionnaireResponse.findMany({
+      where: { userId, completedAt: { not: null } },
+      include: { result: true },
+      orderBy: { completedAt: 'desc' },
+    });
+
+    const sports = [...new Set(responses.map((r) => r.sport.toLowerCase()))];
+
+    const skillRatings: any = {};
+    responses.forEach((res) => {
+      if (res.result) {
+        skillRatings[res.sport.toLowerCase()] = {
+          singles: res.result.singles ? res.result.singles / 1000 : null,
+          doubles: res.result.doubles ? res.result.doubles / 1000 : null,
+          rating: (res.result.doubles ?? res.result.singles ?? 0) / 1000,
+          confidence: res.result.confidence ?? 'N/A',
+          rd: res.result.rd ?? 0,
+        };
+      }
+    });
+
+    // Get recent matches (last 5)
+    const recentMatches = await prisma.match.findMany({
+      where: {
+        participants: {
+          some: { userId },
+        },
+      },
+      include: {
+        participants: {
+          include: {
+            user: {
+              select: { name: true, username: true, image: true },
+            },
+          },
+        },
+      },
+      orderBy: { matchDate: 'desc' },
+      take: 5,
+    });
+
+    // Count total matches
+    const totalMatches = await prisma.match.count({
+      where: {
+        participants: {
+          some: { userId },
+        },
+      },
+    });
+
+    // Check if current user has favorited this player
+    const isFavorite = currentUserId
+      ? await prisma.favorite.findUnique({
+          where: {
+            userId_favoritedId: {
+              userId: currentUserId,
+              favoritedId: userId,
+            },
+          },
+        })
+      : null;
+
+    const profileData = {
+      ...player,
+      sports,
+      skillRatings,
+      recentMatches,
+      totalMatches,
+      isFavorite: !!isFavorite,
+    };
+
+    return res.status(200).json(
+      new ApiResponse(true, 200, profileData, 'Player profile retrieved successfully')
+    );
+  } catch (error) {
+    console.error('Error getting public player profile:', error);
+    return res.status(500).json(
+      new ApiResponse(false, 500, null, 'Failed to get player profile')
+    );
+  }
+};
