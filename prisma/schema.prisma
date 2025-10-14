@@ -171,7 +171,7 @@ model League {
   createdById      String?    
   createdBy        Admin?       @relation(fields: [createdById], references: [id])
 
-  seasons       Season[]
+  seasons       Season[]        @relation("LeagueToSeason")
   sponsorships  Sponsorship[]
   memberships   LeagueMembership[]
   categories    Category[]
@@ -309,8 +309,7 @@ model Season {
   promoCodes            PromoCode[]       @relation("SeasonPromoCodes") 
   withdrawalRequests    WithdrawalRequest[] 
 
-  leagueId        String
-  league          League    @relation(fields: [leagueId], references: [id])
+  leagues         League[]    @relation("LeagueToSeason")
 
   categoryId      String
   category        Category  @relation(fields: [categoryId], references: [id])
