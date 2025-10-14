@@ -41,77 +41,6 @@ interface LeagueData {
   existingSponsorshipIds?: string[];
 }
 
-// LeagueSport operations
-// export const addSportToLeague = async ({ leagueId, sportId, isActive, sortOrder }:{
-//   leagueId: number; sportId: number; isActive?: boolean; sortOrder?: number;
-// }) => {
-//   const league = await prisma.league.findUnique({ where: { id: leagueId } });
-//   if (!league) throw new Error(`League with ID ${leagueId} not found.`);
-//   const sport = await prisma.sport.findUnique({ where: { id: sportId } });
-//   if (!sport) throw new Error(`Sport with ID ${sportId} not found.`);
-
-//   const exists = await prisma.leagueSport.findUnique({
-//     where: { leagueId_sportId: { leagueId, sportId } }
-//   });
-//   if (exists) throw new Error(`Sport "${sport.name}" already added to "${league.name}".`);
-
-//   return prisma.leagueSport.create({
-//     data: { leagueId, sportId, isActive: isActive ?? true, sortOrder: sortOrder ?? 0 },
-//     include: { sport: true }
-//   });
-// };
-
-// export const getSportsAtLeague = async (leagueId: number, includeInactive = false) => {
-//   return prisma.leagueSport.findMany({
-//     where: { leagueId, ...(includeInactive ? {} : { isActive: true }) },
-//     include: {
-//       sport: { select: { id: true, name: true, description: true, pic_url: true, isActive: true } },
-//       _count: { select: { seasons: true } }
-//     },
-//     orderBy: { sortOrder: 'asc' }
-//   });
-// };
-
-// export const updateLeagueSport = async (
-//   leagueId: number,
-//   sportId: number,
-//   data: { isActive?: boolean; sortOrder?: number }
-// ) => {
-//   const ls = await prisma.leagueSport.findUnique({
-//     where: { leagueId_sportId: { leagueId, sportId } },
-//     include: { league: { select: { name: true } }, sport: { select: { name: true } } }
-//   });
-//   if (!ls) throw new Error(`Sport ${sportId} not offered at league ${leagueId}.`);
-
-//   if (data.isActive === false) {
-//     const activeSeasons = await prisma.season.count({
-//       where: { leagueSportId: ls.id, status: { in: ['UPCOMING','REGISTRATION_OPEN','IN_PROGRESS'] } }
-//     });
-//     if (activeSeasons > 0) {
-//       throw new Error(`Cannot deactivate ${ls.sport.name} at ${ls.league.name}; ${activeSeasons} active season(s).`);
-//     }
-//   }
-
-//   return prisma.leagueSport.update({
-//     where: { leagueId_sportId: { leagueId, sportId } },
-//     data,
-//     include: { sport: true }
-//   });
-// };
-
-// export const removeSportFromLeague = async (leagueId: number, sportId: number) => {
-//   const ls = await prisma.leagueSport.findUnique({
-//     where: { leagueId_sportId: { leagueId, sportId } },
-//     include: { _count: { select: { seasons: true } }, sport: true, league: true }
-//   });
-//   if (!ls) throw new Error(`Sport ${sportId} not offered at league ${leagueId}.`);
-//   if (ls._count.seasons > 0) {
-//     throw new Error(`Cannot remove ${ls.sport.name} from ${ls.league.name}; ${ls._count.seasons} season(s) exist.`);
-//   }
-//   return prisma.leagueSport.delete({ where: { leagueId_sportId: { leagueId, sportId } } });
-// };
-
-
 export const getAllLeagues = async () => {
   const leagues = await prisma.league.findMany({
     include: {
@@ -154,28 +83,17 @@ export const getLeagueById = async (id: string) => {
           },
         },
       },
-
-      // Include categories for this league
       categories: true,
-
-      // Include seasons under this league
       seasons: {
         include: {
-          // optionally include related divisions or matches
           divisions: true,
         },
       },
-
-      // Include admin info
       createdBy: {
         select: {
           id: true,
-          // name: true,
-          // email: true,
         },
       },
-
-      // Count totals
       _count: {
         select: {
           seasons: true,
@@ -338,49 +256,3 @@ export const deleteLeague = async (id: string) => {
     where: { id }
   });
 };
-
-
-/**
- * Get leagues offering a specific sport
- * Public endpoint - user searches by sport
- */
-// export const getLeaguesBySport = async (sportId: number, location?: string) => {
-//   const where: any = {
-//     leagueSports: {
-//       some: {
-//         sportId: sportId,
-//         isActive: true
-//       }
-//     }
-//   };
-
-//   // Optionally filter by location
-//   if (location) {
-//     where.location = { contains: location, mode: 'insensitive' };
-//   }
-
-//   return prisma.league.findMany({
-//     where,
-//     include: {
-//       leagueSports: {
-//         where: {
-//           sportId: sportId,
-//           isActive: true
-//         },
-//         include: {
-//           sport: true,
-//           _count: {
-//             select: { seasons: true }
-//           }
-//         }
-//       },
-//       _count: {
-//         select: { seasons: true }
-//       }
-//     },
-//     orderBy: {
-//       // Later add smart sorting - user's location first (maybe)
-//       createdAt: 'desc'
-//     }
-//   });
-// };

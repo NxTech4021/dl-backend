@@ -21,7 +21,7 @@ export const createSeason = async (req: Request, res: Response) => {
     regiDeadline,
     description,
     entryFee,
-    leagueId,
+    leagueIds, 
     categoryId,
     isActive,
     paymentRequired,
@@ -29,11 +29,18 @@ export const createSeason = async (req: Request, res: Response) => {
     withdrawalEnabled,
   } = req.body;
 
-  // Basic validation for required fields
-  if (!name || !startDate || !endDate || !entryFee || !leagueId || !categoryId) {
+  // Updated validation for required fields
+  if (!name || !startDate || !endDate || !entryFee || !leagueIds || !categoryId) {
     return res.status(400).json({
       success: false,
       error: "Missing required fields",
+    });
+  }
+
+  if (!Array.isArray(leagueIds) || leagueIds.length === 0) {
+    return res.status(400).json({
+      success: false,
+      error: "At least one league must be specified",
     });
   }
 
@@ -45,7 +52,7 @@ export const createSeason = async (req: Request, res: Response) => {
       regiDeadline,
       description,
       entryFee,
-      leagueId,
+      leagueIds, // Pass array of league IDs
       categoryId,
       isActive: isActive ?? false,
       paymentRequired: paymentRequired ?? false,
@@ -63,7 +70,6 @@ export const createSeason = async (req: Request, res: Response) => {
     console.error("Error creating season:", error);
 
     if (error instanceof Prisma.PrismaClientKnownRequestError) {
-      // Handle unique constraint violations
       if (error.code === "P2002") {
         return res.status(409).json({
           success: false,
@@ -71,11 +77,10 @@ export const createSeason = async (req: Request, res: Response) => {
         });
       }
 
-      // Handle foreign key constraints
       if (error.code === "P2003") {
         return res.status(400).json({
           success: false,
-          error: "Invalid leagueId or categoryId provided",
+          error: "One or more league IDs or category ID is invalid",
         });
       }
     }
@@ -87,7 +92,6 @@ export const createSeason = async (req: Request, res: Response) => {
       });
     }
 
-    // Generic error handler
     return res.status(500).json({
       success: false,
       error: "Failed to create season. Please try again later.",
@@ -103,16 +107,16 @@ export const getSeasons = async (req: Request, res: Response) => {
     if (id) {
       const season = await getSeasonByIdService(id);
       if (!season) return res.status(404).json({ error: "Season not found." });
-      
+    
       const result = {
         ...season,
-        league: season.league
-          ? { id: season.league.id, name: season.league.name }
-          : null,
+        leagues: season.leagues?.map(league => ({
+          id: league.id,
+          name: league.name
+        })) ?? []
       };
 
       return res.status(200).json(result);
-
     }
 
     if (active === "true") {
@@ -128,14 +132,14 @@ export const getSeasons = async (req: Request, res: Response) => {
     console.error("Error fetching seasons:", error);
 
     if (error instanceof Prisma.PrismaClientValidationError) {
-      return res
-        .status(400)
-        .json({ error: "Invalid query parameters or field selection." });
+      return res.status(400).json({ 
+        error: "Invalid query parameters or field selection." 
+      });
     }
 
-    res
-      .status(500)
-      .json({ error: "Failed to fetch seasons. Try again later." });
+    res.status(500).json({ 
+      error: "Failed to fetch seasons. Try again later." 
+    });
   }
 };
 
@@ -236,10 +240,9 @@ export const deleteSeason = async (req: Request, res: Response) => {
   }
 };
 
-// POST /api/withdrawals (User submits a request)
+
 export const submitWithdrawalRequest = async (req: any, res: any) => {
-  // NOTE: Replace req.user.id with your actual authenticated user retrieval method
-  const userId = req.body.userId || "placeholder-user-id"; // MUST be obtained from auth
+  const userId = req.body.userId
   const { seasonId, reason } = req.body;
 
   if (!seasonId || !reason || !userId) {
@@ -265,7 +268,7 @@ export const submitWithdrawalRequest = async (req: any, res: any) => {
         seasonId,
         userId,
         reason,
-        status: "PENDING", // Uses the WithdrawalStatus enum
+        status: "PENDING",
       },
     });
     res.status(201).json(newRequest);
@@ -280,11 +283,10 @@ export const submitWithdrawalRequest = async (req: any, res: any) => {
   }
 };
 
-// PUT /api/withdrawals/:id/process (Admin processes the request)
+
 export const processWithdrawalRequest = async (req: any, res: any) => {
   const { id } = req.params;
-  // NOTE: Replace req.admin.id with your actual authenticated admin ID retrieval method
-  const processedByAdminId = req.body.adminId || "placeholder-admin-id"; // MUST be obtained from auth
+  const processedByAdminId = req.body.adminId || "placeholder-admin-id";
   const { status } = req.body; // Expects 'APPROVED' or 'REJECTED'
 
   if (!["APPROVED", "REJECTED"].includes(status) || !processedByAdminId) {
@@ -305,7 +307,7 @@ export const processWithdrawalRequest = async (req: any, res: any) => {
       },
     });
 
-    // NOTE: Here you would add business logic for refunds/waitlist promotion, etc.
+    // NOTE: TODO  add business logic for refunds/waitlist promotion, etc.
 
     res.status(200).json(updatedRequest);
   } catch (error: any) {

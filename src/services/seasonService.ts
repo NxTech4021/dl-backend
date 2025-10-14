@@ -10,7 +10,7 @@ interface CreateSeasonData {
   regiDeadline?: string | Date;
   description?: string;
   entryFee: string | number;
-  leagueId: string;
+  leagueIds: string[];
   categoryId: string;
   isActive?: boolean;
   paymentRequired?: boolean;
@@ -26,7 +26,7 @@ interface SeasonUpdateData {
   regiDeadline?: string;
   entryFee?: number;
   description?: string;
-  leagueId?: string;
+  leagueIds?: string[];
   categoryId?: string;
   isActive?: boolean;
   status?: "UPCOMING" | "ACTIVE" | "FINISHED" | "CANCELLED";
@@ -48,7 +48,7 @@ export const createSeasonService = async (data: CreateSeasonData) => {
     regiDeadline,
     description,
     entryFee,
-    leagueId,
+    leagueIds,
     categoryId,
     isActive,
     paymentRequired,
@@ -73,14 +73,20 @@ export const createSeasonService = async (data: CreateSeasonData) => {
       regiDeadline: regiDeadline ? new Date(regiDeadline) : new Date(endDate),
       entryFee: new Prisma.Decimal(entryFee),
       description,
-      leagueId,
       categoryId,
       isActive: isActive ?? false,
       paymentRequired: paymentRequired ?? false,
       promoCodeSupported: promoCodeSupported ?? false,
       withdrawalEnabled: withdrawalEnabled ?? false,
       status: isActive ? "ACTIVE" : "UPCOMING",
+      leagues: {
+        connect: leagueIds.map(id => ({ id }))  
+      }
     },
+      include: {
+      leagues: true,
+      category: true
+    }
   });
 };
 
@@ -103,9 +109,10 @@ export const getAllSeasonsService = async () => {
       registeredUserCount: true,
       createdAt: true,
       updatedAt: true,
-      leagueId: true,
       categoryId: true,
-      league: { select: { id: true, name: true, sportType: true, gameType: true } },
+      leagues: { 
+        select: { id: true, name: true, sportType: true, gameType: true } 
+      },
     },
   });
 };
@@ -126,7 +133,9 @@ export const getSeasonByIdService = async (id: string) => {
           waitlistedUsers: true, 
         },
       },
-      league: { select: { id: true, name: true, sportType: true, gameType: true  } },
+       leagues: { 
+        select: { id: true, name: true, sportType: true, gameType: true } 
+      },
       category: true,
     },
   });
@@ -136,7 +145,7 @@ export const getActiveSeasonService = async () => {
     where: { isActive: true, status: "ACTIVE" },
     include: {
       divisions: { select: { id: true, name: true } },
-      league: { select: { id: true, name: true } },
+      leagues: { select: { id: true, name: true } },
       category: { select: { id: true, name: true } },
     },
   });
@@ -169,7 +178,9 @@ export const updateSeasonService = async (id: string, data: SeasonUpdateData) =>
       regiDeadline: data.regiDeadline ? new Date(data.regiDeadline) : undefined,
       entryFee: typeof data.entryFee === "number" ? new Prisma.Decimal(data.entryFee) : undefined,
       description: data.description,
-      leagueId: data.leagueId,
+      leagues: data.leagueIds ? {
+        set: data.leagueIds.map(id => ({ id })) 
+      } : undefined,
       categoryId: data.categoryId,
       isActive: typeof data.isActive !== "undefined" ? data.isActive : undefined,
       status: data.status ?? (data.isActive ? "ACTIVE" : undefined),
@@ -177,6 +188,10 @@ export const updateSeasonService = async (id: string, data: SeasonUpdateData) =>
       promoCodeSupported: data.promoCodeSupported,
       withdrawalEnabled: data.withdrawalEnabled,
     },
+    include: {
+      leagues: true,
+      category: true
+    }
   });
 
   return updatedSeason;
