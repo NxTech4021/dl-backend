@@ -8,6 +8,8 @@ import {
   updateSeasonStatusService,
   updateSeasonService,
   deleteSeasonService,
+  registerMembershipService,
+  assignDivisionService,
 } from "../services/seasonService";
 
 
@@ -22,7 +24,7 @@ export const createSeason = async (req: Request, res: Response) => {
     description,
     entryFee,
     leagueIds, 
-    categoryId,
+    categoryIds,
     isActive,
     paymentRequired,
     promoCodeSupported,
@@ -30,7 +32,7 @@ export const createSeason = async (req: Request, res: Response) => {
   } = req.body;
 
   // Updated validation for required fields
-  if (!name || !startDate || !endDate || !entryFee || !leagueIds || !categoryId) {
+  if (!name || !startDate || !endDate || !entryFee || !leagueIds || !categoryIds) {
     return res.status(400).json({
       success: false,
       error: "Missing required fields",
@@ -52,8 +54,8 @@ export const createSeason = async (req: Request, res: Response) => {
       regiDeadline,
       description,
       entryFee,
-      leagueIds, // Pass array of league IDs
-      categoryId,
+      leagueIds, 
+      categoryIds,
       isActive: isActive ?? false,
       paymentRequired: paymentRequired ?? false,
       promoCodeSupported: promoCodeSupported ?? false,
@@ -320,5 +322,106 @@ export const processWithdrawalRequest = async (req: any, res: any) => {
       }
     }
     res.status(500).json({ error: "Failed to process withdrawal request." });
+  }
+};
+
+
+export const registerPlayerToSeason = async (req: Request, res: Response) => {
+  const { userId, seasonId } = req.body;
+
+  console.log("DEBUG: Incoming request body:", req.body);
+
+  try {
+    if (!userId || !seasonId) {
+      return res.status(400).json({ error: "userId and seasonId are required." });
+    }
+
+    const membership = await registerMembershipService({ userId, seasonId });
+
+    const result = {
+      ...membership,
+      user: { id: membership.user.id, name: membership.user.name },
+      season: { id: membership.season.id, name: membership.season.name },
+      division: membership.division
+        ? { id: membership.division.id, name: membership.division.name }
+        : null,
+    };
+
+    res.status(201).json({ message: "User registered successfully", membership: result });
+  } catch (error: any) {
+    console.error("Error registering to season:", error);
+    res.status(400).json({ error: error.message });
+  }
+};
+
+export const assignPlayerToDivision = async (req: Request, res: Response) => {
+  const { membershipId, divisionId } = req.body;
+
+  try {
+    if (!membershipId || !divisionId) {
+      return res.status(400).json({ error: "membershipId and divisionId are required." });
+    }
+
+    const membership = await assignDivisionService({ membershipId, divisionId });
+
+    const result = {
+      ...membership,
+      user: {
+        id: membership.user.id,
+        name: membership.user.name
+      },
+      season: {
+        id: membership.season.id,
+        name: membership.season.name
+      },
+      division: {
+        id: membership.division.id,
+        name: membership.division.name
+      }
+    };
+
+    res.status(200).json({ message: "Player assigned to division successfully", membership: result });
+  } catch (error: any) {
+    console.error("Error assigning player to division:", error);
+    res.status(400).json({ error: error.message });
+  }
+};
+
+
+
+export const updatePaymentStatus = async (req: Request, res: Response) => {
+  const { membershipId, paymentStatus } = req.body;
+
+  try {
+    if (!membershipId || !paymentStatus) {
+      return res.status(400).json({ error: "membershipId and paymentStatus are required." });
+    }
+
+    if (!Object.values(PaymentStatus).includes(paymentStatus)) {
+      return res.status(400).json({ error: "Invalid paymentStatus value." });
+    }
+
+    const membership = await updatePaymentStatusService({ membershipId, paymentStatus });
+
+    const result = {
+      ...membership,
+      user: {
+        id: membership.user.id,
+        name: membership.user.name
+      },
+      season: {
+        id: membership.season.id,
+        name: membership.season.name
+      },
+      division: {
+        id: membership.division.id,
+        name: membership.division.name
+      }
+    };
+
+    res.status(200).json({ message: "Payment status updated", membership: result });
+  } catch (error: any) {
+    console.error("Error updating payment status:", error);
+    res.status(400).json({ error: error.message });
   }
 };

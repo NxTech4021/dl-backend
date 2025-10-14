@@ -1,4 +1,4 @@
-import { PrismaClient, Prisma } from '@prisma/client';
+import { PrismaClient, Prisma, PaymentStatus } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
@@ -11,7 +11,7 @@ interface CreateSeasonData {
   description?: string;
   entryFee: string | number;
   leagueIds: string[];
-  categoryId: string;
+  categoryIds: string[];
   isActive?: boolean;
   paymentRequired?: boolean;
   promoCodeSupported?: boolean;
@@ -27,7 +27,7 @@ interface SeasonUpdateData {
   entryFee?: number;
   description?: string;
   leagueIds?: string[];
-  categoryId?: string;
+  categoryIds?: string[];
   isActive?: boolean;
   status?: "UPCOMING" | "ACTIVE" | "FINISHED" | "CANCELLED";
   paymentRequired?: boolean;
@@ -40,6 +40,22 @@ interface StatusUpdate {
   isActive?: boolean;
 }
 
+interface RegisterSeasonMembershipData {
+  userId: string;
+  seasonId: string;
+  divisionId?: string;
+}
+
+interface UpdatePaymentStatusData {
+  membershipId: string;
+  paymentStatus: PaymentStatus;
+}
+
+interface AssignDivisionData {
+  membershipId: string;
+  divisionId: string;
+}
+
 export const createSeasonService = async (data: CreateSeasonData) => {
   const {
     name,
@@ -49,7 +65,7 @@ export const createSeasonService = async (data: CreateSeasonData) => {
     description,
     entryFee,
     leagueIds,
-    categoryId,
+    categoryIds,
     isActive,
     paymentRequired,
     promoCodeSupported,
@@ -73,7 +89,6 @@ export const createSeasonService = async (data: CreateSeasonData) => {
       regiDeadline: regiDeadline ? new Date(regiDeadline) : new Date(endDate),
       entryFee: new Prisma.Decimal(entryFee),
       description,
-      categoryId,
       isActive: isActive ?? false,
       paymentRequired: paymentRequired ?? false,
       promoCodeSupported: promoCodeSupported ?? false,
@@ -81,6 +96,9 @@ export const createSeasonService = async (data: CreateSeasonData) => {
       status: isActive ? "ACTIVE" : "UPCOMING",
       leagues: {
         connect: leagueIds.map(id => ({ id }))  
+      },
+       categories: {
+        connect: categoryIds.map(id => ({ id }))
       }
     },
       include: {
@@ -109,7 +127,9 @@ export const getAllSeasonsService = async () => {
       registeredUserCount: true,
       createdAt: true,
       updatedAt: true,
-      categoryId: true,
+      categories: {
+        select: { id: true, name: true }
+      },
       leagues: { 
         select: { id: true, name: true, sportType: true, gameType: true } 
       },
@@ -136,7 +156,9 @@ export const getSeasonByIdService = async (id: string) => {
        leagues: { 
         select: { id: true, name: true, sportType: true, gameType: true } 
       },
-      category: true,
+      categories: {   
+        select: { id: true, name: true }
+      },
     },
   });
 };
@@ -181,7 +203,9 @@ export const updateSeasonService = async (id: string, data: SeasonUpdateData) =>
       leagues: data.leagueIds ? {
         set: data.leagueIds.map(id => ({ id })) 
       } : undefined,
-      categoryId: data.categoryId,
+       categories: data.categoryIds ? {
+        set: data.categoryIds.map(id => ({ id }))
+      } : undefined,
       isActive: typeof data.isActive !== "undefined" ? data.isActive : undefined,
       status: data.status ?? (data.isActive ? "ACTIVE" : undefined),
       paymentRequired: data.paymentRequired,
@@ -219,4 +243,93 @@ export const deleteSeasonService = async (seasonId: string) => {
   return prisma.season.delete({
     where: { id: seasonId },
   });
+};
+
+export const registerMembershipService = async (data: RegisterSeasonMembershipData) => {
+  const { userId, seasonId, divisionId } = data;
+
+  const season = await prisma.season.findUnique({ where: { id: seasonId } });
+ 
+  if (!season) throw new Error("Season not found");
+ 
+  if (!season.isActive) throw new Error("Season is not active for registration");
+ 
+  if (season.regiDeadline && new Date() > season.regiDeadline)
+    throw new Error("Registration deadline has passed");
+
+  const existingMembership = await prisma.seasonMembership.findFirst({
+    where: { userId, seasonId },
+  });
+  if (existingMembership) throw new Error("User already registered for this season");
+
+   const membershipData: any = { 
+    status: "PENDING",
+    paymentStatus: season.paymentRequired ? PaymentStatus.PENDING : PaymentStatus.COMPLETED,
+    
+    user: {
+      connect: { id: userId }, 
+    },
+    season: {
+      connect: { id: seasonId },
+    },
+    
+    // Note: 'division' field is deliberately omitted here if divisionId is null
+  };
+
+  // 2. Conditionally add the division relation if divisionId is present
+  if (divisionId) {
+      membershipData.division = {
+          connect: { id: divisionId }
+      };
+  }
+
+  // 3. Create the record
+  const membership = await prisma.seasonMembership.create({
+    data: membershipData as Prisma.SeasonMembershipCreateInput, // Use the correct type here for safety
+    include: {
+      user: true,
+      season: true,
+      division: true,
+    },
+  });
+
+
+  // Increment registeredUserCount
+  await prisma.season.update({
+    where: { id: seasonId },
+    data: { registeredUserCount: { increment: 1 } },
+  });
+
+  return membership;
+};
+
+
+
+export const updatePaymentStatusService = async (data: UpdatePaymentStatusData) => {
+  const { membershipId, paymentStatus } = data;
+
+  const membership = await prisma.seasonMembership.update({
+    where: { id: membershipId },
+    data: { paymentStatus },
+    include: {
+      user: true,
+      season: true,
+      division: true,
+    },
+  });
+
+  return membership;
+};
+
+export const assignDivisionService = async (data: AssignDivisionData) => {
+  const { membershipId, divisionId } = data;
+
+  // Update membership with division
+  const membership = await prisma.seasonMembership.update({
+    where: { id: membershipId },
+    data: { divisionId },
+    include: { user: true, season: true, division: true },
+  });
+
+  return membership;
 };

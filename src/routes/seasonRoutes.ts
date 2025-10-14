@@ -5,7 +5,9 @@ import {
   createSeason, 
   updateSeason, 
   updateSeasonStatus,
-  deleteSeason 
+  deleteSeason, 
+  registerPlayerToSeason,
+  assignPlayerToDivision,
 } from '../controllers/seasonController';
 
 const seasonRoutes = Router();
@@ -20,6 +22,13 @@ seasonRoutes.put('/:id', updateSeason);
 seasonRoutes.put('/:id/status', updateSeasonStatus);
 
 seasonRoutes.delete('/:id', deleteSeason);
+
+// Register Player to Season
+seasonRoutes.post('/player/register', registerPlayerToSeason);
+
+// Assign player to Division
+seasonRoutes.post('/player/assign-division', assignPlayerToDivision);
+
 
 export default seasonRoutes;
 
