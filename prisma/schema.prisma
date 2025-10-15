@@ -65,7 +65,6 @@ model Admin {
   divisionsCreated        Division[]             @relation("DivisionCreatedBy")
   divisionsUpdated        Division[]             @relation("DivisionUpdatedBy")
   divisionAssignments     DivisionAssignment[]   @relation("AssignmentsByAdmin")
-  leagueInvites LeagueInvite[]
 }
 
 model AdminInviteToken {
@@ -175,14 +174,12 @@ model League {
   memberships   LeagueMembership[]
   categories    Category[]
   divisions     Division[]
-  invites       LeagueInvite[]
 
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
   @@index([location])
   @@index([status])
 }
-
 
 model LeagueMembership {
   id        String   @id @default(cuid())
@@ -198,47 +195,23 @@ model LeagueMembership {
   @@index([userId])
 }
 
-model LeagueInvite {
-  id          String   @id @default(cuid())
-  leagueId    String
-  email       String
-  token       String   @unique
-  invitedById String?  
-  accepted    Boolean  @default(false)
-  createdAt   DateTime @default(now())
-
-  league      League   @relation(fields: [leagueId], references: [id])
-  invitedBy   Admin?    @relation(fields: [invitedById], references: [id])
-
-  @@index([leagueId])
-  @@index([email])
-}
-
 model Category {
-  id                  String              @id @default(cuid())  // 'category_id'
+  id                  String              @id @default(cuid())  
   leagueId            String?            
   name                String?              @db.VarChar(255)    
   
   // Restrictions and Format
   genderRestriction   GenderRestriction   @default(OPEN)       // 'gender_restriction' enum
   matchFormat         String?                                  // 'match_format' e.g., Best of 3 sets
-  maxPlayers          Int?                                     // 'max_players' (for individual/singles)
-  maxTeams            Int?                                     // 'max_teams' (for doubles/team events)
   game_type           GameType?
   gender_category     GenderType?  
   isActive            Boolean             @default(true)       // 'is_active'
   categoryOrder       Int                 @default(0)          // 'category_order' for display
-
   createdAt           DateTime            @default(now())
   updatedAt           DateTime            @updatedAt
- 
-  league              League?              @relation(fields: [leagueId], references: [id])
+  leagues             League[]
   seasons             Season[] 
-
-  //seasonCategories    SeasonCategory[]
-  
-  // Indexes for efficient querying
-  
+ 
   @@index([leagueId])
   @@index([isActive])
 }
@@ -295,7 +268,7 @@ model Season {
   registeredUserCount   Int               @default(0)
 
   //Bools
-  status          SeasonStatus   @default(UPCOMING)    
+  status                SeasonStatus      @default(UPCOMING)    
   isActive              Boolean           @default(false)
   paymentRequired       Boolean           @default(false)
   promoCodeSupported    Boolean           @default(false)
@@ -303,17 +276,15 @@ model Season {
 
   
   //Relations
-  divisions       Division[]
-  memberships     SeasonMembership[]
-  promoCodes            PromoCode[]       @relation("SeasonPromoCodes") 
+  divisions             Division[]
+  memberships           SeasonMembership[]
+  promoCodes            PromoCode[]           @relation("SeasonPromoCodes") 
   withdrawalRequests    WithdrawalRequest[] 
-  categories      Category[]
-  leagues         League[]    @relation("LeagueToSeason")
+  categories            Category[]
+  leagues               League[]              @relation("LeagueToSeason")
+  waitlistId            String?
+  waitlist              Waitlist?             @relation
   
-  waitlistId             String?
-   waitlist              Waitlist?         @relation
-  
- 
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
   
@@ -348,14 +319,13 @@ model WaitlistUser {
 
 model PromoCode {
   id              String            @id @default(cuid())
-  code            String            @unique // e.g., "OFF50"
-  description     String?           // For internal clarity
-  discountValue   Decimal           @db.Decimal(10, 2) // e.g., 50.00 (dollars or percentage)
+  code            String            @unique 
+  description     String?         
+  discountValue   Decimal           @db.Decimal(10, 2) 
   isPercentage    Boolean           @default(false) // True for %, false for fixed amount
   isActive        Boolean           @default(true)
-  expiresAt       DateTime?         // Optional expiration date
+  expiresAt       DateTime?         
 
-  // Many-to-Many relation to Season
   seasons         Season[]          @relation("SeasonPromoCodes")
 
   createdAt       DateTime          @default(now())
@@ -379,23 +349,17 @@ model WithdrawalRequest {
 }
 
 model Division {
-  id                      String   @id @default(cuid())                 // division_id
-  seasonId                String                                       // season_id
-  season                  Season   @relation(fields: [seasonId], references: [id], onDelete: Cascade)
-
-  leagueId                String                                       // league_id
-  league                  League   @relation(fields: [leagueId], references: [id], onDelete: Cascade)
-
-  name                    String                                       // division_name
+  id                      String   @id @default(cuid())               
+  name                    String                                    
   description             String?
-  level                   DivisionLevel?                               // division_level
+  level                   DivisionLevel?                              
   gameType                GameType                                     // game_type
-  genderCategory          Gender?                                      // gender_category
+  genderCategory          GenderType?                                      // gender_category
 
   // capacities
   maxSinglesPlayers       Int?
   maxDoublesTeams         Int?
-
+ 
   // denormalized counts
   currentSinglesCount     Int?      @default(0)
   currentDoublesCount     Int?      @default(0)
@@ -419,7 +383,12 @@ model Division {
   // Relations
   matches                 Match[]
   assignments             DivisionAssignment[]                         // Player assignments tracking
-  seasonMemberships       SeasonMembership[]   @relation("SeasonMembershipDivision")
+  seasonMemberships       SeasonMembership[]         @relation("SeasonMembershipDivision")
+  seasonId                String                                      
+  season                  Season   @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  leagueId                String                                     
+  league                  League   @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+
   
   createdAt               DateTime  @default(now())
   updatedAt               DateTime  @updatedAt
@@ -655,12 +624,6 @@ enum SportType {
   PADDLE
   PICKLEBALL
   TENNIS
-}
-
-enum Gender {
-  MALE
-  FEMALE
-  MIXED
 }
 
 enum TierType{
