@@ -7,6 +7,8 @@ import {
   cancelPairRequest,
   getPairRequests,
   getUserPartnerships,
+  dissolvePartnership,
+  getActivePartnership,
 } from '../controllers/pairingController';
 
 const pairingRouter = Router();
@@ -23,5 +25,7 @@ pairingRouter.delete('/request/:requestId', cancelPairRequest);
 
 // Partnership routes
 pairingRouter.get('/partnerships', getUserPartnerships);
+pairingRouter.post('/partnership/:partnershipId/dissolve', dissolvePartnership);
+pairingRouter.get('/partnership/active/:seasonId', getActivePartnership);
 
 export default pairingRouter;
