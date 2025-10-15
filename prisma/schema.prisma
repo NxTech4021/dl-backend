@@ -179,7 +179,7 @@ model League {
   createdById String?
   createdBy   Admin?  @relation(fields: [createdById], references: [id])
 
-  seasons      Season[]
+  seasons      Season[] @relation("LeagueToSeason")
   sponsorships Sponsorship[]
   memberships  LeagueMembership[]
   categories   Category[]
@@ -233,6 +233,8 @@ model Category {
   matchFormat       String? // 'match_format' e.g., Best of 3 sets
   maxPlayers        Int? // 'max_players' (for individual/singles)
   maxTeams          Int? // 'max_teams' (for doubles/team events)
+  game_type         GameType?
+  gender_category   GenderType?
 
   isActive      Boolean @default(true) // 'is_active'
   categoryOrder Int     @default(0) // 'category_order' for display
@@ -320,8 +322,7 @@ model Season {
   partnerships  Partnership[]
   registrations SeasonRegistration[]
 
-  leagueId String
-  league   League @relation(fields: [leagueId], references: [id])
+  leagues League[] @relation("LeagueToSeason")
 
   categoryId String
   category   Category @relation(fields: [categoryId], references: [id])
@@ -621,6 +622,12 @@ enum GenderRestriction {
   FEMALE
   MIXED
   OPEN
+}
+
+enum GenderType {
+  MALE
+  FEMALE
+  MIXED
 }
 
 enum MembershipStatus {
