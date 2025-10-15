@@ -1077,25 +1077,22 @@ export const searchPlayers = async (req: AuthenticatedRequest, res: Response) =>
     const { q, sport } = req.query;
     const currentUserId = req.user?.id;
 
-    if (!q || typeof q !== 'string' || q.trim().length < 2) {
-      return res.status(400).json(
-        new ApiResponse(false, 400, null, 'Search query must be at least 2 characters')
-      );
-    }
-
-    const searchTerm = q.trim();
-
     // Build where clause
     const whereClause: any = {
       id: { not: currentUserId }, // Exclude current user
       role: Role.USER,
       status: 'active',
-      OR: [
+    };
+
+    // Add search filter if query provided
+    if (q && typeof q === 'string' && q.trim().length >= 2) {
+      const searchTerm = q.trim();
+      whereClause.OR = [
         { name: { contains: searchTerm, mode: 'insensitive' } },
         { username: { contains: searchTerm, mode: 'insensitive' } },
         { displayUsername: { contains: searchTerm, mode: 'insensitive' } },
-      ],
-    };
+      ];
+    }
 
     const players = await prisma.user.findMany({
       where: whereClause,
