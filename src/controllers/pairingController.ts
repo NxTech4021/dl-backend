@@ -8,6 +8,8 @@ import {
   cancelPairRequest as cancelPairRequestService,
   getPairRequests as getPairRequestsService,
   getUserPartnerships as getUserPartnershipsService,
+  dissolvePartnership as dissolvePartnershipService,
+  getActivePartnership as getActivePartnershipService,
 } from '../services/pairingService';
 
 /**
@@ -226,6 +228,80 @@ export const getUserPartnerships = async (req: AuthenticatedRequest, res: Respon
     console.error('Error in getUserPartnerships controller:', error);
     return res.status(500).json(
       new ApiResponse(false, 500, null, 'Failed to get partnerships')
+    );
+  }
+};
+
+/**
+ * Dissolve a partnership
+ * POST /api/pairing/partnership/:partnershipId/dissolve
+ */
+export const dissolvePartnership = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    const { partnershipId } = req.params;
+
+    if (!userId) {
+      return res.status(401).json(
+        new ApiResponse(false, 401, null, 'Unauthorized')
+      );
+    }
+
+    if (!partnershipId) {
+      return res.status(400).json(
+        new ApiResponse(false, 400, null, 'partnershipId is required')
+      );
+    }
+
+    const result = await dissolvePartnershipService(partnershipId, userId);
+
+    if (!result.success) {
+      return res.status(400).json(
+        new ApiResponse(false, 400, null, result.message)
+      );
+    }
+
+    return res.status(200).json(
+      new ApiResponse(true, 200, result.data, result.message)
+    );
+  } catch (error) {
+    console.error('Error in dissolvePartnership controller:', error);
+    return res.status(500).json(
+      new ApiResponse(false, 500, null, 'Failed to dissolve partnership')
+    );
+  }
+};
+
+/**
+ * Get active partnership for a season
+ * GET /api/pairing/partnership/active/:seasonId
+ */
+export const getActivePartnership = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    const { seasonId } = req.params;
+
+    if (!userId) {
+      return res.status(401).json(
+        new ApiResponse(false, 401, null, 'Unauthorized')
+      );
+    }
+
+    if (!seasonId) {
+      return res.status(400).json(
+        new ApiResponse(false, 400, null, 'seasonId is required')
+      );
+    }
+
+    const partnership = await getActivePartnershipService(userId, seasonId);
+
+    return res.status(200).json(
+      new ApiResponse(true, 200, partnership, 'Active partnership retrieved successfully')
+    );
+  } catch (error) {
+    console.error('Error in getActivePartnership controller:', error);
+    return res.status(500).json(
+      new ApiResponse(false, 500, null, 'Failed to get active partnership')
     );
   }
 };
