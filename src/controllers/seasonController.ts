@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-import { PrismaClient, Prisma } from "@prisma/client";
+import { PrismaClient, Prisma, PaymentStatus } from "@prisma/client";
 import {
   getActiveSeasonService,
   getSeasonByIdService,
@@ -10,8 +10,8 @@ import {
   deleteSeasonService,
   registerMembershipService,
   assignDivisionService,
+  updatePaymentStatusService,
 } from "../services/seasonService";
-
 
 const prisma = new PrismaClient();
 
@@ -32,17 +32,26 @@ export const createSeason = async (req: Request, res: Response) => {
   } = req.body;
 
   // Updated validation for required fields
-  if (!name || !startDate || !endDate || !entryFee || !leagueIds || !categoryIds) {
+  if (!name || !startDate || !endDate || !entryFee) {
     return res.status(400).json({
       success: false,
       error: "Missing required fields",
     });
   }
 
-  if (!Array.isArray(leagueIds) || leagueIds.length === 0) {
+  // Validate leagueIds array
+  if (!leagueIds || !Array.isArray(leagueIds) || leagueIds.length === 0) {
     return res.status(400).json({
       success: false,
       error: "At least one league must be specified",
+    });
+  }
+
+  // Validate categoryIds array
+  if (!categoryIds || !Array.isArray(categoryIds) || categoryIds.length === 0) {
+    return res.status(400).json({
+      success: false,
+      error: "At least one category must be specified",
     });
   }
 
@@ -82,7 +91,7 @@ export const createSeason = async (req: Request, res: Response) => {
       if (error.code === "P2003") {
         return res.status(400).json({
           success: false,
-          error: "One or more league IDs or category ID is invalid",
+          error: "One or more league IDs or category IDs are invalid",
         });
       }
     }
@@ -110,11 +119,21 @@ export const getSeasons = async (req: Request, res: Response) => {
       const season = await getSeasonByIdService(id);
       if (!season) return res.status(404).json({ error: "Season not found." });
     
+      // Updated to handle both leagues and categories
       const result = {
         ...season,
         leagues: season.leagues?.map(league => ({
           id: league.id,
-          name: league.name
+          name: league.name,
+          sportType: league.sportType,
+          gameType: league.gameType
+        })) ?? [],
+        memberships: season.memberships ?? [],
+        categories: season.categories?.map(category => ({
+          id: category.id,
+          name: category.name,
+          genderRestriction: category.genderRestriction,
+          matchFormat: category.matchFormat
         })) ?? []
       };
 
@@ -149,19 +168,114 @@ export const getSeasonById = async (req: Request, res: Response) => {
   const { id } = req.params;
 
   if (!id) {
-  return res.status(400).json({ error: "Season ID is required." });
-  
+    return res.status(400).json({ error: "Season ID is required." });
   }
+
   try {
     const season = await getSeasonByIdService(id);
     if (!season) {
       return res.status(404).json({ error: "Season not found." });
     }
 
-    res.status(200).json(season);
+    // Include both leagues and categories in the response
+    const result = {
+      ...season,
+      leagues: season.leagues?.map(league => ({
+        id: league.id,
+        name: league.name,
+        sportType: league.sportType,
+        gameType: league.gameType
+      })) ?? [],
+      memberships: season.memberships ?? [],
+      categories: season.categories?.map(category => ({
+        id: category.id,
+        name: category.name,
+        genderRestriction: category.genderRestriction,
+        matchFormat: category.matchFormat
+      })) ?? []
+    };
+
+    res.status(200).json(result);
   } catch (error: any) {
     console.error(`Error fetching season ${id}:`, error);
     res.status(500).json({ error: "Failed to retrieve season details." });
+  }
+};
+
+// Updates All information of a season - api contains all fields
+export const updateSeason = async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const {
+    name,
+    startDate,
+    endDate,
+    regiDeadline,
+    description,
+    entryFee,
+    leagueIds,
+    categoryIds,
+    isActive,
+    status,
+    paymentRequired,
+    promoCodeSupported,
+    withdrawalEnabled,
+    ...otherData
+  } = req.body;
+
+  if (!id) {
+    return res.status(400).json({ error: "Season ID is required." });
+  }
+
+  // Validate arrays if provided
+  if (leagueIds && (!Array.isArray(leagueIds) || leagueIds.length === 0)) {
+    return res.status(400).json({
+      error: "leagueIds must be an array with at least one league"
+    });
+  }
+
+  if (categoryIds && (!Array.isArray(categoryIds) || categoryIds.length === 0)) {
+    return res.status(400).json({
+      error: "categoryIds must be an array with at least one category"
+    });
+  }
+
+  try {
+    const seasonData = {
+      name,
+      startDate,
+      endDate,
+      regiDeadline,
+      description,
+      entryFee,
+      leagueIds,
+      categoryIds,
+      isActive,
+      status,
+      paymentRequired,
+      promoCodeSupported,
+      withdrawalEnabled,
+      ...otherData
+    };
+
+    const season = await updateSeasonService(id, seasonData);
+    return res.status(200).json({ 
+      success: true,
+      message: "Season updated successfully", 
+      data: season 
+    });
+  } catch (error: any) {
+    console.error("Error updating season:", error);
+
+    if (error instanceof Prisma.PrismaClientKnownRequestError) {
+      if (error.code === "P2025") {
+        return res.status(404).json({ error: "Season not found for update." });
+      }
+      if (error.code === "P2003") {
+        return res.status(400).json({ error: "One or more league or category IDs are invalid." });
+      }
+    }
+
+    return res.status(500).json({ error: "Failed to update season." });
   }
 };
 
@@ -171,43 +285,32 @@ export const updateSeasonStatus = async (req: Request, res: Response) => {
   const { status, isActive } = req.body;
 
   if (!id) {
-  return res.status(400).json({ error: "Season ID is required." });
+    return res.status(400).json({ error: "Season ID is required." });
   } 
 
   if (!status && typeof isActive === "undefined") {
-    return res
-      .status(400)
-      .json({ error: "Provide either status or isActive." });
+    return res.status(400).json({ 
+      error: "Provide either status or isActive." 
+    });
   }
 
   try {
     const season = await updateSeasonStatusService(id, { status, isActive });
-    return res
-      .status(200)
-      .json({ message: "Season updated successfully", season });
+    return res.status(200).json({ 
+      success: true,
+      message: "Season status updated successfully", 
+      data: season 
+    });
   } catch (error: any) {
     console.error("Error updating season status:", error);
+
+    if (error instanceof Prisma.PrismaClientKnownRequestError) {
+      if (error.code === "P2025") {
+        return res.status(404).json({ error: "Season not found." });
+      }
+    }
+
     return res.status(500).json({ error: "Failed to update season status." });
-  }
-};
-
-// Updates All information of a seaon - api contains all fields
-export const updateSeason = async (req: Request, res: Response) => {
-  const { id } = req.params;
-  const seasonData = req.body;
-
-  if (!id) {
-  return res.status(400).json({ error: "Season ID is required." });
-  }
-
-  try {
-    const season = await updateSeasonService(id, seasonData);
-    return res
-      .status(200)
-      .json({ message: "Season updated successfully", season });
-  } catch (error: any) {
-    console.error("Error updating season:", error);
-    return res.status(500).json({ error: "Failed to update season." });
   }
 };
 

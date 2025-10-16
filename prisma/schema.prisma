@@ -253,7 +253,7 @@ model Sponsorship {
 
   leagues         League[] 
   createdBy       Admin?     @relation("SponsorshipCreatedBy", fields: [createdById], references: [id])
-  divisions       Division[] @relation("DivisionSponsor") // Support division sponsorships
+  divisions       Division[] @relation("DivisionSponsor")
 
   @@map("sponsorship")
 }
@@ -436,7 +436,6 @@ model SeasonMembership {
   @@index([divisionId, status])
 }
 
-// New model for tracking division player assignments (from Excel spec)
 model DivisionAssignment {
   id                String   @id @default(cuid())
   divisionId        String
@@ -486,6 +485,7 @@ model Match {
   @@index([matchDate])
 }
 
+//TO DO - use this and link with seasonmembership
 model MatchParticipant {
   id        String   @id @default(cuid())
   matchId   String
@@ -591,6 +591,7 @@ model PairRequest {
   @@map("pair_request")
 }
 
+//TO DO - use this and link with seasonmembership
 model Partnership {
   id          String    @id @default(cuid())
   player1Id   String
@@ -616,6 +617,7 @@ model Partnership {
   @@map("partnership")
 }
 
+//TO DO - remove this, redundant logic with seasonmembership
 model SeasonRegistration {
   id               Int              @id @default(autoincrement())
   seasonId         String

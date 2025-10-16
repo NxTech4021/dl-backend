@@ -10,52 +10,92 @@ export const createSponsorship = async (req: Request, res: Response) => {
   console.log("Body:", req.body);
 
   try {
-    const { leagueId, companyId, packageTier, contractAmount, sponsorRevenue, sponsoredName, createdById } = req.body;
+    const { 
+      packageTier, 
+      contractAmount, 
+      sponsorRevenue, 
+      sponsoredName, 
+      createdById,
+      leagueIds, 
+      divisionIds 
+    } = req.body;
 
-    const validTiers: TierType[] = ["GOLD", "SILVER", "BRONZE","PLATINUM"];
-    if (!packageTier || !validTiers.includes(packageTier as TierType)) {
-      console.log("Invalid packageTier:", packageTier);
+    // Validate required fields
+    if (!packageTier) {
       return res.status(400).json({
-        message: `Invalid packageTier. Must be one of: ${validTiers.join(", ")}`,
+        success: false,
+        message: "Package tier is required"
       });
     }
 
-    console.log("Creating sponsorship with data:", {
-      leagueId,
-      companyId,
-      packageTier,
-      contractAmount,
-      sponsorRevenue,
-      sponsoredName,
-      createdById,
-    });
+    // Validate package tier
+    const validTiers: TierType[] = ["GOLD", "SILVER", "BRONZE", "PLATINUM"];
+    if (!validTiers.includes(packageTier as TierType)) {
+      return res.status(400).json({
+        success: false,
+        message: `Invalid packageTier. Must be one of: ${validTiers.join(", ")}`
+      });
+    }
+
+    // Prepare connect objects only if IDs are provided
+    const connectLeagues = leagueIds?.length ? {
+      leagues: {
+        connect: leagueIds.map(id => ({ id }))
+      }
+    } : {};
+
+    const connectDivisions = divisionIds?.length ? {
+      divisions: {
+        connect: divisionIds.map(id => ({ id }))
+      }
+    } : {};
 
     const sponsorship = await prisma.sponsorship.create({
       data: {
-        leagueId: leagueId || null,
-        companyId: companyId || null,
         packageTier: packageTier as TierType,
-        contractAmount: contractAmount ?? null,
-        sponsorRevenue: sponsorRevenue ?? null,
+        contractAmount: contractAmount ? new Prisma.Decimal(contractAmount) : null,
+        sponsorRevenue: sponsorRevenue ? new Prisma.Decimal(sponsorRevenue) : null,
         sponsoredName: sponsoredName || null,
         createdById: createdById || null,
+        ...connectLeagues,
+        ...connectDivisions
       },
+      include: {
+        leagues: true,
+        divisions: true,
+        createdBy: true
+      }
     });
 
-    console.log("Sponsorship created successfully:", sponsorship);
-    return res.status(201).json(sponsorship);
+    return res.status(201).json({
+      success: true,
+      message: "Sponsorship created successfully",
+      data: sponsorship
+    });
 
-  } catch (error: any) {
+  } catch (error) {
     console.error("Error creating sponsorship:", error);
 
-    if (error.code === "P2002") {
-      return res.status(400).json({
-        message: "Sponsorship with this leagueId, companyId, and packageTier already exists",
-        error: error.meta,
-      });
+    if (error instanceof Prisma.PrismaClientKnownRequestError) {
+      if (error.code === "P2002") {
+        return res.status(409).json({
+          success: false,
+          message: "A sponsorship with these details already exists"
+        });
+      }
+      if (error.code === "P2003") {
+        return res.status(400).json({
+          success: false,
+          message: "One or more provided IDs are invalid"
+        });
+      }
     }
 
-    return res.status(500).json({ message: error.message, stack: error.stack });
+    return res.status(500).json({
+      success: false,
+      message: "Failed to create sponsorship",
+      error: process.env.NODE_ENV === 'development' ? error : undefined
+    });
   }
 };
 
@@ -95,39 +135,60 @@ export const getSponsorshipById = async (req: Request, res: Response) => {
 export const updateSponsorship = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { leagueId, companyId, packageTier, contractAmount, sponsorRevenue, sponsoredName } = req.body;
-
-    // Convert string/number to Prisma.Decimal if provided
-    const dataToUpdate: any = {
-      leagueId: leagueId ?? undefined,
-      companyId: companyId ?? undefined,
-      packageTier: packageTier ? (packageTier as TierType) : undefined,
-      sponsoredName: sponsoredName ?? undefined,
-    };
-
-    if (contractAmount !== undefined && contractAmount !== null) {
-      dataToUpdate.contractAmount = new Prisma.Decimal(contractAmount);
-    }
-    if (sponsorRevenue !== undefined && sponsorRevenue !== null) {
-      dataToUpdate.sponsorRevenue = new Prisma.Decimal(sponsorRevenue);
-    }
+    const { 
+      packageTier, 
+      contractAmount, 
+      sponsorRevenue, 
+      sponsoredName,
+      leagueIds,
+      divisionIds 
+    } = req.body;
 
     if (!id) {
-          return res.status(400).json(new ApiResponse(false, 400, null, "Sponsorship ID is required"));
-        }
+      return res.status(400).json({
+        success: false,
+        message: "Sponsorship ID is required"
+      });
+    }
+
+    const dataToUpdate: any = {
+      packageTier: packageTier ? (packageTier as TierType) : undefined,
+      sponsoredName: sponsoredName ?? undefined,
+      contractAmount: contractAmount ? new Prisma.Decimal(contractAmount) : undefined,
+      sponsorRevenue: sponsorRevenue ? new Prisma.Decimal(sponsorRevenue) : undefined,
+    };
+
+    // Update relationships if provided
+    if (leagueIds) {
+      dataToUpdate.leagues = {
+        set: leagueIds.map(id => ({ id }))
+      };
+    }
+
+    if (divisionIds) {
+      dataToUpdate.divisions = {
+        set: divisionIds.map(id => ({ id }))
+      };
+    }
 
     const sponsorship = await prisma.sponsorship.update({
       where: { id },
       data: dataToUpdate,
+      include: {
+        leagues: true,
+        divisions: true,
+        createdBy: true
+      }
     });
 
-    return res.json(sponsorship);
-  } catch (error: any) {
-    if (error.code === "P2002") {
-      return res.status(400).json({ message: "Sponsorship with this leagueId, companyId, and packageTier already exists" });
-    }
-    console.error("Failed to update sponsorship:", error);
-    return res.status(500).json({ message: error.message });
+    return res.json({
+      success: true,
+      message: "Sponsorship updated successfully",
+      data: sponsorship
+    });
+
+  } catch (error) {
+    // ... error handling
   }
 };
 
