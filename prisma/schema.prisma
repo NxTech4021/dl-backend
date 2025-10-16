@@ -1,4 +1,3 @@
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -9,36 +8,45 @@ datasource db {
 }
 
 model User {
-  id                  String             @id @default(cuid())
+  id                  String    @id @default(cuid())
   name                String
-  email               String             @unique
-  emailVerified       Boolean            @default(false)
+  email               String    @unique
+  emailVerified       Boolean   @default(false)
   image               String?
-  createdAt           DateTime           @default(now())
-  updatedAt           DateTime           @updatedAt
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
   displayUsername     String?
-  username            String             @unique
-  role                Role               @default(USER)
+  username            String    @unique
+  role                Role      @default(USER)
   dateOfBirth         DateTime?
   gender              String?
   area                String?
-  completedOnboarding Boolean            @default(false)
+  completedOnboarding Boolean   @default(false)
   lastActivityCheck   DateTime?
   lastLogin           DateTime?
-  status              String             @default("active")
+  status              String    @default("active")
   bio                 String?
   phoneNumber         String?
   admin               Admin?
- 
-  achievements        UserAchievement[]
-  accounts            Account[]
-  sessions            Session[]
-  seasonMemberships   SeasonMembership[]
-  leagueMemberships   LeagueMembership[]
-  matchParticipants   MatchParticipant[]
-  processedRequests     WithdrawalRequest[] @relation("ProcessedByAdmin")
+
+  achievements      UserAchievement[]
+  accounts          Account[]
+  sessions          Session[]
+  seasonMemberships SeasonMembership[]
+  leagueMemberships LeagueMembership[]
+  matchParticipants MatchParticipant[]
+  processedRequests WithdrawalRequest[] @relation("ProcessedByAdmin")
 
   divisionAssignments DivisionAssignment[] @relation("DivisionAssignments")
+
+  // Pairing & Favorites Relations
+  favorites            Favorite[]           @relation("UserFavorites")
+  favoritedBy          Favorite[]           @relation("FavoritedBy")
+  sentPairRequests     PairRequest[]        @relation("SentPairRequests")
+  receivedPairRequests PairRequest[]        @relation("ReceivedPairRequests")
+  player1Partnerships  Partnership[]        @relation("Player1Partnerships")
+  player2Partnerships  Partnership[]        @relation("Player2Partnerships")
+  registrations        SeasonRegistration[] @relation("PlayerRegistrations")
 
   @@index([email])
   @@index([username])
@@ -65,6 +73,13 @@ model Admin {
   divisionsCreated        Division[]             @relation("DivisionCreatedBy")
   divisionsUpdated        Division[]             @relation("DivisionUpdatedBy")
   divisionAssignments     DivisionAssignment[]   @relation("AssignmentsByAdmin")
+  leagues             League[]
+  company             Company[]
+  sponsorships        Sponsorship[]        @relation("SponsorshipCreatedBy")
+  divisionsCreated    Division[]           @relation("DivisionCreatedBy")
+  divisionsUpdated    Division[]           @relation("DivisionUpdatedBy")
+  divisionAssignments DivisionAssignment[] @relation("AssignmentsByAdmin")
+  leagueInvites       LeagueInvite[]
 }
 
 model AdminInviteToken {
@@ -157,17 +172,17 @@ model InitialRatingResult {
 }
 
 model League {
-  id            String        @id @default(cuid())
-  name          String        @db.VarChar(255)
-  location      String?
-  description   String?
+  id          String  @id @default(cuid())
+  name        String  @db.VarChar(255)
+  location    String?
+  description String?
 
   status        Statuses       @default(UPCOMING)
   sportType     SportType
   gameType      GameType
 
-  createdById      String?    
-  createdBy        Admin?       @relation(fields: [createdById], references: [id])
+  createdById String?
+  createdBy   Admin?  @relation(fields: [createdById], references: [id])
 
   seasons       Season[]        @relation("LeagueToSeason")
   sponsorships  Sponsorship[]
@@ -175,20 +190,21 @@ model League {
   categories    Category[]
   divisions     Division[]
 
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@index([location])
   @@index([status])
 }
 
 model LeagueMembership {
-  id        String   @id @default(cuid())
-  userId    String
-  leagueId  String
-  joinedAt  DateTime @default(now())
+  id       String   @id @default(cuid())
+  userId   String
+  leagueId String
+  joinedAt DateTime @default(now())
 
-  user      User     @relation(fields: [userId], references: [id])
-  league    League   @relation(fields: [leagueId], references: [id])
+  user   User   @relation(fields: [userId], references: [id])
+  league League @relation(fields: [leagueId], references: [id])
 
   @@unique([userId, leagueId])
   @@index([leagueId])
@@ -218,38 +234,38 @@ model Category {
 
 //Not using now 
 model Company {
-  id              String        @id @default(cuid()) 
-  name            String        @db.VarChar(255)
-  contactEmail    String?       @unique
-  website         String?
-  logoUrl         String?
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
-  
-  createdById     String?       // Admin who created the company
-  createdBy       Admin?        @relation(fields: [createdById], references: [id])
-  sponsorshipDeals Sponsorship[] 
-  
+  id           String   @id @default(cuid())
+  name         String   @db.VarChar(255)
+  contactEmail String?  @unique
+  website      String?
+  logoUrl      String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  createdById      String? // Admin who created the company
+  createdBy        Admin?        @relation(fields: [createdById], references: [id])
+  sponsorshipDeals Sponsorship[]
+
   @@map("company")
 }
 
 model Sponsorship {
-  id                      String        @id @default(cuid())
-  leagueId                String?
-  companyId               String?
-  packageTier             TierType
-  contractAmount          Decimal?       @db.Decimal(10, 2)
-  sponsorRevenue          Decimal?      @db.Decimal(10, 2)
-  sponsoredName           String?
-  createdById             String?
-  createdAt               DateTime      @default(now())
-  updatedAt               DateTime      @updatedAt
+  id             String   @id @default(cuid())
+  leagueId       String?
+  companyId      String?
+  packageTier    TierType
+  contractAmount Decimal? @db.Decimal(10, 2)
+  sponsorRevenue Decimal? @db.Decimal(10, 2)
+  sponsoredName  String?
+  createdById    String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   // Relationships
-  league         League?       @relation(fields: [leagueId], references: [id], onDelete: Cascade)
-  company        Company?      @relation(fields: [companyId], references: [id])
-  createdBy      Admin?        @relation("SponsorshipCreatedBy", fields: [createdById], references: [id])
-  divisions      Division[]    @relation("DivisionSponsor")                // Support division sponsorships
+  league    League?    @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  company   Company?   @relation(fields: [companyId], references: [id])
+  createdBy Admin?     @relation("SponsorshipCreatedBy", fields: [createdById], references: [id])
+  divisions Division[] @relation("DivisionSponsor") // Support division sponsorships
 
   @@unique([leagueId, companyId, packageTier])
   @@index([leagueId])
@@ -258,14 +274,14 @@ model Sponsorship {
 }
 
 model Season {
-  id              String         @id @default(cuid())
-  name            String        
-  startDate       DateTime?
-  endDate         DateTime?
-  regiDeadline    DateTime?
-  entryFee        Decimal        @db.Decimal(10, 2) 
-  description     String?       
-  registeredUserCount   Int               @default(0)
+  id                  String    @id @default(cuid())
+  name                String
+  startDate           DateTime?
+  endDate             DateTime?
+  regiDeadline        DateTime?
+  entryFee            Decimal   @db.Decimal(10, 2)
+  description         String?
+  registeredUserCount Int       @default(0)
 
   //Bools
   status                SeasonStatus      @default(UPCOMING)    
@@ -276,43 +292,52 @@ model Season {
 
   
   //Relations
-  divisions             Division[]
-  memberships           SeasonMembership[]
-  promoCodes            PromoCode[]           @relation("SeasonPromoCodes") 
-  withdrawalRequests    WithdrawalRequest[] 
-  categories            Category[]
-  leagues               League[]              @relation("LeagueToSeason")
-  waitlistId            String?
-  waitlist              Waitlist?             @relation
-  
-  createdAt       DateTime       @default(now())
-  updatedAt       DateTime       @updatedAt
-  
+  divisions          Division[]
+  memberships        SeasonMembership[]
+  promoCodes         PromoCode[]         @relation("SeasonPromoCodes")
+  withdrawalRequests WithdrawalRequest[]
+
+  // Pairing Relations
+  pairRequests  PairRequest[]
+  partnerships  Partnership[]
+  registrations SeasonRegistration[]
+
+  leagues League[] @relation("LeagueToSeason")
+
+  categoryId String
+  category   Category @relation(fields: [categoryId], references: [id])
+
+  waitlistId String?
+  waitlist   Waitlist? @relation
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@index([status])
   @@index([isActive])
 }
 
 model Waitlist {
-  id                 String                 @id @default(cuid())
-  seasonId              String              @unique
-  season                Season              @relation(fields: [seasonId], references: [id])
-  enabled            Boolean                @default(false)
-  maxParticipants    Int?
-  waitlistedUsers     WaitlistUser[]
+  id              String         @id @default(cuid())
+  seasonId        String         @unique
+  season          Season         @relation(fields: [seasonId], references: [id])
+  enabled         Boolean        @default(false)
+  maxParticipants Int?
+  waitlistedUsers WaitlistUser[]
 
-  createdAt          DateTime               @default(now())
-  updatedAt          DateTime               @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model WaitlistUser {
-  id                 String                 @id @default(cuid())
-  waitlistId         String
-  userId             String
-  waitlistDate       DateTime               @default(now())
-  promotedToRegistered Boolean              @default(false)
+  id                   String   @id @default(cuid())
+  waitlistId           String
+  userId               String
+  waitlistDate         DateTime @default(now())
+  promotedToRegistered Boolean  @default(false)
 
-  waitlist           Waitlist               @relation(fields: [waitlistId], references: [id])
-  
+  waitlist Waitlist @relation(fields: [waitlistId], references: [id])
+
   @@unique([waitlistId, userId])
   @@index([userId])
 }
@@ -328,24 +353,26 @@ model PromoCode {
 
   seasons         Season[]          @relation("SeasonPromoCodes")
 
-  createdAt       DateTime          @default(now())
-  updatedAt       DateTime          @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model WithdrawalRequest {
-  id                    String              @id @default(cuid())
-  userId                String
-  reason                String
-  requestDate           DateTime            @default(now())
-  status                WithdrawalStatus    @default(PENDING)
-  processedByAdminId String? 
+  id                 String           @id @default(cuid())
+  userId             String
+  reason             String
+  requestDate        DateTime         @default(now())
+  status             WithdrawalStatus @default(PENDING)
+  processedByAdminId String?
+  partnershipId      String?          // For partner change requests
 
-  processedByAdmin      User?               @relation("ProcessedByAdmin", fields: [processedByAdminId], references: [id])
-  seasonId              String
-  season                Season              @relation(fields: [seasonId], references: [id])
+  processedByAdmin User?        @relation("ProcessedByAdmin", fields: [processedByAdminId], references: [id])
+  seasonId         String
+  season           Season       @relation(fields: [seasonId], references: [id])
+  partnership      Partnership? @relation(fields: [partnershipId], references: [id])
 
-  createdAt             DateTime            @default(now())
-  updatedAt             DateTime            @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model Division {
@@ -361,37 +388,41 @@ model Division {
   maxDoublesTeams         Int?
  
   // denormalized counts
-  currentSinglesCount     Int?      @default(0)
-  currentDoublesCount     Int?      @default(0)
+  currentSinglesCount Int? @default(0)
+  currentDoublesCount Int? @default(0)
 
-  autoAssignmentEnabled   Boolean   @default(false)
-  isActiveDivision        Boolean   @default(true)
-  pointsThreshold         Int?
+  autoAssignmentEnabled Boolean @default(false)
+  isActiveDivision      Boolean @default(true)
+  pointsThreshold       Int?
 
   // Sponsorship fields (from Excel spec)
-  divisionSponsorId       String?                                      // division_sponsor_id
-  divisionSponsor         Sponsorship? @relation("DivisionSponsor", fields: [divisionSponsorId], references: [id], onDelete: SetNull)
-  sponsoredDivisionName   String?                                      // sponsored_division_name
-  prizePoolTotal          Decimal?  @db.Decimal(10, 2)                 // prize_pool_total
+  divisionSponsorId     String? // division_sponsor_id
+  divisionSponsor       Sponsorship? @relation("DivisionSponsor", fields: [divisionSponsorId], references: [id], onDelete: SetNull)
+  sponsoredDivisionName String? // sponsored_division_name
+  prizePoolTotal        Decimal?     @db.Decimal(10, 2) // prize_pool_total
 
   // audit — Admin FKs
-  createdByAdminId        String?
-  createdByAdmin          Admin?    @relation("DivisionCreatedBy", fields: [createdByAdminId], references: [id], onDelete: SetNull)
-  lastUpdatedByAdminId    String?
-  lastUpdatedByAdmin      Admin?    @relation("DivisionUpdatedBy", fields: [lastUpdatedByAdminId], references: [id], onDelete: SetNull)
+  createdByAdminId     String?
+  createdByAdmin       Admin?  @relation("DivisionCreatedBy", fields: [createdByAdminId], references: [id], onDelete: SetNull)
+  lastUpdatedByAdminId String?
+  lastUpdatedByAdmin   Admin?  @relation("DivisionUpdatedBy", fields: [lastUpdatedByAdminId], references: [id], onDelete: SetNull)
 
   // Relations
-  matches                 Match[]
-  assignments             DivisionAssignment[]                         // Player assignments tracking
-  seasonMemberships       SeasonMembership[]         @relation("SeasonMembershipDivision")
+  matches           Match[]
+  assignments       DivisionAssignment[] // Player assignments tracking
+  seasonMemberships SeasonMembership[]         @relation("SeasonMembershipDivision")
   seasonId                String                                      
   season                  Season   @relation(fields: [seasonId], references: [id], onDelete: Cascade)
   leagueId                String                                     
   league                  League   @relation(fields: [leagueId], references: [id], onDelete: Cascade)
 
-  
-  createdAt               DateTime  @default(now())
-  updatedAt               DateTime  @updatedAt
+
+  // Pairing Relations
+  partnerships  Partnership[]
+  registrations SeasonRegistration[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@unique([seasonId, name])
   @@index([seasonId])
@@ -400,7 +431,6 @@ model Division {
   @@index([divisionSponsorId])
   @@map("division")
 }
-
 
 model SeasonMembership {
   id              String         @id @default(cuid())
@@ -425,21 +455,21 @@ model SeasonMembership {
 
 // New model for tracking division player assignments (from Excel spec)
 model DivisionAssignment {
-  id                 String   @id @default(cuid())
-  divisionId         String
-  userId             String
-  assignedBy         String?                                        // Admin ID who made the assignment
-  assignedAt         DateTime @default(now())
-  reassignmentCount  Int      @default(0)                          // Track how many times player was moved
-  notes              String?                                       // Admin notes for assignment
+  id                String   @id @default(cuid())
+  divisionId        String
+  userId            String
+  assignedBy        String? // Admin ID who made the assignment
+  assignedAt        DateTime @default(now())
+  reassignmentCount Int      @default(0) // Track how many times player was moved
+  notes             String? // Admin notes for assignment
 
   // Relations
-  division           Division @relation(fields: [divisionId], references: [id], onDelete: Cascade)
-  user               User     @relation("DivisionAssignments", fields: [userId], references: [id], onDelete: Cascade)
-  assignedByAdmin    Admin?   @relation("AssignmentsByAdmin", fields: [assignedBy], references: [id], onDelete: SetNull)
+  division        Division @relation(fields: [divisionId], references: [id], onDelete: Cascade)
+  user            User     @relation("DivisionAssignments", fields: [userId], references: [id], onDelete: Cascade)
+  assignedByAdmin Admin?   @relation("AssignmentsByAdmin", fields: [assignedBy], references: [id], onDelete: SetNull)
 
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@unique([divisionId, userId])
   @@index([divisionId])
@@ -449,24 +479,24 @@ model DivisionAssignment {
 }
 
 model Match {
-  id            String      @id @default(cuid())
+  id            String   @id @default(cuid())
   divisionId    String?
   sport         String
   matchType     String
   playerScore   Int?
   opponentScore Int?
   outcome       String?
-  matchDate     DateTime    @default(now())
+  matchDate     DateTime @default(now())
   location      String?
   notes         String?
   duration      Int?
 
-  division      Division?   @relation(fields: [divisionId], references: [id], onDelete: Cascade)
-  participants  MatchParticipant[]
-  stats         MatchStats?
+  division     Division?          @relation(fields: [divisionId], references: [id], onDelete: Cascade)
+  participants MatchParticipant[]
+  stats        MatchStats?
 
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([divisionId])
   @@index([sport])
@@ -621,9 +651,15 @@ enum GameType {
 }
 
 enum SportType {
-  PADDLE
+  PADEL
   PICKLEBALL
   TENNIS
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  MIXED
 }
 
 enum TierType{
@@ -633,3 +669,101 @@ enum TierType{
   PLATINUM
 }
 
+// ============================================
+// PAIRING & FAVORITES MODELS
+// ============================================
+
+model Favorite {
+  id          String   @id @default(cuid())
+  userId      String
+  favoritedId String
+  createdAt   DateTime @default(now())
+
+  user      User @relation("UserFavorites", fields: [userId], references: [id], onDelete: Cascade)
+  favorited User @relation("FavoritedBy", fields: [favoritedId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, favoritedId])
+  @@index([userId])
+  @@index([favoritedId])
+  @@map("favorite")
+}
+
+model PairRequest {
+  id          String            @id @default(cuid())
+  requesterId String
+  recipientId String
+  seasonId    String
+  message     String?
+  status      PairRequestStatus
+  createdAt   DateTime          @default(now())
+  respondedAt DateTime?
+  expiresAt   DateTime
+
+  requester User   @relation("SentPairRequests", fields: [requesterId], references: [id], onDelete: Cascade)
+  recipient User   @relation("ReceivedPairRequests", fields: [recipientId], references: [id], onDelete: Cascade)
+  season    Season @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+
+  @@index([requesterId])
+  @@index([recipientId])
+  @@index([seasonId])
+  @@index([status])
+  @@map("pair_request")
+}
+
+model Partnership {
+  id          String    @id @default(cuid())
+  player1Id   String
+  player2Id   String
+  seasonId    String
+  divisionId  String?
+  pairRating  Int?
+  status      String    @default("ACTIVE")
+  createdAt   DateTime  @default(now())
+  dissolvedAt DateTime?
+
+  player1           User                @relation("Player1Partnerships", fields: [player1Id], references: [id], onDelete: Cascade)
+  player2           User                @relation("Player2Partnerships", fields: [player2Id], references: [id], onDelete: Cascade)
+  season            Season              @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  division          Division?           @relation(fields: [divisionId], references: [id], onDelete: SetNull)
+  withdrawalRequest WithdrawalRequest[]
+
+  @@unique([player1Id, player2Id, seasonId])
+  @@index([seasonId])
+  @@index([status])
+  @@index([player1Id])
+  @@index([player2Id])
+  @@map("partnership")
+}
+
+model SeasonRegistration {
+  id               Int              @id @default(autoincrement())
+  seasonId         String
+  registrationType RegistrationType
+  playerId         String?
+  teamId           String?
+  divisionId       String?
+  isActive         Boolean          @default(true)
+  registeredAt     DateTime         @default(now())
+
+  season   Season    @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  player   User?     @relation("PlayerRegistrations", fields: [playerId], references: [id], onDelete: Cascade)
+  division Division? @relation(fields: [divisionId], references: [id], onDelete: SetNull)
+
+  @@unique([seasonId, playerId])
+  @@index([seasonId])
+  @@index([playerId])
+  @@map("season_registration")
+}
+
+enum PairRequestStatus {
+  PENDING
+  ACCEPTED
+  DENIED
+  CANCELLED
+  EXPIRED
+}
+
+enum RegistrationType {
+  INDIVIDUAL
+  TEAM
+}

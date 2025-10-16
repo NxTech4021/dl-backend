@@ -1,14 +1,17 @@
 import { Router } from 'express';
-import { 
-  getSeasons, 
-  getSeasonById, 
-  createSeason, 
-  updateSeason, 
+import {
+  getSeasons,
+  getSeasonById,
+  createSeason,
+  updateSeason,
   updateSeasonStatus,
-  deleteSeason, 
+  deleteSeason,
+  submitWithdrawalRequest,
+  processWithdrawalRequest,
   registerPlayerToSeason,
   assignPlayerToDivision,
 } from '../controllers/seasonController';
+import { verifyAuth } from '../middlewares/auth.middleware';
 
 const seasonRoutes = Router();
 
@@ -22,6 +25,10 @@ seasonRoutes.put('/:id', updateSeason);
 seasonRoutes.put('/:id/status', updateSeasonStatus);
 
 seasonRoutes.delete('/:id', deleteSeason);
+
+// Withdrawal/Partner Change Request routes (require authentication)
+seasonRoutes.post('/withdrawals', verifyAuth, submitWithdrawalRequest);
+seasonRoutes.put('/withdrawals/:id/process', verifyAuth, processWithdrawalRequest);
 
 // Register Player to Season
 seasonRoutes.post('/player/register', registerPlayerToSeason);

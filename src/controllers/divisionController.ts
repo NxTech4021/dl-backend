@@ -195,7 +195,7 @@ export const createDivision = async (req: Request, res: Response) => {
             : null,
         level: levelEnum,
         gameType: gameTypeEnum,
-        genderCategory: genderEnum,
+        genderCategory: genderEnum ?? null,
         maxSinglesPlayers:
           maxSinglesPlayers !== undefined && maxSinglesPlayers !== null
             ? Number(maxSinglesPlayers)

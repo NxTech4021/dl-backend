@@ -102,9 +102,9 @@ export const sendPairRequest = async (
       select: {
         id: true,
         name: true,
-        sport: true,
-        registrationStart: true,
-        registrationEnd: true,
+        sportType: true,
+        startDate: true,
+        regiDeadline: true,
         status: true,
       },
     });
@@ -117,7 +117,7 @@ export const sendPairRequest = async (
     }
 
     const now = new Date();
-    if (season.registrationStart > now || season.registrationEnd < now) {
+    if (season.startDate > now || season.regiDeadline < now) {
       return {
         success: false,
         message: 'Season registration is not currently open',
@@ -180,7 +180,7 @@ export const sendPairRequest = async (
     const existingRegistration = await prisma.seasonRegistration.findFirst({
       where: {
         seasonId,
-        type: 'INDIVIDUAL',
+        registrationType: 'INDIVIDUAL',
         OR: [
           { playerId: requesterId },
           { playerId: recipientId },
@@ -232,7 +232,7 @@ export const sendPairRequest = async (
           select: {
             id: true,
             name: true,
-            sport: true,
+            sportType: true,
           },
         },
       },
@@ -269,7 +269,7 @@ export const acceptPairRequest = async (
       include: {
         season: {
           include: {
-            division: true,
+            divisions: true,
           },
         },
       },
@@ -317,6 +317,20 @@ export const acceptPairRequest = async (
       pairRequest.seasonId
     );
 
+    // Check if requester has existing division assignment for this season
+    // to preserve division when partner changes
+    const existingRegistration = await prisma.seasonRegistration.findFirst({
+      where: {
+        playerId: pairRequest.requesterId,
+        seasonId: pairRequest.seasonId,
+        isActive: true,
+      },
+      select: { divisionId: true },
+    });
+
+    // Determine division: use existing division if available, otherwise assign based on divisions available
+    const assignedDivisionId = existingRegistration?.divisionId || pairRequest.season.divisions[0]?.id;
+
     // Use a transaction to ensure data consistency
     const result = await prisma.$transaction(async (tx) => {
       // Update pair request status
@@ -334,7 +348,7 @@ export const acceptPairRequest = async (
           player1Id: pairRequest.requesterId,
           player2Id: pairRequest.recipientId,
           seasonId: pairRequest.seasonId,
-          divisionId: pairRequest.season.division[0]?.id, // Assign to first division temporarily
+          divisionId: assignedDivisionId,
           pairRating,
         },
         include: {
@@ -360,7 +374,7 @@ export const acceptPairRequest = async (
             select: {
               id: true,
               name: true,
-              sport: true,
+              sportType: true,
             },
           },
         },
@@ -532,9 +546,9 @@ export const getPairRequests = async (userId: string) => {
             select: {
               id: true,
               name: true,
-              sport: true,
-              registrationStart: true,
-              registrationEnd: true,
+              sportType: true,
+              startDate: true,
+              regiDeadline: true,
             },
           },
         },
@@ -557,9 +571,9 @@ export const getPairRequests = async (userId: string) => {
             select: {
               id: true,
               name: true,
-              sport: true,
-              registrationStart: true,
-              registrationEnd: true,
+              sportType: true,
+              startDate: true,
+              regiDeadline: true,
             },
           },
         },
@@ -612,7 +626,7 @@ export const getUserPartnerships = async (userId: string) => {
           select: {
             id: true,
             name: true,
-            sport: true,
+            sportType: true,
             startDate: true,
             endDate: true,
             status: true,
@@ -633,6 +647,138 @@ export const getUserPartnerships = async (userId: string) => {
     return partnerships;
   } catch (error) {
     console.error('Error getting user partnerships:', error);
+    throw error;
+  }
+};
+
+/**
+ * Dissolve a partnership
+ * This marks a partnership as dissolved and allows partners to find new matches
+ */
+export const dissolvePartnership = async (
+  partnershipId: string,
+  dissolvingUserId: string
+): Promise<PairRequestResponse> => {
+  try {
+    // Find the partnership
+    const partnership = await prisma.partnership.findUnique({
+      where: { id: partnershipId },
+      include: {
+        player1: { select: { id: true, name: true } },
+        player2: { select: { id: true, name: true } },
+        season: { select: { id: true, name: true, status: true } },
+      },
+    });
+
+    if (!partnership) {
+      return {
+        success: false,
+        message: 'Partnership not found',
+      };
+    }
+
+    // Validate: Only partners can dissolve
+    if (partnership.player1Id !== dissolvingUserId && partnership.player2Id !== dissolvingUserId) {
+      return {
+        success: false,
+        message: 'You are not authorized to dissolve this partnership',
+      };
+    }
+
+    // Validate: Cannot dissolve if season is completed
+    if (partnership.season.status === 'COMPLETED') {
+      return {
+        success: false,
+        message: 'Cannot dissolve partnership after season is completed',
+      };
+    }
+
+    // Update partnership status to DISSOLVED
+    const updatedPartnership = await prisma.partnership.update({
+      where: { id: partnershipId },
+      data: {
+        status: 'DISSOLVED',
+        dissolvedAt: new Date(),
+      },
+    });
+
+    // TODO: Send notification to other partner
+    const otherPartnerId = partnership.player1Id === dissolvingUserId
+      ? partnership.player2Id
+      : partnership.player1Id;
+
+    console.log(`Partnership ${partnershipId} dissolved by ${dissolvingUserId}. Notify partner ${otherPartnerId}`);
+
+    return {
+      success: true,
+      message: 'Partnership dissolved successfully',
+      data: updatedPartnership,
+    };
+  } catch (error) {
+    console.error('Error dissolving partnership:', error);
+    return {
+      success: false,
+      message: 'Failed to dissolve partnership',
+    };
+  }
+};
+
+/**
+ * Get active partnership for a user in a specific season
+ * Returns null if no active partnership exists
+ */
+export const getActivePartnership = async (
+  userId: string,
+  seasonId: string
+) => {
+  try {
+    const partnership = await prisma.partnership.findFirst({
+      where: {
+        seasonId,
+        status: 'ACTIVE',
+        OR: [
+          { player1Id: userId },
+          { player2Id: userId },
+        ],
+      },
+      include: {
+        player1: {
+          select: {
+            id: true,
+            name: true,
+            username: true,
+            displayUsername: true,
+            image: true,
+          },
+        },
+        player2: {
+          select: {
+            id: true,
+            name: true,
+            username: true,
+            displayUsername: true,
+            image: true,
+          },
+        },
+        season: {
+          select: {
+            id: true,
+            name: true,
+            sportType: true,
+          },
+        },
+        division: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+      },
+    });
+
+    return partnership;
+  } catch (error) {
+    console.error('Error getting active partnership:', error);
     throw error;
   }
 };
