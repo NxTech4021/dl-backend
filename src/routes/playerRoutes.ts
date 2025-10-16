@@ -46,6 +46,39 @@ playerRouter.post('/favorites/:userId', verifyAuth, addFavorite);
 playerRouter.delete('/favorites/:userId', verifyAuth, removeFavorite);
 playerRouter.get('/profile/public/:userId', verifyAuth, getPublicPlayerProfile);
 
+// Withdrawal requests
+playerRouter.get('/withdrawal-requests', verifyAuth, async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const { PrismaClient } = await import('@prisma/client');
+    const prisma = new PrismaClient();
+
+    const requests = await prisma.withdrawalRequest.findMany({
+      where: { userId },
+      include: {
+        season: { select: { id: true, name: true } },
+        partnership: {
+          include: {
+            season: { select: { id: true, name: true } },
+            player1: { select: { id: true, name: true } },
+            player2: { select: { id: true, name: true } },
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    res.status(200).json({ data: requests });
+  } catch (error) {
+    console.error('Error fetching withdrawal requests:', error);
+    res.status(500).json({ error: 'Failed to fetch withdrawal requests' });
+  }
+});
+
 export default playerRouter;
 
 

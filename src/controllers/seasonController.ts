@@ -242,25 +242,37 @@ export const deleteSeason = async (req: Request, res: Response) => {
 
 
 export const submitWithdrawalRequest = async (req: any, res: any) => {
-  const userId = req.body.userId
-  const { seasonId, reason } = req.body;
+  const userId = req.user?.id;
+  const { seasonId, reason, partnershipId } = req.body;
 
-  if (!seasonId || !reason || !userId) {
-    return res
-      .status(400)
-      .json({
-        error:
-          "Missing required fields: seasonId, reason, and authenticated userId.",
-      });
+  if (!userId) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+
+  if (!seasonId || !reason) {
+    return res.status(400).json({
+      error: "Missing required fields: seasonId and reason.",
+    });
   }
 
   try {
-    const season = await prisma.season.findUnique({ where: { id: seasonId } });
+    // If partnershipId is provided, verify the user is part of the partnership
+    if (partnershipId) {
+      const partnership = await prisma.partnership.findUnique({
+        where: { id: partnershipId },
+      });
 
-    if (!season || !season.withdrawalEnabled) {
-      return res
-        .status(400)
-        .json({ error: "Withdrawal is not enabled for this season." });
+      if (!partnership) {
+        return res.status(404).json({ error: "Partnership not found." });
+      }
+
+      if (partnership.player1Id !== userId && partnership.player2Id !== userId) {
+        return res.status(403).json({ error: "You are not part of this partnership." });
+      }
+
+      if (partnership.status !== "ACTIVE") {
+        return res.status(400).json({ error: "Partnership is not active." });
+      }
     }
 
     const newRequest = await prisma.withdrawalRequest.create({
@@ -268,16 +280,24 @@ export const submitWithdrawalRequest = async (req: any, res: any) => {
         seasonId,
         userId,
         reason,
+        partnershipId,
         status: "PENDING",
+      },
+      include: {
+        season: { select: { id: true, name: true } },
+        partnership: {
+          include: {
+            player1: { select: { id: true, name: true } },
+            player2: { select: { id: true, name: true } },
+          },
+        },
       },
     });
     res.status(201).json(newRequest);
   } catch (error: any) {
     console.error("Error submitting withdrawal request:", error);
     if (error instanceof Prisma.PrismaClientValidationError) {
-      return res
-        .status(400)
-        .json({ error: "Invalid data format or type for withdrawal request." });
+      return res.status(400).json({ error: "Invalid data format or type for withdrawal request." });
     }
     res.status(500).json({ error: "Failed to submit withdrawal request." });
   }
@@ -286,30 +306,70 @@ export const submitWithdrawalRequest = async (req: any, res: any) => {
 
 export const processWithdrawalRequest = async (req: any, res: any) => {
   const { id } = req.params;
-  const processedByAdminId = req.body.adminId || "placeholder-admin-id";
+  const processedByAdminId = req.user?.id;
   const { status } = req.body; // Expects 'APPROVED' or 'REJECTED'
 
-  if (!["APPROVED", "REJECTED"].includes(status) || !processedByAdminId) {
-    return res
-      .status(400)
-      .json({ error: "Invalid status or missing admin ID." });
+  if (!processedByAdminId) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+
+  if (!["APPROVED", "REJECTED"].includes(status)) {
+    return res.status(400).json({ error: "Invalid status." });
   }
 
   try {
-    const updatedRequest = await prisma.withdrawalRequest.update({
+    const withdrawalRequest = await prisma.withdrawalRequest.findUnique({
       where: { id },
-      data: {
-        status: status,
-        processedByAdminId: processedByAdminId,
-      },
       include: {
-        processedByAdmin: { select: { name: true, role: true } },
+        partnership: true,
+        season: { select: { id: true, name: true } },
       },
     });
 
-    // NOTE: TODO  add business logic for refunds/waitlist promotion, etc.
+    if (!withdrawalRequest) {
+      return res.status(404).json({ error: "Withdrawal request not found." });
+    }
 
-    res.status(200).json(updatedRequest);
+    if (withdrawalRequest.status !== "PENDING") {
+      return res
+        .status(400)
+        .json({ error: "This request has already been processed." });
+    }
+
+    // Use transaction to ensure atomicity
+    const result = await prisma.$transaction(async (tx) => {
+      const updatedRequest = await tx.withdrawalRequest.update({
+        where: { id },
+        data: {
+          status: status,
+          processedByAdminId: processedByAdminId,
+        },
+        include: {
+          processedByAdmin: { select: { name: true, role: true } },
+          partnership: {
+            include: {
+              player1: { select: { id: true, name: true } },
+              player2: { select: { id: true, name: true } },
+            },
+          },
+        },
+      });
+
+      // If approved and has partnership, dissolve it
+      if (status === "APPROVED" && withdrawalRequest.partnershipId) {
+        await tx.partnership.update({
+          where: { id: withdrawalRequest.partnershipId },
+          data: {
+            status: "DISSOLVED",
+            dissolvedAt: new Date(),
+          },
+        });
+      }
+
+      return updatedRequest;
+    });
+
+    res.status(200).json(result);
   } catch (error: any) {
     console.error(`Error processing withdrawal request ${id}:`, error);
 
