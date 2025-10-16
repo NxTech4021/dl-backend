@@ -151,11 +151,24 @@ export const createDivision = async (req: Request, res: Response) => {
   try {
     const season = await prisma.season.findUnique({
       where: { id: seasonId },
-      select: { id: true, name: true, leagueId: true },
+      select: { 
+        id: true, 
+        name: true, 
+        categoryId: true,
+        category: {
+          select: {
+            leagueId: true
+          }
+        }
+      },
     });
 
     if (!season) {
       return res.status(404).json({ error: "Season not found." });
+    }
+
+    if (!season.category?.leagueId) {
+      return res.status(400).json({ error: "Season category or league not found." });
     }
 
     const duplicate = await prisma.division.findFirst({
@@ -172,7 +185,7 @@ export const createDivision = async (req: Request, res: Response) => {
     const division = await prisma.division.create({
       data: {
         seasonId,
-        leagueId: season.leagueId,
+        leagueId: season.category.leagueId,
         name,
         description,
         pointsThreshold:
@@ -181,7 +194,7 @@ export const createDivision = async (req: Request, res: Response) => {
             : null,
         level: levelEnum,
         gameType: gameTypeEnum,
-        genderCategory: genderEnum,
+        genderCategory: genderEnum ?? null,
         maxSinglesPlayers:
           maxSinglesPlayers !== undefined && maxSinglesPlayers !== null
             ? Number(maxSinglesPlayers)
