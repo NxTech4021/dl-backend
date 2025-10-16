@@ -1591,3 +1591,442 @@ export const getPublicPlayerProfile = async (req: AuthenticatedRequest, res: Res
     );
   }
 };
+
+// Get player's league participation history
+export const getPlayerLeagueHistory = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    
+    // Validate player exists
+    const player = await prisma.user.findUnique({
+      where: { id },
+      select: { id: true, name: true }
+    });
+
+    if (!player) {
+      return res.status(404).json(
+        new ApiResponse(false, 404, null, 'Player not found')
+      );
+    }
+
+    // Get leagues where player has participated
+    const playerLeagues = await prisma.league.findMany({
+      where: {
+        memberships: {
+          some: {
+            userId: id
+          }
+        }
+      },
+      include: {
+        memberships: {
+          where: { userId: id },
+          select: { 
+            joinedAt: true,
+            id: true
+          }
+        },
+        seasons: {
+          select: { 
+            id: true, 
+            name: true, 
+            status: true,
+            startDate: true,
+            endDate: true
+          },
+          orderBy: { startDate: 'desc' }
+        },
+        categories: {
+          select: { 
+            id: true, 
+            name: true,
+            game_type: true,
+            gender_category: true
+          }
+        },
+        createdBy: {
+          select: {
+            id: true,
+            user: {
+              select: {
+                name: true,
+                email: true
+              }
+            }
+          }
+        },
+        _count: {
+          select: { 
+            memberships: true,
+            seasons: true,
+            categories: true
+          }
+        }
+      },
+      orderBy: {
+        createdAt: 'desc'
+      }
+    });
+
+    // Transform data for better frontend consumption
+    const transformedLeagues = playerLeagues.map(league => ({
+      ...league,
+      membership: league.memberships[0], // Player's membership details
+      memberships: undefined // Remove the array since we only need the player's membership
+    }));
+
+    return res.status(200).json(
+      new ApiResponse(true, 200, {
+        player: {
+          id: player.id,
+          name: player.name
+        },
+        leagues: transformedLeagues,
+        count: transformedLeagues.length
+      }, 'Player league history retrieved successfully')
+    );
+
+  } catch (error) {
+    console.error('Error getting player league history:', error);
+    return res.status(500).json(
+      new ApiResponse(false, 500, null, 'Failed to fetch player league history')
+    );
+  }
+};
+
+// Get player's season participation history
+export const getPlayerSeasonHistory = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    
+    // Validate player exists
+    const player = await prisma.user.findUnique({
+      where: { id },
+      select: { id: true, name: true }
+    });
+
+    if (!player) {
+      return res.status(404).json(
+        new ApiResponse(false, 404, null, 'Player not found')
+      );
+    }
+
+    // Get seasons where player has participated
+    const playerSeasons = await prisma.season.findMany({
+      where: {
+        memberships: {
+          some: {
+            userId: id
+          }
+        }
+      },
+      include: {
+        memberships: {
+          where: { userId: id },
+          select: { 
+            joinedAt: true,
+            status: true,
+            division: {
+              select: { 
+                id: true, 
+                name: true, 
+                gameType: true,
+                genderCategory: true,
+                level: true
+              }
+            }
+          }
+        },
+        category: {
+          select: { 
+            id: true, 
+            name: true,
+            game_type: true,
+            gender_category: true,
+            league: {
+              select: {
+                id: true,
+                name: true,
+                sportType: true,
+                location: true
+              }
+            }
+          }
+        },
+        leagues: {
+          select: { 
+            id: true, 
+            name: true, 
+            sportType: true,
+            location: true,
+            status: true
+          }
+        },
+        divisions: {
+          select: {
+            id: true,
+            name: true,
+            gameType: true,
+            genderCategory: true,
+            level: true,
+            isActiveDivision: true
+          }
+        },
+        _count: {
+          select: { 
+            memberships: true,
+            divisions: true
+          }
+        }
+      },
+      orderBy: {
+        startDate: 'desc'
+      }
+    });
+
+    // Transform data for better frontend consumption
+    const transformedSeasons = playerSeasons.map(season => ({
+      ...season,
+      membership: season.memberships[0], // Player's membership details
+      memberships: undefined // Remove the array since we only need the player's membership
+    }));
+
+    return res.status(200).json(
+      new ApiResponse(true, 200, {
+        player: {
+          id: player.id,
+          name: player.name
+        },
+        seasons: transformedSeasons,
+        count: transformedSeasons.length
+      }, 'Player season history retrieved successfully')
+    );
+
+  } catch (error) {
+    console.error('Error getting player season history:', error);
+    return res.status(500).json(
+      new ApiResponse(false, 500, null, 'Failed to fetch player season history')
+    );
+  }
+};
+
+// Get player's division participation history
+export const getPlayerDivisionHistory = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    
+    // Validate player exists
+    const player = await prisma.user.findUnique({
+      where: { id },
+      select: { id: true, name: true }
+    });
+
+    if (!player) {
+      return res.status(404).json(
+        new ApiResponse(false, 404, null, 'Player not found')
+      );
+    }
+
+    // Get divisions where player has been assigned
+    const playerDivisions = await prisma.division.findMany({
+      where: {
+        assignments: {
+          some: {
+            userId: id
+          }
+        }
+      },
+      include: {
+        assignments: {
+          where: { userId: id },
+          select: { 
+            assignedAt: true,
+            reassignmentCount: true,
+            notes: true,
+            assignedByAdmin: {
+              select: {
+                id: true,
+                user: {
+                  select: {
+                    name: true,
+                    email: true
+                  }
+                }
+              }
+            }
+          }
+        },
+        season: {
+          select: {
+            id: true,
+            name: true,
+            status: true,
+            startDate: true,
+            endDate: true
+          }
+        },
+        league: {
+          select: {
+            id: true,
+            name: true,
+            sportType: true,
+            location: true,
+            status: true
+          }
+        },
+        divisionSponsor: {
+          select: {
+            id: true,
+            sponsoredName: true,
+            packageTier: true,
+            prizePoolTotal: true
+          }
+        },
+        _count: {
+          select: { 
+            assignments: true,
+            matches: true
+          }
+        }
+      },
+      orderBy: {
+        createdAt: 'desc'
+      }
+    });
+
+    // Transform data for better frontend consumption
+    const transformedDivisions = playerDivisions.map(division => ({
+      ...division,
+      assignment: division.assignments[0], // Player's assignment details
+      assignments: undefined // Remove the array since we only need the player's assignment
+    }));
+
+    return res.status(200).json(
+      new ApiResponse(true, 200, {
+        player: {
+          id: player.id,
+          name: player.name
+        },
+        divisions: transformedDivisions,
+        count: transformedDivisions.length
+      }, 'Player division history retrieved successfully')
+    );
+
+  } catch (error) {
+    console.error('Error getting player division history:', error);
+    return res.status(500).json(
+      new ApiResponse(false, 500, null, 'Failed to fetch player division history')
+    );
+  }
+};
+
+// Get player's match participation history (admin access)
+export const getPlayerMatchHistoryAdmin = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    
+    // Validate player exists
+    const player = await prisma.user.findUnique({
+      where: { id },
+      select: { id: true, name: true }
+    });
+
+    if (!player) {
+      return res.status(404).json(
+        new ApiResponse(false, 404, null, 'Player not found')
+      );
+    }
+
+    // Get matches where player has participated
+    const playerMatches = await prisma.match.findMany({
+      where: {
+        participants: {
+          some: {
+            userId: id
+          }
+        }
+      },
+      include: {
+        participants: {
+          where: { userId: id },
+          select: { 
+            isStarter: true,
+            team: true
+          }
+        },
+        division: {
+          select: {
+            id: true,
+            name: true,
+            gameType: true,
+            genderCategory: true,
+            level: true,
+            season: {
+              select: {
+                id: true,
+                name: true,
+                status: true
+              }
+            },
+            league: {
+              select: {
+                id: true,
+                name: true,
+                sportType: true,
+                location: true
+              }
+            }
+          }
+        },
+        stats: {
+          select: {
+            playerAces: true,
+            playerUnforcedErrors: true,
+            playerWinners: true,
+            playerDoubleFaults: true,
+            opponentAces: true,
+            opponentUnforcedErrors: true,
+            opponentWinners: true,
+            opponentDoubleFaults: true,
+            rallyCount: true,
+            longestRally: true,
+            breakPointsConverted: true,
+            breakPointsTotal: true
+          }
+        },
+        _count: {
+          select: { 
+            participants: true
+          }
+        }
+      },
+      orderBy: {
+        matchDate: 'desc'
+      }
+    });
+
+    // Transform data for better frontend consumption
+    const transformedMatches = playerMatches.map(match => ({
+      ...match,
+      participation: match.participants[0], // Player's participation details
+      participants: undefined // Remove the array since we only need the player's participation
+    }));
+
+    return res.status(200).json(
+      new ApiResponse(true, 200, {
+        player: {
+          id: player.id,
+          name: player.name
+        },
+        matches: transformedMatches,
+        count: transformedMatches.length
+      }, 'Player match history retrieved successfully')
+    );
+
+  } catch (error) {
+    console.error('Error getting player match history:', error);
+    return res.status(500).json(
+      new ApiResponse(false, 500, null, 'Failed to fetch player match history')
+    );
+  }
+};

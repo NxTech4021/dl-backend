@@ -672,7 +672,7 @@ enum GameType {
 }
 
 enum SportType {
-  PADDLE
+  PADEL
   PICKLEBALL
   TENNIS
 }

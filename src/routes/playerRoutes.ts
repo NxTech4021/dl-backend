@@ -20,6 +20,11 @@ import {
   addFavorite,
   removeFavorite,
   getPublicPlayerProfile,
+  // Player History endpoints
+  getPlayerLeagueHistory,
+  getPlayerSeasonHistory,
+  getPlayerDivisionHistory,
+  getPlayerMatchHistoryAdmin,
 } from '../controllers/playerController';
 
 const playerRouter = Router();
@@ -28,6 +33,12 @@ const playerRouter = Router();
 playerRouter.get('/', getAllPlayers);
 playerRouter.get('/stats', getPlayerStats);
 playerRouter.get('/:id', getPlayerById);
+
+// Player history routes (admin access)
+playerRouter.get('/:id/leagues', getPlayerLeagueHistory);
+playerRouter.get('/:id/seasons', getPlayerSeasonHistory);
+playerRouter.get('/:id/divisions', getPlayerDivisionHistory);
+playerRouter.get('/:id/matches', getPlayerMatchHistoryAdmin);
 
 // Player profile routes (authenticated user)
 playerRouter.get('/profile/me', verifyAuth, getPlayerProfile);
