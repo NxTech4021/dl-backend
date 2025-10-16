@@ -68,18 +68,10 @@ model Admin {
 
   // Relations
   leagues                 League[]
-  company                 Company[]
   sponsorships            Sponsorship[]          @relation("SponsorshipCreatedBy")
   divisionsCreated        Division[]             @relation("DivisionCreatedBy")
   divisionsUpdated        Division[]             @relation("DivisionUpdatedBy")
   divisionAssignments     DivisionAssignment[]   @relation("AssignmentsByAdmin")
-  leagues             League[]
-  company             Company[]
-  sponsorships        Sponsorship[]        @relation("SponsorshipCreatedBy")
-  divisionsCreated    Division[]           @relation("DivisionCreatedBy")
-  divisionsUpdated    Division[]           @relation("DivisionUpdatedBy")
-  divisionAssignments DivisionAssignment[] @relation("AssignmentsByAdmin")
-  leagueInvites       LeagueInvite[]
 }
 
 model AdminInviteToken {
@@ -213,7 +205,6 @@ model LeagueMembership {
 
 model Category {
   id                  String              @id @default(cuid())  
-  leagueId            String?            
   name                String?              @db.VarChar(255)    
   
   // Restrictions and Format
@@ -227,32 +218,29 @@ model Category {
   updatedAt           DateTime            @updatedAt
   leagues             League[]
   seasons             Season[] 
- 
-  @@index([leagueId])
+
   @@index([isActive])
 }
 
-//Not using now 
-model Company {
-  id           String   @id @default(cuid())
-  name         String   @db.VarChar(255)
-  contactEmail String?  @unique
-  website      String?
-  logoUrl      String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+// Not using now 
+// model Company {
+// id           String   @id @default(cuid())
+// name         String   @db.VarChar(255)
+// contactEmail String?  @unique
+// website      String?
+// logoUrl      String?
+// createdAt    DateTime @default(now())
+// updatedAt    DateTime @updatedAt
 
-  createdById      String? // Admin who created the company
-  createdBy        Admin?        @relation(fields: [createdById], references: [id])
-  sponsorshipDeals Sponsorship[]
-
-  @@map("company")
-}
+//  createdById      String? 
+//  createdBy        Admin?        @relation(fields: [createdById], references: [id])
+//  sponsorshipDeals Sponsorship[]
+//
+//  @@map("company")
+//}
 
 model Sponsorship {
   id             String   @id @default(cuid())
-  leagueId       String?
-  companyId      String?
   packageTier    TierType
   contractAmount Decimal? @db.Decimal(10, 2)
   sponsorRevenue Decimal? @db.Decimal(10, 2)
@@ -262,14 +250,11 @@ model Sponsorship {
   updatedAt      DateTime @updatedAt
 
   // Relationships
-  league    League?    @relation(fields: [leagueId], references: [id], onDelete: Cascade)
-  company   Company?   @relation(fields: [companyId], references: [id])
-  createdBy Admin?     @relation("SponsorshipCreatedBy", fields: [createdById], references: [id])
-  divisions Division[] @relation("DivisionSponsor") // Support division sponsorships
 
-  @@unique([leagueId, companyId, packageTier])
-  @@index([leagueId])
-  @@index([companyId])
+  leagues         League[] 
+  createdBy       Admin?     @relation("SponsorshipCreatedBy", fields: [createdById], references: [id])
+  divisions       Division[] @relation("DivisionSponsor") // Support division sponsorships
+
   @@map("sponsorship")
 }
 
@@ -302,10 +287,8 @@ model Season {
   partnerships  Partnership[]
   registrations SeasonRegistration[]
 
-  leagues League[] @relation("LeagueToSeason")
-
-  categoryId String
-  category   Category @relation(fields: [categoryId], references: [id])
+  leagues       League[] @relation("LeagueToSeason")
+  categories    Category[]
 
   waitlistId String?
   waitlist   Waitlist? @relation
@@ -380,8 +363,8 @@ model Division {
   name                    String                                    
   description             String?
   level                   DivisionLevel?                              
-  gameType                GameType                                     // game_type
-  genderCategory          GenderType?                                      // gender_category
+  gameType                GameType                                   
+  genderCategory          GenderType?                                  
 
   // capacities
   maxSinglesPlayers       Int?
@@ -571,6 +554,104 @@ model UserAchievement {
   @@index([achievementId])
 }
 
+model Favorite {
+  id          String   @id @default(cuid())
+  userId      String
+  favoritedId String
+  createdAt   DateTime @default(now())
+
+  user      User @relation("UserFavorites", fields: [userId], references: [id], onDelete: Cascade)
+  favorited User @relation("FavoritedBy", fields: [favoritedId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, favoritedId])
+  @@index([userId])
+  @@index([favoritedId])
+  @@map("favorite")
+}
+
+model PairRequest {
+  id          String            @id @default(cuid())
+  requesterId String
+  recipientId String
+  seasonId    String
+  message     String?
+  status      PairRequestStatus
+  createdAt   DateTime          @default(now())
+  respondedAt DateTime?
+  expiresAt   DateTime
+
+  requester User   @relation("SentPairRequests", fields: [requesterId], references: [id], onDelete: Cascade)
+  recipient User   @relation("ReceivedPairRequests", fields: [recipientId], references: [id], onDelete: Cascade)
+  season    Season @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+
+  @@index([requesterId])
+  @@index([recipientId])
+  @@index([seasonId])
+  @@index([status])
+  @@map("pair_request")
+}
+
+model Partnership {
+  id          String    @id @default(cuid())
+  player1Id   String
+  player2Id   String
+  seasonId    String
+  divisionId  String?
+  pairRating  Int?
+  status      String    @default("ACTIVE")
+  createdAt   DateTime  @default(now())
+  dissolvedAt DateTime?
+
+  player1           User                @relation("Player1Partnerships", fields: [player1Id], references: [id], onDelete: Cascade)
+  player2           User                @relation("Player2Partnerships", fields: [player2Id], references: [id], onDelete: Cascade)
+  season            Season              @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  division          Division?           @relation(fields: [divisionId], references: [id], onDelete: SetNull)
+  withdrawalRequest WithdrawalRequest[]
+
+  @@unique([player1Id, player2Id, seasonId])
+  @@index([seasonId])
+  @@index([status])
+  @@index([player1Id])
+  @@index([player2Id])
+  @@map("partnership")
+}
+
+model SeasonRegistration {
+  id               Int              @id @default(autoincrement())
+  seasonId         String
+  registrationType RegistrationType
+  playerId         String?
+  teamId           String?
+  divisionId       String?
+  isActive         Boolean          @default(true)
+  registeredAt     DateTime         @default(now())
+
+  season   Season    @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  player   User?     @relation("PlayerRegistrations", fields: [playerId], references: [id], onDelete: Cascade)
+  division Division? @relation(fields: [divisionId], references: [id], onDelete: SetNull)
+
+  @@unique([seasonId, playerId])
+  @@index([seasonId])
+  @@index([playerId])
+  @@map("season_registration")
+}
+
+// Enums 
+
+enum PairRequestStatus {
+  PENDING
+  ACCEPTED
+  DENIED
+  CANCELLED
+  EXPIRED
+}
+
+enum RegistrationType {
+  INDIVIDUAL
+  TEAM
+}
+
+
 enum Role {
   USER
   ADMIN
@@ -656,114 +737,9 @@ enum SportType {
   TENNIS
 }
 
-enum Gender {
-  MALE
-  FEMALE
-  MIXED
-}
-
-enum TierType{
+enum TierType {
   BRONZE
   SILVER
   GOLD
   PLATINUM
-}
-
-// ============================================
-// PAIRING & FAVORITES MODELS
-// ============================================
-
-model Favorite {
-  id          String   @id @default(cuid())
-  userId      String
-  favoritedId String
-  createdAt   DateTime @default(now())
-
-  user      User @relation("UserFavorites", fields: [userId], references: [id], onDelete: Cascade)
-  favorited User @relation("FavoritedBy", fields: [favoritedId], references: [id], onDelete: Cascade)
-
-  @@unique([userId, favoritedId])
-  @@index([userId])
-  @@index([favoritedId])
-  @@map("favorite")
-}
-
-model PairRequest {
-  id          String            @id @default(cuid())
-  requesterId String
-  recipientId String
-  seasonId    String
-  message     String?
-  status      PairRequestStatus
-  createdAt   DateTime          @default(now())
-  respondedAt DateTime?
-  expiresAt   DateTime
-
-  requester User   @relation("SentPairRequests", fields: [requesterId], references: [id], onDelete: Cascade)
-  recipient User   @relation("ReceivedPairRequests", fields: [recipientId], references: [id], onDelete: Cascade)
-  season    Season @relation(fields: [seasonId], references: [id], onDelete: Cascade)
-
-  @@index([requesterId])
-  @@index([recipientId])
-  @@index([seasonId])
-  @@index([status])
-  @@map("pair_request")
-}
-
-model Partnership {
-  id          String    @id @default(cuid())
-  player1Id   String
-  player2Id   String
-  seasonId    String
-  divisionId  String?
-  pairRating  Int?
-  status      String    @default("ACTIVE")
-  createdAt   DateTime  @default(now())
-  dissolvedAt DateTime?
-
-  player1           User                @relation("Player1Partnerships", fields: [player1Id], references: [id], onDelete: Cascade)
-  player2           User                @relation("Player2Partnerships", fields: [player2Id], references: [id], onDelete: Cascade)
-  season            Season              @relation(fields: [seasonId], references: [id], onDelete: Cascade)
-  division          Division?           @relation(fields: [divisionId], references: [id], onDelete: SetNull)
-  withdrawalRequest WithdrawalRequest[]
-
-  @@unique([player1Id, player2Id, seasonId])
-  @@index([seasonId])
-  @@index([status])
-  @@index([player1Id])
-  @@index([player2Id])
-  @@map("partnership")
-}
-
-model SeasonRegistration {
-  id               Int              @id @default(autoincrement())
-  seasonId         String
-  registrationType RegistrationType
-  playerId         String?
-  teamId           String?
-  divisionId       String?
-  isActive         Boolean          @default(true)
-  registeredAt     DateTime         @default(now())
-
-  season   Season    @relation(fields: [seasonId], references: [id], onDelete: Cascade)
-  player   User?     @relation("PlayerRegistrations", fields: [playerId], references: [id], onDelete: Cascade)
-  division Division? @relation(fields: [divisionId], references: [id], onDelete: SetNull)
-
-  @@unique([seasonId, playerId])
-  @@index([seasonId])
-  @@index([playerId])
-  @@map("season_registration")
-}
-
-enum PairRequestStatus {
-  PENDING
-  ACCEPTED
-  DENIED
-  CANCELLED
-  EXPIRED
-}
-
-enum RegistrationType {
-  INDIVIDUAL
-  TEAM
 }
