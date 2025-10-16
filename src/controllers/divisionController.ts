@@ -151,13 +151,27 @@ export const createDivision = async (req: Request, res: Response) => {
   try {
     const season = await prisma.season.findUnique({
       where: { id: seasonId },
-      select: { id: true, name: true, leagueId: true },
+      select: { 
+        id: true, 
+        name: true,  
+        leagues: { 
+          select: {
+            id: true
+            }
+        }
+      },
     });
 
     if (!season) {
       return res.status(404).json({ error: "Season not found." });
     }
 
+    const leagueId = season.leagues && season.leagues.length > 0 ? season.leagues[0].id : null;
+
+    if (!leagueId) {
+      
+        return res.status(400).json({ error: "Season is not linked to any league." });
+    }
     const duplicate = await prisma.division.findFirst({
       where: { seasonId, name },
       select: { id: true },
@@ -172,7 +186,7 @@ export const createDivision = async (req: Request, res: Response) => {
     const division = await prisma.division.create({
       data: {
         seasonId,
-        leagueId: season.leagueId,
+        leagueId: leagueId,
         name,
         description,
         pointsThreshold:

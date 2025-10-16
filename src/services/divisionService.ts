@@ -37,9 +37,9 @@ export const createDivision = async (data: DivisionCreationData) => {
   }
 
   // Business Rule: Cannot create divisions for completed seasons
-  if (season.status === 'COMPLETED') {
-    throw new Error('Cannot create divisions for completed seasons.');
-  }
+  // if (season.status === 'COMPLETED') {
+  //   throw new Error('Cannot create divisions for completed seasons.');
+  // }
 
   // Business Rule: Check for duplicate division names in same season
   const existingDivision = await prisma.division.findFirst({

@@ -72,10 +72,10 @@ app.use(
 // According to the official Express documentaticlon for better-auth,
 // the auth handler must be mounted BEFORE express.json().
 // Express v5 requires the {*any} syntax for wildcard routes.
-app.all("/api/auth/{*any}", (req, res, next) => {
+app.all("/api/auth/{*any}", (req, res) => {
   console.log(`🔐 Auth request: ${req.method} ${req.path}`);
   try {
-    toNodeHandler(auth)(req, res, next);
+    toNodeHandler(auth)(req, res);
   } catch (error) {
     console.error("❌ Auth handler error:", error);
     res.status(500).json({ error: "Authentication error" });

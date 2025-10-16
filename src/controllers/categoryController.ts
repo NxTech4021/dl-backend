@@ -30,8 +30,6 @@ export const createCategory = async (req: Request, res: Response) => {
         name,
         genderRestriction,
         matchFormat,
-        maxPlayers,
-        maxTeams,
         categoryOrder,
         game_type,          
         gender_category: mappedGenderCategory
