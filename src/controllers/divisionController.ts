@@ -1,7 +1,7 @@
 import {
   DivisionLevel,
   GameType,
-  Gender,
+  GenderType,
   Prisma,
   PrismaClient,
 } from "@prisma/client";
@@ -9,7 +9,7 @@ import { Request, Response } from "express";
 
 const prisma = new PrismaClient();
 
-const toEnum = <T extends DivisionLevel | GameType | Gender>(
+const toEnum = <T extends DivisionLevel | GameType | GenderType>(
   value: string | undefined,
   enumType: Record<string, T>
 ): T | undefined => {
@@ -121,7 +121,7 @@ export const createDivision = async (req: Request, res: Response) => {
 
   const levelEnum = toEnum(divisionLevel, DivisionLevel);
   const gameTypeEnum = toEnum(gameType, GameType);
-  const genderEnum = toEnum(genderCategory, Gender);
+  const genderEnum = toEnum(genderCategory, GenderType);
 
   if (!levelEnum) {
     return res.status(400).json({ error: "Invalid divisionLevel value." });
@@ -153,12 +153,11 @@ export const createDivision = async (req: Request, res: Response) => {
       where: { id: seasonId },
       select: { 
         id: true, 
-        name: true, 
-        categoryId: true,
-        category: {
+        name: true,  
+        leagues: { 
           select: {
-            leagueId: true
-          }
+            id: true
+            }
         }
       },
     });
@@ -167,10 +166,12 @@ export const createDivision = async (req: Request, res: Response) => {
       return res.status(404).json({ error: "Season not found." });
     }
 
-    if (!season.category?.leagueId) {
-      return res.status(400).json({ error: "Season category or league not found." });
-    }
+    const leagueId = season.leagues && season.leagues.length > 0 ? season.leagues[0].id : null;
 
+    if (!leagueId) {
+      
+        return res.status(400).json({ error: "Season is not linked to any league." });
+    }
     const duplicate = await prisma.division.findFirst({
       where: { seasonId, name },
       select: { id: true },
@@ -185,7 +186,7 @@ export const createDivision = async (req: Request, res: Response) => {
     const division = await prisma.division.create({
       data: {
         seasonId,
-        leagueId: season.category.leagueId,
+        leagueId: leagueId,
         name,
         description,
         pointsThreshold:
@@ -321,7 +322,7 @@ export const updateDivision = async (req: Request, res: Response) => {
     }
 
     if (genderCategory !== undefined) {
-      const genderEnum = toEnum(genderCategory, Gender);
+      const genderEnum = toEnum(genderCategory, GenderType);
       if (!genderEnum) {
         return res
           .status(400)

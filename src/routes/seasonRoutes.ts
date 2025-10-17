@@ -7,7 +7,9 @@ import {
   updateSeasonStatus,
   deleteSeason,
   submitWithdrawalRequest,
-  processWithdrawalRequest
+  processWithdrawalRequest,
+  registerPlayerToSeason,
+  assignPlayerToDivision,
 } from '../controllers/seasonController';
 import { verifyAuth } from '../middlewares/auth.middleware';
 
@@ -27,6 +29,13 @@ seasonRoutes.delete('/:id', deleteSeason);
 // Withdrawal/Partner Change Request routes (require authentication)
 seasonRoutes.post('/withdrawals', verifyAuth, submitWithdrawalRequest);
 seasonRoutes.put('/withdrawals/:id/process', verifyAuth, processWithdrawalRequest);
+
+// Register Player to Season
+seasonRoutes.post('/player/register', registerPlayerToSeason);
+
+// Assign player to Division
+seasonRoutes.post('/player/assign-division', assignPlayerToDivision);
+
 
 export default seasonRoutes;
 

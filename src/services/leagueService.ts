@@ -44,7 +44,7 @@ interface LeagueData {
 export const getAllLeagues = async () => {
   const leagues = await prisma.league.findMany({
     include: {
-      sponsorships: { include: { company: true } },
+      sponsorships: true,
       _count: {
         select: { seasons: true, memberships: true, categories: true },
       },
@@ -64,12 +64,7 @@ export const getLeagueById = async (id: string) => {
   const league = await prisma.league.findUnique({
     where: { id },
     include: {
-      // Include sponsorships and their company info
-      sponsorships: {
-        include: { company: true },
-      },
-
-      // Include memberships and their related users (players/admins)
+      sponsorships: true,
       memberships: {
         include: {
           user: {

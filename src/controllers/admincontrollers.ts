@@ -6,6 +6,7 @@ import { sendEmail } from "../config/nodemailer";
 import { Request, Response } from "express";
 import { auth } from "../lib/auth";
 
+
 const prisma = new PrismaClient();
 
 const toWebHeaders = (headers: Request["headers"]): Headers => {
@@ -49,8 +50,8 @@ export const createSuperadmin = async (req: Request, res: Response) => {
         email,
         password,
         name,
-        username, // Include username in the signup request
-      },
+        username, 
+      } as any,
     });
 
     if (!signUpResult || (signUpResult as any).error) {
@@ -246,13 +247,14 @@ export const registerAdmin = async (req: Request, res: Response) => {
         .json({ message: "Username is already taken", status: "FAILED" });
     }
 
+    
     const registeredUser = await auth.api.signUpEmail({
       body: {
         email: invite.email,
         password,
         name,
         username,
-      },
+      } as any,
     });
 
     if (!registeredUser?.user) {
@@ -349,7 +351,17 @@ export const sendAdminInvite = async (req: Request, res: Response) => {
 
 export const getAdminSession = async (req: Request, res: Response) => {
   try {
-    const session = await auth.api.getSession({ headers: req.headers });
+
+    const fetchHeaders = new Headers();
+    for (const [key, value] of Object.entries(req.headers)) {
+      if (value !== undefined) {
+        fetchHeaders.append(
+          key,
+          Array.isArray(value) ? value.join(", ") : value
+        );
+      }
+    }
+    const session = await auth.api.getSession({ headers: fetchHeaders });
 
     if (!session) {
       return res
