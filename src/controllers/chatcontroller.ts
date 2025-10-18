@@ -125,6 +125,7 @@ export const markAsRead = async (req: Request, res: Response) => {
             select: { threadId: true, senderId: true } 
         });
 
+        
         if (!messageInfo) {
             return res.status(404).json({ error: "Message not found" });
         }

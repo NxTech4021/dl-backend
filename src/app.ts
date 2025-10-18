@@ -5,7 +5,7 @@ import cookieParser from "cookie-parser";
 import { socketHandler } from "./utils/socketconnection";
 import { toNodeHandler } from "better-auth/node";
 import { auth } from "./lib/auth";
-
+import { socketMiddleware } from "./middlewares/socketmiddleware";
 import router from "./routes/index";
 import pino from "pino-http";
 import {
@@ -40,7 +40,9 @@ app.use((req, res, next) => {
 });
 
 const httpServer = createServer(app);
+console.log("🔧 Initializing Socket.IO server...");
 const io = socketHandler(httpServer);
+console.log("✅ Socket.IO server initialized successfully");
 
 // Set up CORS
 app.use(
@@ -92,8 +94,25 @@ app.use(express.json());
 app.use(cookieParser());
 app.use(pino());
 
+app.use(socketMiddleware(io));
+console.log("✅ Socket middleware attached to Express app");
+
 // Mount API routes under /api prefix
 app.use("/api", router);
+
+
+// Test Socket Connection 
+app.post("/api/test-socket", (req, res) => {
+  if (req.io) {
+    const { room, event, data } = req.body;
+    req.io.to(room || 'global').emit(event || 'test', data || { message: 'Test from server' });
+    console.log(`📤 Test socket event sent - Room: ${room}, Event: ${event}`);
+    res.json({ success: true, message: "Socket event sent" });
+  } else {
+    console.log("❌ Socket.IO not available for test");
+    res.status(500).json({ error: "Socket.IO not available" });
+  }
+});
 
 // Health check endpoint
 app.get("/health", (req, res) => {
