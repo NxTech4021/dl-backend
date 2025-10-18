@@ -22,6 +22,12 @@ import {
 
 const app = express();
 
+const httpServer = createServer(app);
+console.log("🔧 Initializing Socket.IO server...");
+const io = socketHandler(httpServer);
+console.log("✅ Socket.IO server initialized successfully");
+
+
 // Apply security middlewares first
 app.use(securityHeaders);
 app.use(ipBlocker);
@@ -39,10 +45,6 @@ app.use((req, res, next) => {
   next();
 });
 
-const httpServer = createServer(app);
-console.log("🔧 Initializing Socket.IO server...");
-const io = socketHandler(httpServer);
-console.log("✅ Socket.IO server initialized successfully");
 
 // Set up CORS
 app.use(
@@ -119,4 +121,5 @@ app.get("/health", (req, res) => {
   res.json({ status: "OK", message: "Server is running" });
 });
 
+export { httpServer, io };
 export default app;
