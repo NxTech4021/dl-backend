@@ -3,18 +3,27 @@ import { Server as HttpServer } from 'http';
 import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
-const activeUsers = new Map<string, string>(); // Map<userId, socketId>
+const activeUsers = new Map<string, string>(); 
+const userSockets = new Map<string, string>();
+
 
 export function socketHandler(httpServer: HttpServer) {
   const io = new SocketIOServer(httpServer, {
     cors: {
-      origin: "*", // Adjust this to your client's URL in production
-      methods: ["GET", "POST"]
-    }
+      origin: [
+      "http://localhost:3030",
+      "https://staging.appdevelopers.my",
+    ],
+      methods: ["GET", "POST"],
+      credentials: true
+    },
+     transports: ['websocket', 'polling'] 
   });
 
+  console.log("🚀 Socket.IO server initialized");
+
   io.on('connection', (socket) => {
-    console.log(`User connected: ${socket.id}`);
+    console.log(`✅ User connected: ${socket.id} at ${new Date().toISOString()}`);
 
     // 1. Online Presence: User reports their ID upon connection
     socket.on('set_user_id', (userId: string) => {
