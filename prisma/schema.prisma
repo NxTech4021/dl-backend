@@ -1,4 +1,3 @@
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -8,84 +7,87 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-enum Role {
-  USER
-  ADMIN
-  SUPERADMIN
-}
-
-enum AdminStatus {
-  PENDING
-  ACTIVE
-  SUSPENDED
-}
-
-enum UserStatus {
-  ACTIVE
-  INACTIVE
-  SUSPENDED
-}
-
-
-
 model User {
-  id                   String    @id @default(cuid())
-  name                 String
-  username             String    @unique
-  displayUsername      String?
-  email                String    @unique
-  emailVerified        Boolean   @default(false)
-  image                String?
-  gender               String?   // 'male' | 'female'
-  dateOfBirth          DateTime?
-  area                 String?
-  phoneNumber          String?
-  bio                  String?
-  status               String    @default("active")   // 'active' | 'inactive'
-  completedOnboarding  Boolean   @default(false)
-  lastLogin            DateTime?
-  lastActivityCheck    DateTime?
-  accounts             Account[]
-  sessions             Session[]
-  playerMatches        Match[]   @relation("PlayerMatches")
-  opponentMatches      Match[]   @relation("OpponentMatches")
-  achievements         UserAchievement[]
-  createdAt            DateTime  @default(now())
-  updatedAt            DateTime  @updatedAt
-  role                 Role      @default(USER)
+  id                  String    @id @default(cuid())
+  name                String
+  email               String    @unique
+  emailVerified       Boolean   @default(false)
+  image               String?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  displayUsername     String?
+  username            String    @unique
+  role                Role      @default(USER)
+  dateOfBirth         DateTime?
+  gender              String?
+  area                String?
+  completedOnboarding Boolean   @default(false)
+  lastActivityCheck   DateTime?
+  lastLogin           DateTime?
+  status              String    @default("active")
+  bio                 String?
+  phoneNumber         String?
+  admin               Admin?
 
+  achievements      UserAchievement[]
+  accounts          Account[]
+  sessions          Session[]
+  seasonMemberships SeasonMembership[]
+  leagueMemberships LeagueMembership[]
+  matchParticipants MatchParticipant[]
+  processedRequests WithdrawalRequest[] @relation("ProcessedByAdmin")
 
-  //Admin relation 
-  admin Admin?
+  divisionAssignments DivisionAssignment[] @relation("DivisionAssignments")
+
+  // Pairing & Favorites Relations
+  favorites            Favorite[]           @relation("UserFavorites")
+  favoritedBy          Favorite[]           @relation("FavoritedBy")
+  sentPairRequests     PairRequest[]        @relation("SentPairRequests")
+  receivedPairRequests PairRequest[]        @relation("ReceivedPairRequests")
+  player1Partnerships  Partnership[]        @relation("Player1Partnerships")
+  player2Partnerships  Partnership[]        @relation("Player2Partnerships")
+  registrations        SeasonRegistration[] @relation("PlayerRegistrations")
 
   //Thread relations
   userThreads  UserThread[]   
   messages     Message[]      
   readMessages MessageReadBy[] 
+
+  @@index([email])
+  @@index([username])
+  @@index([status])
+  @@index([completedOnboarding])
+  @@index([createdAt])
+  @@map("user")
 }
 
 model Admin {
-  id         String       @id @default(cuid())
-  userId     String?      @unique
-  status     AdminStatus  @default(PENDING)
-  invitedBy  String?     
-  createdAt  DateTime     @default(now())
-  updatedAt  DateTime     @updatedAt
+  id        String            @id @default(cuid())
+  userId    String?           @unique
+  status    AdminStatus       @default(PENDING)
+  invitedBy String?
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+  user      User?             @relation(fields: [userId], references: [id])
+  invite    AdminInviteToken?
 
-  user   User?   @relation(fields: [userId], references: [id])
-  invite AdminInviteToken?
+  // Relations
+  leagues                 League[]
+  sponsorships            Sponsorship[]          @relation("SponsorshipCreatedBy")
+  divisionsCreated        Division[]             @relation("DivisionCreatedBy")
+  divisionsUpdated        Division[]             @relation("DivisionUpdatedBy")
+  divisionAssignments     DivisionAssignment[]   @relation("AssignmentsByAdmin")
 }
 
 model AdminInviteToken {
   id        String   @id @default(cuid())
-  adminId   String   @unique  
+  adminId   String   @unique
   email     String
   token     String   @unique
-  status    String   @default("PENDING") // PENDING, ACCEPTED, EXPIRED
+  status    String   @default("PENDING")
   createdAt DateTime @default(now())
   expiresAt DateTime
-
-  admin Admin @relation(fields: [adminId], references: [id])
+  admin     Admin    @relation(fields: [adminId], references: [id])
 }
 
 model Account {
@@ -93,18 +95,16 @@ model Account {
   userId                String
   accountId             String
   providerId            String
-  accessToken           String?   @db.Text
-  refreshToken          String?   @db.Text
+  accessToken           String?
+  refreshToken          String?
   accessTokenExpiresAt  DateTime?
   refreshTokenExpiresAt DateTime?
   scope                 String?
-  idToken               String?   @db.Text
+  idToken               String?
   password              String?
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([providerId, accountId])
   @@map("account")
@@ -117,10 +117,13 @@ model Session {
   token     String   @unique
   ipAddress String?
   userAgent String?
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@index([userId])
+  @@index([token])
+  @@index([expiresAt])
   @@map("session")
 }
 
@@ -128,7 +131,7 @@ model Verification {
   id         String   @id @default(cuid())
   identifier String
   value      String   @unique
-  status     String   @default("PENDING") // NEW: PENDING, ACCEPTED, EXPIRED
+  status     String   @default("PENDING")
   expiresAt  DateTime
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
@@ -137,17 +140,15 @@ model Verification {
 }
 
 model QuestionnaireResponse {
-  id          Int       @id @default(autoincrement())
-  userId      String // Changed to String to match User.id type
-  sport       String // 'pickleball' | 'tennis' | 'padel'
-  qVersion    Int // from JSON file
-  qHash       String // SHA1 of JSON contents
-  answersJson Json // raw client payload
-  startedAt   DateTime  @default(now())
+  id          Int                  @id @default(autoincrement())
+  userId      String
+  sport       String
+  qVersion    Int
+  qHash       String
+  answersJson Json
+  startedAt   DateTime             @default(now())
   completedAt DateTime?
-
-  // one-to-one
-  result InitialRatingResult?
+  result      InitialRatingResult?
 
   @@index([userId])
   @@index([sport, qVersion])
@@ -155,78 +156,388 @@ model QuestionnaireResponse {
 }
 
 model InitialRatingResult {
-  id         Int      @id @default(autoincrement())
-  responseId Int      @unique
-  source     String // 'questionnaire' | 'dupr_conversion' | ...
+  id         Int                   @id @default(autoincrement())
+  responseId Int                   @unique
+  source     String
   singles    Int?
   doubles    Int?
   rd         Int?
   confidence String?
   detail     Json?
-  createdAt  DateTime @default(now())
+  createdAt  DateTime              @default(now())
+  response   QuestionnaireResponse @relation(fields: [responseId], references: [id], onDelete: Cascade)
+}
 
-  response QuestionnaireResponse @relation(fields: [responseId], references: [id], onDelete: Cascade)
+model League {
+  id          String  @id @default(cuid())
+  name        String  @db.VarChar(255)
+  location    String?
+  description String?
+
+  status        Statuses       @default(UPCOMING)
+  sportType     SportType
+  gameType      GameType
+
+  createdById String?
+  createdBy   Admin?  @relation(fields: [createdById], references: [id])
+
+  seasons       Season[]        @relation("LeagueToSeason")
+  sponsorships  Sponsorship[]
+  memberships   LeagueMembership[]
+  categories    Category[]
+  divisions     Division[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([location])
+  @@index([status])
+}
+
+model LeagueMembership {
+  id       String   @id @default(cuid())
+  userId   String
+  leagueId String
+  joinedAt DateTime @default(now())
+
+  user   User   @relation(fields: [userId], references: [id])
+  league League @relation(fields: [leagueId], references: [id])
+
+  @@unique([userId, leagueId])
+  @@index([leagueId])
+  @@index([userId])
+}
+
+model Category {
+  id                  String              @id @default(cuid())  
+  name                String?              @db.VarChar(255)    
+  
+  // Restrictions and Format
+  genderRestriction   GenderRestriction   @default(OPEN)       // 'gender_restriction' enum
+  matchFormat         String?                                  // 'match_format' e.g., Best of 3 sets
+  game_type           GameType?
+  gender_category     GenderType?  
+  isActive            Boolean             @default(true)       // 'is_active'
+  categoryOrder       Int                 @default(0)          // 'category_order' for display
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+  leagues             League[]
+  seasons             Season[] 
+
+  @@index([isActive])
+}
+
+// Not using now 
+// model Company {
+// id           String   @id @default(cuid())
+// name         String   @db.VarChar(255)
+// contactEmail String?  @unique
+// website      String?
+// logoUrl      String?
+// createdAt    DateTime @default(now())
+// updatedAt    DateTime @updatedAt
+
+//  createdById      String? 
+//  createdBy        Admin?        @relation(fields: [createdById], references: [id])
+//  sponsorshipDeals Sponsorship[]
+//
+//  @@map("company")
+//}
+
+model Sponsorship {
+  id             String   @id @default(cuid())
+  packageTier    TierType
+  contractAmount Decimal? @db.Decimal(10, 2)
+  sponsorRevenue Decimal? @db.Decimal(10, 2)
+  sponsoredName  String?
+  createdById    String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  // Relationships
+
+  leagues         League[] 
+  createdBy       Admin?     @relation("SponsorshipCreatedBy", fields: [createdById], references: [id])
+  divisions       Division[] @relation("DivisionSponsor")
+
+  @@map("sponsorship")
+}
+
+model Season {
+  id                  String    @id @default(cuid())
+  name                String
+  startDate           DateTime?
+  endDate             DateTime?
+  regiDeadline        DateTime?
+  entryFee            Decimal   @db.Decimal(10, 2)
+  description         String?
+  registeredUserCount Int       @default(0)
+
+  //Bools
+  status                SeasonStatus      @default(UPCOMING)    
+  isActive              Boolean           @default(false)
+  paymentRequired       Boolean           @default(false)
+  promoCodeSupported    Boolean           @default(false)
+  withdrawalEnabled     Boolean           @default(false)
+
+  
+  //Relations
+  divisions          Division[]
+  memberships        SeasonMembership[]
+  promoCodes         PromoCode[]         @relation("SeasonPromoCodes")
+  withdrawalRequests WithdrawalRequest[]
+
+  // Pairing Relations
+  pairRequests  PairRequest[]
+  partnerships  Partnership[]
+  registrations SeasonRegistration[]
+
+  leagues       League[] @relation("LeagueToSeason")
+  categories    Category[]
+
+  waitlistId String?
+  waitlist   Waitlist? @relation
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+  @@index([isActive])
+}
+
+model Waitlist {
+  id              String         @id @default(cuid())
+  seasonId        String         @unique
+  season          Season         @relation(fields: [seasonId], references: [id])
+  enabled         Boolean        @default(false)
+  maxParticipants Int?
+  waitlistedUsers WaitlistUser[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model WaitlistUser {
+  id                   String   @id @default(cuid())
+  waitlistId           String
+  userId               String
+  waitlistDate         DateTime @default(now())
+  promotedToRegistered Boolean  @default(false)
+
+  waitlist Waitlist @relation(fields: [waitlistId], references: [id])
+
+  @@unique([waitlistId, userId])
+  @@index([userId])
+}
+
+model PromoCode {
+  id              String            @id @default(cuid())
+  code            String            @unique 
+  description     String?         
+  discountValue   Decimal           @db.Decimal(10, 2) 
+  isPercentage    Boolean           @default(false) // True for %, false for fixed amount
+  isActive        Boolean           @default(true)
+  expiresAt       DateTime?         
+
+  seasons         Season[]          @relation("SeasonPromoCodes")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model WithdrawalRequest {
+  id                 String           @id @default(cuid())
+  userId             String
+  reason             String
+  requestDate        DateTime         @default(now())
+  status             WithdrawalStatus @default(PENDING)
+  processedByAdminId String?
+  partnershipId      String?          // For partner change requests
+
+  processedByAdmin User?        @relation("ProcessedByAdmin", fields: [processedByAdminId], references: [id])
+  seasonId         String
+  season           Season       @relation(fields: [seasonId], references: [id])
+  partnership      Partnership? @relation(fields: [partnershipId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Division {
+  id                      String   @id @default(cuid())               
+  name                    String                                    
+  description             String?
+  level                   DivisionLevel?                              
+  gameType                GameType                                   
+  genderCategory          GenderType?                                  
+
+  // capacities
+  maxSinglesPlayers       Int?
+  maxDoublesTeams         Int?
+ 
+  // denormalized counts
+  currentSinglesCount Int? @default(0)
+  currentDoublesCount Int? @default(0)
+
+  autoAssignmentEnabled Boolean @default(false)
+  isActiveDivision      Boolean @default(true)
+  pointsThreshold       Int?
+
+  // Sponsorship fields (from Excel spec)
+  divisionSponsorId     String? // division_sponsor_id
+  divisionSponsor       Sponsorship? @relation("DivisionSponsor", fields: [divisionSponsorId], references: [id], onDelete: SetNull)
+  sponsoredDivisionName String? // sponsored_division_name
+  prizePoolTotal        Decimal?     @db.Decimal(10, 2) // prize_pool_total
+
+  // audit — Admin FKs
+  createdByAdminId     String?
+  createdByAdmin       Admin?  @relation("DivisionCreatedBy", fields: [createdByAdminId], references: [id], onDelete: SetNull)
+  lastUpdatedByAdminId String?
+  lastUpdatedByAdmin   Admin?  @relation("DivisionUpdatedBy", fields: [lastUpdatedByAdminId], references: [id], onDelete: SetNull)
+
+  // Relations
+  matches           Match[]
+  assignments       DivisionAssignment[] // Player assignments tracking
+  seasonMemberships SeasonMembership[]         @relation("SeasonMembershipDivision")
+  seasonId                String                                      
+  season                  Season   @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  leagueId                String                                     
+  league                  League   @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+
+
+  // Pairing Relations
+  partnerships  Partnership[]
+  registrations SeasonRegistration[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([seasonId, name])
+  @@index([seasonId])
+  @@index([leagueId])
+  @@index([isActiveDivision])
+  @@index([divisionSponsorId])
+  @@map("division")
+}
+
+model SeasonMembership {
+  id              String         @id @default(cuid())
+  userId          String
+  seasonId        String
+  divisionId      String?
+  status          String         @default("PENDING") // 'PENDING' | 'ACTIVE' | 'INACTIVE' | 'FLAGGED' | 'REMOVED'
+  joinedAt        DateTime       @default(now())
+  withdrawalReason String?        // For handling "View Withdrawal Request"
+  paymentStatus   PaymentStatus  @default(PENDING)
+
+  // Relations
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  season           Season   @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  division         Division? @relation("SeasonMembershipDivision", fields: [divisionId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, seasonId, divisionId])
+  @@index([userId])
+  @@index([seasonId])
+  @@index([divisionId, status])
+}
+
+model DivisionAssignment {
+  id                String   @id @default(cuid())
+  divisionId        String
+  userId            String
+  assignedBy        String? // Admin ID who made the assignment
+  assignedAt        DateTime @default(now())
+  reassignmentCount Int      @default(0) // Track how many times player was moved
+  notes             String? // Admin notes for assignment
+
+  // Relations
+  division        Division @relation(fields: [divisionId], references: [id], onDelete: Cascade)
+  user            User     @relation("DivisionAssignments", fields: [userId], references: [id], onDelete: Cascade)
+  assignedByAdmin Admin?   @relation("AssignmentsByAdmin", fields: [assignedBy], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([divisionId, userId])
+  @@index([divisionId])
+  @@index([userId])
+  @@index([assignedBy])
+  @@map("division_assignment")
 }
 
 model Match {
-  id            String      @id @default(cuid())
-  playerId      String      // Player initiating/recording the match
-  opponentId    String      // Opponent player ID
-  sport         String      // 'tennis' | 'pickleball' | 'padel'
-  matchType     String      // 'singles' | 'doubles'
-  playerScore   Int         // Player's score
-  opponentScore Int         // Opponent's score
-  outcome       String      // 'win' | 'loss' | 'draw'
-  matchDate     DateTime    @default(now())
-  location      String?     // Optional match location
-  notes         String?     // Optional match notes
-  duration      Int?        // Match duration in minutes
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
+  id            String   @id @default(cuid())
+  divisionId    String?
+  sport         String
+  matchType     String
+  playerScore   Int?
+  opponentScore Int?
+  outcome       String?
+  matchDate     DateTime @default(now())
+  location      String?
+  notes         String?
+  duration      Int?
 
-  player        User        @relation("PlayerMatches", fields: [playerId], references: [id], onDelete: Cascade)
-  opponent      User        @relation("OpponentMatches", fields: [opponentId], references: [id], onDelete: Cascade)
-  stats         MatchStats?
+  division     Division?          @relation(fields: [divisionId], references: [id], onDelete: Cascade)
+  participants MatchParticipant[]
+  stats        MatchStats?
 
-  @@index([playerId])
-  @@index([opponentId])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([divisionId])
   @@index([sport])
   @@index([matchDate])
 }
 
-model MatchStats {
-  id                    String   @id @default(cuid())
-  matchId               String   @unique
-  playerAces            Int?
-  playerUnforcedErrors  Int?
-  playerWinners         Int?
-  playerDoubleFaults    Int?
-  opponentAces          Int?
-  opponentUnforcedErrors Int?
-  opponentWinners       Int?
-  opponentDoubleFaults  Int?
-  rallyCount            Int?
-  longestRally          Int?
-  breakPointsConverted  Int?
-  breakPointsTotal      Int?
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
+//TO DO - use this and link with seasonmembership
+model MatchParticipant {
+  id        String   @id @default(cuid())
+  matchId   String
+  userId    String
+  isStarter Boolean  @default(true)
+  team      String?
+  createdAt DateTime @default(now())
 
-  match                 Match    @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  match Match @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([matchId, userId])
+  @@index([userId])
+  @@index([matchId])
+}
+
+model MatchStats {
+  id                     String   @id @default(cuid())
+  matchId                String   @unique
+  playerAces             Int?
+  playerUnforcedErrors   Int?
+  playerWinners          Int?
+  playerDoubleFaults     Int?
+  opponentAces           Int?
+  opponentUnforcedErrors Int?
+  opponentWinners        Int?
+  opponentDoubleFaults   Int?
+  rallyCount             Int?
+  longestRally           Int?
+  breakPointsConverted   Int?
+  breakPointsTotal       Int?
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+  match                  Match    @relation(fields: [matchId], references: [id], onDelete: Cascade)
 }
 
 model Achievement {
-  id          String   @id @default(cuid())
-  title       String   // e.g., "First Win", "10 Match Streak"
-  description String   // e.g., "Win your first match"
-  icon        String?  // Icon identifier or emoji
-  category    String   // e.g., "match", "rating", "streak", "milestone"
-  requirement Json?    // Requirements to unlock (e.g., {matches_won: 1})
-  points      Int      @default(0) // Points awarded for achievement
-  isActive    Boolean  @default(true) // Can be earned
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
+  id               String            @id @default(cuid())
+  title            String
+  description      String
+  icon             String?
+  category         String
+  requirement      Json?
+  points           Int               @default(0)
+  isActive         Boolean           @default(true)
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
   userAchievements UserAchievement[]
 
   @@index([category])
@@ -238,11 +549,10 @@ model UserAchievement {
   userId        String
   achievementId String
   unlockedAt    DateTime    @default(now())
-  progress      Json?       // Current progress toward achievement
+  progress      Json?
   isCompleted   Boolean     @default(true)
-
-  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
   achievement   Achievement @relation(fields: [achievementId], references: [id], onDelete: Cascade)
+  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, achievementId])
   @@index([userId])
@@ -338,3 +648,195 @@ enum MediaType {
 }
 
 
+
+model Favorite {
+  id          String   @id @default(cuid())
+  userId      String
+  favoritedId String
+  createdAt   DateTime @default(now())
+
+  user      User @relation("UserFavorites", fields: [userId], references: [id], onDelete: Cascade)
+  favorited User @relation("FavoritedBy", fields: [favoritedId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, favoritedId])
+  @@index([userId])
+  @@index([favoritedId])
+  @@map("favorite")
+}
+
+model PairRequest {
+  id          String            @id @default(cuid())
+  requesterId String
+  recipientId String
+  seasonId    String
+  message     String?
+  status      PairRequestStatus
+  createdAt   DateTime          @default(now())
+  respondedAt DateTime?
+  expiresAt   DateTime
+
+  requester User   @relation("SentPairRequests", fields: [requesterId], references: [id], onDelete: Cascade)
+  recipient User   @relation("ReceivedPairRequests", fields: [recipientId], references: [id], onDelete: Cascade)
+  season    Season @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+
+  @@index([requesterId])
+  @@index([recipientId])
+  @@index([seasonId])
+  @@index([status])
+  @@map("pair_request")
+}
+
+//TO DO - use this and link with seasonmembership
+model Partnership {
+  id          String    @id @default(cuid())
+  player1Id   String
+  player2Id   String
+  seasonId    String
+  divisionId  String?
+  pairRating  Int?
+  status      String    @default("ACTIVE")
+  createdAt   DateTime  @default(now())
+  dissolvedAt DateTime?
+
+  player1           User                @relation("Player1Partnerships", fields: [player1Id], references: [id], onDelete: Cascade)
+  player2           User                @relation("Player2Partnerships", fields: [player2Id], references: [id], onDelete: Cascade)
+  season            Season              @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  division          Division?           @relation(fields: [divisionId], references: [id], onDelete: SetNull)
+  withdrawalRequest WithdrawalRequest[]
+
+  @@unique([player1Id, player2Id, seasonId])
+  @@index([seasonId])
+  @@index([status])
+  @@index([player1Id])
+  @@index([player2Id])
+  @@map("partnership")
+}
+
+//TO DO - remove this, redundant logic with seasonmembership
+model SeasonRegistration {
+  id               Int              @id @default(autoincrement())
+  seasonId         String
+  registrationType RegistrationType
+  playerId         String?
+  teamId           String?
+  divisionId       String?
+  isActive         Boolean          @default(true)
+  registeredAt     DateTime         @default(now())
+
+  season   Season    @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  player   User?     @relation("PlayerRegistrations", fields: [playerId], references: [id], onDelete: Cascade)
+  division Division? @relation(fields: [divisionId], references: [id], onDelete: SetNull)
+
+  @@unique([seasonId, playerId])
+  @@index([seasonId])
+  @@index([playerId])
+  @@map("season_registration")
+}
+
+// Enums 
+
+enum PairRequestStatus {
+  PENDING
+  ACCEPTED
+  DENIED
+  CANCELLED
+  EXPIRED
+}
+
+enum RegistrationType {
+  INDIVIDUAL
+  TEAM
+}
+
+
+enum Role {
+  USER
+  ADMIN
+  SUPERADMIN
+}
+
+enum AdminStatus {
+  PENDING
+  ACTIVE
+  SUSPENDED
+}
+
+enum PaymentStatus {
+  PENDING
+  COMPLETED
+  FAILED
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
+enum SeasonStatus {
+  UPCOMING
+  ACTIVE
+  FINISHED
+  CANCELLED
+}
+
+enum GenderRestriction {
+  MALE
+  FEMALE
+  MIXED
+  OPEN
+}
+
+enum GenderType {
+  MALE
+  FEMALE
+  MIXED
+}
+
+enum MembershipStatus {
+  PENDING
+  ACTIVE
+  FLAGGED
+  INACTIVE
+  REMOVED
+}
+
+enum Statuses {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+  UPCOMING
+  ONGOING
+  FINISHED
+  CANCELLED
+}
+
+enum WithdrawalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum DivisionLevel {
+  BEGINNER
+  INTERMEDIATE
+  ADVANCED
+}
+
+enum GameType {
+  SINGLES
+  DOUBLES
+}
+
+enum SportType {
+  PADEL
+  PICKLEBALL
+  TENNIS
+}
+
+enum TierType {
+  BRONZE
+  SILVER
+  GOLD
+  PLATINUM
+}

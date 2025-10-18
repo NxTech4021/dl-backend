@@ -57,6 +57,7 @@ export function getBackendBaseURL(): string {
  */
 export function getTrustedOrigins(): string[] {
   const baseOrigins = [
+    "http://localhost:3030",
     "http://localhost:82",
     "http://localhost:3001",
     "http://localhost:8081",
@@ -68,8 +69,30 @@ export function getTrustedOrigins(): string[] {
     baseOrigins.push(
       `http://${localIP}:3001`,
       `http://${localIP}:8081`,
-      `http://${localIP}:82`
+      `http://${localIP}:82`,
+      `http://${localIP}:3030`
     );
+  }
+
+  // Add origins from BETTER_AUTH_URL (without path) if provided
+  if (process.env.BETTER_AUTH_URL) {
+    try {
+      const url = new URL(process.env.BETTER_AUTH_URL);
+      baseOrigins.push(`${url.protocol}//${url.host}`, `${url.protocol}//${url.hostname}:3030`);
+    } catch (error) {
+      console.warn(
+        `[network] Failed to parse BETTER_AUTH_URL (${process.env.BETTER_AUTH_URL}):`,
+        error
+      );
+    }
+  }
+
+  // Add origins from CORS_ALLOWED_ORIGINS env if provided
+  if (process.env.CORS_ALLOWED_ORIGINS) {
+    const corsOrigins = process.env.CORS_ALLOWED_ORIGINS.split(",")
+      .map((o) => o.trim())
+      .filter(Boolean);
+    baseOrigins.push(...corsOrigins);
   }
 
   // Add any additional origins from environment

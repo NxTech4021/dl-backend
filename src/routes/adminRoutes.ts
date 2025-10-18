@@ -1,32 +1,31 @@
 import { Router } from "express";
-import { verifyJWT } from "../middlewares/auth.middleware";
+import { verifyAuth } from "../middlewares/auth.middleware";
 import {
-  // adminLogin,
   createSuperadmin,
   getInviteEmail,
   registerAdmin,
   sendAdminInvite,
   getAdminSession,
-  // adminLogout,
   fetchAdmins,
   getAdminById,
-  updateAdmin
+  updateAdmin,
+  updatePassword
 } from "../controllers/admincontrollers";
 
 
-const adminrouter = Router();
+const adminRouter = Router();
 // TO DO
 // Make them protected routes
-adminrouter.get("/get-invite", getInviteEmail);
-adminrouter.get("/session", getAdminSession);
-adminrouter.get("/getadmins", fetchAdmins);
-adminrouter.get("/profile/:id", getAdminById);
+adminRouter.get("/get-invite", getInviteEmail);
+adminRouter.get("/session", getAdminSession);
+adminRouter.get("/getadmins", fetchAdmins);
+adminRouter.get("/profile/:id", getAdminById);
 
-adminrouter.put("/account/update", updateAdmin)
-adminrouter.post("/superadmin", createSuperadmin);
-adminrouter.post("/register", registerAdmin);
-adminrouter.post("/invite", sendAdminInvite);
-// adminrouter.post("/adminlogin", adminLogin);
-// adminrouter.post("/logout", adminLogout);
+adminRouter.put("/account/update", updateAdmin)
+adminRouter.post("/superadmin", createSuperadmin);
+adminRouter.post("/register", registerAdmin);
+adminRouter.post("/invite", sendAdminInvite);
+adminRouter.post("/updatepassword", updatePassword);
 
-export default adminrouter;
+
+export default adminRouter;

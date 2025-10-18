@@ -1,14 +1,26 @@
 import { PrismaClient, Role } from "@prisma/client";
-import { createAdminInvite, updateAdminService } from "../services/adminService";
+import { createAdminInvite, resendAdminInvite, updateAdminService } from "../services/adminService";
 import { inviteEmailTemplate } from "../utils/email";
 import { ApiResponse } from "../utils/ApiResponse";
 import { sendEmail } from "../config/nodemailer";
 import { Request, Response } from "express";
 import { auth } from "../lib/auth";
 
-const JWT_SECRET = process.env.JWT_SECRET || "supersecret";
+
 const prisma = new PrismaClient();
 
+const toWebHeaders = (headers: Request["headers"]): Headers => {
+  const webHeaders = new Headers();
+  for (const [key, value] of Object.entries(headers)) {
+    if (value === undefined) continue;
+    if (Array.isArray(value)) {
+      webHeaders.set(key, value.join(","));
+    } else {
+      webHeaders.set(key, String(value));
+    }
+  }
+  return webHeaders;
+};
 
 export const createSuperadmin = async (req: Request, res: Response) => {
   try {
@@ -38,7 +50,8 @@ export const createSuperadmin = async (req: Request, res: Response) => {
         email,
         password,
         name,
-      },
+        username, 
+      } as any,
     });
 
     if (!signUpResult || (signUpResult as any).error) {
@@ -52,103 +65,27 @@ export const createSuperadmin = async (req: Request, res: Response) => {
       data: {
         role: Role.SUPERADMIN,
         emailVerified: true,
-        username,
       },
       include: { accounts: true },
+    });
+
+     const adminRecord = await prisma.admin.create({
+      data: {
+        userId: newSuperadmin.id,
+        status: "ACTIVE",
+      },
     });
 
     res.status(201).json({
       message: "Superadmin user created successfully!",
       user: newSuperadmin,
+      admin:adminRecord,
     });
   } catch (error) {
     console.error("Error creating superadmin:", error);
     res.status(500).json({ error: "An internal server error occurred." });
   }
 };
-
-// export const adminLogin = async (req: Request, res: Response) => {
-//   try {
-//     const { email, password } = req.body;
-
-//     if (!email || !password) {
-//       return res
-//         .status(400)
-//         .json(
-//           new ApiResponse(false, 400, null, "Email and password are required")
-//         );
-//     }
-
-//     // Find user with accounts
-//     const user = await prisma.user.findUnique({
-//       where: { email },
-//       include: { accounts: true },
-//     });
-
-//     if (!user || (user.role !== Role.ADMIN && user.role !== Role.SUPERADMIN)) {
-//       return res
-//         .status(403)
-//         .json(
-//           new ApiResponse(false, 403, null, "Sorry you do not have permission")
-//         );
-//     }
-
-//     // Credentials account
-//     const account = user.accounts.find(
-//       (acc) => acc.providerId === "credentials"
-//     );
-
-//     if (!account || !account.password) {
-//       return res
-//         .status(400)
-//         .json(new ApiResponse(false, 401, null, "Invalid credentials No account exists"));
-//     }
-
-//     // Compare password
-//     const isPasswordValid = await bcrypt.compare(password, account.password);
-//     if (!isPasswordValid) {
-//       return res
-//         .status(400)
-//         .json(new ApiResponse(false, 401, null, "Invalid credentials"));
-//     }
-
-//     // Generate JWT including userId and role
-//     const token = jwt.sign({ userId: user.id, role: user.role }, JWT_SECRET, {
-//       expiresIn: "7d",
-//     });
-
-//     // Send token in cookie + response
-//     res
-//       .cookie("accessToken", token, {
-//         httpOnly: true,
-//         secure: false, // set to true in production with HTTPS
-//         sameSite: "lax",
-//         maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-//       })
-//       .status(200)
-//       .json(
-//         new ApiResponse(
-//           true,
-//           200,
-//           {
-//             token,
-//             user: {
-//               id: user.id,
-//               name: user.name,
-//               email: user.email,
-//               role: user.role,
-//             },
-//           },
-//           "Login successful"
-//         )
-//       );
-//   } catch (error) {
-//     console.error("Login error:", error);
-//     res
-//       .status(500)
-//       .json(new ApiResponse(false, 400, null, "Something went wrong"));
-//   }
-// };
 
 export const fetchAdmins = async (req: Request, res: Response) => {
   try {
@@ -167,9 +104,14 @@ export const fetchAdmins = async (req: Request, res: Response) => {
       email: a.user?.email ?? a.invite?.email ?? "",
       role: a.user?.role,
       status: a.status,
-      createdAt: a.user?.createdAt ?? a.createdAt,
+      image: a.user?.image,
+      displayUsername: a.user?.displayUsername,
+      username: a.user?.username,
+      dateOfBirth: a.user?.dateOfBirth,
+      gender: a.user?.gender,
+      area: a.user?.area,
+      createdAt: a.createdAt,
       updatedAt: a.user?.updatedAt,
-      type: a.status === "PENDING" ? "PENDING" : "ACTIVE",
     }));
 
     // Return combined response
@@ -230,10 +172,14 @@ export const getInviteEmail = async (req: Request, res: Response) => {
   try {
     const { token } = req.query;
 
+    console.log("Token from query:", token);
+
     if (!token) return res.status(400).json({ message: "Token is required" });
       const invite = await prisma.adminInviteToken.findUnique({
       where: { token: token as string },
     });
+
+    console.log("Invite found:", invite);
 
     if (
       !invite ||
@@ -279,13 +225,36 @@ export const registerAdmin = async (req: Request, res: Response) => {
         .json({ message: "Invite token expired", status: "FAILED" });
     }
 
+     // Check if email already exists
+    const existingUser = await prisma.user.findUnique({
+      where: { email: invite.email },
+    });
+
+    if (existingUser) {
+      return res
+        .status(400)
+        .json({ message: "Email is already registered", status: "FAILED" });
+    }
+
+    // Check if username already exists
+    const existingUsername = await prisma.user.findUnique({
+      where: { username },
+    });
+
+    if (existingUsername) {
+      return res
+        .status(400)
+        .json({ message: "Username is already taken", status: "FAILED" });
+    }
+
+    
     const registeredUser = await auth.api.signUpEmail({
       body: {
         email: invite.email,
         password,
         name,
         username,
-      },
+      } as any,
     });
 
     if (!registeredUser?.user) {
@@ -335,25 +304,64 @@ export const registerAdmin = async (req: Request, res: Response) => {
 
 export const sendAdminInvite = async (req: Request, res: Response) => {
   try {
-    const { email, name } = req.body;
-    // const admin = req.user; // Implement after authcontext 
+    const { email, name, adminId } = req.body;
 
-    console.log("Body:", req.body);
-    const inviteLink = await createAdminInvite(email, name);
+    let inviteLink: string;
+    let targetEmail: string;
+
+    if (adminId) {
+      // Resend for PENDING admin
+      const admin = await prisma.admin.findUnique({
+        where: { id: adminId },
+        include: { invite: true, user: true },
+      });
+
+      if (!admin) {
+        return res.status(404).json({ error: "Admin not found." });
+      }
+
+      if (admin.status !== "PENDING") {
+        return res
+          .status(400)
+          .json({ error: "Cannot resend invite to active or suspended admin." });
+      }
+
+      targetEmail = admin.user?.email ?? admin.invite?.email!;
+      inviteLink = await resendAdminInvite(adminId);
+    } else {
+      if (!email || !name) {
+        return res.status(400).json({ error: "Email and name are required." });
+      }
+
+      targetEmail = email;
+      inviteLink = await createAdminInvite(email, name);
+    }
+
+    // Send email
     const html = inviteEmailTemplate(inviteLink);
+    await sendEmail(targetEmail, "You're invited to become an Admin", html);
 
-    await sendEmail(email, "You're invited to become an Admin", html);
-
-    res.status(200).json({ message: "Invite sent successfully!" });
-  } catch (err) {
+    res.status(200).json({ message: "Invite sent successfully!", status: "SUCCESS" });
+  } catch (err: any) {
     console.error("Error sending invite:", err);
-    res.status(400).json({ error: "Failed to send invite." });
+    res.status(400).json({ error: err.message || "Failed to send invite.", status: "FAILED" });
   }
 };
 
+
 export const getAdminSession = async (req: Request, res: Response) => {
   try {
-    const session = await auth.api.getSession({ headers: req.headers });
+
+    const fetchHeaders = new Headers();
+    for (const [key, value] of Object.entries(req.headers)) {
+      if (value !== undefined) {
+        fetchHeaders.append(
+          key,
+          Array.isArray(value) ? value.join(", ") : value
+        );
+      }
+    }
+    const session = await auth.api.getSession({ headers: fetchHeaders });
 
     if (!session) {
       return res
@@ -385,7 +393,7 @@ export const getAdminSession = async (req: Request, res: Response) => {
     });
     console.log("user", user)
 
-    if (user.role !== Role.ADMIN && user.role !== Role.SUPERADMIN) {
+    if (user?.role !== Role.ADMIN && user?.role !== Role.SUPERADMIN) {
       return res
         .status(403)
         .json(new ApiResponse(false, 403, null, "Not authorized"));
@@ -404,6 +412,47 @@ export const getAdminSession = async (req: Request, res: Response) => {
     return res
       .status(500)
       .json(new ApiResponse(false, 400, null, "Failed to fetch session"));
+  }
+};
+
+export const updatePassword = async (req: Request, res: Response) => {
+  try {
+    const headers = toWebHeaders(req.headers);
+
+    const session = await auth.api.getSession({ headers });
+    if (!session) {
+      return res
+        .status(401)
+        .json(new ApiResponse(false, 401, null, "No active session"));
+    }
+
+   const { oldPassword, newPassword } = req.body;
+    if (!oldPassword || !newPassword) {
+      return res
+        .status(400)
+        .json(new ApiResponse(false, 400, null, "Both old and new password are required"));
+    }
+
+    // Will throw if invalid current password
+    await auth.api.changePassword({
+      body: {
+        currentPassword: oldPassword,
+        newPassword,
+        revokeOtherSessions: false,
+      },
+      headers,
+    });
+
+    return res
+      .status(200)
+      .json(new ApiResponse(true, 200, null, "Password changed successfully"));
+  } catch (error: any) {
+    console.error("❌ Change password error:", error);
+
+    // Better Auth usually throws an Error with message
+    return res
+      .status(400)
+      .json(new ApiResponse(false, 400, null, error?.message || "Password change failed"));
   }
 };
 
@@ -427,20 +476,3 @@ export const getAdminById = async (req: Request, res: Response) => {
   }
 };
 
-//Not used 
-// export const adminLogout = async (req: Request, res: Response) => {
-//   try {
-   
-//     res
-//       .clearCookie("accessToken", {
-//         httpOnly: true,
-//         secure: false, 
-//         sameSite: "lax",
-//       })
-//       .status(200)
-//       .json(new ApiResponse(true, 200, null, "Logout successful"));
-//   } catch (error) {
-//     console.error("Logout error:", error);
-//     res.status(500).json(new ApiResponse(false, 400, null, "Logout failed"));
-//   }
-// };
