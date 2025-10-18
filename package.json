@@ -37,6 +37,7 @@
     "multer": "^2.0.2",
     "nodemailer": "^7.0.5",
     "pino-http": "^10.5.0",
+    "socket.io": "^4.8.1",
     "resend": "^6.1.2"
   },
   "devDependencies": {
