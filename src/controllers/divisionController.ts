@@ -333,6 +333,7 @@ export const updateDivision = async (req: Request, res: Response) => {
     isActive,
     prizePoolTotal,
     sponsorName,
+    seasonId,
   } = req.body;
 
   try {
@@ -345,6 +346,8 @@ export const updateDivision = async (req: Request, res: Response) => {
       return res.status(404).json({ error: "Division not found." });
     }
 
+
+ 
     const data: Prisma.DivisionUpdateInput = {};
 
     if (name !== undefined) data.name = name;
@@ -359,6 +362,12 @@ export const updateDivision = async (req: Request, res: Response) => {
         return res.status(400).json({ error: "Invalid divisionLevel value." });
       }
       data.level = levelEnum;
+    }
+
+    if (seasonId !== undefined) {
+      data.season = {
+        connect: { id: seasonId },
+      };
     }
 
     if (gameType !== undefined) {
