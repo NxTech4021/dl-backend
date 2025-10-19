@@ -6,6 +6,7 @@ import {
   PrismaClient,
 } from "@prisma/client";
 import { Request, Response } from "express";
+import { createThread } from "./threadController";
 
 const prisma = new PrismaClient();
 
@@ -158,12 +159,18 @@ export const createDivision = async (req: Request, res: Response) => {
     isActive = true,
     prizePoolTotal,
     sponsorName,
+    adminId
   } = req.body;
+
+  if (!adminId) {
+    return res.status(400).json({
+      error: "Admin Id is required to create the division thread.",
+    });
+  }
 
   if (!seasonId || !name || !divisionLevel || !gameType) {
     return res.status(400).json({
-      error:
-        "seasonId, name, divisionLevel, and gameType are required fields.",
+      error: "seasonId, name, divisionLevel, and gameType are required fields.",
     });
   }
 
@@ -197,6 +204,16 @@ export const createDivision = async (req: Request, res: Response) => {
   }
 
   try {
+    // Verify admin exists
+    const adminUser = await prisma.user.findUnique({
+      where: { id: adminId },
+      select: { id: true, name: true }
+    });
+
+    if (!adminUser) {
+      return res.status(404).json({ error: "Admin user not found." });
+    }
+
     const season = await prisma.season.findUnique({
       where: { id: seasonId },
       select: { 
@@ -205,7 +222,7 @@ export const createDivision = async (req: Request, res: Response) => {
         leagues: { 
           select: {
             id: true
-            }
+          }
         }
       },
     });
@@ -217,9 +234,9 @@ export const createDivision = async (req: Request, res: Response) => {
     const leagueId = season.leagues && season.leagues.length > 0 ? season.leagues[0].id : null;
 
     if (!leagueId) {
-      
-        return res.status(400).json({ error: "Season is not linked to any league." });
+      return res.status(400).json({ error: "Season is not linked to any league." });
     }
+
     const duplicate = await prisma.division.findFirst({
       where: { seasonId, name },
       select: { id: true },
@@ -231,49 +248,124 @@ export const createDivision = async (req: Request, res: Response) => {
       });
     }
 
-    const division = await prisma.division.create({
-      data: {
-        seasonId,
-        leagueId: leagueId,
-        name,
-        description,
-        pointsThreshold:
-          threshold !== undefined && threshold !== null
-            ? Number(threshold)
-            : null,
-        level: levelEnum,
-        gameType: gameTypeEnum,
-        genderCategory: genderEnum ?? null,
-        maxSinglesPlayers:
-          maxSinglesPlayers !== undefined && maxSinglesPlayers !== null
-            ? Number(maxSinglesPlayers)
-            : null,
-        maxDoublesTeams:
-          maxDoublesTeams !== undefined && maxDoublesTeams !== null
-            ? Number(maxDoublesTeams)
-            : null,
-        autoAssignmentEnabled: Boolean(autoAssignmentEnabled),
-        isActiveDivision: Boolean(isActive),
-        prizePoolTotal:
-          prizePoolTotal !== undefined && prizePoolTotal !== null
-            ? new Prisma.Decimal(prizePoolTotal)
-            : null,
-        sponsoredDivisionName: sponsorName ?? null,
-      },
-      include: {
-        season: true,
-      },
+    // Create division and thread in a transaction
+    const result = await prisma.$transaction(async (tx) => {
+      // Create the division first
+      const division = await tx.division.create({
+        data: {
+          seasonId,
+          leagueId: leagueId,
+          name,
+          description,
+          pointsThreshold:
+            threshold !== undefined && threshold !== null
+              ? Number(threshold)
+              : null,
+          level: levelEnum,
+          gameType: gameTypeEnum,
+          genderCategory: genderEnum ?? null,
+          maxSinglesPlayers:
+            maxSinglesPlayers !== undefined && maxSinglesPlayers !== null
+              ? Number(maxSinglesPlayers)
+              : null,
+          maxDoublesTeams:
+            maxDoublesTeams !== undefined && maxDoublesTeams !== null
+              ? Number(maxDoublesTeams)
+              : null,
+          autoAssignmentEnabled: Boolean(autoAssignmentEnabled),
+          isActiveDivision: Boolean(isActive),
+          prizePoolTotal:
+            prizePoolTotal !== undefined && prizePoolTotal !== null
+              ? new Prisma.Decimal(prizePoolTotal)
+              : null,
+          sponsoredDivisionName: sponsorName ?? null,
+        },
+        include: {
+          season: true,
+        },
+      });
+
+      // Create the group chat/thread for the division
+      const thread = await tx.thread.create({
+        data: {
+          name: `${division.name} Chat`,
+          isGroup: true,
+          divisionId: division.id,
+          members: {
+            create: [{
+              userId: adminId,
+              role: "admin"
+            }]
+          }
+        },
+        include: {
+          members: {
+            include: {
+              user: {
+                select: { id: true, name: true, username: true, image: true }
+              }
+            }
+          }
+        }
+      });
+
+      console.log(`✅ Division ${division.id} created with chat thread ${thread.id}`);
+
+      return { division, thread };
     });
 
+    // Socket notification for thread creation
+    if (req.io) {
+      req.io.to(adminId).emit('new_thread', {
+        thread: result.thread,
+        message: `Division chat created for ${result.division.name}`,
+        timestamp: new Date().toISOString()
+      });
+
+      req.io.to(adminId).emit('division_created', {
+        division: result.division,
+        thread: result.thread,
+        message: `Division ${result.division.name} created successfully`,
+        timestamp: new Date().toISOString()
+      });
+
+      console.log(`📤 Sent division and thread creation notifications to admin ${adminId}`);
+    }
+
     return res.status(201).json({
-      data: formatDivision(division),
-      message: "Division created successfully",
+      success: true,
+      data: {
+        division: formatDivision(result.division),
+        thread: {
+          id: result.thread.id,
+          name: result.thread.name,
+          isGroup: result.thread.isGroup,
+          divisionId: result.thread.divisionId,
+          members: result.thread.members
+        }
+      },
+      message: "Division and chat group created successfully",
     });
+
   } catch (error) {
-    console.error("Create Division Error:", error);
-    return res
-      .status(500)
-      .json({ error: "An error occurred while creating the division." });
+    console.error("❌ Create Division Error:", error);
+
+    if (error instanceof Prisma.PrismaClientKnownRequestError) {
+      if (error.code === "P2002") {
+        return res.status(409).json({
+          error: "A division with this name already exists in the season."
+        });
+      }
+      if (error.code === "P2003") {
+        return res.status(400).json({
+          error: "Invalid season, league, or admin ID provided."
+        });
+      }
+    }
+
+    return res.status(500).json({ 
+      error: "An error occurred while creating the division and chat group." 
+    });
   }
 };
 
@@ -333,6 +425,7 @@ export const updateDivision = async (req: Request, res: Response) => {
     isActive,
     prizePoolTotal,
     sponsorName,
+    seasonId,
   } = req.body;
 
   try {
@@ -345,6 +438,8 @@ export const updateDivision = async (req: Request, res: Response) => {
       return res.status(404).json({ error: "Division not found." });
     }
 
+
+ 
     const data: Prisma.DivisionUpdateInput = {};
 
     if (name !== undefined) data.name = name;
@@ -359,6 +454,12 @@ export const updateDivision = async (req: Request, res: Response) => {
         return res.status(400).json({ error: "Invalid divisionLevel value." });
       }
       data.level = levelEnum;
+    }
+
+    if (seasonId !== undefined) {
+      data.season = {
+        connect: { id: seasonId },
+      };
     }
 
     if (gameType !== undefined) {
