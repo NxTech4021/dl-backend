@@ -403,6 +403,7 @@ model Division {
   season                  Season   @relation(fields: [seasonId], references: [id], onDelete: Cascade)
   leagueId                String                                     
   league                  League   @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  threads Thread[]        @relation("DivisionThreads")
 
 
   // Pairing Relations
@@ -565,6 +566,10 @@ model Thread {
   name        String?      // Only for group chats
   avatarUrl   String? 
   isGroup     Boolean      @default(false)
+  
+  divisionId  String?      
+  division   Division?      @relation("DivisionThreads", fields: [divisionId], references: [id])
+
   members     UserThread[]
   messages    Message[]
   createdAt   DateTime     @default(now())

@@ -12,6 +12,16 @@ export function socketHandler(httpServer: HttpServer) {
     cors: {
       origin: [
       "http://localhost:3030",
+      "http://localhost:82",
+      "http://localhost",
+      "http://localhost:3001",
+      "http://localhost:8081",
+      "http://192.168.1.3:3001", // Added current IP from logs
+      "http://192.168.1.7:3001",
+      "http://192.168.100.53:8081", // Mobile app origin
+      "exp://192.168.100.53:8081", // Expo development server
+      "http://172.20.10.3:8081", // New mobile app origin
+      "exp://172.20.10.3:8081", // New Expo development server
       "https://staging.appdevelopers.my",
     ],
       methods: ["GET", "POST"],
