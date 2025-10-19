@@ -27,7 +27,6 @@ const playerRouter = Router();
 // Admin routes
 playerRouter.get('/', getAllPlayers);
 playerRouter.get('/stats', getPlayerStats);
-playerRouter.get('/:id', getPlayerById);
 
 // Player profile routes (authenticated user)
 playerRouter.get('/profile/me', verifyAuth, getPlayerProfile);
@@ -78,6 +77,9 @@ playerRouter.get('/withdrawal-requests', verifyAuth, async (req, res) => {
     res.status(500).json({ error: 'Failed to fetch withdrawal requests' });
   }
 });
+
+// Parameterized routes - MUST BE LAST to avoid catching specific routes
+playerRouter.get('/:id', getPlayerById);
 
 export default playerRouter;
 
