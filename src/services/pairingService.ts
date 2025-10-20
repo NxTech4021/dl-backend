@@ -1,4 +1,4 @@
-import prisma from '../lib/prisma';
+import { prisma } from '../lib/prisma';
 import { PairRequestStatus } from '@prisma/client';
 
 /**
@@ -31,14 +31,18 @@ export const calculatePairRating = async (
     // Get season details to know which sport
     const season = await prisma.season.findUnique({
       where: { id: seasonId },
-      select: { sportType: true },
+      select: {
+        category: {
+          select: { game_type: true }
+        }
+      },
     });
 
     if (!season) {
       throw new Error('Season not found');
     }
 
-    const sport = season.sportType?.toLowerCase() || '';
+    const sport = season.category?.game_type?.toLowerCase() || '';
 
     // Get questionnaire responses for both players for this sport
     const [player1Response, player2Response] = await Promise.all([
@@ -102,10 +106,12 @@ export const sendPairRequest = async (
       select: {
         id: true,
         name: true,
-        sportType: true,
         startDate: true,
         regiDeadline: true,
         status: true,
+        category: {
+          select: { game_type: true }
+        }
       },
     });
 
@@ -124,10 +130,11 @@ export const sendPairRequest = async (
       };
     }
 
-    // Check if requester already has a pending request for this season
+    // Check if requester already has a pending request to this specific recipient for this season
     const existingRequesterRequest = await prisma.pairRequest.findFirst({
       where: {
         requesterId,
+        recipientId,
         seasonId,
         status: PairRequestStatus.PENDING,
       },
@@ -136,7 +143,7 @@ export const sendPairRequest = async (
     if (existingRequesterRequest) {
       return {
         success: false,
-        message: 'You already have a pending pair request for this season',
+        message: 'You already have a pending pair request to this player for this season',
       };
     }
 
@@ -232,7 +239,6 @@ export const sendPairRequest = async (
           select: {
             id: true,
             name: true,
-            sportType: true,
           },
         },
       },
@@ -374,7 +380,6 @@ export const acceptPairRequest = async (
             select: {
               id: true,
               name: true,
-              sportType: true,
             },
           },
         },
@@ -546,7 +551,6 @@ export const getPairRequests = async (userId: string) => {
             select: {
               id: true,
               name: true,
-              sportType: true,
               startDate: true,
               regiDeadline: true,
             },
@@ -571,7 +575,6 @@ export const getPairRequests = async (userId: string) => {
             select: {
               id: true,
               name: true,
-              sportType: true,
               startDate: true,
               regiDeadline: true,
             },
@@ -626,7 +629,6 @@ export const getUserPartnerships = async (userId: string) => {
           select: {
             id: true,
             name: true,
-            sportType: true,
             startDate: true,
             endDate: true,
             status: true,
@@ -636,8 +638,8 @@ export const getUserPartnerships = async (userId: string) => {
           select: {
             id: true,
             name: true,
-            minRating: true,
-            maxRating: true,
+            level: true,
+            gameType: true,
           },
         },
       },
@@ -764,7 +766,6 @@ export const getActivePartnership = async (
           select: {
             id: true,
             name: true,
-            sportType: true,
           },
         },
         division: {

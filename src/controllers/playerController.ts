@@ -1156,7 +1156,9 @@ export const searchPlayers = async (req: AuthenticatedRequest, res: Response) =>
 };
 
 /**
- * Get available players for a season (not yet registered, not paired)
+ * Get available players for a season (league members without active partnerships)
+ * Includes: 1) Players needing new partners due to dissolution
+ *           2) League members who haven't registered for season yet
  * GET /api/player/discover/:seasonId
  */
 export const getAvailablePlayersForSeason = async (req: AuthenticatedRequest, res: Response) => {
@@ -1170,38 +1172,117 @@ export const getAvailablePlayersForSeason = async (req: AuthenticatedRequest, re
       );
     }
 
-    // Get already registered player IDs
-    const registrations = await prisma.seasonRegistration.findMany({
-      where: { seasonId, isActive: true },
-      select: { playerId: true, teamId: true },
+    // Get season with league info
+    const season = await prisma.season.findUnique({
+      where: { id: seasonId },
+      select: {
+        id: true,
+        leagues: { select: { id: true } }
+      },
     });
 
-    const registeredPlayerIds = registrations
-      .map((r) => r.playerId)
-      .filter((id): id is string => id !== null);
+    if (!season) {
+      return res.status(404).json(
+        new ApiResponse(false, 404, null, 'Season not found')
+      );
+    }
 
-    // Get players in active pairs for this season
+    const leagueIds = season.leagues.map(l => l.id);
+
+    // Get players in ACTIVE partnerships for this season (these should be excluded)
     const activePairs = await prisma.partnership.findMany({
-      where: { seasonId, status: 'ACTIVE' },
+      where: {
+        seasonId,
+        status: 'ACTIVE',
+        dissolvedAt: null
+      },
       select: { player1Id: true, player2Id: true },
     });
 
-    const pairedPlayerIds = [
+    const activelyPairedPlayerIds = [
       ...activePairs.map((p) => p.player1Id),
       ...activePairs.map((p) => p.player2Id),
     ];
 
-    // Combine all unavailable IDs
-    const unavailableIds = [
-      ...new Set([...registeredPlayerIds, ...pairedPlayerIds, currentUserId]),
-    ].filter((id): id is string => id !== undefined);
+    // Get players who are registered for this season with dissolved partnerships
+    // These are players who paid but need a new partner
+    const dissolvedPartnerships = await prisma.partnership.findMany({
+      where: {
+        seasonId,
+        OR: [
+          { status: 'DISSOLVED' },
+          { dissolvedAt: { not: null } }
+        ]
+      },
+      select: { player1Id: true, player2Id: true },
+    });
 
-    // Get available players
+    const playersNeedingNewPartner = [
+      ...new Set([
+        ...dissolvedPartnerships.map(p => p.player1Id),
+        ...dissolvedPartnerships.map(p => p.player2Id),
+      ])
+    ];
+
+    // Get players with approved withdrawal requests who need new partners
+    const approvedWithdrawals = await prisma.withdrawalRequest.findMany({
+      where: {
+        seasonId,
+        status: 'APPROVED',
+        partnershipId: { not: null }
+      },
+      select: { userId: true },
+    });
+
+    const withdrawalPlayerIds = approvedWithdrawals.map(w => w.userId);
+
+    // Combine players needing new partners
+    const needsNewPartnerIds = [
+      ...new Set([...playersNeedingNewPartner, ...withdrawalPlayerIds])
+    ];
+
+    // Get league members (players who have joined the league)
+    const leagueMembers = await prisma.leagueMembership.findMany({
+      where: { leagueId: { in: leagueIds } },
+      select: { userId: true },
+    });
+
+    const leagueMemberIds = leagueMembers.map(m => m.userId);
+
+    // INCLUDE:
+    // 1. Players who need a new partner (registered but dissolved/withdrawn)
+    // 2. League members who haven't registered for this season yet
+    // EXCLUDE:
+    // - Players in active partnerships
+    // - Current user
     const availablePlayers = await prisma.user.findMany({
       where: {
-        id: { notIn: unavailableIds },
-        role: Role.USER,
-        status: 'active',
+        AND: [
+          { id: { not: currentUserId } },
+          { id: { notIn: activelyPairedPlayerIds } },
+          { role: Role.USER },
+          { status: 'active' },
+          {
+            OR: [
+              // Players who need new partners
+              { id: { in: needsNewPartnerIds } },
+              // League members who haven't registered for season yet
+              {
+                AND: [
+                  { id: { in: leagueMemberIds } },
+                  {
+                    seasonRegistrations: {
+                      none: {
+                        seasonId: seasonId,
+                        isActive: true
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
       },
       select: {
         id: true,
