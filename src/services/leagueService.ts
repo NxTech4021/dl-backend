@@ -167,7 +167,7 @@ export const createLeague = async (data: LeagueData) => {
       sponsorships: sponsorshipData
     },
     include: {
-      sponsorships: { include: { company: true } },
+      sponsorships: true,
     },
   });
 };
