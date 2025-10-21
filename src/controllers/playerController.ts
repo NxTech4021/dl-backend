@@ -1172,12 +1172,19 @@ export const getAvailablePlayersForSeason = async (req: AuthenticatedRequest, re
       );
     }
 
-    // Get season with league info
+    // Get season with league and category info
     const season = await prisma.season.findUnique({
       where: { id: seasonId },
       select: {
         id: true,
-        leagues: { select: { id: true } }
+        leagues: { select: { id: true } },
+        categories: {
+          select: {
+            id: true,
+            genderRestriction: true,
+            gender_category: true
+          }
+        }
       },
     });
 
@@ -1188,6 +1195,10 @@ export const getAvailablePlayersForSeason = async (req: AuthenticatedRequest, re
     }
 
     const leagueIds = season.leagues.map(l => l.id);
+
+    // Get gender restriction from season's category
+    const categoryGender = season.categories[0]?.gender_category || season.categories[0]?.genderRestriction;
+    console.log('🔍 Season category gender restriction:', categoryGender);
 
     // Get players in ACTIVE partnerships for this season (these should be excluded)
     const activePairs = await prisma.partnership.findMany({
@@ -1249,12 +1260,21 @@ export const getAvailablePlayersForSeason = async (req: AuthenticatedRequest, re
 
     const leagueMemberIds = leagueMembers.map(m => m.userId);
 
+    // Build gender filter if category has gender restriction
+    const genderFilter: any = {};
+    if (categoryGender && categoryGender !== 'MIXED' && categoryGender !== 'OPEN') {
+      genderFilter.gender = categoryGender;
+      console.log('🔍 Applying gender filter:', categoryGender);
+    }
+
     // INCLUDE:
     // 1. Players who need a new partner (registered but dissolved/withdrawn)
     // 2. League members who haven't registered for this season yet
     // EXCLUDE:
     // - Players in active partnerships
     // - Current user
+    // FILTER BY:
+    // - Gender (if category is gender-restricted)
     const availablePlayers = await prisma.user.findMany({
       where: {
         AND: [
@@ -1262,6 +1282,7 @@ export const getAvailablePlayersForSeason = async (req: AuthenticatedRequest, re
           { id: { notIn: activelyPairedPlayerIds } },
           { role: Role.USER },
           { status: 'active' },
+          ...Object.keys(genderFilter).length > 0 ? [genderFilter] : [],
           {
             OR: [
               // Players who need new partners
@@ -1274,7 +1295,7 @@ export const getAvailablePlayersForSeason = async (req: AuthenticatedRequest, re
                     seasonMemberships: {
                       none: {
                         seasonId: seasonId,
-                        isActive: true
+                        status: 'ACTIVE'
                       }
                     }
                   }
