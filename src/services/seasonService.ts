@@ -147,6 +147,9 @@ export const getAllSeasonsService = async () => {
       memberships: {          
         select: { userId: true }
       },
+      divisions: {
+        select: { id: true, name: true }
+      },
     },
   });
 };
