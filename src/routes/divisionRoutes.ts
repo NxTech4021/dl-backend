@@ -10,7 +10,9 @@ import {
     getDivisionAssignments,
     getUserDivisionAssignments,
     autoAssignPlayersToDivisions,
-    transferPlayerBetweenDivisions
+    transferPlayerBetweenDivisions,
+    getDivisionsBySeasonId,
+    getDivisionSummaryBySeasonId
 } from "../controllers/divisionController";
 
 const divisionRoutes = Router();
@@ -21,6 +23,9 @@ divisionRoutes.get('/', getDivisions);
 divisionRoutes.get('/:id', getDivisionById); 
 divisionRoutes.put('/:id', updateDivision);
 divisionRoutes.delete('/delete/:id', deleteDivision);
+
+divisionRoutes.get("/season/:seasonId", getDivisionsBySeasonId);
+divisionRoutes.get("/season/:seasonId/summary", getDivisionSummaryBySeasonId);
 
 
 // Manual assignment
