@@ -42,7 +42,7 @@ export const calculatePairRating = async (
       throw new Error('Season not found');
     }
 
-    const sport = season.category?.game_type?.toLowerCase() || '';
+    const sport = season.categories[0]?.game_type?.toLowerCase() || '';
 
     // Get questionnaire responses for both players for this sport
     const [player1Response, player2Response] = await Promise.all([
@@ -109,7 +109,7 @@ export const sendPairRequest = async (
         startDate: true,
         regiDeadline: true,
         status: true,
-        category: {
+        categories: {
           select: { game_type: true }
         }
       },
