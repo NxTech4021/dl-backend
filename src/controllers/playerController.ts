@@ -1818,13 +1818,13 @@ export const getPlayerSeasonHistory = async (req: Request, res: Response) => {
             }
           }
         },
-        category: {
+        categories: {
           select: { 
             id: true, 
             name: true,
             game_type: true,
             gender_category: true,
-            league: {
+            leagues: {
               select: {
                 id: true,
                 name: true,
