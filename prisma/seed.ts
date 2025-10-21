@@ -2,7 +2,6 @@ import {
   Prisma,
   PrismaClient,
   GameType,
-  Gender,
   SportType,
   Statuses,
 } from "@prisma/client";
@@ -175,60 +174,154 @@ async function seedTestUsers() {
 
 async function seedLeagueAndSeason(createdByAdminId?: string) {
   const existingLeague = await prisma.league.findFirst({
-    where: { name: "Demo Doubles League" },
+    where: { name: "Subang Pickleball League" },
   });
 
   if (existingLeague) {
+    console.log("   League already exists, skipping seed...");
     const existingSeason = await prisma.season.findFirst({
-      where: { name: "Fall 2025 Season" },
+      where: { leagues: { some: { id: existingLeague.id } } }
     });
     return { league: existingLeague, season: existingSeason };
   }
 
+  // Create main league with categories
   const league = await prisma.league.create({
     data: {
-      name: "Demo Doubles League",
-      location: "Kuala Lumpur",
+      name: "Subang Pickleball League",
+      location: "Subang Jaya",
       sportType: SportType.PICKLEBALL,
       gameType: GameType.DOUBLES,
       status: Statuses.ACTIVE,
       ...(createdByAdminId ? { createdById: createdByAdminId } : {}),
-      description: "Doubles league for partner pairing testing.",
-    },
-  });
-
-  const category = await prisma.category.create({
-    data: {
-      leagueId: league.id,
-      name: "Open Doubles",
-      genderRestriction: "MIXED",
-      matchFormat: "Best of 3 sets",
-      isActive: true,
-      categoryOrder: 1,
-    },
-  });
-
-  const season = await prisma.season.create({
-    data: {
-      name: "Fall 2025 Season",
-      categoryId: category.id,
-      entryFee: new Prisma.Decimal(50),
-      status: "ACTIVE",
-      isActive: true,
-      description: "Active season for pairing and partner change testing.",
-      paymentRequired: false,
-      promoCodeSupported: false,
-      withdrawalEnabled: true,
-      startDate: new Date(),
-      endDate: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000), // 90 days from now
-      regiDeadline: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days from now
-      leagues: {
-        connect: { id: league.id }
+      description: "Premier pickleball league in Subang with multiple categories for all skill levels.",
+      categories: {
+        create: [
+          {
+            name: "Men's Singles",
+            game_type: GameType.SINGLES,
+            gender_category: "MALE",
+            genderRestriction: "MALE",
+            matchFormat: "Best of 3 sets",
+            isActive: true,
+            categoryOrder: 1,
+          },
+          {
+            name: "Women's Singles",
+            game_type: GameType.SINGLES,
+            gender_category: "FEMALE",
+            genderRestriction: "FEMALE",
+            matchFormat: "Best of 3 sets",
+            isActive: true,
+            categoryOrder: 2,
+          },
+          {
+            name: "Men's Doubles",
+            game_type: GameType.DOUBLES,
+            gender_category: "MALE",
+            genderRestriction: "MALE",
+            matchFormat: "Best of 3 sets",
+            isActive: true,
+            categoryOrder: 3,
+          },
+          {
+            name: "Women's Doubles",
+            game_type: GameType.DOUBLES,
+            gender_category: "FEMALE",
+            genderRestriction: "FEMALE",
+            matchFormat: "Best of 3 sets",
+            isActive: true,
+            categoryOrder: 4,
+          },
+          {
+            name: "Mixed Doubles",
+            game_type: GameType.DOUBLES,
+            gender_category: "MIXED",
+            genderRestriction: "MIXED",
+            matchFormat: "Best of 3 sets",
+            isActive: true,
+            categoryOrder: 5,
+          },
+        ]
       }
     },
+    include: {
+      categories: true
+    }
   });
 
-  return { league, season };
+  const categories = league.categories;
+
+  console.log(`   Created ${categories.length} categories for league`);
+
+  // Create seasons for each category
+  // Create league-season-category relationship via update
+  const seasons = [];
+
+  // Season 1 (Active) - for all categories
+  for (const category of categories) {
+    const season = await prisma.season.create({
+      data: {
+        name: `S1 - ${category.name}`,
+        entryFee: new Prisma.Decimal(50),
+        status: "ACTIVE",
+        isActive: true,
+        description: `Season 1 for ${category.name}. Registration open!`,
+        paymentRequired: false,
+        promoCodeSupported: false,
+        withdrawalEnabled: true,
+        startDate: new Date(),
+        endDate: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000), // 90 days
+        regiDeadline: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days
+      },
+    });
+
+    // Connect season to league and category
+    await prisma.season.update({
+      where: { id: season.id },
+      data: {
+        leagues: { connect: { id: league.id } },
+        categories: { connect: { id: category.id } }
+      }
+    });
+
+    seasons.push(season);
+  }
+
+  // Season 2 (Upcoming) - for Mixed Doubles only
+  const mixedDoublesCategory = categories.find(c => c.name === "Mixed Doubles");
+  if (mixedDoublesCategory) {
+    const upcomingSeason = await prisma.season.create({
+      data: {
+        name: `S2 - Mixed Doubles`,
+        entryFee: new Prisma.Decimal(60),
+        status: "UPCOMING",
+        isActive: false,
+        description: "Upcoming Season 2 for Mixed Doubles.",
+        paymentRequired: true,
+        promoCodeSupported: true,
+        withdrawalEnabled: false,
+        startDate: new Date(Date.now() + 45 * 24 * 60 * 60 * 1000), // 45 days
+        endDate: new Date(Date.now() + 135 * 24 * 60 * 60 * 1000), // 135 days
+        regiDeadline: new Date(Date.now() + 40 * 24 * 60 * 60 * 1000), // 40 days
+      },
+    });
+
+    // Connect season to league and category
+    await prisma.season.update({
+      where: { id: upcomingSeason.id },
+      data: {
+        leagues: { connect: { id: league.id } },
+        categories: { connect: { id: mixedDoublesCategory.id } }
+      }
+    });
+
+    seasons.push(upcomingSeason);
+  }
+
+  console.log(`   Created ${seasons.length} seasons`);
+
+  return { league, season: seasons[0], categories, seasons };
 }
 
 async function main() {
@@ -247,9 +340,10 @@ async function main() {
     console.log("   - ethan@test.com\n");
 
     const leagueSeason = await seedLeagueAndSeason(admin.adminId);
-    console.log("✅ Demo Doubles League & Fall 2025 Season created");
-    console.log("   - League: Demo Doubles League (ACTIVE)");
-    console.log("   - Season: Fall 2025 Season (ACTIVE, withdrawalEnabled: true)\n");
+    console.log("✅ Subang Pickleball League created");
+    console.log("   - League: Subang Pickleball League (ACTIVE)");
+    console.log("   - Categories: 5 (Men's/Women's Singles, Men's/Women's/Mixed Doubles)");
+    console.log("   - Seasons: 6 (5 Active S1 + 1 Upcoming S2)\n");
 
     console.log("🌟 Database seeded successfully!");
     console.log("\n📝 You can now test the pairing module with these users!");
