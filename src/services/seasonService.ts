@@ -184,10 +184,21 @@ export const getSeasonByIdService = async (id: string) => {
         }
       },
       memberships: {
-        include: {
-          user: true, 
-        },
-      },
+        include: {
+          user: {
+            include: {
+              questionnaireResponses: {
+                include: {
+                  result: true
+                },
+                where: {
+                  completedAt: { not: null }
+                }
+              }
+            }
+          }, 
+        },
+      },
     },
   });
 };

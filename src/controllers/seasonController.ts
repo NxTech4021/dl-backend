@@ -128,7 +128,25 @@ export const getSeasons = async (req: Request, res: Response) => {
           sportType: league.sportType,
           gameType: league.gameType
         })) ?? [],
-        memberships: season.memberships ?? [],
+        memberships: season.memberships?.map(membership => ({
+          ...membership,
+          user: membership.user ? {
+            ...membership.user,
+            questionnaireResponses: membership.user.questionnaireResponses?.map(response => ({
+              id: response.id,
+              sport: response.sport,
+              completedAt: response.completedAt,
+              result: response.result ? {
+                id: response.result.id,
+                singles: response.result.singles,
+                doubles: response.result.doubles,
+                rd: response.result.rd,
+                confidence: response.result.confidence,
+                source: response.result.source
+              } : null
+            })) || []
+          } : null
+        })) ?? [],
         categories: season.categories?.map(category => ({
           id: category.id,
           name: category.name,
@@ -186,7 +204,25 @@ export const getSeasonById = async (req: Request, res: Response) => {
         sportType: league.sportType,
         gameType: league.gameType
       })) ?? [],
-      memberships: season.memberships ?? [],
+      memberships: season.memberships?.map(membership => ({
+        ...membership,
+        user: membership.user ? {
+          ...membership.user,
+          questionnaireResponses: membership.user.questionnaireResponses?.map(response => ({
+            id: response.id,
+            sport: response.sport,
+            completedAt: response.completedAt,
+            result: response.result ? {
+              id: response.result.id,
+              singles: response.result.singles,
+              doubles: response.result.doubles,
+              rd: response.result.rd,
+              confidence: response.result.confidence,
+              source: response.result.source
+            } : null
+          })) || []
+        } : null
+      })) ?? [],
       categories: season.categories?.map(category => ({
         id: category.id,
         name: category.name,
