@@ -1271,7 +1271,7 @@ export const getAvailablePlayersForSeason = async (req: AuthenticatedRequest, re
                 AND: [
                   { id: { in: leagueMemberIds } },
                   {
-                    seasonRegistrations: {
+                    seasonMemberships: {
                       none: {
                         seasonId: seasonId,
                         isActive: true
