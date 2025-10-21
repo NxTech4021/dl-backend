@@ -1,18 +1,12 @@
-import { Router } from "express";
-import {
-  createSponsorship,
-  getSponsorships,
-  getSponsorshipById,
-  updateSponsorship,
-  deleteSponsorship,
-} from "../controllers/sponsorController";
+import { Router } from 'express';
+import { getAllSponsors, createSponsor, getSponsorById, updateSponsor, deleteSponsor } from '../controllers/sponsorController';
 
 const sponsorRoutes = Router();
 
-sponsorRoutes.post("/create", createSponsorship);
-sponsorRoutes.get("/", getSponsorships);
-sponsorRoutes.get("/:id", getSponsorshipById);
-sponsorRoutes.put("/:id", updateSponsorship);
-sponsorRoutes.delete("/:id", deleteSponsorship);
+sponsorRoutes.get('/', getAllSponsors);
+sponsorRoutes.post('/create', createSponsor);
+sponsorRoutes.get('/:id', getSponsorById);
+sponsorRoutes.put('/:id', updateSponsor);
+sponsorRoutes.delete('/:id', deleteSponsor);
 
 export default sponsorRoutes;

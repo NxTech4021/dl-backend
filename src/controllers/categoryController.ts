@@ -83,6 +83,82 @@ export const createCategory = async (req: Request, res: Response) => {
   }
 };
 
+export const getAllCategories = async (req: Request, res: Response) => {
+  try {
+    const categories = await prisma.category.findMany({
+      include: {
+        leagues: {
+          select: {
+            id: true,
+            name: true,
+          }
+        },
+        seasons: {
+          select: {
+            id: true,
+            name: true,
+          }
+        }
+      },
+      orderBy: { categoryOrder: 'asc' }
+    });
+
+    return res.status(200).json(
+      new ApiResponse(true, 200, categories, "Categories fetched successfully")
+    );
+  } catch (error) {
+    console.error("Error fetching categories:", error);
+    return res.status(500).json(
+      new ApiResponse(false, 500, null, "Error fetching categories")
+    );
+  }
+};
+
+export const getCategoryById = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+
+    if (!id) {
+      return res.status(400).json(
+        new ApiResponse(false, 400, null, "Category ID is required")
+      );
+    }
+
+    const category = await prisma.category.findUnique({
+      where: { id },
+      include: {
+        leagues: {
+          select: {
+            id: true,
+            name: true,
+          }
+        },
+        seasons: {
+          select: {
+            id: true,
+            name: true,
+          }
+        }
+      }
+    });
+
+    if (!category) {
+      return res.status(404).json(
+        new ApiResponse(false, 404, null, "Category not found")
+      );
+    }
+
+    return res.status(200).json(
+      new ApiResponse(true, 200, category, "Category fetched successfully")
+    );
+  } catch (error) {
+    console.error("Error fetching category:", error);
+    return res.status(500).json(
+      new ApiResponse(false, 500, null, "Error fetching category")
+    );
+  }
+};
+
 export const getCategoriesByLeague = async (req: Request, res: Response) => {
   try {
     const { leagueId } = req.params;
