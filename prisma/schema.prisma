@@ -49,9 +49,9 @@ model User {
   registrations        SeasonRegistration[] @relation("PlayerRegistrations")
 
   //Thread relations
-  userThreads  UserThread[]   
-  messages     Message[]      
-  readMessages MessageReadBy[] 
+  userThreads  UserThread[]
+  messages     Message[]
+  readMessages MessageReadBy[]
 
   // Questionnaire relations
   questionnaireResponses QuestionnaireResponse[]
@@ -75,11 +75,11 @@ model Admin {
   invite    AdminInviteToken?
 
   // Relations
-  leagues                 League[]
-  sponsorships            Sponsorship[]          @relation("SponsorshipCreatedBy")
-  divisionsCreated        Division[]             @relation("DivisionCreatedBy")
-  divisionsUpdated        Division[]             @relation("DivisionUpdatedBy")
-  divisionAssignments     DivisionAssignment[]   @relation("AssignmentsByAdmin")
+  leagues             League[]
+  sponsorships        Sponsorship[]        @relation("SponsorshipCreatedBy")
+  divisionsCreated    Division[]           @relation("DivisionCreatedBy")
+  divisionsUpdated    Division[]           @relation("DivisionUpdatedBy")
+  divisionAssignments DivisionAssignment[] @relation("AssignmentsByAdmin")
 }
 
 model AdminInviteToken {
@@ -153,7 +153,7 @@ model QuestionnaireResponse {
   completedAt DateTime?
   result      InitialRatingResult?
 
-  user        User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([sport, qVersion])
@@ -179,18 +179,18 @@ model League {
   location    String?
   description String?
 
-  status        Statuses       @default(UPCOMING)
-  sportType     SportType
-  gameType      GameType
+  status    Statuses  @default(UPCOMING)
+  sportType SportType
+  gameType  GameType
 
   createdById String?
   createdBy   Admin?  @relation(fields: [createdById], references: [id])
 
-  seasons       Season[]        @relation("LeagueToSeason")
-  sponsorships  Sponsorship[]
-  memberships   LeagueMembership[]
-  categories    Category[]
-  divisions     Division[]
+  seasons      Season[]           @relation("LeagueToSeason")
+  sponsorships Sponsorship[]
+  memberships  LeagueMembership[]
+  categories   Category[]
+  divisions    Division[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -214,20 +214,20 @@ model LeagueMembership {
 }
 
 model Category {
-  id                  String              @id @default(cuid())  
-  name                String?              @db.VarChar(255)    
-  
+  id   String  @id @default(cuid())
+  name String? @db.VarChar(255)
+
   // Restrictions and Format
-  genderRestriction   GenderRestriction   @default(OPEN)       // 'gender_restriction' enum
-  matchFormat         String?                                  // 'match_format' e.g., Best of 3 sets
-  game_type           GameType?
-  gender_category     GenderType?  
-  isActive            Boolean             @default(true)       // 'is_active'
-  categoryOrder       Int                 @default(0)          // 'category_order' for display
-  createdAt           DateTime            @default(now())
-  updatedAt           DateTime            @updatedAt
-  leagues             League[]
-  seasons             Season[] 
+  genderRestriction GenderRestriction @default(OPEN) // 'gender_restriction' enum
+  matchFormat       String? // 'match_format' e.g., Best of 3 sets
+  game_type         GameType?
+  gender_category   GenderType?
+  isActive          Boolean           @default(true) // 'is_active'
+  categoryOrder     Int               @default(0) // 'category_order' for display
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  leagues           League[]
+  seasons           Season[]
 
   @@index([isActive])
 }
@@ -261,9 +261,9 @@ model Sponsorship {
 
   // Relationships
 
-  leagues         League[] 
-  createdBy       Admin?     @relation("SponsorshipCreatedBy", fields: [createdById], references: [id])
-  divisions       Division[] @relation("DivisionSponsor")
+  leagues   League[]
+  createdBy Admin?     @relation("SponsorshipCreatedBy", fields: [createdById], references: [id])
+  divisions Division[] @relation("DivisionSponsor")
 
   @@map("sponsorship")
 }
@@ -279,13 +279,12 @@ model Season {
   registeredUserCount Int       @default(0)
 
   //Bools
-  status                SeasonStatus      @default(UPCOMING)    
-  isActive              Boolean           @default(false)
-  paymentRequired       Boolean           @default(false)
-  promoCodeSupported    Boolean           @default(false)
-  withdrawalEnabled     Boolean           @default(false)
+  status             SeasonStatus @default(UPCOMING)
+  isActive           Boolean      @default(false)
+  paymentRequired    Boolean      @default(false)
+  promoCodeSupported Boolean      @default(false)
+  withdrawalEnabled  Boolean      @default(false)
 
-  
   //Relations
   divisions          Division[]
   memberships        SeasonMembership[]
@@ -297,8 +296,8 @@ model Season {
   partnerships  Partnership[]
   registrations SeasonRegistration[]
 
-  leagues       League[] @relation("LeagueToSeason")
-  categories    Category[]
+  leagues    League[]   @relation("LeagueToSeason")
+  categories Category[]
 
   waitlistId String?
   waitlist   Waitlist? @relation
@@ -336,15 +335,15 @@ model WaitlistUser {
 }
 
 model PromoCode {
-  id              String            @id @default(cuid())
-  code            String            @unique 
-  description     String?         
-  discountValue   Decimal           @db.Decimal(10, 2) 
-  isPercentage    Boolean           @default(false) // True for %, false for fixed amount
-  isActive        Boolean           @default(true)
-  expiresAt       DateTime?         
+  id            String    @id @default(cuid())
+  code          String    @unique
+  description   String?
+  discountValue Decimal   @db.Decimal(10, 2)
+  isPercentage  Boolean   @default(false) // True for %, false for fixed amount
+  isActive      Boolean   @default(true)
+  expiresAt     DateTime?
 
-  seasons         Season[]          @relation("SeasonPromoCodes")
+  seasons Season[] @relation("SeasonPromoCodes")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -357,7 +356,7 @@ model WithdrawalRequest {
   requestDate        DateTime         @default(now())
   status             WithdrawalStatus @default(PENDING)
   processedByAdminId String?
-  partnershipId      String?          // For partner change requests
+  partnershipId      String? // For partner change requests
 
   processedByAdmin User?        @relation("ProcessedByAdmin", fields: [processedByAdminId], references: [id])
   seasonId         String
@@ -369,17 +368,17 @@ model WithdrawalRequest {
 }
 
 model Division {
-  id                      String   @id @default(cuid())               
-  name                    String                                    
-  description             String?
-  level                   DivisionLevel?                              
-  gameType                GameType                                   
-  genderCategory          GenderType?                                  
+  id             String         @id @default(cuid())
+  name           String
+  description    String?
+  level          DivisionLevel?
+  gameType       GameType
+  genderCategory GenderType?
 
   // capacities
-  maxSinglesPlayers       Int?
-  maxDoublesTeams         Int?
- 
+  maxSinglesPlayers Int?
+  maxDoublesTeams   Int?
+
   // denormalized counts
   currentSinglesCount Int? @default(0)
   currentDoublesCount Int? @default(0)
@@ -403,13 +402,12 @@ model Division {
   // Relations
   matches           Match[]
   assignments       DivisionAssignment[] // Player assignments tracking
-  seasonMemberships SeasonMembership[]         @relation("SeasonMembershipDivision")
-  seasonId                String                                      
-  season                  Season   @relation(fields: [seasonId], references: [id], onDelete: Cascade)
-  leagueId                String                                     
-  league                  League   @relation(fields: [leagueId], references: [id], onDelete: Cascade)
-  threads Thread[]        @relation("DivisionThreads")
-
+  seasonMemberships SeasonMembership[]   @relation("SeasonMembershipDivision")
+  seasonId          String
+  season            Season               @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  leagueId          String
+  league            League               @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  threads           Thread[]             @relation("DivisionThreads")
 
   // Pairing Relations
   partnerships  Partnership[]
@@ -427,19 +425,19 @@ model Division {
 }
 
 model SeasonMembership {
-  id              String         @id @default(cuid())
-  userId          String
-  seasonId        String
-  divisionId      String?
-  status          String         @default("PENDING") // 'PENDING' | 'ACTIVE' | 'INACTIVE' | 'FLAGGED' | 'REMOVED'
-  joinedAt        DateTime       @default(now())
-  withdrawalReason String?        // For handling "View Withdrawal Request"
-  paymentStatus   PaymentStatus  @default(PENDING)
+  id               String        @id @default(cuid())
+  userId           String
+  seasonId         String
+  divisionId       String?
+  status           String        @default("PENDING") // 'PENDING' | 'ACTIVE' | 'INACTIVE' | 'FLAGGED' | 'REMOVED'
+  joinedAt         DateTime      @default(now())
+  withdrawalReason String? // For handling "View Withdrawal Request"
+  paymentStatus    PaymentStatus @default(PENDING)
 
   // Relations
-  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  season           Season   @relation(fields: [seasonId], references: [id], onDelete: Cascade)
-  division         Division? @relation("SeasonMembershipDivision", fields: [divisionId], references: [id], onDelete: Cascade)
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  season   Season    @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  division Division? @relation("SeasonMembershipDivision", fields: [divisionId], references: [id], onDelete: Cascade)
 
   @@unique([userId, seasonId, divisionId])
   @@index([userId])
@@ -565,58 +563,57 @@ model UserAchievement {
   @@index([achievementId])
 }
 
-
 model Thread {
-  id          String       @id @default(cuid())
-  name        String?      // Only for group chats
-  avatarUrl   String? 
-  isGroup     Boolean      @default(false)
-  
-  divisionId  String?      
-  division   Division?      @relation("DivisionThreads", fields: [divisionId], references: [id])
+  id        String  @id @default(cuid())
+  name      String? // Only for group chats
+  avatarUrl String?
+  isGroup   Boolean @default(false)
 
-  members     UserThread[]
-  messages    Message[]
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
+  divisionId String?
+  division   Division? @relation("DivisionThreads", fields: [divisionId], references: [id])
+
+  members   UserThread[]
+  messages  Message[]
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
 }
 
 model UserThread {
-  id        String   @id @default(cuid())
-  thread      Thread    @relation(fields: [threadId], references: [id])
-  threadId    String
-  user      User     @relation(fields: [userId], references: [id])
-  userId    String
-  role      String?  
-  joinedAt  DateTime @default(now())
+  id       String   @id @default(cuid())
+  thread   Thread   @relation(fields: [threadId], references: [id])
+  threadId String
+  user     User     @relation(fields: [userId], references: [id])
+  userId   String
+  role     String?
+  joinedAt DateTime @default(now())
 
   @@unique([threadId, userId]) // Prevent duplicate memberships
 }
 
 model Message {
-  id          String         @id @default(cuid())
-  thread      Thread         @relation(fields: [threadId], references: [id])
-  threadId    String
-  sender      User           @relation(fields: [senderId], references: [id])
-  senderId    String
-  
+  id       String @id @default(cuid())
+  thread   Thread @relation(fields: [threadId], references: [id])
+  threadId String
+  sender   User   @relation(fields: [senderId], references: [id])
+  senderId String
+
   // Content and Type
-  type        MediaType      @default(TEXT) 
-  content     String?       
-  files       File[]         // New relation for multimedia files
-  
+  type    MediaType @default(TEXT)
+  content String?
+  files   File[] // New relation for multimedia files
+
   // Reply/Quote/Forwarding
-  repliesToId String?       
-  repliesTo   Message?       @relation("Replies", fields: [repliesToId], references: [id], onDelete: SetNull)
-  repliedBy   Message[]      @relation("Replies") 
-  
+  repliesToId String?
+  repliesTo   Message?  @relation("Replies", fields: [repliesToId], references: [id], onDelete: SetNull)
+  repliedBy   Message[] @relation("Replies")
+
   // Message Management
-  isEdited    Boolean        @default(false)
-  isDeleted   Boolean        @default(false)
-  
-  readBy      MessageReadBy[]
-  createdAt   DateTime       @default(now())
-  updatedAt   DateTime       @updatedAt
+  isEdited  Boolean @default(false)
+  isDeleted Boolean @default(false)
+
+  readBy    MessageReadBy[]
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
 
   @@index([threadId, createdAt])
 }
@@ -632,32 +629,30 @@ model MessageReadBy {
 }
 
 model File {
-  id          String   @id @default(cuid())
-  message     Message  @relation(fields: [messageId], references: [id])
-  messageId   String
-  
-  url         String  
-  mimeType    String  
-  sizeKB      Int      // File size in kilobytes for preview/management
-  
-  fileName    String?  
-  isMedia     Boolean  @default(false) // True for images/videos, false for documents
-  
-  createdAt   DateTime @default(now())
-  
+  id        String  @id @default(cuid())
+  message   Message @relation(fields: [messageId], references: [id])
+  messageId String
+
+  url      String
+  mimeType String
+  sizeKB   Int // File size in kilobytes for preview/management
+
+  fileName String?
+  isMedia  Boolean @default(false) // True for images/videos, false for documents
+
+  createdAt DateTime @default(now())
+
   @@index([messageId])
 }
 
 enum MediaType {
-  TEXT     
+  TEXT
   IMAGE
   VIDEO
   VOICE_NOTE
   DOCUMENT
-  SYSTEM    // For messages like 'User X joined'
+  SYSTEM // For messages like 'User X joined'
 }
-
-
 
 model Favorite {
   id          String   @id @default(cuid())
@@ -757,7 +752,6 @@ enum RegistrationType {
   INDIVIDUAL
   TEAM
 }
-
 
 enum Role {
   USER
