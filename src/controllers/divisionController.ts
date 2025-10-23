@@ -621,6 +621,54 @@ export const assignPlayerToDivision = async (req: Request, res: Response) => {
       });
     }
 
+    // Check player rating against division threshold (before checking capacity)
+    if (division.pointsThreshold) {
+      // Get the season's league to determine sport type
+      const seasonWithLeague = await prisma.season.findUnique({
+        where: { id: seasonId },
+        include: {
+          leagues: {
+            select: { sportType: true }
+          }
+        }
+      });
+
+      if (seasonWithLeague?.leagues?.[0]?.sportType) {
+        const sportType = seasonWithLeague.leagues[0].sportType.toLowerCase();
+        
+        // Get player's questionnaire response for this sport
+        const questionnaireResponse = await prisma.questionnaireResponse.findFirst({
+          where: {
+            userId: userId,
+            sport: sportType,
+            completedAt: { not: null }
+          },
+          include: {
+            result: true
+          }
+        });
+
+        if (questionnaireResponse?.result) {
+          // Determine the appropriate rating based on game type
+          const playerRating = division.gameType === 'DOUBLES' 
+            ? questionnaireResponse.result.doubles 
+            : questionnaireResponse.result.singles;
+
+          if (playerRating && playerRating > division.pointsThreshold) {
+            return res.status(400).json({
+              success: false,
+              error: `Player rating (${playerRating}) exceeds division threshold (${division.pointsThreshold}). Player is too advanced for this division.`
+            });
+          }
+        } else {
+          return res.status(400).json({
+            success: false,
+            error: "Player has not completed the skill assessment questionnaire for this sport"
+          });
+        }
+      }
+    }
+
     // Check division capacity
     const capacityCheck = await checkDivisionCapacity(divisionId, division.gameType);
     if (!capacityCheck.hasCapacity) {
