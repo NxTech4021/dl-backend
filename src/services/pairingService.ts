@@ -32,7 +32,7 @@ export const calculatePairRating = async (
     const season = await prisma.season.findUnique({
       where: { id: seasonId },
       select: {
-        category: {
+        categories: {
           select: { game_type: true }
         }
       },
@@ -123,7 +123,7 @@ export const sendPairRequest = async (
     }
 
     const now = new Date();
-    if (season.startDate > now || season.regiDeadline < now) {
+    if (now > season.regiDeadline || now > season.startDate) {
       return {
         success: false,
         message: 'Season registration is not currently open',
@@ -688,7 +688,7 @@ export const dissolvePartnership = async (
     }
 
     // Validate: Cannot dissolve if season is completed
-    if (partnership.season.status === 'COMPLETED') {
+    if (partnership.season.status === 'FINISHED') {
       return {
         success: false,
         message: 'Cannot dissolve partnership after season is completed',

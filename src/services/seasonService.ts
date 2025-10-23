@@ -311,8 +311,8 @@ export const registerMembershipService = async (data: RegisterSeasonMembershipDa
  
   if (!season.isActive) throw new Error("Season is not active for registration");
  
-  if (season.regiDeadline && new Date() > season.regiDeadline)
-    throw new Error("Registration deadline has passed");
+  if (season.regiDeadline && (new Date() > season.regiDeadline || new Date() > season.startDate))
+    throw new Error("Season registration is not currently open");
 
   const existingMembership = await prisma.seasonMembership.findFirst({
     where: { userId, seasonId },
