@@ -109,9 +109,9 @@ export const getThreads = async (req: Request, res: Response) => {
 // Send a message in a thread
 export const sendMessage = async (req: Request, res: Response) => {
   const { threadId } = req.params;
-  const { senderId, content, messageType = 'text' } = req.body;
+  const { senderId, content, } = req.body;
 
-  console.log(`💬 Sending message - Thread: ${threadId}, Sender: ${senderId}, Type: ${messageType}`);
+  console.log(`💬 Sending message - Thread: ${threadId}, Sender: ${senderId}`);
 
   if (!senderId || !content) {
     console.log(`❌ Missing required fields - SenderId: ${senderId}, Content: ${!!content}`);
@@ -120,11 +120,11 @@ export const sendMessage = async (req: Request, res: Response) => {
 
   try {
     // Verify thread exists and user is a member
-    const threadMember = await prisma.threadMember.findFirst({
+    const threadUser = await prisma.userThread.findFirst({
       where: { threadId, userId: senderId }
     });
 
-    if (!threadMember) {
+    if (!threadUser) {
       console.log(`❌ User ${senderId} is not a member of thread ${threadId}`);
       return res.status(403).json({ error: "User is not a member of this thread" });
     }
@@ -134,7 +134,6 @@ export const sendMessage = async (req: Request, res: Response) => {
         threadId, 
         senderId, 
         content,
-        messageType 
       },
       include: { 
         sender: { 
@@ -311,11 +310,11 @@ export const getThreadMembers = async (req: Request, res: Response) => {
     const { threadId } = req.params;
     console.log(`👥 Fetching members for thread: ${threadId}`);
 
-    const members = await prisma.threadMember.findMany({
+    const members = await prisma.userThread.findMany({
       where: { threadId },
       include: {
         user: {
-          select: { id: true, name: true, username: true, image: true }
+          select: { id: true, name: true, username: true}
         }
       }
     });
@@ -329,5 +328,62 @@ export const getThreadMembers = async (req: Request, res: Response) => {
   } catch (error) {
     console.error("❌ Error fetching thread members:", error);
     return res.status(500).json({ error: "Failed to fetch thread members" });
+  }
+};
+
+export const getAvailableUsers = async (req: Request, res: Response) => {
+  try {
+    const { userId } = req.params;
+    console.log(`📋 Fetching available users for: ${userId}`);
+
+    if (!userId) {
+      return res.status(400).json({ error: "User ID is required" });
+    }
+
+    // Step 1: Get user IDs that already have single chats with current user
+    const existingChatUsers = await prisma.userThread.findMany({
+      where: {
+        thread: {
+          isGroup: false,
+          members: {
+            some: { userId } 
+          }
+        },
+        userId: { not: userId } 
+      },
+      select: {
+        userId: true
+      }
+    });
+
+    const existingUserIds = existingChatUsers.map(ut => ut.userId);
+
+    // Step 2: Get all users except current user and those with existing chats
+    const availableUsers = await prisma.user.findMany({
+      where: {
+        id: { 
+          notIn: [userId, ...existingUserIds] 
+        }
+      },
+      select: {
+        id: true,
+        name: true,
+        username: true,
+        image: true,
+        email: true,
+      }
+    });
+
+    console.log(`✅ Found ${availableUsers.length} available users (excluded ${existingUserIds.length} with existing chats)`);
+    
+    return res.json({ 
+      success: true, 
+      data: availableUsers,
+      count: availableUsers.length,
+      excludedCount: existingUserIds.length
+    });
+  } catch (error) {
+    console.error("❌ Error fetching available users:", error);
+    return res.status(500).json({ error: "Failed to fetch available users" });
   }
 };

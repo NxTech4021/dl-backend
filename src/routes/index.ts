@@ -8,6 +8,7 @@ import sponsorRoutes from "./sponsorRoutes";
 import categoryRoutes from "./categoryRoutes";
 import pairingRouter from "./pairingRoutes";
 import onboardingRouter from "./onboarding";
+import chatRoutes from "./threadRoutes";
 // import matchRoutes from "./matchRoutes";
 
 
@@ -34,7 +35,7 @@ router.use("/pairing", pairingRouter);
 // LeaderBoard
 
 // Chat
-// router.use("/chat", chatRoutes);
+router.use("/chat", chatRoutes);
 
 // Settings
 
