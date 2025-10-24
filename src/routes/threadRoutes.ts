@@ -5,7 +5,8 @@ import {
   sendMessage,
   getMessages,
   markAsRead,
-  getThreadMembers
+  getThreadMembers,
+  getAvailableUsers
 } from "../controllers/threadController";
 
 const chatRoutes = Router();
@@ -14,6 +15,7 @@ const chatRoutes = Router();
 chatRoutes.post("/threads", createThread);
 chatRoutes.get("/threads/:userId", getThreads);
 chatRoutes.get("/threads/:threadId/members", getThreadMembers);
+chatRoutes.get('/threads/users/available/:userId', getAvailableUsers);
 
 // Message management
 chatRoutes.post("/threads/:threadId/messages", sendMessage);
