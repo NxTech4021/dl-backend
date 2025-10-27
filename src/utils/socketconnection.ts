@@ -61,6 +61,12 @@ export function socketHandler(httpServer: HttpServer) {
       socket.to(threadId).emit('typing_status', { threadId, senderId, isTyping: true });
     });
 
+    socket.on('typing', (data) => {
+    console.log('Received typing event:', data);
+    // Broadcast to everyone in the thread EXCEPT the sender
+    socket.to(data.threadId).emit('user_typing', data);
+  });
+
     socket.on('typing_stop', ({ threadId, senderId }) => {
       // Broadcast to all other members in the thread room
       socket.to(threadId).emit('typing_status', { threadId, senderId, isTyping: false });

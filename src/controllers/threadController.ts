@@ -3,7 +3,7 @@ import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
-// Create a new thread (single or group)
+// Create a new thread (single or group)  
 export const createThread = async (req: Request, res: Response) => {
   try {
     const { name, isGroup, userIds } = req.body;
@@ -297,7 +297,7 @@ export const markAsRead = async (req: Request, res: Response) => {
       success: true, 
       data: readReceipt,
       message: "Message marked as read" 
-    });
+    }); 
   } catch (error) {
     console.error("❌ Error marking message as read:", error);
     return res.status(500).json({ error: "Failed to mark message as read" });

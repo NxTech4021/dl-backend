@@ -12,7 +12,7 @@ import {
 const chatRoutes = Router();
 
 // Thread management
-chatRoutes.post("/threads", createThread);
+chatRoutes.post("/threads/", createThread);
 chatRoutes.get("/threads/:userId", getThreads);
 chatRoutes.get("/threads/:threadId/members", getThreadMembers);
 chatRoutes.get('/threads/users/available/:userId', getAvailableUsers);
