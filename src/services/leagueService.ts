@@ -71,19 +71,27 @@ export const getAllLeagues = async () => {
     orderBy: { createdAt: 'desc' },
   });
 
-  // Calculate total members from all seasons in all leagues
-  const totalMembers = leagues.reduce((sum: number, league: any) => {
-    if (!league.seasons) return sum;
-    return sum + league.seasons.reduce((seasonSum: number, season: any) => {
+  // Calculate total season memberships for each league
+  const leaguesWithMemberships = leagues.map((league: any) => {
+    const totalSeasonMemberships = league.seasons?.reduce((sum: number, season: any) => {
       const memberships = season._count?.memberships || 0;
-      const registrations = season._count?.registrations || 0;
-      return seasonSum + memberships + registrations;
-    }, 0);
+      return sum + memberships;
+    }, 0) || 0;
+
+    return {
+      ...league,
+      totalSeasonMemberships
+    };
+  });
+
+  // Calculate total members from all seasons in all leagues
+  const totalMembers = leaguesWithMemberships.reduce((sum: number, league: any) => {
+    return sum + (league.totalSeasonMemberships || 0);
   }, 0);
 
   const totalCategories = leagues.reduce((sum: number, league: any) => sum + (league.categories?.length || 0), 0);
 
-  return { leagues, totalMembers, totalCategories };
+  return { leagues: leaguesWithMemberships, totalMembers, totalCategories };
 };
 
 
@@ -135,7 +143,16 @@ export const getLeagueById = async (id: string) => {
     throw new Error(`League with ID ${id} not found.`);
   }
 
-  return league;
+  // Calculate total season memberships for this league
+  const totalSeasonMemberships = league.seasons?.reduce((sum: number, season: any) => {
+    const memberships = season._count?.memberships || 0;
+    return sum + memberships;
+  }, 0) || 0;
+
+  return {
+    ...league,
+    totalSeasonMemberships
+  };
 };
 
 
