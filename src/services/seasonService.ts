@@ -120,7 +120,7 @@ export const createSeasonService = async (data: CreateSeasonData) => {
 };
 
 export const getAllSeasonsService = async () => {
-  return await prisma.season.findMany({
+  const seasons = await prisma.season.findMany({
     orderBy: { startDate: "desc" },
     select: {
       id: true,
@@ -150,8 +150,24 @@ export const getAllSeasonsService = async () => {
       divisions: {
         select: { id: true, name: true }
       },
+      // Include counts for both membership systems
+      _count: {
+        select: {
+          memberships: true,
+          registrations: true
+        }
+      }
     },
   });
+
+  // Calculate actual player count by combining both systems
+  return seasons.map(season => ({
+    ...season,
+    // Calculate total players from both SeasonMembership and SeasonRegistration
+    registeredUserCount: season._count.memberships + season._count.registrations,
+    // Keep the original count for reference
+    originalRegisteredUserCount: season.registeredUserCount
+  }));
 };
 
 export const getSeasonByIdService = async (id: string) => {
@@ -201,6 +217,27 @@ export const getSeasonByIdService = async (id: string) => {
             }
           }, 
         },
+      },
+      // Also include SeasonRegistration data for backward compatibility
+      registrations: {
+        include: {
+          player: {
+            include: {
+              questionnaireResponses: {
+                include: {
+                  result: true
+                },
+                where: {
+                  completedAt: { not: null }
+                }
+              }
+            }
+          },
+          division: true
+        },
+        where: {
+          isActive: true
+        }
       },
     },
   });

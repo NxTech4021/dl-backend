@@ -24,7 +24,7 @@ export const createSeason = async (req: Request, res: Response) => {
     description,
     entryFee,
     leagueIds, 
-    categoryIds,
+    categoryId, // Changed from categoryIds to categoryId
     isActive,
     paymentRequired,
     promoCodeSupported,
@@ -47,11 +47,11 @@ export const createSeason = async (req: Request, res: Response) => {
     });
   }
 
-  // Validate categoryIds array
-  if (!categoryIds || !Array.isArray(categoryIds) || categoryIds.length === 0) {
+  // Validate categoryId (single category)
+  if (!categoryId || typeof categoryId !== 'string') {
     return res.status(400).json({
       success: false,
-      error: "At least one category must be specified",
+      error: "A category must be specified",
     });
   }
 
@@ -64,7 +64,7 @@ export const createSeason = async (req: Request, res: Response) => {
       description,
       entryFee,
       leagueIds, 
-      categoryIds,
+      categoryIds: [categoryId], // Convert single categoryId to array for service
       isActive: isActive ?? false,
       paymentRequired: paymentRequired ?? false,
       promoCodeSupported: promoCodeSupported ?? false,
@@ -128,25 +128,63 @@ export const getSeasons = async (req: Request, res: Response) => {
           sportType: league.sportType,
           gameType: league.gameType
         })) ?? [],
-        memberships: season.memberships?.map(membership => ({
-          ...membership,
-          user: membership.user ? {
-            ...membership.user,
-            questionnaireResponses: membership.user.questionnaireResponses?.map(response => ({
-              id: response.id,
-              sport: response.sport,
-              completedAt: response.completedAt,
-              result: response.result ? {
-                id: response.result.id,
-                singles: response.result.singles,
-                doubles: response.result.doubles,
-                rd: response.result.rd,
-                confidence: response.result.confidence,
-                source: response.result.source
-              } : null
-            })) || []
-          } : null
-        })) ?? [],
+        // Merge SeasonMembership and SeasonRegistration data
+        memberships: [
+          // Convert SeasonMembership to unified format
+          ...(season.memberships?.map(membership => ({
+            id: membership.id,
+            userId: membership.userId,
+            seasonId: membership.seasonId,
+            divisionId: membership.divisionId,
+            status: membership.status,
+            joinedAt: membership.joinedAt,
+            withdrawalReason: membership.withdrawalReason,
+            paymentStatus: membership.paymentStatus,
+            user: membership.user ? {
+              ...membership.user,
+              questionnaireResponses: membership.user.questionnaireResponses?.map(response => ({
+                id: response.id,
+                sport: response.sport,
+                completedAt: response.completedAt,
+                result: response.result ? {
+                  id: response.result.id,
+                  singles: response.result.singles,
+                  doubles: response.result.doubles,
+                  rd: response.result.rd,
+                  confidence: response.result.confidence,
+                  source: response.result.source
+                } : null
+              })) || []
+            } : null
+          })) || []),
+          // Convert SeasonRegistration to unified format
+          ...(season.registrations?.map(registration => ({
+            id: `reg_${registration.id}`, // Prefix to avoid ID conflicts
+            userId: registration.playerId,
+            seasonId: registration.seasonId.toString(),
+            divisionId: registration.divisionId?.toString() || null,
+            status: 'ACTIVE', // SeasonRegistration is always active
+            joinedAt: registration.registeredAt,
+            withdrawalReason: null,
+            paymentStatus: 'PENDING', // Default for registrations
+            user: registration.player ? {
+              ...registration.player,
+              questionnaireResponses: registration.player.questionnaireResponses?.map(response => ({
+                id: response.id,
+                sport: response.sport,
+                completedAt: response.completedAt,
+                result: response.result ? {
+                  id: response.result.id,
+                  singles: response.result.singles,
+                  doubles: response.result.doubles,
+                  rd: response.result.rd,
+                  confidence: response.result.confidence,
+                  source: response.result.source
+                } : null
+              })) || []
+            } : null
+          })) || [])
+        ],
         categories: season.categories?.map(category => ({
           id: category.id,
           name: category.name,
@@ -204,25 +242,63 @@ export const getSeasonById = async (req: Request, res: Response) => {
         sportType: league.sportType,
         gameType: league.gameType
       })) ?? [],
-      memberships: season.memberships?.map(membership => ({
-        ...membership,
-        user: membership.user ? {
-          ...membership.user,
-          questionnaireResponses: membership.user.questionnaireResponses?.map(response => ({
-            id: response.id,
-            sport: response.sport,
-            completedAt: response.completedAt,
-            result: response.result ? {
-              id: response.result.id,
-              singles: response.result.singles,
-              doubles: response.result.doubles,
-              rd: response.result.rd,
-              confidence: response.result.confidence,
-              source: response.result.source
-            } : null
-          })) || []
-        } : null
-      })) ?? [],
+      // Merge SeasonMembership and SeasonRegistration data
+      memberships: [
+        // Convert SeasonMembership to unified format
+        ...(season.memberships?.map(membership => ({
+          id: membership.id,
+          userId: membership.userId,
+          seasonId: membership.seasonId,
+          divisionId: membership.divisionId,
+          status: membership.status,
+          joinedAt: membership.joinedAt,
+          withdrawalReason: membership.withdrawalReason,
+          paymentStatus: membership.paymentStatus,
+          user: membership.user ? {
+            ...membership.user,
+            questionnaireResponses: membership.user.questionnaireResponses?.map(response => ({
+              id: response.id,
+              sport: response.sport,
+              completedAt: response.completedAt,
+              result: response.result ? {
+                id: response.result.id,
+                singles: response.result.singles,
+                doubles: response.result.doubles,
+                rd: response.result.rd,
+                confidence: response.result.confidence,
+                source: response.result.source
+              } : null
+            })) || []
+          } : null
+        })) || []),
+        // Convert SeasonRegistration to unified format
+        ...(season.registrations?.map(registration => ({
+          id: `reg_${registration.id}`, // Prefix to avoid ID conflicts
+          userId: registration.playerId,
+          seasonId: registration.seasonId.toString(),
+          divisionId: registration.divisionId?.toString() || null,
+          status: 'ACTIVE', // SeasonRegistration is always active
+          joinedAt: registration.registeredAt,
+          withdrawalReason: null,
+          paymentStatus: 'PENDING', // Default for registrations
+          user: registration.player ? {
+            ...registration.player,
+            questionnaireResponses: registration.player.questionnaireResponses?.map(response => ({
+              id: response.id,
+              sport: response.sport,
+              completedAt: response.completedAt,
+              result: response.result ? {
+                id: response.result.id,
+                singles: response.result.singles,
+                doubles: response.result.doubles,
+                rd: response.result.rd,
+                confidence: response.result.confidence,
+                source: response.result.source
+              } : null
+            })) || []
+          } : null
+        })) || [])
+      ],
       categories: season.categories?.map(category => ({
         id: category.id,
         name: category.name,

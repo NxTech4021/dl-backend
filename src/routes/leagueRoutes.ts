@@ -5,7 +5,7 @@ import {
   createLeague,
   updateLeague,
   deleteLeague,
-  joinLeague,
+  // joinLeague, // LeagueMembership model has been removed
   // sendLeagueInvite,
 } from '../controllers/leagueController';
 
@@ -13,7 +13,7 @@ const leagueRoutes = Router();
 
 // Public routes for all users
 leagueRoutes.get('/', getLeagues);                         
-leagueRoutes.post('/join', joinLeague);
+// leagueRoutes.post('/join', joinLeague); // LeagueMembership model has been removed
 // leagueRoutes.post('/invite', sendLeagueInvite);  
 leagueRoutes.get('/:id', getLeagueById);               
 // Public routes - View sports at a league
