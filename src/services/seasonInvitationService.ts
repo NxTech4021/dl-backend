@@ -1,5 +1,5 @@
 import { prisma } from '../lib/prisma';
-import { SeasonInvitationStatus, PartnershipStatus } from '@prisma/client';
+import { SeasonInvitationStatus, PartnershipStatus, FriendshipStatus } from '@prisma/client';
 
 interface ServiceResponse {
   success: boolean;
@@ -12,48 +12,34 @@ interface ServiceResponse {
 // ==========================================
 
 /**
- * Send a season invitation to a general partnership
+ * Send a season invitation to a friend
  */
 export const sendSeasonInvitation = async (data: {
   senderId: string;
   recipientId: string;
-  generalPartnershipId: string;
   seasonId: string;
   message?: string;
 }): Promise<ServiceResponse> => {
   try {
-    const { senderId, recipientId, generalPartnershipId, seasonId, message } = data;
+    const { senderId, recipientId, seasonId, message } = data;
 
     // Validate: Cannot invite yourself
     if (senderId === recipientId) {
       return { success: false, message: 'Cannot send invitation to yourself' };
     }
 
-    // Validate: General partnership exists and is active
-    const generalPartnership = await prisma.generalPartnership.findUnique({
-      where: { id: generalPartnershipId }
+    // Validate: Must be friends (ACCEPTED friendship)
+    const friendship = await prisma.friendship.findFirst({
+      where: {
+        OR: [
+          { requesterId: senderId, recipientId, status: FriendshipStatus.ACCEPTED },
+          { requesterId: recipientId, recipientId: senderId, status: FriendshipStatus.ACCEPTED }
+        ]
+      }
     });
 
-    if (!generalPartnership) {
-      return { success: false, message: 'General partnership not found' };
-    }
-
-    if (generalPartnership.status !== 'ACTIVE') {
-      return { success: false, message: 'General partnership is not active' };
-    }
-
-    // Validate: Sender is part of the partnership
-    if (generalPartnership.player1Id !== senderId && generalPartnership.player2Id !== senderId) {
-      return { success: false, message: 'You are not part of this partnership' };
-    }
-
-    // Validate: Recipient is the other player in the partnership
-    const expectedRecipientId = generalPartnership.player1Id === senderId
-      ? generalPartnership.player2Id
-      : generalPartnership.player1Id;
-
-    if (recipientId !== expectedRecipientId) {
-      return { success: false, message: 'Invalid recipient for this partnership' };
+    if (!friendship) {
+      return { success: false, message: 'Can only invite friends. Send a friend request first.' };
     }
 
     // Validate: Season exists
@@ -92,15 +78,16 @@ export const sendSeasonInvitation = async (data: {
     });
 
     if (recipientExistingPartnership) {
-      return { success: false, message: 'Your partner already has a partnership in this season' };
+      return { success: false, message: 'Your friend already has a partnership in this season' };
     }
 
-    // Check for existing pending invitation
+    // Check for existing pending invitation between these two users for this season
     const existingInvitation = await prisma.seasonInvitation.findFirst({
       where: {
-        generalPartnershipId,
-        seasonId,
-        status: 'PENDING'
+        OR: [
+          { senderId, recipientId, seasonId, status: 'PENDING' },
+          { senderId: recipientId, recipientId: senderId, seasonId, status: 'PENDING' }
+        ]
       }
     });
 
@@ -116,7 +103,6 @@ export const sendSeasonInvitation = async (data: {
       data: {
         senderId,
         recipientId,
-        generalPartnershipId,
         seasonId,
         message,
         status: 'PENDING',
@@ -146,28 +132,6 @@ export const sendSeasonInvitation = async (data: {
             id: true,
             name: true
           }
-        },
-        generalPartnership: {
-          include: {
-            player1: {
-              select: {
-                id: true,
-                name: true,
-                username: true,
-                displayUsername: true,
-                image: true
-              }
-            },
-            player2: {
-              select: {
-                id: true,
-                name: true,
-                username: true,
-                displayUsername: true,
-                image: true
-              }
-            }
-          }
         }
       }
     });
@@ -184,7 +148,7 @@ export const sendSeasonInvitation = async (data: {
 };
 
 /**
- * Accept a season invitation and create season-specific partnership
+ * Accept a season invitation and create season-specific partnership + memberships
  */
 export const acceptSeasonInvitation = async (
   invitationId: string,
@@ -192,10 +156,7 @@ export const acceptSeasonInvitation = async (
 ): Promise<ServiceResponse> => {
   try {
     const invitation = await prisma.seasonInvitation.findUnique({
-      where: { id: invitationId },
-      include: {
-        generalPartnership: true
-      }
+      where: { id: invitationId }
     });
 
     if (!invitation) {
@@ -248,8 +209,9 @@ export const acceptSeasonInvitation = async (
       return { success: false, message: 'You already have a partnership in this season' };
     }
 
-    // Transaction: Update invitation + Create season partnership
+    // Transaction: Update invitation + Create season partnership + Create season memberships for both players
     const result = await prisma.$transaction(async (tx) => {
+      // Update invitation status
       await tx.seasonInvitation.update({
         where: { id: invitationId },
         data: {
@@ -258,12 +220,12 @@ export const acceptSeasonInvitation = async (
         }
       });
 
+      // Create partnership
       const partnership = await tx.partnership.create({
         data: {
           captainId: invitation.senderId,
           partnerId: invitation.recipientId,
           seasonId: invitation.seasonId,
-          generalPartnershipId: invitation.generalPartnershipId,
           status: 'ACTIVE'
         },
         include: {
@@ -304,6 +266,25 @@ export const acceptSeasonInvitation = async (
             }
           }
         }
+      });
+
+      // Create season memberships for both players
+      await tx.seasonMembership.createMany({
+        data: [
+          {
+            userId: invitation.senderId,
+            seasonId: invitation.seasonId,
+            status: 'PENDING', // Status will be updated once payment is processed
+            paymentStatus: 'PENDING'
+          },
+          {
+            userId: invitation.recipientId,
+            seasonId: invitation.seasonId,
+            status: 'PENDING',
+            paymentStatus: 'PENDING'
+          }
+        ],
+        skipDuplicates: true // In case membership already exists
       });
 
       return partnership;
@@ -430,28 +411,6 @@ export const getSeasonInvitations = async (userId: string) => {
               id: true,
               name: true
             }
-          },
-          generalPartnership: {
-            include: {
-              player1: {
-                select: {
-                  id: true,
-                  name: true,
-                  username: true,
-                  displayUsername: true,
-                  image: true
-                }
-              },
-              player2: {
-                select: {
-                  id: true,
-                  name: true,
-                  username: true,
-                  displayUsername: true,
-                  image: true
-                }
-              }
-            }
           }
         },
         orderBy: { createdAt: 'desc' }
@@ -481,28 +440,6 @@ export const getSeasonInvitations = async (userId: string) => {
             select: {
               id: true,
               name: true
-            }
-          },
-          generalPartnership: {
-            include: {
-              player1: {
-                select: {
-                  id: true,
-                  name: true,
-                  username: true,
-                  displayUsername: true,
-                  image: true
-                }
-              },
-              player2: {
-                select: {
-                  id: true,
-                  name: true,
-                  username: true,
-                  displayUsername: true,
-                  image: true
-                }
-              }
             }
           }
         },
@@ -540,7 +477,13 @@ export const getPendingSeasonInvitation = async (
             name: true,
             username: true,
             displayUsername: true,
-            image: true
+            image: true,
+            area: true,
+            gender: true,
+            questionnaireResponses: {
+              where: { completedAt: { not: null } },
+              include: { result: true }
+            }
           }
         },
         recipient: {
@@ -549,47 +492,19 @@ export const getPendingSeasonInvitation = async (
             name: true,
             username: true,
             displayUsername: true,
-            image: true
+            image: true,
+            area: true,
+            gender: true,
+            questionnaireResponses: {
+              where: { completedAt: { not: null } },
+              include: { result: true }
+            }
           }
         },
         season: {
           select: {
             id: true,
             name: true
-          }
-        },
-        generalPartnership: {
-          include: {
-            player1: {
-              select: {
-                id: true,
-                name: true,
-                username: true,
-                displayUsername: true,
-                image: true,
-                area: true,
-                gender: true,
-                questionnaireResponses: {
-                  where: { completedAt: { not: null } },
-                  include: { result: true }
-                }
-              }
-            },
-            player2: {
-              select: {
-                id: true,
-                name: true,
-                username: true,
-                displayUsername: true,
-                image: true,
-                area: true,
-                gender: true,
-                questionnaireResponses: {
-                  where: { completedAt: { not: null } },
-                  include: { result: true }
-                }
-              }
-            }
           }
         }
       }
