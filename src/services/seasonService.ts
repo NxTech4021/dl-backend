@@ -85,7 +85,7 @@ export const createSeasonService = async (data: CreateSeasonData) => {
       endDate: new Date(endDate),
       regiDeadline: regiDeadline ? new Date(regiDeadline) : new Date(endDate),
       entryFee: new Prisma.Decimal(entryFee),
-      description,
+      description: description ?? null,
       isActive: isActive ?? false,
       paymentRequired: paymentRequired ?? false,
       promoCodeSupported: promoCodeSupported ?? false,
@@ -120,7 +120,7 @@ export const createSeasonService = async (data: CreateSeasonData) => {
 };
 
 export const getAllSeasonsService = async () => {
-  return await prisma.season.findMany({
+  const seasons = await prisma.season.findMany({
     orderBy: { startDate: "desc" },
     select: {
       id: true,
@@ -144,14 +144,34 @@ export const getAllSeasonsService = async () => {
       leagues: { 
         select: { id: true, name: true, sportType: true, gameType: true } 
       },
-      memberships: {          
-        select: { userId: true }
+      memberships: {
+        include: {
+          user: {
+            select: {
+              id: true,
+              name: true,
+              image: true,
+            }
+          }
+        },
+        take: 6,
+        orderBy: {
+          joinedAt: 'asc'
+        }
+      },
+      _count: {
+        select: { memberships: true }
       },
       divisions: {
         select: { id: true, name: true }
       },
     },
   });
+
+  return seasons.map(season => ({
+    ...season,
+    registeredUserCount: season.memberships.length,
+  }));
 };
 
 export const getSeasonByIdService = async (id: string) => {
@@ -202,6 +222,26 @@ export const getSeasonByIdService = async (id: string) => {
           }, 
         },
       },
+      registrations: {
+        include: {
+          player: {
+            include: {
+              questionnaireResponses: {
+                include: {
+                  result: true
+                },
+                where: {
+                  completedAt: { not: null }
+                }
+              }
+            }
+          },
+          division: true
+        },
+        where: {
+          isActive: true
+        }
+      },
     },
   });
 };
@@ -220,42 +260,44 @@ export const getActiveSeasonService = async () => {
 export const updateSeasonStatusService = async (id: string, data: StatusUpdate) => {
   const { status, isActive } = data;
 
-  // If isActive is true and no explicit status provided, set status = ACTIVE
   const finalStatus = status ?? (isActive ? "ACTIVE" : undefined);
+
+  const updateData: any = {};
+  if (typeof isActive !== "undefined") {
+    updateData.isActive = isActive;
+  }
+  if (finalStatus) {
+    updateData.status = finalStatus;
+  }
 
   const updatedSeason = await prisma.season.update({
     where: { id },
-    data: {
-      isActive: typeof isActive !== "undefined" ? isActive : undefined,
-      status: finalStatus,
-    },
+    data: updateData,
   });
 
   return updatedSeason;
 };
 
 export const updateSeasonService = async (id: string, data: SeasonUpdateData) => {
+  const updateData: any = {};
+  
+  if (data.name !== undefined) updateData.name = data.name;
+  if (data.startDate !== undefined) updateData.startDate = new Date(data.startDate);
+  if (data.endDate !== undefined) updateData.endDate = new Date(data.endDate);
+  if (data.regiDeadline !== undefined) updateData.regiDeadline = new Date(data.regiDeadline);
+  if (data.entryFee !== undefined) updateData.entryFee = new Prisma.Decimal(data.entryFee);
+  if (data.description !== undefined) updateData.description = data.description ?? null;
+  if (data.leagueIds !== undefined) updateData.leagues = { set: data.leagueIds.map(id => ({ id })) };
+  if (data.categoryIds !== undefined) updateData.categories = { set: data.categoryIds.map(id => ({ id })) };
+  if (data.isActive !== undefined) updateData.isActive = data.isActive;
+  if (data.status !== undefined) updateData.status = data.status;
+  if (data.paymentRequired !== undefined) updateData.paymentRequired = data.paymentRequired;
+  if (data.promoCodeSupported !== undefined) updateData.promoCodeSupported = data.promoCodeSupported;
+  if (data.withdrawalEnabled !== undefined) updateData.withdrawalEnabled = data.withdrawalEnabled;
+
   const updatedSeason = await prisma.season.update({
     where: { id },
-    data: {
-      name: data.name,
-      startDate: data.startDate ? new Date(data.startDate) : undefined,
-      endDate: data.endDate ? new Date(data.endDate) : undefined,
-      regiDeadline: data.regiDeadline ? new Date(data.regiDeadline) : undefined,
-      entryFee: typeof data.entryFee === "number" ? new Prisma.Decimal(data.entryFee) : undefined,
-      description: data.description,
-      leagues: data.leagueIds ? {
-        set: data.leagueIds.map(id => ({ id }))
-      } : undefined,
-      categories: data.categoryIds ? {
-        set: data.categoryIds.map(id => ({ id }))
-      } : undefined,
-      isActive: typeof data.isActive !== "undefined" ? data.isActive : undefined,
-      status: data.status ?? (data.isActive ? "ACTIVE" : undefined),
-      paymentRequired: data.paymentRequired,
-      promoCodeSupported: data.promoCodeSupported,
-      withdrawalEnabled: data.withdrawalEnabled,
-    },
+    data: updateData,
     include: {
       leagues: {
         select: {
@@ -311,7 +353,7 @@ export const registerMembershipService = async (data: RegisterSeasonMembershipDa
  
   if (!season.isActive) throw new Error("Season is not active for registration");
  
-  if (season.regiDeadline && (new Date() > season.regiDeadline || new Date() > season.startDate))
+  if (season.regiDeadline && (new Date() > season.regiDeadline || (season.startDate && new Date() > season.startDate)))
     throw new Error("Season registration is not currently open");
 
   const existingMembership = await prisma.seasonMembership.findFirst({

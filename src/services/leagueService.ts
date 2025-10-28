@@ -53,33 +53,45 @@ export const getAllLeagues = async () => {
           gender_category: true
         }
       },
-      memberships: {
+      seasons: {
         include: {
-          user: {
+          _count: {
             select: {
-              id: true,
-              name: true,
-              image: true,
+              memberships: true,
+              registrations: true
             }
           }
-        },
-        take: 6, // limit to 6 members for profile pictures
-        orderBy: {
-          joinedAt: 'asc' 
         }
       },
       _count: {
-        select: { seasons: true, memberships: true },
+        select: { seasons: true },
       },
       createdBy: { select: { id: true } },
     },
     orderBy: { createdAt: 'desc' },
   });
 
-  const totalMembers = leagues.reduce((sum, league) => sum + (league._count.memberships || 0), 0);
-  const totalCategories = leagues.reduce((sum, league) => sum + (league.categories?.length || 0), 0);
+  // Calculate total season memberships for each league
+  const leaguesWithMemberships = leagues.map((league: any) => {
+    const totalSeasonMemberships = league.seasons?.reduce((sum: number, season: any) => {
+      const memberships = season._count?.memberships || 0;
+      return sum + memberships;
+    }, 0) || 0;
 
-  return { leagues, totalMembers, totalCategories };
+    return {
+      ...league,
+      totalSeasonMemberships
+    };
+  });
+
+  // Calculate total members from all seasons in all leagues
+  const totalMembers = leaguesWithMemberships.reduce((sum: number, league: any) => {
+    return sum + (league.totalSeasonMemberships || 0);
+  }, 0);
+
+  const totalCategories = leagues.reduce((sum: number, league: any) => sum + (league.categories?.length || 0), 0);
+
+  return { leagues: leaguesWithMemberships, totalMembers, totalCategories };
 };
 
 
@@ -88,23 +100,27 @@ export const getLeagueById = async (id: string) => {
     where: { id },
     include: {
       sponsorships: true,
-      memberships: {
-        include: {
-          user: {
-            select: {
-              id: true,
-              name: true,
-              email: true,
-              role: true,
-              image: true,
-            },
-          },
-        },
-      },
+      // memberships removed - LeagueMembership model no longer exists
       categories: true,
       seasons: {
         include: {
           divisions: true,
+          memberships: {
+            include: {
+              user: true
+            }
+          },
+          registrations: {
+            include: {
+              player: true
+            }
+          },
+          _count: {
+            select: {
+              memberships: true,
+              registrations: true
+            }
+          }
         },
       },
       createdBy: {
@@ -117,7 +133,7 @@ export const getLeagueById = async (id: string) => {
           seasons: true,
           sponsorships: true,
           categories: true,
-          memberships: true,
+          // memberships removed
         },
       },
     },
@@ -127,7 +143,16 @@ export const getLeagueById = async (id: string) => {
     throw new Error(`League with ID ${id} not found.`);
   }
 
-  return league;
+  // Calculate total season memberships for this league
+  const totalSeasonMemberships = league.seasons?.reduce((sum: number, season: any) => {
+    const memberships = season._count?.memberships || 0;
+    return sum + memberships;
+  }, 0) || 0;
+
+  return {
+    ...league,
+    totalSeasonMemberships
+  };
 };
 
 
@@ -254,7 +279,7 @@ export const deleteLeague = async (id: string) => {
         select: {
           seasons: true,
           sponsorships: true, 
-          memberships: true, 
+          // memberships removed - LeagueMembership model no longer exists
           categories: true, 
         }
       }
@@ -272,12 +297,7 @@ export const deleteLeague = async (id: string) => {
     );
   }
 
-  // Prevent deletion if players are joined
-  if (league._count.memberships > 0) {
-    throw new Error(
-      `Cannot delete league "${league.name}". It has ${league._count.memberships} joined player(s). Please remove all memberships first.`
-    );
-  }
+  // memberships check removed - LeagueMembership model no longer exists
 
   // Optional: warn if league has sponsorships
   if (league._count.sponsorships > 0) {

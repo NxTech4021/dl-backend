@@ -33,7 +33,7 @@ model User {
   accounts          Account[]
   sessions          Session[]
   seasonMemberships SeasonMembership[]
-  leagueMemberships LeagueMembership[]
+  // leagueMemberships LeagueMembership[] // REMOVED: LeagueMembership model no longer exists
   matchParticipants MatchParticipant[]
   processedRequests WithdrawalRequest[] @relation("ProcessedByAdmin")
 
@@ -189,7 +189,7 @@ model League {
 
   seasons      Season[]           @relation("LeagueToSeason")
   sponsorships Sponsorship[]
-  memberships  LeagueMembership[]
+  // memberships LeagueMembership[] // REMOVED: LeagueMembership model no longer exists
   categories   Category[]
   divisions    Division[]
 
@@ -200,19 +200,22 @@ model League {
   @@index([status])
 }
 
-model LeagueMembership {
-  id       String   @id @default(cuid())
-  userId   String
-  leagueId String
-  joinedAt DateTime @default(now())
-
-  user   User   @relation(fields: [userId], references: [id])
-  league League @relation(fields: [leagueId], references: [id])
-
-  @@unique([userId, leagueId])
-  @@index([leagueId])
-  @@index([userId])
-}
+// REMOVED: LeagueMembership model no longer exists
+// Players now join seasons directly, not leagues
+// 
+// model LeagueMembership {
+//   id       String   @id @default(cuid())
+//   userId   String
+//   leagueId String
+//   joinedAt DateTime @default(now())
+//
+//   user   User   @relation(fields: [userId], references: [id])
+//   league League @relation(fields: [leagueId], references: [id])
+//
+//   @@unique([userId, leagueId])
+//   @@index([leagueId])
+//   @@index([userId])
+// }
 
 model Category {
   id   String  @id @default(cuid())
