@@ -1581,6 +1581,8 @@ export const getPublicPlayerProfile = async (req: AuthenticatedRequest, res: Res
     const { userId } = req.params;
     const currentUserId = req.user?.id;
 
+    console.log('🔍 getPublicPlayerProfile: prisma is', typeof prisma, prisma);
+
     if (!userId) {
       return res.status(400).json(
         new ApiResponse(false, 400, null, 'User ID is required')
