@@ -39,22 +39,15 @@ model User {
 
   divisionAssignments DivisionAssignment[] @relation("DivisionAssignments")
 
-  // Pairing & Favorites Relations
-  favorites            Favorite[]           @relation("UserFavorites")
-  favoritedBy          Favorite[]           @relation("FavoritedBy")
-  sentPairRequests     PairRequest[]        @relation("SentPairRequests")
-  receivedPairRequests PairRequest[]        @relation("ReceivedPairRequests")
-  captainPartnerships  Partnership[]        @relation("PartnershipCaptain")
-  partnerPartnerships  Partnership[]        @relation("PartnershipPartner")
-  registrations        SeasonRegistration[] @relation("PlayerRegistrations")
-
-  // General Pairing Relations (NEW)
-  sentGeneralPairRequests     GeneralPairRequest[] @relation("SentGeneralPairRequests")
-  receivedGeneralPairRequests GeneralPairRequest[] @relation("ReceivedGeneralPairRequests")
-  generalPartnershipPlayer1   GeneralPartnership[] @relation("GeneralPartnershipPlayer1")
-  generalPartnershipPlayer2   GeneralPartnership[] @relation("GeneralPartnershipPlayer2")
-  sentSeasonInvitations       SeasonInvitation[]   @relation("SentSeasonInvitations")
-  receivedSeasonInvitations   SeasonInvitation[]   @relation("ReceivedSeasonInvitations")
+  // Pairing & Friendship Relations
+  sentFriendRequests        Friendship[]       @relation("SentFriendRequests")
+  receivedFriendRequests    Friendship[]       @relation("ReceivedFriendRequests")
+  sentPairRequests          PairRequest[]      @relation("SentPairRequests")
+  receivedPairRequests      PairRequest[]      @relation("ReceivedPairRequests")
+  captainPartnerships       Partnership[]      @relation("PartnershipCaptain")
+  partnerPartnerships       Partnership[]      @relation("PartnershipPartner")
+  sentSeasonInvitations     SeasonInvitation[] @relation("SentSeasonInvitations")
+  receivedSeasonInvitations SeasonInvitation[] @relation("ReceivedSeasonInvitations")
 
   //Thread relations
   userThreads  UserThread[]
@@ -302,8 +295,7 @@ model Season {
   // Pairing Relations
   pairRequests      PairRequest[]
   partnerships      Partnership[]
-  registrations     SeasonRegistration[]
-  seasonInvitations SeasonInvitation[] // NEW
+  seasonInvitations SeasonInvitation[]
 
   leagues    League[]   @relation("LeagueToSeason")
   categories Category[]
@@ -419,8 +411,7 @@ model Division {
   threads           Thread[]             @relation("DivisionThreads")
 
   // Pairing Relations
-  partnerships  Partnership[]
-  registrations SeasonRegistration[]
+  partnerships Partnership[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -663,19 +654,22 @@ enum MediaType {
   SYSTEM // For messages like 'User X joined'
 }
 
-model Favorite {
-  id          String   @id @default(cuid())
-  userId      String
-  favoritedId String
-  createdAt   DateTime @default(now())
+model Friendship {
+  id          String           @id @default(cuid())
+  requesterId String
+  recipientId String
+  status      FriendshipStatus @default(PENDING)
+  createdAt   DateTime         @default(now())
+  respondedAt DateTime?
 
-  user      User @relation("UserFavorites", fields: [userId], references: [id], onDelete: Cascade)
-  favorited User @relation("FavoritedBy", fields: [favoritedId], references: [id], onDelete: Cascade)
+  requester User @relation("SentFriendRequests", fields: [requesterId], references: [id], onDelete: Cascade)
+  recipient User @relation("ReceivedFriendRequests", fields: [recipientId], references: [id], onDelete: Cascade)
 
-  @@unique([userId, favoritedId])
-  @@index([userId])
-  @@index([favoritedId])
-  @@map("favorite")
+  @@unique([requesterId, recipientId])
+  @@index([requesterId])
+  @@index([recipientId])
+  @@index([status])
+  @@map("friendship")
 }
 
 model PairRequest {
@@ -702,23 +696,21 @@ model PairRequest {
 
 //TO DO - use this and link with seasonmembership
 model Partnership {
-  id                   String             @id @default(cuid())
-  captainId            String             // Requester = Captain
-  partnerId            String             // Recipient = Partner
-  seasonId             String
-  generalPartnershipId String?            // NEW: Link to general partnership
-  divisionId           String?
-  pairRating           Int?
-  status               PartnershipStatus  @default(ACTIVE)
-  createdAt            DateTime           @default(now())
-  dissolvedAt          DateTime?
+  id          String            @id @default(cuid())
+  captainId   String            // Requester = Captain
+  partnerId   String            // Recipient = Partner
+  seasonId    String
+  divisionId  String?
+  pairRating  Int?
+  status      PartnershipStatus @default(ACTIVE)
+  createdAt   DateTime          @default(now())
+  dissolvedAt DateTime?
 
-  captain            User                @relation("PartnershipCaptain", fields: [captainId], references: [id], onDelete: Cascade)
-  partner            User                @relation("PartnershipPartner", fields: [partnerId], references: [id], onDelete: Cascade)
-  season             Season              @relation(fields: [seasonId], references: [id], onDelete: Cascade)
-  generalPartnership GeneralPartnership? @relation(fields: [generalPartnershipId], references: [id], onDelete: SetNull) // NEW
-  division           Division?           @relation(fields: [divisionId], references: [id], onDelete: SetNull)
-  withdrawalRequest  WithdrawalRequest[]
+  captain           User                @relation("PartnershipCaptain", fields: [captainId], references: [id], onDelete: Cascade)
+  partner           User                @relation("PartnershipPartner", fields: [partnerId], references: [id], onDelete: Cascade)
+  season            Season              @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  division          Division?           @relation(fields: [divisionId], references: [id], onDelete: SetNull)
+  withdrawalRequest WithdrawalRequest[]
 
   @@unique([captainId, seasonId])
   @@unique([partnerId, seasonId])
@@ -726,104 +718,35 @@ model Partnership {
   @@index([status])
   @@index([captainId])
   @@index([partnerId])
-  @@index([generalPartnershipId]) // NEW
   @@map("partnership")
 }
 
+
 // ==========================================
-// NEW: General Pair Request (no season)
+// Season Invitation (requires accepted friendship)
 // ==========================================
-model GeneralPairRequest {
-  id          String                   @id @default(cuid())
-  requesterId String
+model SeasonInvitation {
+  id          String                 @id @default(cuid())
+  senderId    String
   recipientId String
+  seasonId    String
   message     String?
-  status      GeneralPairRequestStatus
-  createdAt   DateTime                 @default(now())
+  status      SeasonInvitationStatus
+  createdAt   DateTime               @default(now())
   respondedAt DateTime?
   expiresAt   DateTime
 
-  requester User @relation("SentGeneralPairRequests", fields: [requesterId], references: [id], onDelete: Cascade)
-  recipient User @relation("ReceivedGeneralPairRequests", fields: [recipientId], references: [id], onDelete: Cascade)
-
-  @@index([requesterId])
-  @@index([recipientId])
-  @@index([status])
-  @@map("general_pair_request")
-}
-
-// ==========================================
-// NEW: General Partnership (no season)
-// ==========================================
-model GeneralPartnership {
-  id          String                   @id @default(cuid())
-  player1Id   String
-  player2Id   String
-  status      GeneralPartnershipStatus @default(ACTIVE)
-  createdAt   DateTime                 @default(now())
-  dissolvedAt DateTime?
-
-  player1 User @relation("GeneralPartnershipPlayer1", fields: [player1Id], references: [id], onDelete: Cascade)
-  player2 User @relation("GeneralPartnershipPlayer2", fields: [player2Id], references: [id], onDelete: Cascade)
-
-  seasonInvitations  SeasonInvitation[]
-  seasonPartnerships Partnership[]
-
-  @@unique([player1Id, player2Id])
-  @@index([player1Id])
-  @@index([player2Id])
-  @@index([status])
-  @@map("general_partnership")
-}
-
-// ==========================================
-// NEW: Season Invitation
-// ==========================================
-model SeasonInvitation {
-  id                   String                 @id @default(cuid())
-  senderId             String
-  recipientId          String
-  generalPartnershipId String
-  seasonId             String
-  message              String?
-  status               SeasonInvitationStatus
-  createdAt            DateTime               @default(now())
-  respondedAt          DateTime?
-  expiresAt            DateTime
-
-  sender             User               @relation("SentSeasonInvitations", fields: [senderId], references: [id], onDelete: Cascade)
-  recipient          User               @relation("ReceivedSeasonInvitations", fields: [recipientId], references: [id], onDelete: Cascade)
-  generalPartnership GeneralPartnership @relation(fields: [generalPartnershipId], references: [id], onDelete: Cascade)
-  season             Season             @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  sender    User   @relation("SentSeasonInvitations", fields: [senderId], references: [id], onDelete: Cascade)
+  recipient User   @relation("ReceivedSeasonInvitations", fields: [recipientId], references: [id], onDelete: Cascade)
+  season    Season @relation(fields: [seasonId], references: [id], onDelete: Cascade)
 
   @@index([senderId])
   @@index([recipientId])
   @@index([seasonId])
-  @@index([generalPartnershipId])
   @@index([status])
   @@map("season_invitation")
 }
 
-//TO DO - remove this, redundant logic with seasonmembership
-model SeasonRegistration {
-  id               Int              @id @default(autoincrement())
-  seasonId         String
-  registrationType RegistrationType
-  playerId         String?
-  teamId           String?
-  divisionId       String?
-  isActive         Boolean          @default(true)
-  registeredAt     DateTime         @default(now())
-
-  season   Season    @relation(fields: [seasonId], references: [id], onDelete: Cascade)
-  player   User?     @relation("PlayerRegistrations", fields: [playerId], references: [id], onDelete: Cascade)
-  division Division? @relation(fields: [divisionId], references: [id], onDelete: SetNull)
-
-  @@unique([seasonId, playerId])
-  @@index([seasonId])
-  @@index([playerId])
-  @@map("season_registration")
-}
 
 // Enums 
 
@@ -842,10 +765,6 @@ enum PartnershipStatus {
   EXPIRED
 }
 
-enum RegistrationType {
-  INDIVIDUAL
-  TEAM
-}
 
 enum Role {
   USER
@@ -942,17 +861,11 @@ enum TierType {
 // ==========================================
 // NEW ENUMS for General Pairing System
 // ==========================================
-enum GeneralPairRequestStatus {
+enum FriendshipStatus {
   PENDING
   ACCEPTED
-  DENIED
-  CANCELLED
-  EXPIRED
-}
-
-enum GeneralPartnershipStatus {
-  ACTIVE
-  DISSOLVED
+  REJECTED
+  BLOCKED
 }
 
 enum SeasonInvitationStatus {
