@@ -10,7 +10,7 @@ import {
 
 /**
  * POST /api/pairing/season/invitation
- * Send a season invitation to a general partnership
+ * Send a season invitation to a friend
  */
 export const sendSeasonInvitationHandler = async (req: Request, res: Response) => {
   try {
@@ -19,18 +19,17 @@ export const sendSeasonInvitationHandler = async (req: Request, res: Response) =
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
-    const { recipientId, generalPartnershipId, seasonId, message } = req.body;
+    const { recipientId, seasonId, message } = req.body;
 
-    if (!recipientId || !generalPartnershipId || !seasonId) {
+    if (!recipientId || !seasonId) {
       return res.status(400).json({
-        error: 'Recipient ID, general partnership ID, and season ID are required'
+        error: 'Recipient ID and season ID are required'
       });
     }
 
     const result = await sendSeasonInvitation({
       senderId: userId,
       recipientId,
-      generalPartnershipId,
       seasonId,
       message
     });
