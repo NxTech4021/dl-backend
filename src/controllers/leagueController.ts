@@ -28,11 +28,12 @@ export const getLeagues = async (req: Request, res: Response) => {
 };
 
 
-export const getLeaguePlayerCount = async (leagueId: string) => {
-  return prisma.leagueMembership.count({
-    where: { leagueId }
-  });
-};
+// LeagueMembership model has been removed - this function is no longer needed
+// export const getLeaguePlayerCount = async (leagueId: string) => {
+//   return prisma.leagueMembership.count({
+//     where: { leagueId }
+//   });
+// };
 
 export const getLeagueById = async (req: Request, res: Response) => {
   try {
@@ -264,54 +265,55 @@ export const deleteLeague = async (req: Request, res: Response) => {
 };
 
 
-export const joinLeague = async (req: Request, res: Response) => {
-  try {
-    const { leagueId, userId } = req.body;
+// LeagueMembership model has been removed - joinLeague functionality is no longer available
+// export const joinLeague = async (req: Request, res: Response) => {
+//   try {
+//     const { leagueId, userId } = req.body;
 
-    if (!leagueId || !userId) {
-      return res.status(400).json({ message: "leagueId and userId are required" });
-    }
+//     if (!leagueId || !userId) {
+//       return res.status(400).json({ message: "leagueId and userId are required" });
+//     }
 
-    // Check if league exists
-    const league = await prisma.league.findUnique({
-      where: { id: leagueId },
-    });
+//     // Check if league exists
+//     const league = await prisma.league.findUnique({
+//       where: { id: leagueId },
+//     });
 
-    if (!league) {
-      return res.status(404).json({ message: "League not found" });
-    }
+//     if (!league) {
+//       return res.status(404).json({ message: "League not found" });
+//     }
 
-    // Check if already a member
-    const existingMembership = await prisma.leagueMembership.findUnique({
-      where: {
-        userId_leagueId: {
-          userId,
-          leagueId,
-        },
-      },
-    });
+//     // Check if already a member
+//     const existingMembership = await prisma.leagueMembership.findUnique({
+//       where: {
+//         userId_leagueId: {
+//           userId,
+//           leagueId,
+//         },
+//       },
+//     });
 
-    if (existingMembership) {
-      return res.status(409).json({ message: "You have already joined this league." });
-    }
+//     if (existingMembership) {
+//       return res.status(409).json({ message: "You have already joined this league." });
+//     }
 
-    // Create membership
-    const membership = await prisma.leagueMembership.create({
-      data: {
-        userId,
-        leagueId,
-      },
-    });
+//     // Create membership
+//     const membership = await prisma.leagueMembership.create({
+//       data: {
+//         userId,
+//         leagueId,
+//       },
+//     });
 
-    return res.status(201).json({
-      message: "Successfully joined the league!",
-      membership,
-    });
-  } catch (error) {
-    console.error("Error joining league:", error);
-    return res.status(500).json({ message: "Internal server error" });
-  }
-};
+//     return res.status(201).json({
+//       message: "Successfully joined the league!",
+//       membership,
+//     });
+//   } catch (error) {
+//     console.error("Error joining league:", error);
+//     return res.status(500).json({ message: "Internal server error" });
+//   }
+// };
 
 
 //TODO SOON

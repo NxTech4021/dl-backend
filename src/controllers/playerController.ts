@@ -1253,10 +1253,8 @@ export const getAvailablePlayersForSeason = async (req: AuthenticatedRequest, re
     ];
 
     // Get league members (players who have joined the league)
-    const leagueMembers = await prisma.leagueMembership.findMany({
-      where: { leagueId: { in: leagueIds } },
-      select: { userId: true },
-    });
+    // LeagueMembership model has been removed - this functionality is no longer available
+    const leagueMembers: { userId: string }[] = []; // Empty array since memberships no longer exist
 
     const leagueMemberIds = leagueMembers.map(m => m.userId);
 
