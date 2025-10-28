@@ -11,14 +11,13 @@ import {
   getActivePartnership,
 } from '../controllers/pairingController';
 import {
-  sendGeneralPairRequestHandler,
-  acceptGeneralPairRequestHandler,
-  denyGeneralPairRequestHandler,
-  cancelGeneralPairRequestHandler,
-  getGeneralPairRequestsHandler,
-  getGeneralPartnershipsHandler,
-  dissolveGeneralPartnershipHandler,
-} from '../controllers/generalPairingController';
+  sendFriendRequestHandler,
+  acceptFriendRequestHandler,
+  rejectFriendRequestHandler,
+  removeFriendHandler,
+  getFriendRequestsHandler,
+  getFriendsHandler,
+} from '../controllers/friendshipController';
 import {
   sendSeasonInvitationHandler,
   acceptSeasonInvitationHandler,
@@ -48,20 +47,17 @@ pairingRouter.post('/partnership/:partnershipId/dissolve', dissolvePartnership);
 pairingRouter.get('/partnership/active/:seasonId', getActivePartnership);
 
 // ==========================================
-// GENERAL PAIRING ROUTES (NEW - PHASE 1)
+// FRIENDSHIP ROUTES (NEW)
 // ==========================================
-pairingRouter.post('/general/request', sendGeneralPairRequestHandler);
-pairingRouter.get('/general/requests', getGeneralPairRequestsHandler);
-pairingRouter.post('/general/request/:requestId/accept', acceptGeneralPairRequestHandler);
-pairingRouter.post('/general/request/:requestId/deny', denyGeneralPairRequestHandler);
-pairingRouter.delete('/general/request/:requestId', cancelGeneralPairRequestHandler);
-
-// General partnership routes
-pairingRouter.get('/general/partnerships', getGeneralPartnershipsHandler);
-pairingRouter.post('/general/partnership/:partnershipId/dissolve', dissolveGeneralPartnershipHandler);
+pairingRouter.post('/friendship/request', sendFriendRequestHandler);
+pairingRouter.get('/friendship/requests', getFriendRequestsHandler);
+pairingRouter.post('/friendship/:friendshipId/accept', acceptFriendRequestHandler);
+pairingRouter.post('/friendship/:friendshipId/reject', rejectFriendRequestHandler);
+pairingRouter.delete('/friendship/:friendshipId', removeFriendHandler);
+pairingRouter.get('/friends', getFriendsHandler);
 
 // ==========================================
-// SEASON INVITATION ROUTES (NEW - PHASE 2)
+// SEASON INVITATION ROUTES (NEW)
 // ==========================================
 pairingRouter.post('/season/invitation', sendSeasonInvitationHandler);
 pairingRouter.get('/season/invitations', getSeasonInvitationsHandler);
