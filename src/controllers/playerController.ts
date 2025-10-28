@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-import { PrismaClient, Role, UserStatus } from "@prisma/client";
+import { Role, UserStatus } from "@prisma/client";
 import { ApiResponse } from "../utils/ApiResponse";
 import { AuthenticatedRequest } from "../middlewares/auth.middleware";
 import { auth } from "../lib/auth";
@@ -8,8 +8,7 @@ import multer from "multer";
 import { uploadProfileImage as uploadToStorage, deleteProfileImage } from "../config/cloudStorage.config";
 import path from "path";
 import fs from "fs";
-
-const prisma = new PrismaClient();
+import { prisma } from "../lib/prisma";
 
 // Configure multer for file uploads
 const storage = multer.diskStorage({
