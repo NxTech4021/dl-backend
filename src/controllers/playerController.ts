@@ -1662,14 +1662,22 @@ export const getPublicPlayerProfile = async (req: AuthenticatedRequest, res: Res
       },
     });
 
-    // Check if current user has favorited this player
-    const isFavorite = currentUserId
-      ? await prisma.favorite.findUnique({
+    // Check if current user is friends with this player
+    const isFriend = currentUserId
+      ? await prisma.friendship.findFirst({
           where: {
-            userId_favoritedId: {
-              userId: currentUserId,
-              favoritedId: userId,
-            },
+            OR: [
+              {
+                requesterId: currentUserId,
+                recipientId: userId,
+                status: 'ACCEPTED',
+              },
+              {
+                requesterId: userId,
+                recipientId: currentUserId,
+                status: 'ACCEPTED',
+              },
+            ],
           },
         })
       : null;
@@ -1680,7 +1688,7 @@ export const getPublicPlayerProfile = async (req: AuthenticatedRequest, res: Res
       skillRatings,
       recentMatches,
       totalMatches,
-      isFavorite: !!isFavorite,
+      isFriend: !!isFriend,
     };
 
     return res.status(200).json(
