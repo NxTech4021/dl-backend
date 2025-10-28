@@ -1,4 +1,4 @@
-import { PrismaClient, Statuses, SportType, LeagueType, GameType, TierType } from '@prisma/client';
+import { PrismaClient, Statuses, SportType, GameType, TierType } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
@@ -16,7 +16,6 @@ interface LeagueData {
   description?: string;
   status?: Statuses;
   sportType?: SportType;
-  joinType?: LeagueType;
   gameType?: GameType;
   createCompany?: boolean; 
   createdById?: string;
@@ -45,8 +44,32 @@ export const getAllLeagues = async () => {
   const leagues = await prisma.league.findMany({
     include: {
       sponsorships: true,
+      categories: {
+        select: {
+          id: true,
+          name: true,
+          genderRestriction: true,
+          game_type: true,
+          gender_category: true
+        }
+      },
+      memberships: {
+        include: {
+          user: {
+            select: {
+              id: true,
+              name: true,
+              image: true,
+            }
+          }
+        },
+        take: 6, // limit to 6 members for profile pictures
+        orderBy: {
+          joinedAt: 'asc' 
+        }
+      },
       _count: {
-        select: { seasons: true, memberships: true, categories: true },
+        select: { seasons: true, memberships: true },
       },
       createdBy: { select: { id: true } },
     },
@@ -54,7 +77,7 @@ export const getAllLeagues = async () => {
   });
 
   const totalMembers = leagues.reduce((sum, league) => sum + (league._count.memberships || 0), 0);
-  const totalCategories = leagues.reduce((sum, league) => sum + (league._count.categories || 0), 0);
+  const totalCategories = leagues.reduce((sum, league) => sum + (league.categories?.length || 0), 0);
 
   return { leagues, totalMembers, totalCategories };
 };
@@ -110,13 +133,29 @@ export const getLeagueById = async (id: string) => {
 
 
 export const createLeague = async (data: LeagueData) => {
-  const { name, location, description, status, sportType, joinType, gameType, sponsorships, existingSponsorshipIds } = data;
+  const { name, location, description, status, sportType, gameType, sponsorships, existingSponsorshipIds } = data;
+
+  // Validate required fields
+  if (!name) {
+    throw new Error("League name is required");
+  }
+  if (!sportType) {
+    throw new Error("Sport type is required");
+  }
+  if (!gameType) {
+    throw new Error("Game type is required");
+  }
+
+  const whereClause: any = {
+    name: { equals: name, mode: "insensitive" },
+  };
+  
+  if (location) {
+    whereClause.location = { equals: location, mode: "insensitive" };
+  }
 
   const existingLeague = await prisma.league.findFirst({
-    where: {
-      name: { equals: name, mode: "insensitive" },
-      location: { equals: location, mode: "insensitive" },
-    },
+    where: whereClause,
   });
 
   if (existingLeague) {
@@ -157,14 +196,13 @@ export const createLeague = async (data: LeagueData) => {
   return prisma.league.create({
     data: {
       name,
-      location,
-      description,
-      status,
+      location: location || null,
+      description: description || null,
+      status: status || Statuses.UPCOMING,
       sportType,
-      joinType,
       gameType,
-      createdById: data.createdById, 
-      sponsorships: sponsorshipData
+      createdById: data.createdById || null,
+      ...(sponsorshipData ? { sponsorships: sponsorshipData } : {}),
     },
     include: {
       sponsorships: true,
@@ -190,14 +228,16 @@ export const updateLeague = async (id: string, data: LeagueData) => {
     if (duplicate) throw new Error(`A league with this name and location already exists.`);
   }
 
+  const updateData: any = {};
+  
+  if (data.name !== undefined) updateData.name = data.name.trim();
+  if (data.location !== undefined) updateData.location = data.location.trim();
+  if (data.description !== undefined) updateData.description = data.description.trim();
+  if (data.status !== undefined) updateData.status = data.status;
+
   return prisma.league.update({
     where: { id },
-    data: {
-      name: data.name?.trim(),
-      location: data.location?.trim(),
-      description: data.description?.trim(),
-      status: data.status,
-    },
+    data: updateData,
     include: {
       sponsorships: true,
     },

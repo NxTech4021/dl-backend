@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import * as leagueService from '../services/leagueService';
-import { Statuses, PrismaClient, Prisma, LeagueType } from '@prisma/client';
+import { Statuses, PrismaClient, Prisma } from '@prisma/client';
 import { ApiResponse } from '../utils/ApiResponse';
 import crypto from "crypto";
 
@@ -71,7 +71,7 @@ export const createLeague = async (req: Request, res: Response) => {
     console.log("Body:", JSON.stringify(req.body, null, 2));
     console.log("User (from auth):", JSON.stringify(req.user, null, 2));
 
-   const { name, location, description, status, sportType, joinType, gameType, sponsorships, existingSponsorshipIds } = req.body;
+   const { name, location, description, status, sportType, gameType, sponsorships, existingSponsorshipIds } = req.body;
 
     // Validation
     if (!name || !name.trim()) {
@@ -109,7 +109,6 @@ export const createLeague = async (req: Request, res: Response) => {
       description,
       status,
       sportType,
-      joinType,
       gameType,
       sponsorships: sponsorships?.map((s: any) => ({ ...s, createdById: req.user?.id })),
       existingSponsorshipIds
@@ -282,46 +281,32 @@ export const joinLeague = async (req: Request, res: Response) => {
       return res.status(404).json({ message: "League not found" });
     }
 
-    const joinType: LeagueType = league.joinType ?? "OPEN";
-
-    // Handle join types
-    if (joinType === "INVITE_ONLY") {
-      return res.status(403).json({
-        message: "This league is invite-only. You cannot join without an invitation.",
-      });
-    }
-
-    if (joinType === "OPEN" || joinType === "MANUAL") {
-      // Check if already a member
-      const existingMembership = await prisma.leagueMembership.findUnique({
-        where: {
-          userId_leagueId: {
-            userId,
-            leagueId,
-          },
-        },
-      });
-
-      if (existingMembership) {
-        return res.status(409).json({ message: "You have already joined this league." });
-      }
-
-      // Create membership
-      const membership = await prisma.leagueMembership.create({
-        data: {
+    // Check if already a member
+    const existingMembership = await prisma.leagueMembership.findUnique({
+      where: {
+        userId_leagueId: {
           userId,
           leagueId,
         },
-      });
+      },
+    });
 
-      return res.status(201).json({
-        message: "Successfully joined the league!",
-        membership,
-      });
+    if (existingMembership) {
+      return res.status(409).json({ message: "You have already joined this league." });
     }
 
-    // fallback for unexpected join types
-    return res.status(400).json({ message: "Invalid join type." });
+    // Create membership
+    const membership = await prisma.leagueMembership.create({
+      data: {
+        userId,
+        leagueId,
+      },
+    });
+
+    return res.status(201).json({
+      message: "Successfully joined the league!",
+      membership,
+    });
   } catch (error) {
     console.error("Error joining league:", error);
     return res.status(500).json({ message: "Internal server error" });
