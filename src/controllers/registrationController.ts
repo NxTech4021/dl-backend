@@ -1,9 +1,9 @@
+import { prisma } from "../lib/prisma";
 import { Request, Response } from 'express';
 import { PrismaClient, RegistrationType } from '@prisma/client';
 import * as registrationService from '../services/registrationService';
 import { ApiResponse } from '../utils/ApiResponse';
 
-const prisma = new PrismaClient();
 
 export const getRegistrations = async (req: Request, res: Response) => {
   try {
