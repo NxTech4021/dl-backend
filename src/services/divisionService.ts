@@ -1,6 +1,6 @@
+import { prisma } from "../lib/prisma";
 import { PrismaClient } from '@prisma/client';
 
-const prisma = new PrismaClient();
 
 interface DivisionCreationData {
   rank: number;
