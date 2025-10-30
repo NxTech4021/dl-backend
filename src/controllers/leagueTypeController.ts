@@ -1,3 +1,4 @@
+import { prisma } from "../lib/prisma";
 // import { Request, Response } from 'express';
 // import { PrismaClient, LeagueTypeType, Gender } from '@prisma/client';
 // import * as leagueTypeService from '../services/leagueTypeService';
