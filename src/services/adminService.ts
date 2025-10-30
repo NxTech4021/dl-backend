@@ -1,7 +1,7 @@
+import { prisma } from "../lib/prisma";
 import { PrismaClient } from "@prisma/client";
 import crypto from "crypto";
 
-const prisma = new PrismaClient();
 const BASE_URL = process.env.BASE_URL || "http://localhost:82";
 
 
