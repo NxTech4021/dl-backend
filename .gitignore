@@ -30,3 +30,5 @@ tests/**/*.d.ts.map
 # Build output
 dist/
 build/
+
+.backups
