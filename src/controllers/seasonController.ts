@@ -371,7 +371,7 @@ const processWithdrawal = async (id: string, processedByAdminId: string, status:
   const result = await prisma.$transaction(async (tx) => {
     const updatedRequest = await tx.withdrawalRequest.update({
       where: { id },
-      data: { status, processedByAdminId },
+      data: { status: status as any, processedByAdminId },
       include: {
         processedByAdmin: { select: { name: true, role: true } },
         partnership: {
