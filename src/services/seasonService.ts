@@ -1,6 +1,6 @@
+import { prisma } from "../lib/prisma";
 import { PrismaClient, Prisma, PaymentStatus } from '@prisma/client';
 
-const prisma = new PrismaClient();
 
 
 interface CreateSeasonData {
