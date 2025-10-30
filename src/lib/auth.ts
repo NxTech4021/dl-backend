@@ -1,3 +1,4 @@
+import { prisma } from "./prisma";
 import { betterAuth } from "better-auth";
 import { APIError } from "better-auth/api";
 import { prismaAdapter } from "better-auth/adapters/prisma";
@@ -7,7 +8,6 @@ import { expo } from "@better-auth/expo";
 import { sendEmail } from "../config/nodemailer";
 import { getBackendBaseURL, getTrustedOrigins } from "../config/network";
 
-const prisma = new PrismaClient({ log: ["query", "info", "warn", "error"] });
 
 // Debug environment variables
 console.log("🔐 Better Auth Environment Check:");
