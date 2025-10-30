@@ -1,9 +1,9 @@
+import { prisma } from "../lib/prisma";
 import { Request, Response } from 'express';
 import { PrismaClient, PaymentStatus } from '@prisma/client';
 import * as paymentService from '../services/paymentService';
 import { ApiResponse } from '../utils/ApiResponse';
 
-const prisma = new PrismaClient();
 
 export const getPayments = async (req: Request, res: Response) => {
   try {
