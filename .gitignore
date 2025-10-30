@@ -6,3 +6,29 @@
 node_modules/
 .DS_Store
 test-cs.json
+
+# TypeScript compiled output (should not be in src/)
+src/**/*.js
+src/**/*.js.map
+src/**/*.d.ts
+src/**/*.d.ts.map
+!src/types/**/*.d.ts
+
+# Prisma compiled output
+prisma/*.js
+prisma/*.js.map
+prisma/*.d.ts
+prisma/*.d.ts.map
+!prisma/schema.prisma
+
+# Test compiled output
+tests/**/*.js
+tests/**/*.js.map
+tests/**/*.d.ts
+tests/**/*.d.ts.map
+
+# Build output
+dist/
+build/
+
+.backups

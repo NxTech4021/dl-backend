@@ -1,6 +1,6 @@
+import { prisma } from "../lib/prisma";
 import { PrismaClient } from '@prisma/client';
 
-const prisma = new PrismaClient();
 
 interface TeamCreationData {
   name: string;
@@ -293,27 +293,23 @@ export const removeTeamMember = async (teamId: string, userId: string) => {
     throw new Error('User is not a member of this team.');
   }
 
-  // Business Rule: Check if team has active registrations and this would leave team too small
-  const registrationCount = await prisma.seasonRegistration.count({
-    where: {
-      teamId,
-      isActive: true,
-      season: {
-        status: {
-          in: ['UPCOMING', 'REGISTRATION_OPEN', 'IN_PROGRESS']
-        }
-      }
-    }
+  // Business Rule: Check if any team members have active season memberships
+  // Note: SeasonMembership is player-based, not team-based
+  // Teams don't register directly; individual players do
+  const teamMembers = await prisma.teamMember.findMany({
+    where: { teamId },
+    select: { userId: true },
   });
 
-  if (registrationCount > 0) {
-    const memberCount = await prisma.teamMember.count({
-      where: { teamId }
-    });
+  const activeMembershipCount = await prisma.seasonMembership.count({
+    where: {
+      userId: { in: teamMembers.map(m => m.userId) },
+      status: 'ACTIVE',
+    },
+  });
 
-    if (memberCount <= 2) { // Would leave only captain
-      throw new Error('Cannot remove member: team must have at least 2 members for active registrations.');
-    }
+  if (activeMembershipCount > 0 && teamMembers.length <= 2) {
+    throw new Error('Cannot remove member: team would be too small for members with active season registrations.');
   }
 
   // Business Logic: Remove team member
@@ -367,29 +363,39 @@ export const updateTeamMember = async (teamId: string, userId: string, data: { r
 // Business Logic: Team deletion with constraint checking
 export const deleteTeam = async (id: string) => {
   // Business Rule: Check if team has active registrations
-  const activeRegistrationCount = await prisma.seasonRegistration.count({
-    where: { 
-      teamId: id,
-      isActive: true,
-      season: {
-        status: {
-          in: ['UPCOMING', 'REGISTRATION_OPEN', 'IN_PROGRESS']
-        }
-      }
-    },
-  });
-
-  if (activeRegistrationCount > 0) {
-    throw new Error('Cannot delete a team with active season registrations.');
-  }
-
-  // Business Rule: Check if team has any historical registrations
-  const totalRegistrationCount = await prisma.seasonRegistration.count({
+  // Note: Teams don't register directly; individual team members register via SeasonMembership
+  const teamMembers = await prisma.teamMember.findMany({
     where: { teamId: id },
+    select: { userId: true },
   });
 
-  if (totalRegistrationCount > 0) {
-    throw new Error('Cannot delete a team with historical registrations. Consider deactivating instead.');
+  if (teamMembers.length > 0) {
+    const activeMembershipCount = await prisma.seasonMembership.count({
+      where: {
+        userId: { in: teamMembers.map(m => m.userId) },
+        status: 'ACTIVE',
+        season: {
+          status: {
+            in: ['UPCOMING', 'REGISTRATION_OPEN', 'IN_PROGRESS']
+          }
+        }
+      },
+    });
+
+    if (activeMembershipCount > 0) {
+      throw new Error('Cannot delete a team with active season registrations.');
+    }
+
+    // Business Rule: Check if team has any historical registrations
+    const totalMembershipCount = await prisma.seasonMembership.count({
+      where: {
+        userId: { in: teamMembers.map(m => m.userId) },
+      },
+    });
+
+    if (totalMembershipCount > 0) {
+      throw new Error('Cannot delete a team with historical registrations. Consider deactivating instead.');
+    }
   }
 
   // Business Logic: Delete team and cascade to members

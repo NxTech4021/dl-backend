@@ -1,10 +1,10 @@
+import { prisma } from "../lib/prisma";
 import { Request, Response } from 'express';
 import * as leagueService from '../services/leagueService';
 import { Statuses, PrismaClient, Prisma } from '@prisma/client';
 import { ApiResponse } from '../utils/ApiResponse';
 import crypto from "crypto";
 
-const prisma = new PrismaClient();
 
 
 export const getLeagues = async (req: Request, res: Response) => {

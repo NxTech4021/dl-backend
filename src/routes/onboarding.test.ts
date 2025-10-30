@@ -1,8 +1,8 @@
+import { prisma } from "../lib/prisma";
 import request from 'supertest';
 import { PrismaClient } from '@prisma/client';
 import app from '../app';
 
-const prisma = new PrismaClient();
 
 describe('Onboarding Profile Routes', () => {
   let testUserId: string;
