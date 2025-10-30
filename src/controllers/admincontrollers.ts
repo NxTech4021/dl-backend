@@ -1,3 +1,4 @@
+import { prisma } from "../lib/prisma";
 import { PrismaClient, Role } from "@prisma/client";
 import { createAdminInvite, resendAdminInvite, updateAdminService } from "../services/adminService";
 import { inviteEmailTemplate } from "../utils/email";
@@ -7,7 +8,6 @@ import { Request, Response } from "express";
 import { auth } from "../lib/auth";
 
 
-const prisma = new PrismaClient();
 
 const toWebHeaders = (headers: Request["headers"]): Headers => {
   const webHeaders = new Headers();
