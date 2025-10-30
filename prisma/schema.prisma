@@ -611,31 +611,6 @@ model MessageReadBy {
   @@unique([messageId, userId])
 }
 
-model File {
-  id        String  @id @default(cuid())
-  message   Message @relation(fields: [messageId], references: [id])
-  messageId String
-
-  url      String
-  mimeType String
-  sizeKB   Int // File size in kilobytes for preview/management
-
-  fileName String?
-  isMedia  Boolean @default(false) // True for images/videos, false for documents
-
-  createdAt DateTime @default(now())
-
-  @@index([messageId])
-}
-
-enum MediaType {
-  TEXT
-  IMAGE
-  VIDEO
-  VOICE_NOTE
-  DOCUMENT
-  SYSTEM // For messages like 'User X joined'
-}
 
 model Friendship {
   id          String           @id @default(cuid())
