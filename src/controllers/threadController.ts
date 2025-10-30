@@ -1,7 +1,5 @@
 import { prisma } from "../lib/prisma";
 import { Request, Response } from "express";
-import { PrismaClient } from "@prisma/client";
-
 
 // Create a new thread (single or group)  
 export const createThread = async (req: Request, res: Response) => {
