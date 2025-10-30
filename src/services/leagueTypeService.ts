@@ -1,6 +1,6 @@
+import { prisma } from "../lib/prisma";
 import { PrismaClient, LeagueTypeType, Gender } from '@prisma/client';
 
-const prisma = new PrismaClient();
 
 interface LeagueTypeCreationData {
   name: string;
