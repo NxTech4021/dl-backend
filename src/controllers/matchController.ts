@@ -1,7 +1,7 @@
+import { prisma } from "../lib/prisma";
 import { Request, Response } from "express";
 import { PrismaClient} from "@prisma/client";
 
-const prisma = new PrismaClient();
 
 export const createMatch = async (req: Request, res: Response) => {
   const { divisionId, sport, matchType, playerScore, opponentScore, outcome, matchDate, location, notes, duration } = req.body;
