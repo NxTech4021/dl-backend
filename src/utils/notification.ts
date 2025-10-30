@@ -166,31 +166,6 @@ const notificationPaymentReminder = (seasonName: string, amount: string, dueDate
   };
 };
 
-// Achievement Notifications
-const notificationAchievementUnlocked = (achievementTitle: string, points: number) => {
-  return {
-    type: NotificationType.ACHIEVEMENT_UNLOCKED,
-    title: '🏆 Achievement Unlocked!',
-    message: `Congratulations! You unlocked "${achievementTitle}" and earned ${points} points!`,
-  };
-};
-
-const notificationLevelUp = (newLevel: string, divisionName: string) => {
-  return {
-    type: NotificationType.LEVEL_UP,
-    title: '📈 Level Up!',
-    message: `Congratulations! You've been promoted to ${newLevel} level in ${divisionName}!`,
-  };
-};
-
-const notificationRankingUpdate = (newRank: number, divisionName: string, change: 'up' | 'down' | 'same') => {
-  const emoji = change === 'up' ? '📈' : change === 'down' ? '📉' : '➡️';
-  return {
-    type: NotificationType.RANKING_UPDATE,
-    title: `${emoji} Ranking Update`,
-    message: `Your new ranking in ${divisionName} is #${newRank}.`,
-  };
-};
 
 // Withdrawal Notifications
 const notificationWithdrawalRequestReceived = (seasonName: string) => {
@@ -300,11 +275,6 @@ export {
   notificationPaymentConfirmed,
   notificationPaymentFailed,
   notificationPaymentReminder,
-  
-  // Achievement
-  notificationAchievementUnlocked,
-  notificationLevelUp,
-  notificationRankingUpdate,
   
   // Withdrawal
   notificationWithdrawalRequestReceived,
