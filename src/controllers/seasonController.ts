@@ -1,3 +1,4 @@
+import { prisma } from "../lib/prisma";
 import { Request, Response } from "express";
 import { PrismaClient, Prisma, PaymentStatus } from "@prisma/client";
 import {
@@ -13,7 +14,6 @@ import {
   updatePaymentStatusService,
 } from "../services/seasonService";
 
-const prisma = new PrismaClient();
 
 export const createSeason = async (req: Request, res: Response) => {
   const {
