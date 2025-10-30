@@ -1,8 +1,8 @@
+import { prisma } from "../lib/prisma";
 import { Server as SocketIOServer } from 'socket.io';
 import { Server as HttpServer } from 'http';
 import { PrismaClient } from "@prisma/client";
 
-const prisma = new PrismaClient();
 const activeUsers = new Map<string, string>(); 
 const userSockets = new Map<string, string>();
 
