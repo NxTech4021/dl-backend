@@ -231,7 +231,7 @@ export const createDivision = async (req: Request, res: Response) => {
       return res.status(404).json({ error: "Season not found." });
     }
 
-    const leagueId = season.leagues && season.leagues.length > 0 ? season.leagues[0].id : null;
+    const leagueId = season?.leagues && season.leagues.length > 0 ? season.leagues[0]?.id : null;
 
     if (!leagueId) {
       return res.status(400).json({ error: "Season is not linked to any league." });
@@ -1165,7 +1165,7 @@ export const autoAssignPlayersToDivisions = async (req: Request, res: Response) 
 
     for (const membership of unassignedUsers) {
       try {
-        const userRating = membership.user.initialRatingResult?.[0]?.rating || 0;
+        const userRating = membership.user.initialRatingResult?.singles || membership.user.initialRatingResult?.doubles || 0;
         
         // Find appropriate division based on rating and capacity
         let targetDivision = null;
@@ -1225,7 +1225,7 @@ export const autoAssignPlayersToDivisions = async (req: Request, res: Response) 
         errors.push({
           userId: membership.userId,
           userName: membership.user.name,
-          reason: error.message
+          reason: error instanceof Error ? error.message : String(error)
         });
       }
     }
@@ -1508,9 +1508,9 @@ export const getDivisionsBySeasonId = async (req: Request, res: Response) => {
     // Format the response data
     const formattedDivisions = divisions.map(division => ({
       ...formatDivision(division),
-      assignmentCount: division._count?.assignments || 0,
-      membershipCount: division._count?.seasonMemberships || 0,
-      matchCount: division._count?.matches || 0,
+      assignmentCount: (division._count as any)?.assignments || 0,
+      membershipCount: (division._count as any)?.seasonMemberships || 0,
+      matchCount: (division._count as any)?.matches || 0,
       sponsor: division.divisionSponsor ? {
         id: division.divisionSponsor.id,
         name: division.divisionSponsor.sponsoredName,
