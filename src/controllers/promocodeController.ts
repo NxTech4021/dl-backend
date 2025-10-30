@@ -1,6 +1,6 @@
+import { prisma } from "../lib/prisma";
 import { PrismaClient, Prisma } from '@prisma/client';
 import { Request, Response } from "express";
-const prisma = new PrismaClient();
 
 export const createPromoCode = async (req: Request, res: Response) => {
     const { code, discountValue, isPercentage, expiresAt, description, seasonIds } = req.body;
