@@ -1,6 +1,6 @@
+import { prisma } from "../lib/prisma";
 import { PrismaClient, Statuses, SportType, GameType, TierType } from '@prisma/client';
 
-const prisma = new PrismaClient();
 
 interface LeagueFilters {
   name?: string;
@@ -57,8 +57,7 @@ export const getAllLeagues = async () => {
         include: {
           _count: {
             select: {
-              memberships: true,
-              registrations: true
+              memberships: true
             }
           }
         }
@@ -110,15 +109,9 @@ export const getLeagueById = async (id: string) => {
               user: true
             }
           },
-          registrations: {
-            include: {
-              player: true
-            }
-          },
           _count: {
             select: {
-              memberships: true,
-              registrations: true
+              memberships: true
             }
           }
         },
