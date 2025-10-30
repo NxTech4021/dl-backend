@@ -119,6 +119,11 @@ export const sendMessage = async (req: Request, res: Response) => {
   }
 
   try {
+    if (!threadId) {
+      console.log(`❌ Thread ID is required`);
+      return res.status(400).json({ error: "Thread ID is required" });
+    }
+
     // Verify thread exists and user is a member
     const threadUser = await prisma.userThread.findFirst({
       where: { threadId, userId: senderId }
@@ -245,6 +250,10 @@ export const markAsRead = async (req: Request, res: Response) => {
 
   console.log(`👁️ Marking message ${messageId} as read by user ${readerId}`);
 
+  if (!messageId) {
+    return res.status(400).json({ error: "Message ID is required" });
+  }
+
   if (!readerId) {
     return res.status(400).json({ error: "User ID is required" });
   }
@@ -267,14 +276,16 @@ export const markAsRead = async (req: Request, res: Response) => {
       return res.json({ success: true, message: "Own message, no read receipt needed" });
     }
 
-    // Upsert the read receipt
-    const readReceipt = await prisma.messageReadBy.upsert({
+    await prisma.messageReadBy.upsert({
       where: { messageId_userId: { messageId, userId: readerId } },
       update: { readAt: new Date() },
-      create: { messageId, userId: readerId },
-      include: {
-        user: { select: { id: true, name: true } }
-      }
+      create: { messageId, userId: readerId }
+    });
+
+    // Get the user data separately for the socket broadcast
+    const readerUser = await prisma.user.findUnique({
+      where: { id: readerId },
+      select: { id: true, name: true }
     });
 
     console.log(`✅ Message ${messageId} marked as read by ${readerId}`);
@@ -284,8 +295,7 @@ export const markAsRead = async (req: Request, res: Response) => {
       const readData = {
         messageId,
         threadId: messageInfo.threadId,
-        readerId,
-        readerName: readReceipt.user.name,
+        readerName: readerUser?.name || 'Unknown User',
         timestamp: new Date().toISOString()
       };
       
@@ -309,6 +319,10 @@ export const getThreadMembers = async (req: Request, res: Response) => {
   try {
     const { threadId } = req.params;
     console.log(`👥 Fetching members for thread: ${threadId}`);
+
+    if (!threadId) {
+      return res.status(400).json({ error: "Thread ID is required" });
+    }
 
     const members = await prisma.userThread.findMany({
       where: { threadId },
