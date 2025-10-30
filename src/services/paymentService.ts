@@ -1,6 +1,6 @@
+import { prisma } from "../lib/prisma";
 import { PrismaClient, PaymentStatus } from '@prisma/client';
 
-const prisma = new PrismaClient();
 
 interface PaymentCreationData {
   amount: number;
