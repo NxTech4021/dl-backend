@@ -177,13 +177,13 @@ export const updateDivision = async (id: number, data: DivisionUpdateData) => {
 
 // Business Logic: Division deletion with constraint checking
 export const deleteDivision = async (id: number) => {
-  // Business Rule: Check if division has registrations
-  const registrationCount = await prisma.seasonRegistration.count({
-    where: { divisionId: id },
+  // Business Rule: Check if division has members
+  const memberCount = await prisma.seasonMembership.count({
+    where: { divisionId: id.toString() },
   });
 
-  if (registrationCount > 0) {
-    throw new Error('Cannot delete a division that has registrations.');
+  if (memberCount > 0) {
+    throw new Error(`Cannot delete division: ${memberCount} member(s) are assigned to this division.`);
   }
 
   // Business Logic: Delete division
