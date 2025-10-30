@@ -562,20 +562,16 @@ export const assignPlayerToDivision = async (req: Request, res: Response) => {
       });
     }
 
-
-
-      let adminId = null;
-
-      if (assignedBy) {
-        const adminRecord = await prisma.admin.findUnique({
-          where: { userId: assignedBy },
-          select: { id: true },
-        });
-
-        if (adminRecord) {
-          adminId = adminRecord.id;
-        }
+    let adminId = null;
+    if (assignedBy) {
+      const adminRecord = await prisma.admin.findUnique({
+        where: { userId: assignedBy },
+        select: { id: true },
+      });
+      if (adminRecord) {
+        adminId = adminRecord.id;
       }
+    }
 
     // Check if user exists
     const user = await prisma.user.findUnique({
@@ -623,7 +619,6 @@ export const assignPlayerToDivision = async (req: Request, res: Response) => {
 
     // Check player rating against division threshold (before checking capacity)
     if (division.pointsThreshold) {
-      // Get the season's league to determine sport type
       const seasonWithLeague = await prisma.season.findUnique({
         where: { id: seasonId },
         include: {
@@ -636,7 +631,6 @@ export const assignPlayerToDivision = async (req: Request, res: Response) => {
       if (seasonWithLeague?.leagues?.[0]?.sportType) {
         const sportType = seasonWithLeague.leagues[0].sportType.toLowerCase();
         
-        // Get player's questionnaire response for this sport
         const questionnaireResponse = await prisma.questionnaireResponse.findFirst({
           where: {
             userId: userId,
@@ -690,27 +684,42 @@ export const assignPlayerToDivision = async (req: Request, res: Response) => {
       });
     }
 
-    // Check if user has season membership
-    let seasonMembership = await prisma.seasonMembership.findUnique({
-      where: { userId_seasonId_divisionId: { userId, seasonId, divisionId } }
+    // 🆕 NEW: Find the division's group chat thread
+    const divisionThread = await prisma.thread.findFirst({
+      where: { 
+        divisionId: divisionId,
+        isGroup: true 
+      },
+      select: { id: true, name: true }
     });
 
-    // Create or update season membership
-    if (!seasonMembership) {
-      // Check if user has any membership in this season
-      const existingMembership = await prisma.seasonMembership.findFirst({
+    if (!divisionThread) {
+      console.log(`⚠️ No group chat found for division ${divisionId}`);
+      return res.status(400).json({
+        success: false,
+        error: "Division group chat not found. Please contact administrator."
+      });
+    }
+
+    // Check if user is already a member of the division thread
+    const existingThreadMember = await prisma.userThread.findUnique({
+      where: { 
+        threadId_userId: { 
+          threadId: divisionThread.id, 
+          userId 
+        } 
+      }
+    });
+
+    // Create assignment and add to group chat in a transaction
+    const result = await prisma.$transaction(async (tx) => {
+      // Handle season membership
+      let seasonMembership = await tx.seasonMembership.findFirst({
         where: { userId, seasonId }
       });
 
-      if (existingMembership) {
-        // Update existing membership to include division
-        seasonMembership = await prisma.seasonMembership.update({
-          where: { id: existingMembership.id },
-          data: { divisionId }
-        });
-      } else {
-        // Create new season membership
-        seasonMembership = await prisma.seasonMembership.create({
+      if (!seasonMembership) {
+        seasonMembership = await tx.seasonMembership.create({
           data: {
             userId,
             seasonId,
@@ -718,53 +727,96 @@ export const assignPlayerToDivision = async (req: Request, res: Response) => {
             status: "ACTIVE"
           }
         });
+      } else if (seasonMembership.divisionId !== divisionId) {
+        await tx.seasonMembership.update({
+          where: { id: seasonMembership.id },
+          data: { divisionId }
+        });
       }
-    }
 
-    // Create division assignment
-    const assignment = await prisma.divisionAssignment.create({
-      data: {
-        divisionId,
-        userId,
-        assignedBy: adminId,
-        notes: notes || (autoAssignment ? "Auto-assigned based on rating" : null)
-      },
-      include: {
-        user: { select: { id: true, name: true, username: true } },
-        division: { select: { id: true, name: true, level: true, gameType: true } },
+      // Create division assignment
+      const assignment = await tx.divisionAssignment.create({
+        data: {
+          divisionId,
+          userId,
+          assignedBy: adminId,
+          notes: notes || (autoAssignment ? "Auto-assigned based on rating" : null)
+        },
+        include: {
+          user: { select: { id: true, name: true, username: true } },
+          division: { select: { id: true, name: true, level: true, gameType: true } },
+        }
+      });
+
+      if (!existingThreadMember) {
+        await tx.userThread.create({
+          data: {
+            threadId: divisionThread.id,
+            userId: userId,
+            role: null
+          }
+        });
+        console.log(`✅ Added user ${userId} to division group chat ${divisionThread.id}`);
+      } else {
+        console.log(`ℹ️ User ${userId} already in division group chat ${divisionThread.id}`);
       }
+
+      return { assignment, divisionThread };
     });
 
     // Update division counts
     await updateDivisionCounts(divisionId, true);
 
-    console.log(`✅ User ${userId} assigned to division ${divisionId} successfully`);
+    console.log(`✅ User ${userId} assigned to division ${divisionId} and added to group chat`);
 
     
-    // Socket notifications FUTURE TO-DO 
-    // if (req.io) {
-    //   req.io.to(userId).emit('division_assigned', {
-    //     assignment,
-    //     message: `You have been assigned to ${division.name}`,
-    //     timestamp: new Date().toISOString()
-    //   });
+    if (req.io) {
+      // Notify the assigned user
+      req.io.to(userId).emit('division_assigned', {
+        assignment: result.assignment,
+        groupChat: {
+          threadId: result.divisionThread.id,
+          threadName: result.divisionThread.name
+        },
+        message: `You have been assigned to ${division.name} and added to the group chat`,
+        timestamp: new Date().toISOString()
+      });
 
-    //   req.io.to(`season_${seasonId}`).emit('user_assigned_to_division', {
-    //     userId,
-    //     divisionId,
-    //     seasonId,
-    //     userName: user.name,
-    //     divisionName: division.name,
-    //     timestamp: new Date().toISOString()
-    //   });
+      // Notify the division group chat about new member
+      req.io.to(result.divisionThread.id).emit('member_joined_division', {
+        userId,
+        userName: user.name,
+        divisionId,
+        divisionName: division.name,
+        message: `${user.name} has been assigned to ${division.name}`,
+        timestamp: new Date().toISOString()
+      });
 
-    //   console.log(`📤 Sent division assignment notifications`);
-    // }
+      // Notify the assigned user that they joined the group chat
+      req.io.to(userId).emit('new_thread', {
+        thread: {
+          id: result.divisionThread.id,
+          name: result.divisionThread.name,
+          isGroup: true,
+          divisionId: divisionId
+        },
+        message: `Welcome to ${division.name} group chat!`,
+        timestamp: new Date().toISOString()
+      });
+
+      console.log(`📤 Sent division assignment and group chat notifications`);
+    }
 
     return res.status(201).json({
       success: true,
-      message: "User assigned to division successfully",
-      data: assignment
+      message: "User assigned to division and added to group chat successfully",
+      data: {
+        assignment: result.assignment,
+        groupChat: {
+          threadId: result.divisionThread.id,
+          threadName: result.divisionThread.name
+        }
+      }
     });
 
   } catch (error) {
@@ -823,50 +875,96 @@ export const removePlayerFromDivision = async (req: Request, res: Response) => {
       });
     }
 
-    // Remove the assignment
-    await prisma.divisionAssignment.delete({
-      where: { divisionId_userId: { divisionId, userId } }
+    const divisionThread = await prisma.thread.findFirst({
+      where: { 
+        divisionId: divisionId,
+        isGroup: true 
+      },
+      select: { id: true, name: true }
     });
 
-    // Update season membership to remove division
-    await prisma.seasonMembership.updateMany({
-      where: { 
-        userId, 
-        seasonId: assignment.division.seasonId,
-        divisionId 
-      },
-      data: { divisionId: null }
+    // Remove assignment and group chat membership in transaction
+    await prisma.$transaction(async (tx) => {
+      // Remove the assignment
+      await tx.divisionAssignment.delete({
+        where: { divisionId_userId: { divisionId, userId } }
+      });
+
+      // Update season membership to remove division
+      await tx.seasonMembership.updateMany({
+        where: { 
+          userId, 
+          seasonId: assignment.division.seasonId,
+          divisionId 
+        },
+        data: { divisionId: null }
+      });
+
+      // 🆕 NEW: Remove user from division group chat
+      if (divisionThread) {
+        const threadMember = await tx.userThread.findUnique({
+          where: { 
+            threadId_userId: { 
+              threadId: divisionThread.id, 
+              userId 
+            } 
+          }
+        });
+
+        if (threadMember) {
+          await tx.userThread.delete({
+            where: { 
+              threadId_userId: { 
+                threadId: divisionThread.id, 
+                userId 
+              } 
+            }
+          });
+          console.log(`✅ Removed user ${userId} from division group chat ${divisionThread.id}`);
+        }
+      }
     });
 
     // Update division counts
     await updateDivisionCounts(divisionId, false);
 
-    console.log(`✅ User ${userId} removed from division ${divisionId}`);
+    console.log(`✅ User ${userId} removed from division ${divisionId} and group chat`);
 
-    
-    // Socket notifications FUTURE TO-DO 
-    // if (req.io) {
-    //   req.io.to(userId).emit('division_removed', {
-    //     divisionId,
-    //     divisionName: assignment.division.name,
-    //     reason: reason || "Removed by admin",
-    //     timestamp: new Date().toISOString()
-    //   });
+    // 🆕 ENHANCED: Socket notifications for removal
+    if (req.io) {
+      // Notify the removed user
+      req.io.to(userId).emit('division_removed', {
+        divisionId,
+        divisionName: assignment.division.name,
+        groupChatRemoved: divisionThread ? {
+          threadId: divisionThread.id,
+          threadName: divisionThread.name
+        } : null,
+        reason: reason || "Removed by admin",
+        timestamp: new Date().toISOString()
+      });
 
-    //   req.io.to(`season_${assignment.division.seasonId}`).emit('user_removed_from_division', {
-    //     userId,
-    //     divisionId,
-    //     userName: assignment.user.name,
-    //     divisionName: assignment.division.name,
-    //     timestamp: new Date().toISOString()
-    //   });
+      // Notify the division group chat about member leaving
+      if (divisionThread) {
+        req.io.to(divisionThread.id).emit('member_left_division', {
+          userId,
+          userName: assignment.user.name,
+          divisionId,
+          divisionName: assignment.division.name,
+          message: `${assignment.user.name} has been removed from ${assignment.division.name}`,
+          timestamp: new Date().toISOString()
+        });
 
-    //   console.log(`📤 Sent division removal notifications`);
-    // }
+        // Force the user to leave the socket room
+        req.io.sockets.sockets.get(userId)?.leave(divisionThread.id);
+      }
+
+      console.log(`📤 Sent division removal and group chat notifications`);
+    }
 
     return res.json({
       success: true,
-      message: "User removed from division successfully"
+      message: "User removed from division and group chat successfully"
     });
 
   } catch (error) {
@@ -960,9 +1058,6 @@ export const getDivisionAssignments = async (req: Request, res: Response) => {
 export const getUserDivisionAssignments = async (req: Request, res: Response) => {
   try {
     const { userId } = req.params;
-
-    console.log(`👤 Fetching division assignments for user ${userId}`);
-
     if (!userId) {
       return res.status(400).json({
         success: false,
