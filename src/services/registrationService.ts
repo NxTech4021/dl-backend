@@ -1,6 +1,6 @@
+import { prisma } from "../lib/prisma";
 import { PrismaClient, RegistrationType } from '@prisma/client';
 
-const prisma = new PrismaClient();
 
 interface PlayerRegistrationData {
   playerId: string;
