@@ -1,5 +1,6 @@
 import { prisma } from '../lib/prisma';
 import { SeasonInvitationStatus, PartnershipStatus, FriendshipStatus } from '@prisma/client';
+import { io } from '../app';
 
 interface ServiceResponse {
   success: boolean;
@@ -28,27 +29,35 @@ export const sendSeasonInvitation = async (data: {
       return { success: false, message: 'Cannot send invitation to yourself' };
     }
 
-    // Validate: Must be friends (ACCEPTED friendship)
-    const friendship = await prisma.friendship.findFirst({
-      where: {
-        OR: [
-          { requesterId: senderId, recipientId, status: FriendshipStatus.ACCEPTED },
-          { requesterId: recipientId, recipientId: senderId, status: FriendshipStatus.ACCEPTED }
-        ]
-      }
-    });
-
-    if (!friendship) {
-      return { success: false, message: 'Can only invite friends. Send a friend request first.' };
-    }
-
-    // Validate: Season exists
+    // Validate: Season exists and registration is open
     const season = await prisma.season.findUnique({
-      where: { id: seasonId }
+      where: { id: seasonId },
+      select: {
+        id: true,
+        name: true,
+        status: true,
+        regiDeadline: true,
+        startDate: true
+      }
     });
 
     if (!season) {
       return { success: false, message: 'Season not found' };
+    }
+
+    // Validate: Registration is still open
+    const now = new Date();
+
+    if (season.status !== 'UPCOMING' && season.status !== 'ONGOING' && season.status !== 'ACTIVE') {
+      return { success: false, message: 'This season is not accepting registrations' };
+    }
+
+    if (season.regiDeadline && now > season.regiDeadline) {
+      return { success: false, message: 'Registration deadline has passed' };
+    }
+
+    if (season.startDate && now > season.startDate) {
+      return { success: false, message: 'Season has already started' };
     }
 
     // Check if sender already has a partnership in this season
@@ -135,6 +144,21 @@ export const sendSeasonInvitation = async (data: {
         }
       }
     });
+
+    // ✅ Emit Socket.IO event to notify recipient in real-time
+    try {
+      io.to(recipientId).emit('season_invitation_received', {
+        invitationId: invitation.id,
+        sender: invitation.sender,
+        season: invitation.season,
+        message: invitation.message,
+        expiresAt: invitation.expiresAt
+      });
+      console.log(`📨 Socket.IO: Notified user ${recipientId} of new season invitation`);
+    } catch (socketError) {
+      console.error('Error emitting socket event:', socketError);
+      // Don't fail the whole operation if socket fails
+    }
 
     return {
       success: true,
@@ -289,6 +313,36 @@ export const acceptSeasonInvitation = async (
 
       return partnership;
     });
+
+    // ✅ Emit Socket.IO events to notify both users
+    try {
+      // Notify sender that their invitation was accepted
+      io.to(invitation.senderId).emit('season_invitation_accepted', {
+        invitationId: invitation.id,
+        acceptedBy: result.partner,
+        partnership: {
+          id: result.id,
+          captain: result.captain,
+          partner: result.partner,
+          season: result.season
+        }
+      });
+      console.log(`📨 Socket.IO: Notified sender ${invitation.senderId} of accepted invitation`);
+
+      // Notify recipient (acceptor) about successful partnership creation
+      io.to(invitation.recipientId).emit('partnership_created', {
+        partnership: {
+          id: result.id,
+          captain: result.captain,
+          partner: result.partner,
+          season: result.season
+        }
+      });
+      console.log(`📨 Socket.IO: Notified recipient ${invitation.recipientId} of partnership creation`);
+    } catch (socketError) {
+      console.error('Error emitting socket events:', socketError);
+      // Don't fail the whole operation if socket fails
+    }
 
     return {
       success: true,
@@ -510,9 +564,47 @@ export const getPendingSeasonInvitation = async (
       }
     });
 
-    return invitation;
+    // Add direction indicator to help frontend determine UI state
+    if (invitation) {
+      return {
+        ...invitation,
+        direction: invitation.senderId === userId ? 'sent' : 'received'
+      };
+    }
+
+    return null;
   } catch (error) {
     console.error('Error getting pending season invitation:', error);
+    throw error;
+  }
+};
+
+// ==========================================
+// SCHEDULED TASKS
+// ==========================================
+
+/**
+ * Expire old season invitations (run daily via cron job)
+ * Updates all PENDING invitations that have passed their expiresAt date to EXPIRED
+ */
+export const expireOldSeasonInvitations = async (): Promise<number> => {
+  try {
+    const now = new Date();
+    const result = await prisma.seasonInvitation.updateMany({
+      where: {
+        status: 'PENDING',
+        expiresAt: { lt: now }
+      },
+      data: {
+        status: 'EXPIRED',
+        respondedAt: now
+      }
+    });
+
+    console.log(`✅ Expired ${result.count} season invitations`);
+    return result.count;
+  } catch (error) {
+    console.error('❌ Error expiring season invitations:', error);
     throw error;
   }
 };
