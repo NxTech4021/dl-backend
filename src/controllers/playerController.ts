@@ -375,6 +375,7 @@ export const searchPlayers = async (req: AuthenticatedRequest, res: Response) =>
 export const getAvailablePlayersForSeason = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { seasonId } = req.params;
+    const { q: searchQuery } = req.query; // Get search query from query params
     const currentUserId = req.user?.id;
 
     if (!seasonId) {
@@ -389,11 +390,15 @@ export const getAvailablePlayersForSeason = async (req: AuthenticatedRequest, re
       );
     }
 
-    const result = await searchService.getAvailablePlayersForSeason(seasonId, currentUserId);
+    const result = await searchService.getAvailablePlayersForSeason(
+      seasonId,
+      currentUserId,
+      searchQuery as string | undefined
+    );
 
     return res.status(200).json(
       new ApiResponse(true, 200, result, result.usedFallback
-        ? 'No friends available. Showing all eligible players.'
+        ? (searchQuery ? 'Showing search results' : 'No friends available')
         : 'Available friends retrieved successfully')
     );
   } catch (error: any) {

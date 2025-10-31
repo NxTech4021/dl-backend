@@ -736,12 +736,12 @@ export const getActivePartnership = async (
         seasonId,
         status: 'ACTIVE',
         OR: [
-          { player1Id: userId },
-          { player2Id: userId },
+          { captainId: userId },
+          { partnerId: userId },
         ],
       },
       include: {
-        player1: {
+        captain: {
           select: {
             id: true,
             name: true,
@@ -750,7 +750,7 @@ export const getActivePartnership = async (
             image: true,
           },
         },
-        player2: {
+        partner: {
           select: {
             id: true,
             name: true,
@@ -760,12 +760,6 @@ export const getActivePartnership = async (
           },
         },
         season: {
-          select: {
-            id: true,
-            name: true,
-          },
-        },
-        division: {
           select: {
             id: true,
             name: true,

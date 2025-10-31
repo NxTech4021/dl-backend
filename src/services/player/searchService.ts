@@ -90,8 +90,12 @@ export async function searchPlayers(
  */
 export async function getAvailablePlayersForSeason(
   seasonId: string,
-  currentUserId: string
+  currentUserId: string,
+  searchQuery?: string
 ) {
+  const isSearching = searchQuery && searchQuery.trim().length > 0;
+  console.log(`🔍 Search mode: ${isSearching ? 'YES' : 'NO'} | Query: "${searchQuery || ''}"`);
+
   // Get current user's gender
   const currentUser = await prisma.user.findUnique({
     where: { id: currentUserId },
@@ -154,21 +158,31 @@ export async function getAvailablePlayersForSeason(
       status: 'ACTIVE',
       dissolvedAt: null
     },
-    select: { player1Id: true, player2Id: true },
+    select: { captainId: true, partnerId: true },
   });
 
   const activelyPairedPlayerIds = [
-    ...activePairs.map((p) => p.player1Id),
-    ...activePairs.map((p) => p.player2Id),
+    ...activePairs.map((p) => p.captainId),
+    ...activePairs.map((p) => p.partnerId),
   ];
   console.log(`🔍 ${activelyPairedPlayerIds.length} players already in active partnerships`);
 
-  // Build gender filter for MIXED doubles (opposite gender only)
+  // Build gender filter based on category
   const genderFilter: any = {};
-  if (isMixedDoubles && currentUser.gender) {
-    // If user is MALE, show FEMALE friends; if FEMALE, show MALE friends
-    genderFilter.gender = currentUser.gender === 'MALE' ? 'FEMALE' : 'MALE';
-    console.log(`🔍 Mixed doubles: Filtering for ${genderFilter.gender} partners`);
+  if (currentUser.gender) {
+    if (isMixedDoubles) {
+      // Mixed doubles: opposite gender only
+      genderFilter.gender = currentUser.gender === 'MALE' ? 'FEMALE' : 'MALE';
+      console.log(`🔍 Mixed doubles: Filtering for ${genderFilter.gender} partners`);
+    } else if (categoryGender === 'MALE') {
+      // Men's doubles: only MALE players
+      genderFilter.gender = 'MALE';
+      console.log(`🔍 Men's doubles: Filtering for MALE partners only`);
+    } else if (categoryGender === 'FEMALE') {
+      // Women's doubles: only FEMALE players
+      genderFilter.gender = 'FEMALE';
+      console.log(`🔍 Women's doubles: Filtering for FEMALE partners only`);
+    }
   }
 
   // Try to find friends first
@@ -200,17 +214,25 @@ export async function getAvailablePlayersForSeason(
   let playersToReturn = friendPlayers;
   let usedFallback = false;
 
-  // Fallback: If no friends available, show all eligible players
-  if (friendPlayers.length === 0) {
-    console.log('⚠️  No friends available, using fallback to show all eligible players');
+  // If user is searching, show all eligible NON-FRIEND players (excluding friends)
+  if (isSearching) {
+    console.log('🔍 User is searching, fetching all eligible non-friend players');
+
+    // Build search filter for name/username
+    const searchFilter: any[] = [
+      { name: { contains: searchQuery, mode: 'insensitive' } },
+      { username: { contains: searchQuery, mode: 'insensitive' } },
+      { displayUsername: { contains: searchQuery, mode: 'insensitive' } },
+    ];
 
     const allEligiblePlayers = await prisma.user.findMany({
       where: {
         AND: [
           { id: { not: currentUserId } },
-          { id: { notIn: activelyPairedPlayerIds } },
+          { id: { notIn: [...activelyPairedPlayerIds, ...friendIds] } }, // Exclude friends and paired players
           { role: Role.USER },
           { status: 'active' },
+          { OR: searchFilter }, // Search by name or username
           ...Object.keys(genderFilter).length > 0 ? [genderFilter] : [],
         ]
       },
@@ -226,8 +248,14 @@ export async function getAvailablePlayersForSeason(
       },
     });
 
-    console.log(`✅ Found ${allEligiblePlayers.length} eligible players (fallback)`);
+    console.log(`✅ Found ${allEligiblePlayers.length} eligible non-friend players matching "${searchQuery}"`);
     playersToReturn = allEligiblePlayers;
+    usedFallback = true; // Mark as fallback to show proper message
+  }
+  // If NOT searching and no friends, show fallback message (but return empty list)
+  else if (friendPlayers.length === 0) {
+    console.log('⚠️  No friends available and not searching - returning empty list');
+    playersToReturn = [];
     usedFallback = true;
   }
 
