@@ -219,28 +219,9 @@ export const getSeasonByIdService = async (id: string) => {
                 }
               }
             }
-          }, 
-        },
-      },
-      registrations: {
-        include: {
-          player: {
-            include: {
-              questionnaireResponses: {
-                include: {
-                  result: true
-                },
-                where: {
-                  completedAt: { not: null }
-                }
-              }
-            }
           },
           division: true
         },
-        where: {
-          isActive: true
-        }
       },
     },
   });
