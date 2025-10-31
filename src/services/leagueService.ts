@@ -4,13 +4,13 @@ import { PrismaClient, Statuses, SportType, GameType, TierType } from '@prisma/c
 
 interface LeagueFilters {
   name?: string;
-  sportId?: number;      // Filter by sport (via LeagueSport junction)
+  sportId?: number;
   location?: string;
   status?: string;
 }
 
 interface LeagueData {
-  id?: string; // optional, mainly for updates
+  id?: string;
   name?: string;
   location?: string;
   description?: string;
@@ -27,7 +27,7 @@ interface LeagueData {
     createdById?: string;
   };
   sponsorships?: {
-    id?: string;          // optional for new sponsorships
+    id?: string;
     companyId: string;
     packageTier: TierType;
     contractAmount: number;

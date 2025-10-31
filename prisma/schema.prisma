@@ -189,7 +189,6 @@ model League {
 
   seasons      Season[]           @relation("LeagueToSeason")
   sponsorships Sponsorship[]
-  // memberships LeagueMembership[] // REMOVED: LeagueMembership model no longer exists
   categories   Category[]
   divisions    Division[]
 
@@ -199,23 +198,6 @@ model League {
   @@index([location])
   @@index([status])
 }
-
-// REMOVED: LeagueMembership model no longer exists
-// Players now join seasons directly, not leagues
-// 
-// model LeagueMembership {
-//   id       String   @id @default(cuid())
-//   userId   String
-//   leagueId String
-//   joinedAt DateTime @default(now())
-//
-//   user   User   @relation(fields: [userId], references: [id])
-//   league League @relation(fields: [leagueId], references: [id])
-//
-//   @@unique([userId, leagueId])
-//   @@index([leagueId])
-//   @@index([userId])
-// }
 
 model Category {
   id   String  @id @default(cuid())
@@ -600,10 +582,7 @@ model Message {
   sender   User   @relation(fields: [senderId], references: [id])
   senderId String
 
-  // Content and Type
-  type    MediaType @default(TEXT)
   content String?
-  files   File[] // New relation for multimedia files
 
   // Reply/Quote/Forwarding
   repliesToId String?
@@ -627,35 +606,11 @@ model MessageReadBy {
   messageId String
   user      User    @relation(fields: [userId], references: [id])
   userId    String
+  readAt    DateTime?
 
   @@unique([messageId, userId])
 }
 
-model File {
-  id        String  @id @default(cuid())
-  message   Message @relation(fields: [messageId], references: [id])
-  messageId String
-
-  url      String
-  mimeType String
-  sizeKB   Int // File size in kilobytes for preview/management
-
-  fileName String?
-  isMedia  Boolean @default(false) // True for images/videos, false for documents
-
-  createdAt DateTime @default(now())
-
-  @@index([messageId])
-}
-
-enum MediaType {
-  TEXT
-  IMAGE
-  VIDEO
-  VOICE_NOTE
-  DOCUMENT
-  SYSTEM // For messages like 'User X joined'
-}
 
 model Friendship {
   id          String           @id @default(cuid())
@@ -664,6 +619,13 @@ model Friendship {
   status      FriendshipStatus @default(PENDING)
   createdAt   DateTime         @default(now())
   respondedAt DateTime?
+}
+  
+model Favorite {
+  id          String   @id @default(cuid())
+  userId      String
+  favoritedId String
+  createdAt   DateTime @default(now())
 
   requester User @relation("SentFriendRequests", fields: [requesterId], references: [id], onDelete: Cascade)
   recipient User @relation("ReceivedFriendRequests", fields: [recipientId], references: [id], onDelete: Cascade)
