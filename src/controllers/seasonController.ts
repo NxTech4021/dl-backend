@@ -20,7 +20,8 @@ import {
   validateUpdateSeasonData,
   validateStatusUpdate,
   validateWithdrawalRequest,
-  handlePrismaError
+  handlePrismaError,
+  handleWithdrawalError
 } from "../validators/season";
 
 // Withdrawal Operations
@@ -679,28 +680,3 @@ const processWithdrawal = async (id: string, processedByAdminId: string, status:
 
 };
 
-const formatMembershipResponse = (membership: any) => {
-  return {
-    ...membership,
-    user: { id: membership.user.id, name: membership.user.name },
-    season: { id: membership.season.id, name: membership.season.name },
-    division: membership.division
-      ? { id: membership.division.id, name: membership.division.name }
-      : null,
-  };
-};
-
-
-const handleWithdrawalError = (error: any, res: Response) => {
-  if (error instanceof Prisma.PrismaClientValidationError) {
-    return res.status(400).json({ 
-      error: "Invalid data format or type for withdrawal request." 
-    });
-  }
-
-  if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025") {
-    return res.status(404).json({ error: "Withdrawal request not found." });
-  }
-
-  res.status(500).json({ error: "Failed to process withdrawal request." });
-};
