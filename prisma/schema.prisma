@@ -33,7 +33,6 @@ model User {
   accounts          Account[]
   sessions          Session[]
   seasonMemberships SeasonMembership[]
-  // leagueMemberships LeagueMembership[] // REMOVED: LeagueMembership model no longer exists
   matchParticipants MatchParticipant[]
   processedRequests WithdrawalRequest[] @relation("ProcessedByAdmin")
 
@@ -48,6 +47,10 @@ model User {
   partnerPartnerships       Partnership[]      @relation("PartnershipPartner")
   sentSeasonInvitations     SeasonInvitation[] @relation("SentSeasonInvitations")
   receivedSeasonInvitations SeasonInvitation[] @relation("ReceivedSeasonInvitations")
+
+  // Favorite relations
+  favoritesMade     Favorite[] @relation("UserFavorites")
+  favoritedByOthers Favorite[] @relation("FavoritedUser")
 
   //Thread relations
   userThreads  UserThread[]
@@ -246,7 +249,6 @@ model Sponsorship {
   updatedAt      DateTime @updatedAt
 
   // Relationships
-
   leagues   League[]
   createdBy Admin?     @relation("SponsorshipCreatedBy", fields: [createdById], references: [id])
   divisions Division[] @relation("DivisionSponsor")
@@ -557,10 +559,11 @@ model Thread {
   divisionId String?
   division   Division? @relation("DivisionThreads", fields: [divisionId], references: [id])
 
-  members   UserThread[]
-  messages  Message[]
-  createdAt DateTime     @default(now())
-  updatedAt DateTime     @updatedAt
+  members  UserThread[]
+  messages Message[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model UserThread {
@@ -601,16 +604,15 @@ model Message {
 }
 
 model MessageReadBy {
-  id        String  @id @default(cuid())
-  message   Message @relation(fields: [messageId], references: [id])
+  id        String   @id @default(cuid())
+  message   Message  @relation(fields: [messageId], references: [id])
   messageId String
-  user      User    @relation(fields: [userId], references: [id])
+  user      User     @relation(fields: [userId], references: [id])
   userId    String
   readAt    DateTime?
 
   @@unique([messageId, userId])
 }
-
 
 model Friendship {
   id          String           @id @default(cuid())
@@ -619,13 +621,6 @@ model Friendship {
   status      FriendshipStatus @default(PENDING)
   createdAt   DateTime         @default(now())
   respondedAt DateTime?
-}
-  
-model Favorite {
-  id          String   @id @default(cuid())
-  userId      String
-  favoritedId String
-  createdAt   DateTime @default(now())
 
   requester User @relation("SentFriendRequests", fields: [requesterId], references: [id], onDelete: Cascade)
   recipient User @relation("ReceivedFriendRequests", fields: [recipientId], references: [id], onDelete: Cascade)
@@ -635,6 +630,21 @@ model Favorite {
   @@index([recipientId])
   @@index([status])
   @@map("friendship")
+}
+
+model Favorite {
+  id          String   @id @default(cuid())
+  userId      String   // User who is making the favorite
+  favoritedId String   // User who is being favorited
+  createdAt   DateTime @default(now())
+
+  user      User @relation("UserFavorites", fields: [userId], references: [id], onDelete: Cascade)
+  favorited User @relation("FavoritedUser", fields: [favoritedId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, favoritedId])
+  @@index([userId])
+  @@index([favoritedId])
+  @@map("favorite")
 }
 
 model PairRequest {
@@ -659,7 +669,6 @@ model PairRequest {
   @@map("pair_request")
 }
 
-//TO DO - use this and link with seasonmembership
 model Partnership {
   id          String            @id @default(cuid())
   captainId   String            // Requester = Captain
@@ -686,10 +695,6 @@ model Partnership {
   @@map("partnership")
 }
 
-
-// ==========================================
-// Season Invitation (requires accepted friendship)
-// ==========================================
 model SeasonInvitation {
   id          String                 @id @default(cuid())
   senderId    String
@@ -712,9 +717,7 @@ model SeasonInvitation {
   @@map("season_invitation")
 }
 
-
 // Enums 
-
 enum PairRequestStatus {
   PENDING
   ACCEPTED
@@ -729,7 +732,6 @@ enum PartnershipStatus {
   DISSOLVED
   EXPIRED
 }
-
 
 enum Role {
   USER
@@ -823,9 +825,6 @@ enum TierType {
   PLATINUM
 }
 
-// ==========================================
-// NEW ENUMS for General Pairing System
-// ==========================================
 enum FriendshipStatus {
   PENDING
   ACCEPTED
