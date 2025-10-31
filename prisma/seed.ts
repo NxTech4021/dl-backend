@@ -310,8 +310,8 @@ async function seedLeagueAndSeason(createdByAdminId?: string) {
         paymentRequired: false,
         promoCodeSupported: false,
         withdrawalEnabled: true,
-        startDate: new Date(),
-        endDate: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000), // 90 days
+        startDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days from now
+        endDate: new Date(Date.now() + 97 * 24 * 60 * 60 * 1000), // 97 days (90 days after start)
         regiDeadline: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days
       },
     });
