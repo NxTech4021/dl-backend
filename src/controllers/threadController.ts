@@ -1,15 +1,19 @@
 import { prisma } from "../lib/prisma";
 import { Request, Response } from "express";
 
-// Create a new thread (single or group)  
+// Create a new thread (single or group)
 export const createThread = async (req: Request, res: Response) => {
   try {
     const { name, isGroup, userIds } = req.body;
-    console.log(`📝 Creating thread - Group: ${isGroup}, Users: ${userIds?.length}, Name: ${name}`);
+    console.log(
+      `📝 Creating thread - Group: ${isGroup}, Users: ${userIds?.length}, Name: ${name}`
+    );
 
     if (!Array.isArray(userIds) || userIds.length < 2) {
       console.log(`❌ Invalid userIds array: ${userIds}`);
-      return res.status(400).json({ error: "At least two users are required to create a thread." });
+      return res
+        .status(400)
+        .json({ error: "At least two users are required to create a thread." });
     }
 
     const thread = await prisma.thread.create({
@@ -23,10 +27,12 @@ export const createThread = async (req: Request, res: Response) => {
           })),
         },
       },
-      include: { 
-        members: { 
-          include: { user: { select: { id: true, name: true, username: true } } } 
-        } 
+      include: {
+        members: {
+          include: {
+            user: { select: { id: true, name: true, username: true } },
+          },
+        },
       },
     });
 
@@ -34,10 +40,10 @@ export const createThread = async (req: Request, res: Response) => {
 
     // 💡 SOCKET INTEGRATION: Notify users about new thread
     if (req.io) {
-      userIds.forEach(userId => {
-        req.io.to(userId).emit('new_thread', {
+      userIds.forEach((userId) => {
+        req.io.to(userId).emit("new_thread", {
           thread,
-          timestamp: new Date().toISOString()
+          timestamp: new Date().toISOString(),
         });
         console.log(`📤 Sent new_thread event to user ${userId}`);
       });
@@ -45,10 +51,10 @@ export const createThread = async (req: Request, res: Response) => {
       console.log(`⚠️ Socket.IO not available in request object`);
     }
 
-    return res.status(201).json({ 
-      success: true, 
+    return res.status(201).json({
+      success: true,
       data: thread,
-      message: "Thread created successfully"
+      message: "Thread created successfully",
     });
   } catch (error) {
     console.error("❌ Error creating thread:", error);
@@ -69,34 +75,42 @@ export const getThreads = async (req: Request, res: Response) => {
     const threads = await prisma.thread.findMany({
       where: { members: { some: { userId } } },
       include: {
-        members: { 
-          include: { 
-            user: { 
-              select: { id: true, name: true, username: true, image: true } 
-            } 
-          } 
+        members: {
+          include: {
+            user: {
+              select: { 
+                id: true, 
+                name: true, 
+                role: true,
+                username: true, 
+                email: true,
+                phoneNumber: true,
+                image: true 
+              },
+            },
+          },
         },
         messages: {
           orderBy: { createdAt: "desc" },
           take: 1,
-          include: { 
-            sender: { 
-              select: { id: true, name: true, username: true } 
-            } 
+          include: {
+            sender: {
+              select: { id: true, name: true, username: true },
+            },
           },
         },
         _count: {
-          select: { messages: true }
-        }
+          select: { messages: true },
+        },
       },
-      orderBy: { updatedAt: "desc" }
+      orderBy: { updatedAt: "desc" },
     });
 
     console.log(`✅ Found ${threads.length} threads for user ${userId}`);
-    return res.json({ 
-      success: true, 
+    return res.json({
+      success: true,
       data: threads,
-      count: threads.length 
+      count: threads.length,
     });
   } catch (error) {
     console.error("❌ Error fetching threads:", error);
@@ -107,13 +121,17 @@ export const getThreads = async (req: Request, res: Response) => {
 // Send a message in a thread
 export const sendMessage = async (req: Request, res: Response) => {
   const { threadId } = req.params;
-  const { senderId, content, } = req.body;
+  const { senderId, content } = req.body;
 
   console.log(`💬 Sending message - Thread: ${threadId}, Sender: ${senderId}`);
 
   if (!senderId || !content) {
-    console.log(`❌ Missing required fields - SenderId: ${senderId}, Content: ${!!content}`);
-    return res.status(400).json({ error: "Sender ID and content are required" });
+    console.log(
+      `❌ Missing required fields - SenderId: ${senderId}, Content: ${!!content}`
+    );
+    return res
+      .status(400)
+      .json({ error: "Sender ID and content are required" });
   }
 
   try {
@@ -124,31 +142,40 @@ export const sendMessage = async (req: Request, res: Response) => {
 
     // Verify thread exists and user is a member
     const threadUser = await prisma.userThread.findFirst({
-      where: { threadId, userId: senderId }
+      where: { threadId, userId: senderId },
     });
 
     if (!threadUser) {
       console.log(`❌ User ${senderId} is not a member of thread ${threadId}`);
-      return res.status(403).json({ error: "User is not a member of this thread" });
+      return res
+        .status(403)
+        .json({ error: "User is not a member of this thread" });
     }
 
     const message = await prisma.message.create({
-      data: { 
-        threadId, 
-        senderId, 
+      data: {
+        threadId,
+        senderId,
         content,
       },
-      include: { 
-        sender: { 
-          select: { id: true, name: true, username: true, image: true } 
-        } 
+      include: {
+        sender: {
+          select: { 
+            id: true, 
+            name: true, 
+            username: true, 
+            image: true, 
+            email: true, 
+            phoneNumber: true 
+          },
+        },
       },
     });
 
     // Update thread's last activity
     await prisma.thread.update({
       where: { id: threadId },
-      data: { updatedAt: new Date() }
+      data: { updatedAt: new Date() },
     });
 
     console.log(`✅ Message created: ${message.id} in thread ${threadId}`);
@@ -157,26 +184,26 @@ export const sendMessage = async (req: Request, res: Response) => {
     if (req.io) {
       const messageData = {
         ...message,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
       };
-      
-      req.io.to(threadId).emit('new_message', messageData);
+
+      req.io.to(threadId).emit("new_message", messageData);
       console.log(`📤 Broadcasted new_message to thread ${threadId}`);
-      
+
       // Also emit to sender's personal room for confirmation
-      req.io.to(senderId).emit('message_sent', {
+      req.io.to(senderId).emit("message_sent", {
         messageId: message.id,
         threadId,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
       });
     } else {
       console.log(`⚠️ Socket.IO not available for message broadcast`);
     }
 
-    return res.status(201).json({ 
-      success: true, 
+    return res.status(201).json({
+      success: true,
       data: message,
-      message: "Message sent successfully" 
+      message: "Message sent successfully",
     });
   } catch (error) {
     console.error("❌ Error sending message:", error);
@@ -189,8 +216,10 @@ export const getMessages = async (req: Request, res: Response) => {
   try {
     const { threadId } = req.params;
     const { page = 1, limit = 50 } = req.query;
-    
-    console.log(`📖 Fetching messages for thread: ${threadId}, Page: ${page}, Limit: ${limit}`);
+
+    console.log(
+      `📖 Fetching messages for thread: ${threadId}, Page: ${page}, Limit: ${limit}`
+    );
 
     if (!threadId) {
       return res.status(400).json({ error: "Thread ID is required" });
@@ -204,36 +233,38 @@ export const getMessages = async (req: Request, res: Response) => {
         orderBy: { createdAt: "desc" },
         skip,
         take: Number(limit),
-        include: { 
-          sender: { 
-            select: { id: true, name: true, username: true, image: true } 
+        include: {
+          sender: {
+            select: { id: true, name: true, username: true, image: true },
           },
-          readBy: { 
-            include: { 
-              user: { 
-                select: { id: true, name: true } 
-              } 
-            } 
-          } 
+          readBy: {
+            include: {
+              user: {
+                select: { id: true, name: true },
+              },
+            },
+          },
         },
       }),
-      prisma.message.count({ where: { threadId } })
+      prisma.message.count({ where: { threadId } }),
     ]);
 
     // Reverse to show oldest first
     const sortedMessages = messages.reverse();
 
-    console.log(`✅ Retrieved ${sortedMessages.length} messages from thread ${threadId}`);
-    
-    return res.json({ 
+    console.log(
+      `✅ Retrieved ${sortedMessages.length} messages from thread ${threadId}`
+    );
+
+    return res.json({
       success: true,
       data: sortedMessages,
       pagination: {
         page: Number(page),
         limit: Number(limit),
         total: totalCount,
-        totalPages: Math.ceil(totalCount / Number(limit))
-      }
+        totalPages: Math.ceil(totalCount / Number(limit)),
+      },
     });
   } catch (error) {
     console.error("❌ Error fetching messages:", error);
@@ -260,7 +291,7 @@ export const markAsRead = async (req: Request, res: Response) => {
     // Find the message and thread info
     const messageInfo = await prisma.message.findUnique({
       where: { id: messageId },
-      select: { threadId: true, senderId: true }
+      select: { threadId: true, senderId: true },
     });
 
     if (!messageInfo) {
@@ -271,19 +302,22 @@ export const markAsRead = async (req: Request, res: Response) => {
     // Don't mark own messages as read
     if (messageInfo.senderId === readerId) {
       console.log(`⏭️ Skipping read receipt for own message`);
-      return res.json({ success: true, message: "Own message, no read receipt needed" });
+      return res.json({
+        success: true,
+        message: "Own message, no read receipt needed",
+      });
     }
 
     await prisma.messageReadBy.upsert({
       where: { messageId_userId: { messageId, userId: readerId } },
       update: { readAt: new Date() },
-      create: { messageId, userId: readerId }
+      create: { messageId, userId: readerId },
     });
 
     // Get the user data separately for the socket broadcast
     const readerUser = await prisma.user.findUnique({
       where: { id: readerId },
-      select: { id: true, name: true }
+      select: { id: true, name: true },
     });
 
     console.log(`✅ Message ${messageId} marked as read by ${readerId}`);
@@ -293,19 +327,21 @@ export const markAsRead = async (req: Request, res: Response) => {
       const readData = {
         messageId,
         threadId: messageInfo.threadId,
-        readerName: readerUser?.name || 'Unknown User',
-        timestamp: new Date().toISOString()
+        readerName: readerUser?.name || "Unknown User",
+        timestamp: new Date().toISOString(),
       };
-      
-      req.io.to(messageInfo.threadId).emit('message_read', readData);
-      console.log(`📤 Broadcasted message_read to thread ${messageInfo.threadId}`);
+
+      req.io.to(messageInfo.threadId).emit("message_read", readData);
+      console.log(
+        `📤 Broadcasted message_read to thread ${messageInfo.threadId}`
+      );
     }
 
-    return res.json({ 
-      success: true, 
-      data: readReceipt,
-      message: "Message marked as read" 
-    }); 
+    return res.json({
+      success: true,
+      // data: readReceipt,
+      message: "Message marked as read",
+    });
   } catch (error) {
     console.error("❌ Error marking message as read:", error);
     return res.status(500).json({ error: "Failed to mark message as read" });
@@ -326,16 +362,16 @@ export const getThreadMembers = async (req: Request, res: Response) => {
       where: { threadId },
       include: {
         user: {
-          select: { id: true, name: true, username: true}
-        }
-      }
+          select: { id: true, name: true, username: true },
+        },
+      },
     });
 
     console.log(`✅ Found ${members.length} members in thread ${threadId}`);
-    return res.json({ 
-      success: true, 
+    return res.json({
+      success: true,
       data: members,
-      count: members.length 
+      count: members.length,
     });
   } catch (error) {
     console.error("❌ Error fetching thread members:", error);
@@ -358,24 +394,24 @@ export const getAvailableUsers = async (req: Request, res: Response) => {
         thread: {
           isGroup: false,
           members: {
-            some: { userId } 
-          }
+            some: { userId },
+          },
         },
-        userId: { not: userId } 
+        userId: { not: userId },
       },
       select: {
-        userId: true
-      }
+        userId: true,
+      },
     });
 
-    const existingUserIds = existingChatUsers.map(ut => ut.userId);
+    const existingUserIds = existingChatUsers.map((ut : any) => ut.userId);
 
     // Step 2: Get all users except current user and those with existing chats
     const availableUsers = await prisma.user.findMany({
       where: {
-        id: { 
-          notIn: [userId, ...existingUserIds] 
-        }
+        id: {
+          notIn: [userId, ...existingUserIds],
+        },
       },
       select: {
         id: true,
@@ -383,16 +419,18 @@ export const getAvailableUsers = async (req: Request, res: Response) => {
         username: true,
         image: true,
         email: true,
-      }
+      },
     });
 
-    console.log(`✅ Found ${availableUsers.length} available users (excluded ${existingUserIds.length} with existing chats)`);
-    
-    return res.json({ 
-      success: true, 
+    console.log(
+      `✅ Found ${availableUsers.length} available users (excluded ${existingUserIds.length} with existing chats)`
+    );
+
+    return res.json({
+      success: true,
       data: availableUsers,
       count: availableUsers.length,
-      excludedCount: existingUserIds.length
+      excludedCount: existingUserIds.length,
     });
   } catch (error) {
     console.error("❌ Error fetching available users:", error);
