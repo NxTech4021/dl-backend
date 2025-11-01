@@ -1,16 +1,16 @@
+import { prisma } from "../lib/prisma";
 import { PrismaClient, Statuses, SportType, GameType, TierType } from '@prisma/client';
 
-const prisma = new PrismaClient();
 
 interface LeagueFilters {
   name?: string;
-  sportId?: number;      // Filter by sport (via LeagueSport junction)
+  sportId?: number;
   location?: string;
   status?: string;
 }
 
 interface LeagueData {
-  id?: string; // optional, mainly for updates
+  id?: string;
   name?: string;
   location?: string;
   description?: string;
@@ -27,7 +27,7 @@ interface LeagueData {
     createdById?: string;
   };
   sponsorships?: {
-    id?: string;          // optional for new sponsorships
+    id?: string;
     companyId: string;
     packageTier: TierType;
     contractAmount: number;
@@ -57,8 +57,7 @@ export const getAllLeagues = async () => {
         include: {
           _count: {
             select: {
-              memberships: true,
-              registrations: true
+              memberships: true
             }
           }
         }
@@ -110,15 +109,9 @@ export const getLeagueById = async (id: string) => {
               user: true
             }
           },
-          registrations: {
-            include: {
-              player: true
-            }
-          },
           _count: {
             select: {
-              memberships: true,
-              registrations: true
+              memberships: true
             }
           }
         },

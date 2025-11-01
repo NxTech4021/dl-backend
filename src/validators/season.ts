@@ -1,3 +1,6 @@
+import { Prisma } from "@prisma/client";
+import { Response } from "express";
+
 export const validateCreateSeasonData = (data: any) => {
   const { name, startDate, endDate, entryFee, leagueIds, categoryId } = data;
 
@@ -132,4 +135,54 @@ export const validateWithdrawalRequest = (data: any) => {
   }
 
   return { isValid: true };
+};
+
+export const handlePrismaError = (error: any, res: Response, defaultMessage: string) => {
+  if (error instanceof Prisma.PrismaClientKnownRequestError) {
+    switch (error.code) {
+      case "P2002":
+        return res.status(409).json({
+          success: false,
+          error: "A season with this name already exists",
+        });
+      case "P2003":
+        return res.status(400).json({
+          success: false,
+          error: "One or more league IDs or category IDs are invalid",
+        });
+      case "P2025":
+        return res.status(404).json({
+          success: false,
+          error: "Season not found",
+        });
+      default:
+        break;
+    }
+  }
+
+  if (error instanceof Prisma.PrismaClientValidationError) {
+    return res.status(400).json({
+      success: false,
+      error: "Invalid data format",
+    });
+  }
+
+  return res.status(500).json({
+    success: false,
+    error: defaultMessage,
+  });
+};
+
+export const handleWithdrawalError = (error: any, res: Response) => {
+  if (error instanceof Prisma.PrismaClientValidationError) {
+    return res.status(400).json({ 
+      error: "Invalid data format or type for withdrawal request." 
+    });
+  }
+
+  if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025") {
+    return res.status(404).json({ error: "Withdrawal request not found." });
+  }
+
+  res.status(500).json({ error: "Failed to process withdrawal request." });
 };

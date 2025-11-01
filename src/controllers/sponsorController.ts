@@ -1,8 +1,8 @@
+import { prisma } from "../lib/prisma";
 import { Request, Response } from "express";
 import { PrismaClient } from "@prisma/client";
 import { ApiResponse } from "../utils/ApiResponse";
 
-const prisma = new PrismaClient();
 
 // Get all sponsors with their linked leagues
 export const getAllSponsors = async (req: Request, res: Response) => {

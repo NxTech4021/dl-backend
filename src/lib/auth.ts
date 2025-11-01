@@ -1,3 +1,4 @@
+import { prisma } from "./prisma";
 import { betterAuth } from "better-auth";
 import { APIError } from "better-auth/api";
 import { prismaAdapter } from "better-auth/adapters/prisma";
@@ -7,7 +8,6 @@ import { expo } from "@better-auth/expo";
 import { sendEmail } from "../config/nodemailer";
 import { getBackendBaseURL, getTrustedOrigins } from "../config/network";
 
-const prisma = new PrismaClient({ log: ["query", "info", "warn", "error"] });
 
 // Debug environment variables
 console.log("🔐 Better Auth Environment Check:");
@@ -38,6 +38,8 @@ const defaultTrustedOrigins = [
   "exp://192.168.100.53:8081",
   "http://172.20.10.3:8081",
   "exp://172.20.10.3:8081",
+  "http://10.72.179.58:8081",
+  "exp://10.72.179.58:8081",
   "https://staging.appdevelopers.my",
 ];
 const envTrustedOrigins = [

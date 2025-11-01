@@ -1,148 +1,74 @@
-import {
-  DivisionLevel,
-  GameType,
-  GenderType,
-  Prisma,
-  PrismaClient,
-} from "@prisma/client";
+/**
+ * Division Controller
+ * HTTP handlers for division-related endpoints
+ * Thin wrapper around division services
+ */
+import { prisma  } from "../lib/prisma";
 import { Request, Response } from "express";
-import { createThread } from "./threadController";
+import { Prisma, GameType, DivisionLevel, GenderType } from "@prisma/client"; 
 
-const prisma = new PrismaClient();
+// Service imports
+import {
+  createDivisionWithThread,
+  getAllDivisions,
+  getDivisionById as getDivisionByIdService,
+  updateDivision as updateDivisionService,
+  deleteDivision as deleteDivisionService
+} from '../services/division/divisionCrudService';
 
-const toEnum = <T extends DivisionLevel | GameType | GenderType>(
-  value: string | undefined,
-  enumType: Record<string, T>
-): T | undefined => {
-  if (!value) return undefined;
-  const normalized = value.toUpperCase();
-  return enumType[normalized as keyof typeof enumType];
-};
+import {
+  getDivisionsBySeasonId as getDivisionsBySeasonIdService,
+  getDivisionSummaryBySeasonId as getDivisionSummaryBySeasonIdService
+} from '../services/division/divisionQueryService';
 
-const FALLBACK_DATE_ISO = new Date(0).toISOString();
+import {
+  assignPlayerToDivision as assignPlayerToDivisionService,
+  removePlayerFromDivision as removePlayerFromDivisionService,
+  getDivisionAssignments as getDivisionAssignmentsService,
+  getUserDivisionAssignments as getUserDivisionAssignmentsService,
+  autoAssignPlayersToDivisions as autoAssignPlayersToDivisionsService,
+  transferPlayerBetweenDivisions as transferPlayerBetweenDivisionsService
+} from '../services/division/divisionAssignmentService';
 
-const toISODateString = (input: unknown): string => {
-  if (!input) return FALLBACK_DATE_ISO;
-  const date = input instanceof Date ? input : new Date(input as any);
-  return Number.isNaN(date.getTime()) ? FALLBACK_DATE_ISO : date.toISOString();
-};
+import {
+  checkDivisionCapacity,
+  getDivisionCapacityInfo
+} from '../services/division/divisionCapacityService';
 
-const toISODateStringOrNull = (input: unknown): string | null => {
-  if (input === null || input === undefined) return null;
-  const date = input instanceof Date ? input : new Date(input as any);
-  return Number.isNaN(date.getTime()) ? null : date.toISOString();
-};
+import {
+  validateUserExists,
+  validateDivisionExists,
+  validatePlayerRatingForDivision,
+  getAdminIdFromUserId
+} from '../services/division/divisionValidationService';
 
-const checkDivisionCapacity = async (divisionId: string, gameType: GameType) => {
-  const division = await prisma.division.findUnique({
-    where: { id: divisionId },
-    select: {
-      maxSinglesPlayers: true,
-      maxDoublesTeams: true,
-      currentSinglesCount: true,
-      currentDoublesCount: true,
-      gameType: true,
-      name: true
-    }
-  });
+// 🆕 Add notification imports NEXT push
+// import { notificationService } from '../services/notificationService';
+// import {
+//   notificationDivisionAssigned,
+//   notificationDivisionRemoved,
+//   notificationDivisionTransferred,
+//   notificationGroupChatAdded
+// } from '../utils/notificationHelpers';
 
-  if (!division) {
-    throw new Error("Division not found");
+
+
+const updateDivisionCounts = async (divisionId: string, increment: boolean) => {
+  // Implementation for updating division counts
+  // This function should update the current player count in the division
+  try {
+    const count = await prisma.divisionAssignment.count({
+      where: { divisionId }
+    });
+    
+    await prisma.division.update({
+      where: { id: divisionId },
+      data: { currentPlayerCount: count }
+    });
+  } catch (error) {
+    console.error('Error updating division counts:', error);
   }
-
-  const isSingles = gameType === GameType.SINGLES;
-  const maxCapacity = isSingles ? division.maxSinglesPlayers : division.maxDoublesTeams;
-  const currentCount = isSingles ? (division.currentSinglesCount || 0) : (division.currentDoublesCount || 0);
-
-  return {
-    hasCapacity: maxCapacity ? currentCount < maxCapacity : true,
-    currentCount,
-    maxCapacity,
-    division
-  };
 };
-
-const updateDivisionCounts = async (divisionId: string, increment: boolean = true) => {
-  const division = await prisma.division.findUnique({
-    where: { id: divisionId },
-    select: { gameType: true }
-  });
-
-  if (!division) return;
-
-  const isSingles = division.gameType === GameType.SINGLES;
-  const updateData = isSingles 
-    ? { currentSinglesCount: { increment: increment ? 1 : -1 } }
-    : { currentDoublesCount: { increment: increment ? 1 : -1 } };
-
-  await prisma.division.update({
-    where: { id: divisionId },
-    data: updateData
-  });
-};
-
-const formatSeason = (season: any) => ({
-  id: season?.id ?? "",
-  name: season?.name ?? "",
-  sportType: season?.sportType ?? null,
-  seasonType: season?.seasonType ?? null,
-  description: season?.description ?? null,
-  startDate: toISODateStringOrNull(season?.startDate),
-  endDate: toISODateStringOrNull(season?.endDate),
-  regiDeadline: toISODateStringOrNull(season?.regiDeadline),
-  status: season?.status ?? "UPCOMING",
-  current:
-    season && "current" in season
-      ? Boolean(season.current)
-      : Boolean(season?.isActive),
-  createdAt: toISODateString(season?.createdAt),
-  updatedAt: toISODateString(season?.updatedAt),
-  memberships: [],
-  withdrawalRequests: [],
-});
-
-const formatDivision = (division: any) => ({
-  id: division.id,
-  seasonId: division.seasonId,
-  name: division.name,
-  description: division.description ?? null,
-  threshold:
-    division.pointsThreshold !== null && division.pointsThreshold !== undefined
-      ? Number(division.pointsThreshold)
-      : null,
-  divisionLevel: division.level
-    ? division.level.toLowerCase()
-    : "beginner",
-  gameType: division.gameType ? division.gameType.toLowerCase() : "singles",
-  genderCategory: division.genderCategory
-    ? division.genderCategory.toLowerCase()
-    : "mixed",
-  maxSingles:
-    division.maxSinglesPlayers !== null && division.maxSinglesPlayers !== undefined
-      ? Number(division.maxSinglesPlayers)
-      : null,
-  maxDoublesTeams:
-    division.maxDoublesTeams !== null && division.maxDoublesTeams !== undefined
-      ? Number(division.maxDoublesTeams)
-      : null,
-  currentSinglesCount:
-    division.currentSinglesCount !== null && division.currentSinglesCount !== undefined
-      ? Number(division.currentSinglesCount)
-      : null,
-  currentDoublesCount:
-    division.currentDoublesCount !== null && division.currentDoublesCount !== undefined
-      ? Number(division.currentDoublesCount)
-      : null,
-  autoAssignmentEnabled: division.autoAssignmentEnabled,
-  isActive: division.isActiveDivision,
-  prizePoolTotal: division.prizePoolTotal
-    ? Number(division.prizePoolTotal)
-    : null,
-  sponsoredDivisionName: division.sponsoredDivisionName ?? null,
-  season: formatSeason(division.season),
-  createdAt: toISODateString(division.createdAt),
-  updatedAt: toISODateString(division.updatedAt),
-});
 
 export const createDivision = async (req: Request, res: Response) => {
   const {
@@ -174,155 +100,35 @@ export const createDivision = async (req: Request, res: Response) => {
     });
   }
 
-  const levelEnum = toEnum(divisionLevel, DivisionLevel);
-  const gameTypeEnum = toEnum(gameType, GameType);
-  const genderEnum = toEnum(genderCategory, GenderType);
-
-  if (!levelEnum) {
-    return res.status(400).json({ error: "Invalid divisionLevel value." });
-  }
-  if (!gameTypeEnum) {
-    return res.status(400).json({ error: "Invalid gameType value." });
-  }
-
-  if (
-    gameTypeEnum === GameType.SINGLES &&
-    (maxSinglesPlayers === null || maxSinglesPlayers === undefined)
-  ) {
-    return res.status(400).json({
-      error: "maxSinglesPlayers is required when gameType is singles.",
-    });
-  }
-
-  if (
-    gameTypeEnum === GameType.DOUBLES &&
-    (maxDoublesTeams === null || maxDoublesTeams === undefined)
-  ) {
-    return res.status(400).json({
-      error: "maxDoublesTeams is required when gameType is doubles.",
-    });
-  }
-
   try {
-    // Verify admin exists
-    const adminUser = await prisma.user.findUnique({
-      where: { id: adminId },
-      select: { id: true, name: true }
-    });
-
-    if (!adminUser) {
-      return res.status(404).json({ error: "Admin user not found." });
-    }
-
-    const season = await prisma.season.findUnique({
-      where: { id: seasonId },
-      select: { 
-        id: true, 
-        name: true,  
-        leagues: { 
-          select: {
-            id: true
-          }
-        }
+    const result = await createDivisionWithThread(
+      {
+        seasonId,
+        name,
+        description,
+        threshold,
+        divisionLevel,
+        gameType,
+        genderCategory,
+        maxSinglesPlayers,
+        maxDoublesTeams,
+        autoAssignmentEnabled,
+        isActive,
+        prizePoolTotal,
+        sponsorName
       },
-    });
-
-    if (!season) {
-      return res.status(404).json({ error: "Season not found." });
-    }
-
-    const leagueId = season?.leagues && season.leagues.length > 0 ? season.leagues[0]?.id : null;
-
-    if (!leagueId) {
-      return res.status(400).json({ error: "Season is not linked to any league." });
-    }
-
-    const duplicate = await prisma.division.findFirst({
-      where: { seasonId, name },
-      select: { id: true },
-    });
-
-    if (duplicate) {
-      return res.status(409).json({
-        error: "A division with this name already exists in the season.",
-      });
-    }
-
-    // Create division and thread in a transaction
-    const result = await prisma.$transaction(async (tx) => {
-      // Create the division first
-      const division = await tx.division.create({
-        data: {
-          seasonId,
-          leagueId: leagueId,
-          name,
-          description,
-          pointsThreshold:
-            threshold !== undefined && threshold !== null
-              ? Number(threshold)
-              : null,
-          level: levelEnum,
-          gameType: gameTypeEnum,
-          genderCategory: genderEnum ?? null,
-          maxSinglesPlayers:
-            maxSinglesPlayers !== undefined && maxSinglesPlayers !== null
-              ? Number(maxSinglesPlayers)
-              : null,
-          maxDoublesTeams:
-            maxDoublesTeams !== undefined && maxDoublesTeams !== null
-              ? Number(maxDoublesTeams)
-              : null,
-          autoAssignmentEnabled: Boolean(autoAssignmentEnabled),
-          isActiveDivision: Boolean(isActive),
-          prizePoolTotal:
-            prizePoolTotal !== undefined && prizePoolTotal !== null
-              ? new Prisma.Decimal(prizePoolTotal)
-              : null,
-          sponsoredDivisionName: sponsorName ?? null,
-        },
-        include: {
-          season: true,
-        },
-      });
-
-      // Create the group chat/thread for the division
-      const thread = await tx.thread.create({
-        data: {
-          name: `${division.name} Chat`,
-          isGroup: true,
-          divisionId: division.id,
-          members: {
-            create: [{
-              userId: adminId,
-              role: "admin"
-            }]
-          }
-        },
-        include: {
-          members: {
-            include: {
-              user: {
-                select: { id: true, name: true, username: true, image: true }
-              }
-            }
-          }
-        }
-      });
-
-      console.log(`✅ Division ${division.id} created with chat thread ${thread.id}`);
-
-      return { division, thread };
-    });
+      adminId
+    );
 
     // Socket notification for thread creation
-    if (req.io) {
-      req.io.to(adminId).emit('new_thread', {
+    if ((req as any).io) { 
+      (req as any).io.to(adminId).emit('new_thread', {
         thread: result.thread,
         message: `Division chat created for ${result.division.name}`,
         timestamp: new Date().toISOString()
       });
 
-      req.io.to(adminId).emit('division_created', {
+      (req as any).io.to(adminId).emit('division_created', {
         division: result.division,
         thread: result.thread,
         message: `Division ${result.division.name} created successfully`,
@@ -335,7 +141,7 @@ export const createDivision = async (req: Request, res: Response) => {
     return res.status(201).json({
       success: true,
       data: {
-        division: formatDivision(result.division),
+        division: result.division,
         thread: {
           id: result.thread.id,
           name: result.thread.name,
@@ -347,7 +153,7 @@ export const createDivision = async (req: Request, res: Response) => {
       message: "Division and chat group created successfully",
     });
 
-  } catch (error) {
+  } catch (error: any) {
     console.error("❌ Create Division Error:", error);
 
     if (error instanceof Prisma.PrismaClientKnownRequestError) {
@@ -363,26 +169,28 @@ export const createDivision = async (req: Request, res: Response) => {
       }
     }
 
-    return res.status(500).json({ 
-      error: "An error occurred while creating the division and chat group." 
+    return res.status(500).json({
+      error: error.message || "An error occurred while creating the division and chat group."
     });
   }
 };
 
+/**
+ * Get all divisions
+ */
 export const getDivisions = async (_req: Request, res: Response) => {
   try {
-    const divisions = await prisma.division.findMany({
-      include: { season: true },
-      orderBy: { createdAt: "desc" },
-    });
-
-    return res.json(divisions.map(formatDivision));
+    const divisions = await getAllDivisions();
+    return res.json(divisions);
   } catch (error) {
     console.error("Get Divisions Error:", error);
     return res.status(500).json({ error: "Failed to retrieve divisions." });
   }
 };
 
+/**
+ * Get division by ID
+ */
 export const getDivisionById = async (req: Request, res: Response) => {
   const { id } = req.params;
   if (!id) {
@@ -390,22 +198,22 @@ export const getDivisionById = async (req: Request, res: Response) => {
   }
 
   try {
-    const division = await prisma.division.findUnique({
-      where: { id },
-      include: { season: true },
-    });
+    const division = await getDivisionByIdService(id);
 
     if (!division) {
       return res.status(404).json({ error: "Division not found." });
     }
 
-    return res.json(formatDivision(division));
+    return res.json(division);
   } catch (error) {
     console.error("Get Division By ID Error:", error);
     return res.status(500).json({ error: "Failed to retrieve division." });
   }
 };
 
+/**
+ * Update division
+ */
 export const updateDivision = async (req: Request, res: Response) => {
   const { id } = req.params;
   if (!id) {
@@ -429,102 +237,35 @@ export const updateDivision = async (req: Request, res: Response) => {
   } = req.body;
 
   try {
-    const existing = await prisma.division.findUnique({
-      where: { id },
-      include: { season: true },
-    });
-
-    if (!existing) {
-      return res.status(404).json({ error: "Division not found." });
-    }
-
-
- 
-    const data: Prisma.DivisionUpdateInput = {};
-
-    if (name !== undefined) data.name = name;
-    if (description !== undefined) data.description = description;
-    if (threshold !== undefined)
-      data.pointsThreshold =
-        threshold !== null ? Number(threshold) : (null as any);
-
-    if (divisionLevel !== undefined) {
-      const levelEnum = toEnum(divisionLevel, DivisionLevel);
-      if (!levelEnum) {
-        return res.status(400).json({ error: "Invalid divisionLevel value." });
-      }
-      data.level = levelEnum;
-    }
-
-    if (seasonId !== undefined) {
-      data.season = {
-        connect: { id: seasonId },
-      };
-    }
-
-    if (gameType !== undefined) {
-      const gameTypeEnum = toEnum(gameType, GameType);
-      if (!gameTypeEnum) {
-        return res.status(400).json({ error: "Invalid gameType value." });
-      }
-      data.gameType = gameTypeEnum;
-    }
-
-    if (genderCategory !== undefined) {
-      const genderEnum = toEnum(genderCategory, GenderType);
-      if (!genderEnum) {
-        return res
-          .status(400)
-          .json({ error: "Invalid genderCategory value." });
-      }
-      data.genderCategory = genderEnum;
-    }
-
-    if (maxSinglesPlayers !== undefined) {
-      data.maxSinglesPlayers =
-        maxSinglesPlayers !== null ? Number(maxSinglesPlayers) : null;
-    }
-
-    if (maxDoublesTeams !== undefined) {
-      data.maxDoublesTeams =
-        maxDoublesTeams !== null ? Number(maxDoublesTeams) : null;
-    }
-
-    if (autoAssignmentEnabled !== undefined) {
-      data.autoAssignmentEnabled = Boolean(autoAssignmentEnabled);
-    }
-
-    if (isActive !== undefined) {
-      data.isActiveDivision = Boolean(isActive);
-    }
-
-    if (prizePoolTotal !== undefined) {
-      data.prizePoolTotal =
-        prizePoolTotal !== null
-          ? new Prisma.Decimal(prizePoolTotal)
-          : (null as any);
-    }
-
-    if (sponsorName !== undefined) {
-      data.sponsoredDivisionName = sponsorName;
-    }
-
-    const division = await prisma.division.update({
-      where: { id },
-      data,
-      include: { season: true },
+    const division = await updateDivisionService(id, {
+      name,
+      description,
+      threshold,
+      divisionLevel,
+      gameType,
+      genderCategory,
+      maxSinglesPlayers,
+      maxDoublesTeams,
+      autoAssignmentEnabled,
+      isActive,
+      prizePoolTotal,
+      sponsorName,
+      seasonId
     });
 
     return res.json({
-      data: formatDivision(division),
+      data: division,
       message: "Division updated successfully",
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error("Update Division Error:", error);
-    return res.status(500).json({ error: "Failed to update division." });
+    return res.status(500).json({ error: error.message || "Failed to update division." });
   }
 };
 
+/**
+ * Delete division
+ */
 export const deleteDivision = async (req: Request, res: Response) => {
   const { id } = req.params;
   if (!id) {
@@ -532,7 +273,7 @@ export const deleteDivision = async (req: Request, res: Response) => {
   }
 
   try {
-    await prisma.division.delete({ where: { id } });
+    await deleteDivisionService(id);
     return res.json({ message: "Division deleted successfully" });
   } catch (error) {
     console.error("Delete Division Error:", error);
@@ -540,21 +281,15 @@ export const deleteDivision = async (req: Request, res: Response) => {
   }
 };
 
-// Assign a user to a division
+/**
+ * Assign player to division
+ */
 export const assignPlayerToDivision = async (req: Request, res: Response) => {
   try {
-    const { 
-      userId, 
-      divisionId, 
-      seasonId, 
-      assignedBy, 
-      notes,
-      autoAssignment = false 
-    } = req.body;
+    const { userId, divisionId, seasonId, assignedBy, notes, autoAssignment } = req.body;
 
-    console.log(`👤 Assigning user ${userId} to division ${divisionId} in season ${seasonId}`);
+    console.log(`🎯 Assigning user ${userId} to division ${divisionId}`);
 
-    // Validate required fields
     if (!userId || !divisionId || !seasonId) {
       return res.status(400).json({
         success: false,
@@ -562,7 +297,9 @@ export const assignPlayerToDivision = async (req: Request, res: Response) => {
       });
     }
 
+    // Get admin ID if provided
     let adminId = null;
+
     if (assignedBy) {
       const adminRecord = await prisma.admin.findUnique({
         where: { userId: assignedBy },
@@ -586,39 +323,43 @@ export const assignPlayerToDivision = async (req: Request, res: Response) => {
       });
     }
 
-    // Check if division exists and get details
-    const division = await prisma.division.findUnique({
-      where: { id: divisionId },
-      include: {
-        season: { select: { id: true, name: true, isActive: true } }
-      }
-    });
-
-    if (!division) {
+    // Validate user exists
+    const userValidation = await validateUserExists(userId);
+    if (!userValidation.isValid) {
       return res.status(404).json({
         success: false,
-        error: "Division not found"
+        error: userValidation.error
       });
     }
 
-    // Verify division belongs to the specified season
-    if (division.seasonId !== seasonId) {
-      return res.status(400).json({
+    // Validate division exists and is active
+    const divisionValidation = await validateDivisionExists(divisionId, seasonId);
+    if (!divisionValidation.isValid) {
+      return res.status(divisionValidation.error === "Division not found" ? 404 : 400).json({
         success: false,
-        error: "Division does not belong to the specified season"
+        error: divisionValidation.error
       });
     }
 
-    // Check if division is active
-    if (!division.isActiveDivision) {
-      return res.status(400).json({
-        success: false,
-        error: "Cannot assign to inactive division"
-      });
-    }
+    const division = divisionValidation.division;
 
-    // Check player rating against division threshold (before checking capacity)
+    // 🆕 Fixed syntax error - proper if statement structure
     if (division.pointsThreshold) {
+      const ratingValidation = await validatePlayerRatingForDivision(
+        userId,
+        divisionId,
+        division.pointsThreshold,
+        division.gameType,
+        seasonId
+      );
+
+      if (!ratingValidation.isValid) {
+        return res.status(400).json({
+          success: false,
+          error: ratingValidation.error
+        });
+      }
+          
       const seasonWithLeague = await prisma.season.findUnique({
         where: { id: seasonId },
         include: {
@@ -641,25 +382,6 @@ export const assignPlayerToDivision = async (req: Request, res: Response) => {
             result: true
           }
         });
-
-        if (questionnaireResponse?.result) {
-          // Determine the appropriate rating based on game type
-          const playerRating = division.gameType === 'DOUBLES' 
-            ? questionnaireResponse.result.doubles 
-            : questionnaireResponse.result.singles;
-
-          if (playerRating && playerRating > division.pointsThreshold) {
-            return res.status(400).json({
-              success: false,
-              error: `Player rating (${playerRating}) exceeds division threshold (${division.pointsThreshold}). Player is too advanced for this division.`
-            });
-          }
-        } else {
-          return res.status(400).json({
-            success: false,
-            error: "Player has not completed the skill assessment questionnaire for this sport"
-          });
-        }
       }
     }
 
@@ -684,7 +406,7 @@ export const assignPlayerToDivision = async (req: Request, res: Response) => {
       });
     }
 
-    // 🆕 NEW: Find the division's group chat thread
+    // Find the division's group chat thread
     const divisionThread = await prisma.thread.findFirst({
       where: { 
         divisionId: divisionId,
@@ -744,7 +466,15 @@ export const assignPlayerToDivision = async (req: Request, res: Response) => {
         },
         include: {
           user: { select: { id: true, name: true, username: true } },
-          division: { select: { id: true, name: true, level: true, gameType: true } },
+          division: { 
+            select: { 
+              id: true, 
+              name: true, 
+              level: true, 
+              gameType: true,
+              season: { select: { id: true, name: true } }
+            } 
+          },
         }
       });
 
@@ -767,12 +497,39 @@ export const assignPlayerToDivision = async (req: Request, res: Response) => {
     // Update division counts
     await updateDivisionCounts(divisionId, true);
 
+    // 🆕 Send notification
+    // const notificationData = notificationDivisionAssigned(
+    //   division.name,
+    //   division.season?.name || 'Current Season'
+    // );
+
+    // await notificationService.createNotification({
+    //   userIds: userId,
+    //   ...notificationData,
+    //   divisionId: divisionId,
+    //   seasonId: seasonId,
+    //   threadId: divisionThread.id
+    // });
+
+    // // 🆕 Send group chat notification
+    // const groupChatNotificationData = notificationGroupChatAdded(
+    //   divisionThread.name,
+    //   division.name
+    // );
+
+    // await notificationService.createNotification({
+    //   userIds: userId,
+    //   ...groupChatNotificationData,
+    //   threadId: divisionThread.id,
+    //   divisionId: divisionId
+    // });
+
     console.log(`✅ User ${userId} assigned to division ${divisionId} and added to group chat`);
 
-    
-    if (req.io) {
+    // Socket notifications
+    if ((req as any).io) {
       // Notify the assigned user
-      req.io.to(userId).emit('division_assigned', {
+      (req as any).io.to(userId).emit('division_assigned', {
         assignment: result.assignment,
         groupChat: {
           threadId: result.divisionThread.id,
@@ -783,7 +540,7 @@ export const assignPlayerToDivision = async (req: Request, res: Response) => {
       });
 
       // Notify the division group chat about new member
-      req.io.to(result.divisionThread.id).emit('member_joined_division', {
+      (req as any).io.to(result.divisionThread.id).emit('member_joined_division', {
         userId,
         userName: user.name,
         divisionId,
@@ -793,7 +550,7 @@ export const assignPlayerToDivision = async (req: Request, res: Response) => {
       });
 
       // Notify the assigned user that they joined the group chat
-      req.io.to(userId).emit('new_thread', {
+      (req as any).io.to(userId).emit('new_thread', {
         thread: {
           id: result.divisionThread.id,
           name: result.divisionThread.name,
@@ -819,7 +576,7 @@ export const assignPlayerToDivision = async (req: Request, res: Response) => {
       }
     });
 
-  } catch (error) {
+  } catch (error: any) {
     console.error("❌ Error assigning user to division:", error);
 
     if (error instanceof Prisma.PrismaClientKnownRequestError) {
@@ -839,16 +596,18 @@ export const assignPlayerToDivision = async (req: Request, res: Response) => {
 
     return res.status(500).json({
       success: false,
-      error: "Failed to assign user to division"
+      error: error.message || "Failed to assign user to division"
     });
   }
 };
 
-
+/**
+ * Remove player from division
+ */
 export const removePlayerFromDivision = async (req: Request, res: Response) => {
   try {
     const { divisionId, userId } = req.params;
-    const { removedBy, reason } = req.body;
+    const { reason } = req.body;
 
     console.log(`🗑️ Removing user ${userId} from division ${divisionId}`);
 
@@ -864,7 +623,14 @@ export const removePlayerFromDivision = async (req: Request, res: Response) => {
       where: { divisionId_userId: { divisionId, userId } },
       include: {
         user: { select: { name: true } },
-        division: { select: { name: true, seasonId: true, gameType: true } }
+        division: { 
+          select: { 
+            name: true, 
+            seasonId: true, 
+            gameType: true,
+            season: { select: { name: true } }
+          } 
+        }
       }
     });
 
@@ -900,7 +666,7 @@ export const removePlayerFromDivision = async (req: Request, res: Response) => {
         data: { divisionId: null }
       });
 
-      // 🆕 NEW: Remove user from division group chat
+      // Remove user from division group chat
       if (divisionThread) {
         const threadMember = await tx.userThread.findUnique({
           where: { 
@@ -928,12 +694,26 @@ export const removePlayerFromDivision = async (req: Request, res: Response) => {
     // Update division counts
     await updateDivisionCounts(divisionId, false);
 
+    // 🆕 Send notification
+    // const notificationData = notificationDivisionRemoved(
+    //   assignment.division.name,
+    //   assignment.division.season?.name || 'Current Season',
+    //   reason
+    // );
+
+    // await notificationService.createNotification({
+    //   userIds: userId,
+    //   ...notificationData,
+    //   divisionId: divisionId,
+    //   seasonId: assignment.division.seasonId
+    // });
+
     console.log(`✅ User ${userId} removed from division ${divisionId} and group chat`);
 
-    // 🆕 ENHANCED: Socket notifications for removal
-    if (req.io) {
+    // Socket notifications for removal
+    if ((req as any).io) {
       // Notify the removed user
-      req.io.to(userId).emit('division_removed', {
+      (req as any).io.to(userId).emit('division_removed', {
         divisionId,
         divisionName: assignment.division.name,
         groupChatRemoved: divisionThread ? {
@@ -946,7 +726,7 @@ export const removePlayerFromDivision = async (req: Request, res: Response) => {
 
       // Notify the division group chat about member leaving
       if (divisionThread) {
-        req.io.to(divisionThread.id).emit('member_left_division', {
+        (req as any).io.to(divisionThread.id).emit('member_left_division', {
           userId,
           userName: assignment.user.name,
           divisionId,
@@ -956,7 +736,12 @@ export const removePlayerFromDivision = async (req: Request, res: Response) => {
         });
 
         // Force the user to leave the socket room
-        req.io.sockets.sockets.get(userId)?.leave(divisionThread.id);
+        const userSockets = (req as any).io.sockets.sockets;
+        for (const [socketId, socket] of userSockets) {
+          if ((socket as any).userId === userId) {
+            socket.leave(divisionThread.id);
+          }
+        }
       }
 
       console.log(`📤 Sent division removal and group chat notifications`);
@@ -967,22 +752,22 @@ export const removePlayerFromDivision = async (req: Request, res: Response) => {
       message: "User removed from division and group chat successfully"
     });
 
-  } catch (error) {
+  } catch (error: any) {
     console.error("❌ Error removing user from division:", error);
     return res.status(500).json({
       success: false,
-      error: "Failed to remove user from division"
+      error: error.message || "Failed to remove user from division"
     });
   }
 };
 
-// Get division assignments
+/**
+ * Get division assignments
+ */
 export const getDivisionAssignments = async (req: Request, res: Response) => {
   try {
     const { divisionId } = req.params;
     const { page = 1, limit = 20 } = req.query;
-
-    console.log(`📋 Fetching assignments for division ${divisionId}`);
 
     if (!divisionId) {
       return res.status(400).json({
@@ -991,58 +776,17 @@ export const getDivisionAssignments = async (req: Request, res: Response) => {
       });
     }
 
-    const skip = (Number(page) - 1) * Number(limit);
-
-    const [assignments, totalCount, division] = await Promise.all([
-      prisma.divisionAssignment.findMany({
-        where: { divisionId },
-        include: {
-          user: { 
-            select: { 
-              id: true, 
-              name: true, 
-              username: true, 
-              image: true,
-              email: true 
-            } 
-          },
-          assignedByAdmin: { 
-            select: { 
-              id: true, 
-              userId: true 
-            } 
-          }
-        },
-        orderBy: { assignedAt: 'desc' },
-        skip,
-        take: Number(limit)
-      }),
-      prisma.divisionAssignment.count({ where: { divisionId } }),
-      prisma.division.findUnique({
-        where: { id: divisionId },
-        select: { 
-          name: true, 
-          maxSinglesPlayers: true, 
-          maxDoublesTeams: true,
-          currentSinglesCount: true,
-          currentDoublesCount: true,
-          gameType: true
-        }
-      })
-    ]);
-
-    console.log(`✅ Found ${assignments.length} assignments for division ${divisionId}`);
+    const result = await getDivisionAssignmentsService(
+      divisionId,
+      Number(page),
+      Number(limit)
+    );
 
     return res.json({
       success: true,
-      data: assignments,
-      division,
-      pagination: {
-        page: Number(page),
-        limit: Number(limit),
-        total: totalCount,
-        totalPages: Math.ceil(totalCount / Number(limit))
-      }
+      data: result.assignments,
+      division: result.division,
+      pagination: result.pagination
     });
 
   } catch (error) {
@@ -1054,10 +798,13 @@ export const getDivisionAssignments = async (req: Request, res: Response) => {
   }
 };
 
-// Get player's division assignments
+/**
+ * Get user's division assignments
+ */
 export const getUserDivisionAssignments = async (req: Request, res: Response) => {
   try {
     const { userId } = req.params;
+
     if (!userId) {
       return res.status(400).json({
         success: false,
@@ -1065,35 +812,7 @@ export const getUserDivisionAssignments = async (req: Request, res: Response) =>
       });
     }
 
-    const assignments = await prisma.divisionAssignment.findMany({
-      where: { userId },
-      include: {
-        division: {
-          select: {
-            id: true,
-            name: true,
-            level: true,
-            gameType: true,
-            genderCategory: true,
-            season: {
-              select: {
-                id: true,
-                name: true,
-                isActive: true,
-                startDate: true,
-                endDate: true
-              }
-            }
-          }
-        },
-        assignedByAdmin: {
-          select: { id: true, userId: true }
-        }
-      },
-      orderBy: { assignedAt: 'desc' }
-    });
-
-    console.log(`✅ Found ${assignments.length} assignments for user ${userId}`);
+    const assignments = await getUserDivisionAssignmentsService(userId);
 
     return res.json({
       success: true,
@@ -1110,12 +829,12 @@ export const getUserDivisionAssignments = async (req: Request, res: Response) =>
   }
 };
 
-// Auto-assign players to divisions (bulk assignment)
+/**
+ * Auto-assign players to divisions
+ */
 export const autoAssignPlayersToDivisions = async (req: Request, res: Response) => {
   try {
     const { seasonId, assignedBy } = req.body;
-
-    console.log(`🤖 Starting auto-assignment for season ${seasonId}`);
 
     if (!seasonId) {
       return res.status(400).json({
@@ -1124,139 +843,29 @@ export const autoAssignPlayersToDivisions = async (req: Request, res: Response) 
       });
     }
 
-    // Get all users without division assignments in this season
-    const unassignedUsers = await prisma.seasonMembership.findMany({
-      where: {
-        seasonId,
-        divisionId: null,
-        status: "ACTIVE"
-      },
-      include: {
-        user: {
-          include: {
-            initialRatingResult: true
-          }
-        }
-      }
-    });
-
-    // Get available divisions for this season
-    const divisions = await prisma.division.findMany({
-      where: {
-        seasonId,
-        isActiveDivision: true,
-        autoAssignmentEnabled: true
-      },
-      orderBy: [
-        { level: 'asc' },
-        { pointsThreshold: 'asc' }
-      ]
-    });
-
-    if (divisions.length === 0) {
-      return res.status(400).json({
-        success: false,
-        error: "No divisions available for auto-assignment"
-      });
-    }
-
-    const assignments = [];
-    const errors = [];
-
-    for (const membership of unassignedUsers) {
-      try {
-        const userRating = membership.user.initialRatingResult?.singles || membership.user.initialRatingResult?.doubles || 0;
-        
-        // Find appropriate division based on rating and capacity
-        let targetDivision = null;
-        
-        for (const division of divisions) {
-          const capacityCheck = await checkDivisionCapacity(division.id, division.gameType);
-          
-          if (capacityCheck.hasCapacity && 
-              (!division.pointsThreshold || userRating >= division.pointsThreshold)) {
-            targetDivision = division;
-          }
-        }
-
-        if (targetDivision) {
-          const assignment = await prisma.divisionAssignment.create({
-            data: {
-              divisionId: targetDivision.id,
-              userId: membership.userId,
-              assignedBy: assignedBy || null,
-              notes: `Auto-assigned based on rating: ${userRating}`
-            },
-            include: {
-              user: { select: { name: true } },
-              division: { select: { name: true } }
-            }
-          });
-
-          // Update season membership
-          await prisma.seasonMembership.update({
-            where: { id: membership.id },
-            data: { divisionId: targetDivision.id }
-          });
-
-          // Update division counts
-          await updateDivisionCounts(targetDivision.id, true);
-
-          assignments.push(assignment);
-
-          // Socket notifications FUTURE TO-DO 
-          // if (req.io) {
-          //   req.io.to(membership.userId).emit('division_assigned', {
-          //     assignment,
-          //     message: `You have been auto-assigned to ${targetDivision.name}`,
-          //     timestamp: new Date().toISOString()
-          //   });
-          // }
-
-        } else {
-          errors.push({
-            userId: membership.userId,
-            userName: membership.user.name,
-            reason: "No suitable division found or all divisions at capacity"
-          });
-        }
-
-      } catch (error) {
-        errors.push({
-          userId: membership.userId,
-          userName: membership.user.name,
-          reason: error instanceof Error ? error.message : String(error)
-        });
-      }
-    }
-
-    console.log(`✅ Auto-assignment completed: ${assignments.length} successful, ${errors.length} failed`);
+    const result = await autoAssignPlayersToDivisionsService(seasonId, assignedBy);
 
     return res.json({
       success: true,
       message: "Auto-assignment completed",
-      data: {
-        assignmentsCreated: assignments.length,
-        assignments,
-        errors: errors.length > 0 ? errors : undefined
-      }
+      data: result
     });
 
-  } catch (error) {
+  } catch (error: any) {
     console.error("❌ Error in auto-assignment:", error);
     return res.status(500).json({
       success: false,
-      error: "Failed to auto-assign users"
+      error: error.message || "Failed to auto-assign users"
     });
   }
 };
 
-// Transfer player between divisions
+/**
+ * Transfer player between divisions
+ */
 export const transferPlayerBetweenDivisions = async (req: Request, res: Response) => {
   try {
     const { userId, fromDivisionId, toDivisionId, transferredBy, reason } = req.body;
-
-    console.log(`🔄 Transferring user ${userId} from division ${fromDivisionId} to ${toDivisionId}`);
 
     if (!userId || !fromDivisionId || !toDivisionId) {
       return res.status(400).json({
@@ -1265,104 +874,26 @@ export const transferPlayerBetweenDivisions = async (req: Request, res: Response
       });
     }
 
-    // Verify current assignment exists
-    const currentAssignment = await prisma.divisionAssignment.findUnique({
-      where: { divisionId_userId: { divisionId: fromDivisionId, userId } },
-      include: {
-        division: { select: { seasonId: true, name: true } }
-      }
-    });
+    const result = await transferPlayerBetweenDivisionsService(
+      userId,
+      fromDivisionId,
+      toDivisionId,
+      transferredBy,
+      reason
+    );
 
-    if (!currentAssignment) {
-      return res.status(404).json({
-        success: false,
-        error: "User is not currently assigned to the source division"
-      });
-    }
+    // 🆕 Send transfer notification
+    // if (result.fromDivision && result.toDivision) {
+    //   const notificationData = notificationDivisionTransferred(
+    //     result.fromDivision.name,
+    //     result.toDivision.name,
+    //     result.toDivision.season?.name || 'Current Season'
+    //   );
 
-    // Check target division
-    const targetDivision = await prisma.division.findUnique({
-      where: { id: toDivisionId },
-      select: { 
-        id: true, 
-        name: true, 
-        seasonId: true, 
-        gameType: true,
-        isActiveDivision: true
-      }
-    });
-
-    if (!targetDivision) {
-      return res.status(404).json({
-        success: false,
-        error: "Target division not found"
-      });
-    }
-
-    // Verify both divisions are in the same season
-    if (currentAssignment.division.seasonId !== targetDivision.seasonId) {
-      return res.status(400).json({
-        success: false,
-        error: "Cannot transfer between divisions in different seasons"
-      });
-    }
-
-    // Check target division capacity
-    const capacityCheck = await checkDivisionCapacity(toDivisionId, targetDivision.gameType);
-    if (!capacityCheck.hasCapacity) {
-      return res.status(400).json({
-        success: false,
-        error: `Target division is at full capacity`
-      });
-    }
-
-    // Perform transfer in transaction
-    const result = await prisma.$transaction(async (tx) => {
-      // Remove from current division
-      await tx.divisionAssignment.delete({
-        where: { divisionId_userId: { divisionId: fromDivisionId, userId } }
-      });
-
-      // Create new assignment
-      const newAssignment = await tx.divisionAssignment.create({
-        data: {
-          divisionId: toDivisionId,
-          userId,
-          assignedBy: transferredBy || null,
-          reassignmentCount: currentAssignment.reassignmentCount + 1,
-          notes: reason || "Transferred between divisions"
-        },
-        include: {
-          user: { select: { name: true } },
-          division: { select: { name: true } }
-        }
-      });
-
-      await tx.seasonMembership.updateMany({
-        where: {
-          userId,
-          seasonId: targetDivision.seasonId,
-          divisionId: fromDivisionId
-        },
-        data: { divisionId: toDivisionId }
-      });
-
-      return newAssignment;
-    });
-
-    // Update division counts
-    await updateDivisionCounts(fromDivisionId, false); // Decrement source
-    await updateDivisionCounts(toDivisionId, true);     // Increment target
-
-    console.log(`✅ User ${userId} transferred successfully`);
-
-    // Socket notifications FUTURE TO-DO 
-    // if (req.io) {
-    //   req.io.to(userId).emit('division_transferred', {
-    //     fromDivision: currentAssignment.division.name,
-    //     toDivision: targetDivision.name,
-    //     reason: reason || "Transferred by admin",
-    //     timestamp: new Date().toISOString()
+    //   await notificationService.createNotification({
+    //     userIds: userId,
+    //     ...notificationData,
+    //     seasonId: result.toDivision.seasonId
     //   });
     // }
 
@@ -1372,29 +903,30 @@ export const transferPlayerBetweenDivisions = async (req: Request, res: Response
       data: result
     });
 
-  } catch (error) {
+  } catch (error: any) {
     console.error("❌ Error transferring user:", error);
     return res.status(500).json({
       success: false,
-      error: "Failed to transfer user between divisions"
+      error: error.message || "Failed to transfer user between divisions"
     });
   }
 };
 
+/**
+ * Get divisions by season ID with filtering
+ */
 export const getDivisionsBySeasonId = async (req: Request, res: Response) => {
   try {
     const { seasonId } = req.params;
-    const { 
-      page = 1, 
-      limit = 20, 
-      isActive, 
-      gameType, 
-      level, 
+    const {
+      page = 1,
+      limit = 20,
+      isActive,
+      gameType,
+      level,
       genderCategory,
-      includeAssignments = false 
+      includeAssignments = false
     } = req.query;
-
-    console.log(`📋 Fetching divisions for season ${seasonId}`);
 
     if (!seasonId) {
       return res.status(400).json({
@@ -1403,142 +935,23 @@ export const getDivisionsBySeasonId = async (req: Request, res: Response) => {
       });
     }
 
-    const season = await prisma.season.findUnique({
-      where: { id: seasonId },
-      select: { id: true, name: true, isActive: true }
+    const result = await getDivisionsBySeasonIdService({
+      seasonId,
+      page: Number(page),
+      limit: Number(limit),
+      isActive: isActive === 'true' ? true : isActive === 'false' ? false : undefined,
+      gameType: gameType as string,
+      level: level as string,
+      genderCategory: genderCategory as string,
+      includeAssignments: includeAssignments === 'true'
     });
-
-    if (!season) {
-      return res.status(404).json({
-        success: false,
-        error: "Season not found"
-      });
-    }
-
-  
-    const whereConditions: any = {
-      seasonId
-    };
-
-    if (gameType) {
-      const gameTypeEnum = toEnum(gameType as string, GameType);
-      if (gameTypeEnum) {
-        whereConditions.gameType = gameTypeEnum;
-      }
-    }
-
-    if (level) {
-      const levelEnum = toEnum(level as string, DivisionLevel);
-      if (levelEnum) {
-        whereConditions.level = levelEnum;
-      }
-    }
-
-    if (genderCategory) {
-      const genderEnum = toEnum(genderCategory as string, GenderType);
-      if (genderEnum) {
-        whereConditions.genderCategory = genderEnum;
-      }
-    }
-
-    const skip = (Number(page) - 1) * Number(limit);
-
-    // Build include object based on query parameters
-    const includeOptions: any = {
-      season: {
-        select: {
-          id: true,
-          name: true,
-          isActive: true,
-          startDate: true,
-          endDate: true
-        }
-      },
-      divisionSponsor: {
-        select: {
-          id: true,
-          sponsoredName: true,
-          packageTier: true
-        }
-      },
-      _count: {
-        select: {
-          assignments: true,
-          seasonMemberships: true,
-          matches: true
-        }
-      }
-    };
-
-    // Include assignments if requested
-    if (includeAssignments === 'true') {
-      includeOptions.assignments = {
-        include: {
-          user: {
-            select: {
-              id: true,
-              name: true,
-              username: true,
-              image: true
-            }
-          }
-        },
-        orderBy: {
-          assignedAt: 'desc'
-        }
-      };
-    }
-
-    const [divisions, totalCount] = await Promise.all([
-      prisma.division.findMany({
-        where: whereConditions,
-        include: includeOptions,
-        orderBy: [
-          { level: 'asc' },
-          { name: 'asc' }
-        ],
-        skip,
-        take: Number(limit)
-      }),
-      prisma.division.count({ where: whereConditions })
-    ]);
-
-    console.log(`✅ Found ${divisions.length} divisions for season ${seasonId}`);
-
-    // Format the response data
-    const formattedDivisions = divisions.map(division => ({
-      ...formatDivision(division),
-      assignmentCount: (division._count as any)?.assignments || 0,
-      membershipCount: (division._count as any)?.seasonMemberships || 0,
-      matchCount: (division._count as any)?.matches || 0,
-      sponsor: division.divisionSponsor ? {
-        id: division.divisionSponsor.id,
-        name: division.divisionSponsor.sponsoredName,
-        tier: division.divisionSponsor.packageTier
-      } : null,
-      assignments: includeAssignments === 'true' ? division.assignments : undefined
-    }));
 
     return res.json({
       success: true,
-      data: formattedDivisions,
-      season: {
-        id: season.id,
-        name: season.name,
-        isActive: season.isActive
-      },
-      pagination: {
-        page: Number(page),
-        limit: Number(limit),
-        total: totalCount,
-        totalPages: Math.ceil(totalCount / Number(limit))
-      },
-      filters: {
-        isActive: isActive ? isActive === 'true' : undefined,
-        gameType: gameType || undefined,
-        level: level || undefined,
-        genderCategory: genderCategory || undefined
-      }
+      data: result.divisions,
+      season: result.season,
+      pagination: result.pagination,
+      filters: result.filters
     });
 
   } catch (error) {
@@ -1558,11 +971,12 @@ export const getDivisionsBySeasonId = async (req: Request, res: Response) => {
   }
 };
 
+/**
+ * Get division summary statistics for a season
+ */
 export const getDivisionSummaryBySeasonId = async (req: Request, res: Response) => {
   try {
     const { seasonId } = req.params;
-
-    console.log(`📊 Fetching division summary for season ${seasonId}`);
 
     if (!seasonId) {
       return res.status(400).json({
@@ -1571,99 +985,20 @@ export const getDivisionSummaryBySeasonId = async (req: Request, res: Response) 
       });
     }
 
-    const [season, divisionStats] = await Promise.all([
-      prisma.season.findUnique({
-        where: { id: seasonId },
-        select: { id: true, name: true, isActive: true }
-      }),
-      prisma.division.findMany({
-        where: { seasonId },
-        select: {
-          id: true,
-          name: true,
-          level: true,
-          gameType: true,
-          genderCategory: true,
-          isActiveDivision: true,
-          maxSinglesPlayers: true,
-          maxDoublesTeams: true,
-          currentSinglesCount: true,
-          currentDoublesCount: true,
-          _count: {
-            select: {
-              assignments: true,
-              seasonMemberships: true,
-              matches: true
-            }
-          }
-        }
-      })
-    ]);
-
-    if (!season) {
-      return res.status(404).json({
-        success: false,
-        error: "Season not found"
-      });
-    }
-
-    // Calculate summary statistics
-    const summary = {
-      totalDivisions: divisionStats.length,
-      activeDivisions: divisionStats.filter(d => d.isActiveDivision).length,
-      inactiveDivisions: divisionStats.filter(d => !d.isActiveDivision).length,
-      totalAssignments: divisionStats.reduce((sum, d) => sum + (d._count?.assignments || 0), 0),
-      totalMemberships: divisionStats.reduce((sum, d) => sum + (d._count?.seasonMemberships || 0), 0),
-      totalMatches: divisionStats.reduce((sum, d) => sum + (d._count?.matches || 0), 0),
-      byGameType: {
-        singles: divisionStats.filter(d => d.gameType === GameType.SINGLES).length,
-        doubles: divisionStats.filter(d => d.gameType === GameType.DOUBLES).length
-      },
-      byLevel: {
-        beginner: divisionStats.filter(d => d.level === DivisionLevel.BEGINNER).length,
-        intermediate: divisionStats.filter(d => d.level === DivisionLevel.INTERMEDIATE).length,
-        advanced: divisionStats.filter(d => d.level === DivisionLevel.ADVANCED).length,
-        // expert: divisionStats.filter(d => d.level === DivisionLevel.EXPERT).length
-      },
-      byGender: {
-        male: divisionStats.filter(d => d.genderCategory === GenderType.MALE).length,
-        female: divisionStats.filter(d => d.genderCategory === GenderType.FEMALE).length,
-        mixed: divisionStats.filter(d => d.genderCategory === GenderType.MIXED || !d.genderCategory).length
-      },
-      capacityUtilization: divisionStats.map(d => {
-        const isSingles = d.gameType === GameType.SINGLES;
-        const maxCapacity = isSingles ? d.maxSinglesPlayers : d.maxDoublesTeams;
-        const currentCount = isSingles ? (d.currentSinglesCount || 0) : (d.currentDoublesCount || 0);
-        const utilizationRate = maxCapacity ? (currentCount / maxCapacity) * 100 : 0;
-        
-        return {
-          divisionId: d.id,
-          divisionName: d.name,
-          maxCapacity: maxCapacity || 0,
-          currentCount: currentCount || 0,
-          utilizationRate: Math.round(utilizationRate * 100) / 100
-        };
-      })
-    };
-
-    console.log(`✅ Generated summary for season ${seasonId}: ${summary.totalDivisions} divisions`);
+    const result = await getDivisionSummaryBySeasonIdService(seasonId);
 
     return res.json({
       success: true,
-      season: {
-        id: season.id,
-        name: season.name,
-        isActive: season.isActive
-      },
-      summary,
-      divisions: divisionStats.map(formatDivision)
+      season: result.season,
+      summary: result.summary,
+      divisions: result.divisions
     });
 
-  } catch (error) {
+  } catch (error: any) {
     console.error("❌ Error fetching division summary:", error);
     return res.status(500).json({
       success: false,
-      error: "Failed to fetch division summary"
+      error: error.message || "Failed to fetch division summary"
     });
   }
 };

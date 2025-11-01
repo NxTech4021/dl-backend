@@ -1,6 +1,6 @@
+import { prisma } from "../lib/prisma";
 import { PrismaClient, Prisma, PaymentStatus } from '@prisma/client';
 
-const prisma = new PrismaClient();
 
 
 interface CreateSeasonData {
@@ -219,28 +219,9 @@ export const getSeasonByIdService = async (id: string) => {
                 }
               }
             }
-          }, 
-        },
-      },
-      registrations: {
-        include: {
-          player: {
-            include: {
-              questionnaireResponses: {
-                include: {
-                  result: true
-                },
-                where: {
-                  completedAt: { not: null }
-                }
-              }
-            }
           },
           division: true
         },
-        where: {
-          isActive: true
-        }
       },
     },
   });

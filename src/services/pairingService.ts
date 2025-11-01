@@ -184,18 +184,15 @@ export const sendPairRequest = async (
     }
 
     // Check if either player is already registered individually
-    const existingRegistration = await prisma.seasonRegistration.findFirst({
+    const existingMembership = await prisma.seasonMembership.findFirst({
       where: {
-        seasonId,
-        registrationType: 'INDIVIDUAL',
-        OR: [
-          { playerId: requesterId },
-          { playerId: recipientId },
-        ],
+        seasonId: seasonId.toString(),
+        userId: { in: [requesterId, recipientId] },
+        status: 'ACTIVE',
       },
     });
 
-    if (existingRegistration) {
+    if (existingMembership) {
       return {
         success: false,
         message: 'One or both players are already registered individually for this season',
@@ -325,17 +322,17 @@ export const acceptPairRequest = async (
 
     // Check if requester has existing division assignment for this season
     // to preserve division when partner changes
-    const existingRegistration = await prisma.seasonRegistration.findFirst({
+    const existingMembership = await prisma.seasonMembership.findFirst({
       where: {
-        playerId: pairRequest.requesterId,
-        seasonId: pairRequest.seasonId,
-        isActive: true,
+        userId: pairRequest.requesterId,
+        seasonId: pairRequest.seasonId.toString(),
+        status: 'ACTIVE',
       },
       select: { divisionId: true },
     });
 
     // Determine division: use existing division if available, otherwise assign based on divisions available
-    const assignedDivisionId = existingRegistration?.divisionId || pairRequest.season.divisions[0]?.id;
+    const assignedDivisionId = existingMembership?.divisionId || pairRequest.season.divisions[0]?.id.toString();
 
     // Use a transaction to ensure data consistency
     const result = await prisma.$transaction(async (tx) => {
@@ -739,12 +736,12 @@ export const getActivePartnership = async (
         seasonId,
         status: 'ACTIVE',
         OR: [
-          { player1Id: userId },
-          { player2Id: userId },
+          { captainId: userId },
+          { partnerId: userId },
         ],
       },
       include: {
-        player1: {
+        captain: {
           select: {
             id: true,
             name: true,
@@ -753,7 +750,7 @@ export const getActivePartnership = async (
             image: true,
           },
         },
-        player2: {
+        partner: {
           select: {
             id: true,
             name: true,
@@ -763,12 +760,6 @@ export const getActivePartnership = async (
           },
         },
         season: {
-          select: {
-            id: true,
-            name: true,
-          },
-        },
-        division: {
           select: {
             id: true,
             name: true,

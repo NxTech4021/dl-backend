@@ -1,6 +1,6 @@
+import { prisma } from "../lib/prisma";
 import { PrismaClient, PaymentStatus } from '@prisma/client';
 
-const prisma = new PrismaClient();
 
 interface PaymentCreationData {
   amount: number;
@@ -115,14 +115,12 @@ export const markPaymentAsPaid = async (id: string) => {
 
 // Business Logic: Payment deletion with constraint checking
 export const deletePayment = async (id: string) => {
-  // Business Rule: Check if payment is linked to registrations
-  const registrationCount = await prisma.seasonRegistration.count({
-    where: { paymentId: id },
-  });
+  // Business Rule: Check if payment is linked to season memberships
+  // Note: SeasonMembership doesn't have paymentId field - uses paymentStatus instead
+  // If you need payment tracking, consider adding a Payment relation to SeasonMembership
+  // For now, we'll skip this check as the model doesn't support it
 
-  if (registrationCount > 0) {
-    throw new Error('Cannot delete a payment that is linked to registrations.');
-  }
+  // TODO: Add Payment relation to SeasonMembership if payment tracking is needed
 
   // Business Rule: Cannot delete paid payments (for audit trail)
   const payment = await prisma.payment.findUnique({

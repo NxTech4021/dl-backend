@@ -110,6 +110,46 @@ async function seedTestUsers() {
       area: "Kuala Lumpur",
       gender: "MALE",
     },
+    {
+      name: "Frank Miller",
+      email: "frank@test.com",
+      username: "frank_m",
+      bio: "Weekend warrior, love the game!",
+      area: "Subang Jaya",
+      gender: "MALE",
+    },
+    {
+      name: "Grace Lee",
+      email: "grace@test.com",
+      username: "grace_l",
+      bio: "Competitive player, looking for tournaments.",
+      area: "Petaling Jaya",
+      gender: "FEMALE",
+    },
+    {
+      name: "Henry Chen",
+      email: "henry@test.com",
+      username: "henry_c",
+      bio: "Doubles specialist, team player.",
+      area: "Kuala Lumpur",
+      gender: "MALE",
+    },
+    {
+      name: "Iris Wong",
+      email: "iris@test.com",
+      username: "iris_w",
+      bio: "Intermediate player, improving steadily.",
+      area: "Subang Jaya",
+      gender: "FEMALE",
+    },
+    {
+      name: "Jack Robinson",
+      email: "jack@test.com",
+      username: "jack_r",
+      bio: "Advanced singles and doubles player.",
+      area: "Petaling Jaya",
+      gender: "MALE",
+    },
   ];
 
   const createdUsers = [];
@@ -270,8 +310,8 @@ async function seedLeagueAndSeason(createdByAdminId?: string) {
         paymentRequired: false,
         promoCodeSupported: false,
         withdrawalEnabled: true,
-        startDate: new Date(),
-        endDate: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000), // 90 days
+        startDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days from now
+        endDate: new Date(Date.now() + 97 * 24 * 60 * 60 * 1000), // 97 days (90 days after start)
         regiDeadline: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days
       },
     });
@@ -333,17 +373,35 @@ async function main() {
 
     const testUsers = await seedTestUsers();
     console.log(`✅ Created ${testUsers.length} test users (all with password: Test@123)`);
-    console.log("   - alice@test.com");
-    console.log("   - bob@test.com");
-    console.log("   - charlie@test.com");
-    console.log("   - diana@test.com");
-    console.log("   - ethan@test.com\n");
+    console.log("   - alice@test.com (Female, KL)");
+    console.log("   - bob@test.com (Male, KL)");
+    console.log("   - charlie@test.com (Male, PJ)");
+    console.log("   - diana@test.com (Female, Subang)");
+    console.log("   - ethan@test.com (Male, KL)");
+    console.log("   - frank@test.com (Male, Subang)");
+    console.log("   - grace@test.com (Female, PJ)");
+    console.log("   - henry@test.com (Male, KL)");
+    console.log("   - iris@test.com (Female, Subang)");
+    console.log("   - jack@test.com (Male, PJ)\n");
 
     const leagueSeason = await seedLeagueAndSeason(admin.adminId);
     console.log("✅ Subang Pickleball League created");
     console.log("   - League: Subang Pickleball League (ACTIVE)");
     console.log("   - Categories: 5 (Men's/Women's Singles, Men's/Women's/Mixed Doubles)");
     console.log("   - Seasons: 6 (5 Active S1 + 1 Upcoming S2)\n");
+
+    // Add all test users to the league as members
+    if (leagueSeason.league) {
+      for (const user of testUsers) {
+        await prisma.leagueMembership.create({
+          data: {
+            userId: user.id,
+            leagueId: leagueSeason.league.id,
+          },
+        });
+      }
+      console.log(`✅ Added ${testUsers.length} users as league members\n`);
+    }
 
     console.log("🌟 Database seeded successfully!");
     console.log("\n📝 You can now test the pairing module with these users!");

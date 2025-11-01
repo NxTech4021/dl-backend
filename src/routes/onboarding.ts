@@ -1,3 +1,4 @@
+import { prisma } from "../lib/prisma";
 // Production-grade onboarding routes
 import express from "express";
 import { PrismaClient } from "@prisma/client";
@@ -19,7 +20,6 @@ import ConfigurationService from "../config/questionnaire";
 import Logger from "../utils/logger";
 import QuestionnaireValidator from "../validators/questionnaire";
 
-const prisma = new PrismaClient();
 const router = express.Router();
 const logger = Logger.getInstance(
   ConfigurationService.getConfig().logging.level,

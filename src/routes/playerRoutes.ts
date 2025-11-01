@@ -1,3 +1,4 @@
+import { prisma } from "../lib/prisma";
 import { Router } from 'express';
 import { verifyAuth } from '../middlewares/auth.middleware';
 
@@ -63,9 +64,6 @@ playerRouter.get('/withdrawal-requests', verifyAuth, async (req, res) => {
     if (!userId) {
       return res.status(401).json({ error: 'Unauthorized' });
     }
-
-    const { PrismaClient } = await import('@prisma/client');
-    const prisma = new PrismaClient();
 
     const requests = await prisma.withdrawalRequest.findMany({
       where: { userId },

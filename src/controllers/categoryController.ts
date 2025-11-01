@@ -1,9 +1,9 @@
+import { prisma } from "../lib/prisma";
 import { Request, Response } from 'express';
 import { Prisma, PrismaClient } from '@prisma/client';
 import { ApiResponse } from '../utils/ApiResponse';
 
 
-const prisma = new PrismaClient();
 
 export const createCategory = async (req: Request, res: Response) => {
   try {
