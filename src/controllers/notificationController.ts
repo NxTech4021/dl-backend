@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
-import { NotificationType } from '@prisma/client';
+import { NotificationCategory } from '@prisma/client';
+import { NotificationType, NOTIFICATION_TYPES } from '../types/notificationTypes';
 import { notificationService } from '../services/notificationService';
 
 // Get user notifications
@@ -15,9 +16,23 @@ export const getUserNotifications = async (req: Request, res: Response) => {
       limit = 20,
       unreadOnly = false,
       archived = false,
+      category,
+      categories,
       type,
       types,
     } = req.query;
+
+    // Parse categories array if provided
+    let parsedCategories: NotificationCategory[] | undefined;
+    if (categories && typeof categories === 'string') {
+      try {
+        parsedCategories = JSON.parse(categories);
+      } catch (error) {
+        return res.status(400).json({ 
+          error: 'Invalid categories format. Expected JSON array.' 
+        });
+      }
+    }
 
     // Parse types array if provided
     let parsedTypes: NotificationType[] | undefined;
@@ -36,6 +51,8 @@ export const getUserNotifications = async (req: Request, res: Response) => {
       limit: Number(limit),
       unreadOnly: unreadOnly === 'true',
       archived: archived === 'true',
+      category: category as NotificationCategory,
+      categories: parsedCategories,
       type: type as NotificationType,
       types: parsedTypes,
     });
@@ -184,16 +201,47 @@ export const getNotificationStats = async (req: Request, res: Response) => {
   }
 };
 
+// Get notifications by category
+export const getNotificationsByCategory = async (req: Request, res: Response) => {
+  try {
+    const { category } = req.params;
+    const { limit = 100 } = req.query;
+
+    if (!category || !Object.values(NotificationCategory).includes(category as NotificationCategory)) {
+      return res.status(400).json({ 
+        error: 'Valid notification category is required',
+        validCategories: Object.values(NotificationCategory),
+      });
+    }
+
+    const notifications = await notificationService.getNotificationsByCategory(
+      category as NotificationCategory,
+      Number(limit)
+    );
+
+    res.json({
+      success: true,
+      data: notifications,
+    });
+  } catch (error) {
+    console.error('Error getting notifications by category:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to get notifications by category',
+    });
+  }
+};
+
 // Get notifications by type
 export const getNotificationsByType = async (req: Request, res: Response) => {
   try {
     const { type } = req.params;
     const { limit = 100 } = req.query;
 
-    if (!type || !Object.values(NotificationType).includes(type as NotificationType)) {
+    if (!type) {
       return res.status(400).json({ 
-        error: 'Valid notification type is required',
-        validTypes: Object.values(NotificationType),
+        error: 'Notification type is required',
+        availableTypes: Object.values(NOTIFICATION_TYPES),
       });
     }
 
@@ -221,6 +269,7 @@ export const sendTestNotification = async (req: Request, res: Response) => {
     const {
       userIds,
       type,
+      category,
       title,
       message,
       seasonId,
@@ -239,10 +288,10 @@ export const sendTestNotification = async (req: Request, res: Response) => {
       });
     }
 
-    if (!type || !Object.values(NotificationType).includes(type)) {
+    if (!category || !Object.values(NotificationCategory).includes(category)) {
       return res.status(400).json({
-        error: 'Valid notification type is required',
-        validTypes: Object.values(NotificationType),
+        error: 'Valid notification category is required',
+        validCategories: Object.values(NotificationCategory),
       });
     }
 
@@ -254,7 +303,8 @@ export const sendTestNotification = async (req: Request, res: Response) => {
 
     const result = await notificationService.createNotification({
       userIds,
-      type,
+      type: type || 'TEST_NOTIFICATION',
+      category,
       title,
       message,
       seasonId,
