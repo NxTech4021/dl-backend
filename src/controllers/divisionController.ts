@@ -1,6 +1,6 @@
 import { prisma } from "../lib/prisma";
 import { Request, Response } from "express";
-import { Prisma, GameType, DivisionLevel, GenderType } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 
 // Service imports
 import {
@@ -94,8 +94,26 @@ export const createDivision = async (req: Request, res: Response) => {
   }
 
   try {
-    logger.info('Creating division', { seasonId, name, divisionLevel, gameType, adminId });
+    logger.info("Creating division", { seasonId, name, divisionLevel, gameType, adminId });
 
+      const adminRecord = await prisma.admin.findUnique({
+      where: { userId: adminId }, // adminId is actually the userId
+      select: { 
+        id: true, // This is the actual admin table ID
+        userId: true,
+        user: { select: { name: true } }
+      },
+    });
+
+     if (!adminRecord) {
+      logger.warn('Admin record not found for userId', { adminId });
+      return res.status(400).json({
+        success: false,
+        error: "Admin record not found for the provided user ID.",
+      });
+    }
+
+    // 1️⃣ Create division and its chat thread
     const result = await createDivisionWithThread(
       {
         seasonId,
@@ -110,31 +128,139 @@ export const createDivision = async (req: Request, res: Response) => {
         autoAssignmentEnabled,
         isActive,
         prizePoolTotal,
-        sponsorName
+        sponsorName,
       },
       adminId
     );
 
-    logger.divisionCreated(result.division.id, result.division.name, seasonId, { adminId });
+   
+    const season = await prisma.season.findUnique({
+      where: { id: seasonId },
+      select: { id: true, name: true },
+    });
 
-    // Socket notification for thread creation
+    logger.divisionCreated(result.division.id, result.division.name, seasonId, { 
+      adminId: adminRecord.id,
+      adminUserId: adminId
+    });
+
+   
+    const seasonMembers = await prisma.seasonMembership.findMany({
+      where: { 
+        seasonId,
+          userId: {
+          not: adminId
+        }
+      },
+      select: { userId: true },
+    });
+
+    console.log("✅ Season Members (excluding admin):", seasonMembers.length);
+      console.log("🔍 Admin details:", {
+      adminUserId: adminId,
+      adminName: adminRecord.user?.name,
+      adminTableId: adminRecord.id
+    });
+    const recipientUserIds = seasonMembers.map((m) => m.userId);
+
+    // 4️⃣ Notify season members about the new division (NOT the admin)
+    if (recipientUserIds.length > 0) {
+      try {
+        // Use notification template with proper category
+        const divisionNotif = notificationTemplates.division.created(
+          result.division.name,
+          season?.name || 'Current Season',
+          adminRecord.user?.name 
+        );
+
+        console.log("📧 Creating notification for season members:", {
+          userCount: recipientUserIds.length,
+          divisionName: result.division.name,
+          createdBy: adminRecord.user?.name,
+        });
+
+        const notifications = await notificationService.createNotification({
+          userIds: recipientUserIds,
+          ...divisionNotif,
+          divisionId: result.division.id,
+          seasonId: seasonId,
+          threadId: result.thread.id,
+        });
+
+        console.log("✅ Notifications created:", notifications.length);
+
+        logger.notificationSent("DIVISION_CREATED", recipientUserIds, {
+          divisionId: result.division.id,
+          action: "division_created",
+          excludedAdmin: adminId,
+          adminName: adminRecord.user?.name,
+        });
+
+        // 5️⃣ Emit socket events to season members (NOT the admin)
+        if ((req as any).io) {
+          recipientUserIds.forEach((userId) => {
+            (req as any).io.to(userId).emit("new_notification", {
+              type: divisionNotif.type,
+              category: divisionNotif.category,
+              title: divisionNotif.title,
+              message: divisionNotif.message,
+              divisionId: result.division.id,
+              seasonId,
+              timestamp: new Date().toISOString(),
+              read: false,
+            });
+          });
+
+          logger.info("Sent division creation socket notifications to season members", {
+            seasonId,
+            userCount: recipientUserIds.length,
+            divisionId: result.division.id,
+            excludedAdmin: adminId,
+          });
+        }
+      } catch (notifError) {
+        console.error("❌ Notification Error:", notifError);
+        logger.error(
+          "Failed to send division creation notification to season members",
+          {
+            seasonId,
+            divisionId: result.division.id,
+          },
+          notifError as Error
+        );
+      }
+    } else {
+      logger.info("No season members found to notify for new division (excluding admin)", { 
+        seasonId, 
+        adminUserId: adminId 
+      });
+    }
+
+  // 6️⃣ ONLY emit socket notifications for thread creation to the admin (not database notifications)
     if ((req as any).io) {
-      (req as any).io.to(adminId).emit('new_thread', {
+      // Just inform about the thread creation - no persistent notification
+      (req as any).io.to(adminId).emit("new_thread", { // Use adminId (which is userId)
         thread: result.thread,
         message: `Division chat created for ${result.division.name}`,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
       });
 
-      (req as any).io.to(adminId).emit('division_created', {
+      (req as any).io.to(adminId).emit("division_created", { // Use adminId (which is userId)
         division: result.division,
         thread: result.thread,
         message: `Division ${result.division.name} created successfully`,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
       });
 
-      logger.info('Sent division creation notifications', { adminId, divisionId: result.division.id });
+      logger.info("Sent division creation socket events to admin (no persistent notification)", {
+        adminId,
+        adminUserId: adminId,
+        divisionId: result.division.id,
+      });
     }
 
+
+    // 7️⃣ Respond to the frontend
     return res.status(201).json({
       success: true,
       data: {
@@ -144,33 +270,36 @@ export const createDivision = async (req: Request, res: Response) => {
           name: result.thread.name,
           isGroup: result.thread.isGroup,
           divisionId: result.thread.divisionId,
-          members: result.thread.members
-        }
+          members: result.thread.members,
+        },
+        notificationsSent: recipientUserIds.length, // Number of members notified (excluding admin)
       },
       message: "Division and chat group created successfully",
     });
-
   } catch (error: any) {
-    logger.error('Create division error', { seasonId, name, adminId }, error);
+    console.error("❌ Division Creation Error:", error);
+    logger.error("Create division error", { seasonId, name, adminId }, error);
 
     if (error instanceof Prisma.PrismaClientKnownRequestError) {
       if (error.code === "P2002") {
         return res.status(409).json({
           success: false,
-          error: "A division with this name already exists in the season."
+          error: "A division with this name already exists in the season.",
         });
       }
       if (error.code === "P2003") {
         return res.status(400).json({
           success: false,
-          error: "Invalid season, league, or admin ID provided."
+          error: "Invalid season, league, or admin ID provided.",
         });
       }
     }
 
     return res.status(500).json({
       success: false,
-      error: error.message || "An error occurred while creating the division and chat group."
+      error:
+        error.message ||
+        "An error occurred while creating the division and chat group.",
     });
   }
 };

@@ -1,5 +1,6 @@
 import { Server as SocketIOServer } from 'socket.io';
 import { prisma } from '../lib/prisma';
+import { NotificationCategory } from '@prisma/client';
 import {
   CreateNotificationData,
   NotificationFilter,
@@ -24,7 +25,7 @@ export class NotificationService {
    */
   async createNotification(data: CreateNotificationData): Promise<NotificationResult[]> {
     try {
-      const { userIds, type, title, message, metadata, ...entityIds } = data;
+      const { userIds, type, category, title, message, metadata, ...entityIds } = data;
       
       // Normalize userIds to array
       const userIdArray = Array.isArray(userIds) ? userIds : [userIds];
@@ -47,16 +48,18 @@ export class NotificationService {
 
       const validUserIds = users.map(u => u.id);
 
-      // 🆕 Create notification in database
+      // Create notification in database
       const notification = await prisma.notification.create({
         data: {
           title,
           message,
-          type,
+          category, // Use category from Prisma schema
+          type,     // Store type as string
           ...entityIds,
         }
       });
 
+      // Create UserNotification records for each user
       await prisma.userNotification.createMany({
         data: validUserIds.map(userId => ({
           userId,
@@ -70,7 +73,8 @@ export class NotificationService {
           id: notification.id,
           title: notification.title || undefined,
           message: notification.message,
-          type: notification.type as NotificationType,
+          category: notification.category,
+          type: notification.type || undefined,
           read: false,
           archive: false,
           createdAt: notification.createdAt,
@@ -83,6 +87,7 @@ export class NotificationService {
 
       logger.info('Notification created and sent', { 
         notificationId: notification.id,
+        category,
         type, 
         userCount: validUserIds.length 
       });
@@ -91,7 +96,8 @@ export class NotificationService {
         id: notification.id,
         title: notification.title || undefined,
         message: notification.message,
-        type: notification.type as NotificationType,
+        category: notification.category,
+        type: notification.type || undefined,
         read: false,
         archive: false,
         createdAt: notification.createdAt,
@@ -106,6 +112,9 @@ export class NotificationService {
     }
   }
 
+  /**
+   * Get user notifications with pagination and filtering
+   */
   async getUserNotifications(
     userId: string,
     filter: NotificationFilter = {}
@@ -116,6 +125,8 @@ export class NotificationService {
         limit = 20,
         unreadOnly = false,
         archived = false,
+        category,
+        categories,
         type,
         types,
       } = filter;
@@ -128,10 +139,18 @@ export class NotificationService {
         ...(archived !== undefined && { archive: archived }),
       };
 
+      // Category filtering
+      if (category) {
+        where.notification = { ...where.notification, category };
+      } else if (categories && categories.length > 0) {
+        where.notification = { ...where.notification, category: { in: categories } };
+      }
+
+      // Type filtering
       if (type) {
-        where.notification = { type };
+        where.notification = { ...where.notification, type };
       } else if (types && types.length > 0) {
-        where.notification = { type: { in: types } };
+        where.notification = { ...where.notification, type: { in: types } };
       }
 
       const [userNotifications, total] = await Promise.all([
@@ -155,7 +174,8 @@ export class NotificationService {
         id: un.notification.id,
         title: un.notification.title || undefined,
         message: un.notification.message,
-        type: un.notification.type as NotificationType,
+        category: un.notification.category,
+        type: un.notification.type || undefined,
         read: un.read,
         archive: un.archive,
         createdAt: un.notification.createdAt,
@@ -278,35 +298,43 @@ export class NotificationService {
 
   async getNotificationStats(userId: string): Promise<NotificationStats> {
     try {
-      const [total, unread, archived, byTypeData] = await Promise.all([
+      const [total, unread, archived, byTypeData, byCategoryData] = await Promise.all([
         prisma.userNotification.count({ where: { userId } }),
         prisma.userNotification.count({ where: { userId, read: false } }),
         prisma.userNotification.count({ where: { userId, archive: true } }),
-        prisma.userNotification.groupBy({
-          by: ['notificationId'],
+        // Group by notification type
+        prisma.userNotification.findMany({
           where: { userId },
-          _count: true,
+          include: { notification: { select: { type: true } } }
+        }),
+        // Group by notification category
+        prisma.userNotification.findMany({
+          where: { userId },
+          include: { notification: { select: { category: true } } }
         })
       ]);
 
-      // Get notification types
-      const notificationIds = byTypeData.map(item => item.notificationId);
-      const notifications = await prisma.notification.findMany({
-        where: { id: { in: notificationIds } },
-        select: { id: true, type: true }
+      // Count by type
+      const byType: Record<NotificationType, number> = {};
+      byTypeData.forEach(un => {
+        if (un.notification.type) {
+          const type = un.notification.type;
+          byType[type] = (byType[type] || 0) + 1;
+        }
       });
 
-      const byType: Record<NotificationType, number> = {} as Record<NotificationType, number>;
-      
-      notifications.forEach(notif => {
-        const type = notif.type as NotificationType;
-        byType[type] = (byType[type] || 0) + 1;
+      // Count by category
+      const byCategory: Record<NotificationCategory, number> = {} as Record<NotificationCategory, number>;
+      byCategoryData.forEach(un => {
+        const category = un.notification.category;
+        byCategory[category] = (byCategory[category] || 0) + 1;
       });
 
       const stats: NotificationStats = {
         total,
         unread,
         archived,
+        byCategory,
         byType,
       };
 
@@ -332,7 +360,8 @@ export class NotificationService {
         id: notif.id,
         title: notif.title || undefined,
         message: notif.message,
-        type: notif.type as NotificationType,
+        category: notif.category,
+        type: notif.type || undefined,
         read: false, // This is not user-specific
         archive: false,
         createdAt: notif.createdAt,
@@ -340,6 +369,34 @@ export class NotificationService {
     } catch (error) {
       logger.error('Error getting notifications by type', { type }, error as Error);
       throw new AppError('Failed to get notifications by type', 500);
+    }
+  }
+
+  // Add new method for category filtering
+  async getNotificationsByCategory(
+    category: NotificationCategory,
+    limit: number = 100
+  ): Promise<NotificationResult[]> {
+    try {
+      const notifications = await prisma.notification.findMany({
+        where: { category },
+        orderBy: { createdAt: 'desc' },
+        take: limit,
+      });
+
+      return notifications.map(notif => ({
+        id: notif.id,
+        title: notif.title || undefined,
+        message: notif.message,
+        category: notif.category,
+        type: notif.type || undefined,
+        read: false,
+        archive: false,
+        createdAt: notif.createdAt,
+      }));
+    } catch (error) {
+      logger.error('Error getting notifications by category', { category }, error as Error);
+      throw new AppError('Failed to get notifications by category', 500);
     }
   }
 
