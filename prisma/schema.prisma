@@ -732,7 +732,8 @@ model Notification {
   id               String           @id @unique @default(cuid())
   title            String?
   message          String
-  type             NotificationType
+  category         NotificationCategory
+  type             String?
   createdAt        DateTime         @default(now())
   
   seasonId         String?
@@ -778,54 +779,15 @@ model UserNotification {
   @@map("user_notification")
 }
 
-enum NotificationType {
- 
-  // Division notifications
-  DIVISION_ASSIGNED
-  DIVISION_TRANSFERRED
-  DIVISION_REMOVED
-  
-  // Chat notifications
-  GROUP_CHAT_ADDED
-  NEW_MESSAGE
-  
-  // Match notifications
-  MATCH_SCHEDULED
-  MATCH_REMINDER
-  MATCH_RESULT
-  MATCH_CANCELLED
-  
-  // Season notifications
-  SEASON_REGISTRATION_CONFIRMED
-  SEASON_STARTING_SOON
-  SEASON_ENDED
-  SEASON_CANCELLED
-  
-  // Pairing notifications
-  PAIR_REQUEST_RECEIVED
-  PAIR_REQUEST_ACCEPTED
-  PAIR_REQUEST_REJECTED
-  PARTNERSHIP_DISSOLVED
-  
-  // Payment notifications
-  PAYMENT_CONFIRMED
-  PAYMENT_FAILED
-  PAYMENT_REMINDER
-  
-  // Withdrawal notifications
-  WITHDRAWAL_REQUEST_RECEIVED
-  WITHDRAWAL_REQUEST_APPROVED
-  WITHDRAWAL_REQUEST_REJECTED
-  
-  // Admin notifications
-  ADMIN_MESSAGE
-  SYSTEM_MAINTENANCE
-  NEW_FEATURE
-  
-  // General reminders
-  MATCH_UPCOMING
-  REGISTRATION_DEADLINE
-  PAYMENT_DUE
+enum NotificationCategory {
+  DIVISION
+  LEAGUE
+  CHAT
+  MATCH
+  SEASON
+  PAYMENT
+  ADMIN
+  GENERAL
 }
 
 enum PairRequestStatus {
