@@ -14,6 +14,9 @@ src/**/*.d.ts
 src/**/*.d.ts.map
 !src/types/**/*.d.ts
 
+# Ignore all log files
+logs/*.log
+
 # Prisma compiled output
 prisma/*.js
 prisma/*.js.map
