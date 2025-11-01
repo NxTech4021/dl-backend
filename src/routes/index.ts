@@ -9,7 +9,8 @@ import categoryRoutes from "./categoryRoutes";
 import pairingRouter from "./pairingRoutes";
 import onboardingRouter from "./onboarding";
 import chatRoutes from "./threadRoutes";
-// import matchRoutes from "./matchRoutes";
+import notificationRouter from "./notificationRoutes";
+import matchRoutes from "./matchRoutes";
 
 
 const router = express.Router();
@@ -30,7 +31,7 @@ router.use("/sponsor", sponsorRoutes);
 router.use("/category", categoryRoutes);
 router.use("/pairing", pairingRouter);
 
-// router.use("/match", matchRoutes);
+router.use("/match", matchRoutes);
 
 // LeaderBoard
 
@@ -39,7 +40,8 @@ router.use("/chat", chatRoutes);
 
 // Settings
 
-// Notification?
+// Notification
+router.use("/notifcation", notificationRouter);
 
 // router.post("/api/")
 

@@ -16,6 +16,7 @@ import { CreateDivisionData, UpdateDivisionData, DivisionWithThread } from './ut
  * @param tx - Optional transaction client
  * @returns Created division and thread
  */
+
 export async function createDivisionWithThread(
   data: CreateDivisionData,
   adminId: string
@@ -139,7 +140,7 @@ export async function createDivisionWithThread(
 
     console.log(`✅ Division ${division.id} created with chat thread ${thread.id}`);
 
-    return { division, thread };
+    return { division, thread, season };
   });
 
   return result;

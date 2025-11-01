@@ -60,6 +60,10 @@ model User {
   // Questionnaire relations
   questionnaireResponses QuestionnaireResponse[]
 
+  // Notification relations
+  notifications     Notification[]
+  userNotifications UserNotification[]
+
   @@index([email])
   @@index([username])
   @@index([status])
@@ -286,6 +290,7 @@ model Season {
 
   leagues    League[]   @relation("LeagueToSeason")
   categories Category[]
+  notifications Notification[]
 
   waitlistId String?
   waitlist   Waitlist? @relation
@@ -350,6 +355,7 @@ model WithdrawalRequest {
   seasonId         String
   season           Season       @relation(fields: [seasonId], references: [id])
   partnership      Partnership? @relation(fields: [partnershipId], references: [id])
+  notifications Notification[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -396,6 +402,7 @@ model Division {
   leagueId          String
   league            League               @relation(fields: [leagueId], references: [id], onDelete: Cascade)
   threads           Thread[]             @relation("DivisionThreads")
+  notifications Notification[]
 
   // Pairing Relations
   partnerships Partnership[]
@@ -472,6 +479,7 @@ model Match {
   division     Division?          @relation(fields: [divisionId], references: [id], onDelete: Cascade)
   participants MatchParticipant[]
   stats        MatchStats?
+  notifications Notification[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -564,6 +572,7 @@ model Thread {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  notifications Notification[]
 }
 
 model UserThread {
@@ -661,6 +670,7 @@ model PairRequest {
   requester User   @relation("SentPairRequests", fields: [requesterId], references: [id], onDelete: Cascade)
   recipient User   @relation("ReceivedPairRequests", fields: [recipientId], references: [id], onDelete: Cascade)
   season    Season @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  notifications Notification[]
 
   @@index([requesterId])
   @@index([recipientId])
@@ -685,6 +695,7 @@ model Partnership {
   season            Season              @relation(fields: [seasonId], references: [id], onDelete: Cascade)
   division          Division?           @relation(fields: [divisionId], references: [id], onDelete: SetNull)
   withdrawalRequest WithdrawalRequest[]
+  notifications Notification[]
 
   @@unique([captainId, seasonId])
   @@unique([partnerId, seasonId])
@@ -717,7 +728,68 @@ model SeasonInvitation {
   @@map("season_invitation")
 }
 
-// Enums 
+model Notification {
+  id               String           @id @unique @default(cuid())
+  title            String?
+  message          String
+  category         NotificationCategory
+  type             String?
+  createdAt        DateTime         @default(now())
+  
+  seasonId         String?
+  divisionId       String?
+  matchId          String?
+  userId           String?
+  partnershipId    String?
+  threadId         String?
+  pairRequestId    String?
+  withdrawalRequestId String?
+  
+  // Relations
+  season           Season?           @relation(fields: [seasonId], references: [id])
+  division         Division?         @relation(fields: [divisionId], references: [id])
+  match            Match?            @relation(fields: [matchId], references: [id])
+  user             User?             @relation(fields: [userId], references: [id])
+  partnership      Partnership?      @relation(fields: [partnershipId], references: [id])
+  thread           Thread?           @relation(fields: [threadId], references: [id])
+  pairRequest      PairRequest?      @relation(fields: [pairRequestId], references: [id])
+  withdrawalRequest WithdrawalRequest? @relation(fields: [withdrawalRequestId], references: [id])
+  
+  userNotifications UserNotification[]
+  
+  @@index([type])
+  @@index([createdAt])
+  @@map("notification")
+}
+
+model UserNotification {
+  id             String       @id @unique @default(cuid())
+  userId         String
+  notificationId String
+  read           Boolean      @default(false)
+  archive        Boolean      @default(false)
+  readAt         DateTime?
+
+  notification   Notification @relation(fields: [notificationId], references: [id])
+  user           User         @relation(fields: [userId], references: [id])
+
+  @@unique([userId, notificationId])
+  @@index([userId, read])
+  @@index([userId, archive])
+  @@map("user_notification")
+}
+
+enum NotificationCategory {
+  DIVISION
+  LEAGUE
+  CHAT
+  MATCH
+  SEASON
+  PAYMENT
+  ADMIN
+  GENERAL
+}
+
 enum PairRequestStatus {
   PENDING
   ACCEPTED
