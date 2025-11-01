@@ -42,50 +42,70 @@ export class NotificationService {
       if (users.length !== userIdArray.length) {
         const existingIds = users.map(u => u.id);
         const missingIds = userIdArray.filter(id => !existingIds.includes(id));
-        logger.warn(`Users not found: ${missingIds.join(', ')}`);
+        logger.warn('Some users not found', { missingIds });
       }
 
       const validUserIds = users.map(u => u.id);
 
-      // Create notification record in memory (since we don't have DB model yet)
-      const notificationId = this.generateId();
-      const notification: NotificationResult = {
-        id: notificationId,
-        title,
-        message,
-        type,
-        read: false,
-        archive: false,
-        createdAt: new Date(),
-        metadata: {
-          ...metadata,
+      // 🆕 Create notification in database
+      const notification = await prisma.notification.create({
+        data: {
+          title,
+          message,
+          type,
           ...entityIds,
-        },
-      };
+        }
+      });
+
+      await prisma.userNotification.createMany({
+        data: validUserIds.map(userId => ({
+          userId,
+          notificationId: notification.id,
+        }))
+      });
 
       // Send real-time notifications via Socket.IO
       if (this.io) {
-        this.emitNotifications(validUserIds, notification);
+        this.emitNotifications(validUserIds, {
+          id: notification.id,
+          title: notification.title || undefined,
+          message: notification.message,
+          type: notification.type as NotificationType,
+          read: false,
+          archive: false,
+          createdAt: notification.createdAt,
+          metadata: {
+            ...metadata,
+            ...entityIds,
+          }
+        });
       }
 
-      // Store in cache or send to queue for persistence
-      await this.persistNotifications(validUserIds, notification);
-
-      logger.info(`Notification sent to ${validUserIds.length} users: ${type}`);
+      logger.info('Notification created and sent', { 
+        notificationId: notification.id,
+        type, 
+        userCount: validUserIds.length 
+      });
 
       return validUserIds.map(userId => ({
-        ...notification,
-        id: `${notificationId}_${userId}`,
+        id: notification.id,
+        title: notification.title || undefined,
+        message: notification.message,
+        type: notification.type as NotificationType,
+        read: false,
+        archive: false,
+        createdAt: notification.createdAt,
+        metadata: {
+          ...metadata,
+          ...entityIds,
+        }
       }));
     } catch (error) {
-      logger.error('Error creating notification:', error);
+      logger.error('Error creating notification', {}, error as Error);
       throw error instanceof AppError ? error : new AppError('Failed to create notification', 500);
     }
   }
 
-  /**
-   * Get user notifications with pagination and filtering
-   */
   async getUserNotifications(
     userId: string,
     filter: NotificationFilter = {}
@@ -100,10 +120,47 @@ export class NotificationService {
         types,
       } = filter;
 
-      // TODO: Replace with actual database query when notification model is added
-      // For now, return mock data structure
-      const notifications: NotificationResult[] = [];
-      const total = 0;
+      const skip = (page - 1) * limit;
+
+      const where: any = {
+        userId,
+        ...(unreadOnly && { read: false }),
+        ...(archived !== undefined && { archive: archived }),
+      };
+
+      if (type) {
+        where.notification = { type };
+      } else if (types && types.length > 0) {
+        where.notification = { type: { in: types } };
+      }
+
+      const [userNotifications, total] = await Promise.all([
+        prisma.userNotification.findMany({
+          where,
+          include: {
+            notification: true,
+          },
+          orderBy: {
+            notification: {
+              createdAt: 'desc'
+            }
+          },
+          skip,
+          take: limit,
+        }),
+        prisma.userNotification.count({ where })
+      ]);
+
+      const notifications: NotificationResult[] = userNotifications.map(un => ({
+        id: un.notification.id,
+        title: un.notification.title || undefined,
+        message: un.notification.message,
+        type: un.notification.type as NotificationType,
+        read: un.read,
+        archive: un.archive,
+        createdAt: un.notification.createdAt,
+        readAt: un.readAt || undefined,
+      }));
 
       const pagination = {
         page,
@@ -113,18 +170,29 @@ export class NotificationService {
         hasMore: page * limit < total,
       };
 
-      logger.info(`Retrieved ${notifications.length} notifications for user ${userId}`);
+      logger.debug('Retrieved user notifications', { userId, count: notifications.length });
 
       return { notifications, pagination };
     } catch (error) {
-      logger.error('Error getting user notifications:', error);
+      logger.error('Error getting user notifications', { userId }, error as Error);
       throw new AppError('Failed to retrieve notifications', 500);
     }
   }
 
   async markAsRead(notificationId: string, userId: string): Promise<void> {
     try {
-      // TODO: Implement database update when notification model is added
+      await prisma.userNotification.update({
+        where: {
+          userId_notificationId: {
+            userId,
+            notificationId
+          }
+        },
+        data: {
+          read: true,
+          readAt: new Date()
+        }
+      });
       
       // Emit real-time update
       if (this.io) {
@@ -134,20 +202,25 @@ export class NotificationService {
         });
       }
 
-      logger.info(`Notification ${notificationId} marked as read for user ${userId}`);
+      logger.debug('Notification marked as read', { notificationId, userId });
     } catch (error) {
-      logger.error('Error marking notification as read:', error);
+      logger.error('Error marking notification as read', { notificationId, userId }, error as Error);
       throw new AppError('Failed to mark notification as read', 500);
     }
   }
 
-  /**
-   * Mark all notifications as read for a user
-   */
   async markAllAsRead(userId: string): Promise<{ count: number }> {
     try {
-      // TODO: Implement database update when notification model is added
-      const count = 0;
+      const result = await prisma.userNotification.updateMany({
+        where: { 
+          userId,
+          read: false
+        },
+        data: {
+          read: true,
+          readAt: new Date()
+        }
+      });
 
       // Emit real-time update
       if (this.io) {
@@ -156,98 +229,146 @@ export class NotificationService {
         });
       }
 
-      logger.info(`All notifications marked as read for user ${userId}`);
+      logger.info('All notifications marked as read', { userId, count: result.count });
 
-      return { count };
+      return { count: result.count };
     } catch (error) {
-      logger.error('Error marking all notifications as read:', error);
+      logger.error('Error marking all notifications as read', { userId }, error as Error);
       throw new AppError('Failed to mark all notifications as read', 500);
     }
   }
 
-  /**
-   * Archive notification
-   */
   async archiveNotification(notificationId: string, userId: string): Promise<void> {
     try {
-      // TODO: Implement database update when notification model is added
+      await prisma.userNotification.update({
+        where: {
+          userId_notificationId: {
+            userId,
+            notificationId
+          }
+        },
+        data: {
+          archive: true
+        }
+      });
 
-      logger.info(`Notification ${notificationId} archived for user ${userId}`);
+      logger.debug('Notification archived', { notificationId, userId });
     } catch (error) {
-      logger.error('Error archiving notification:', error);
+      logger.error('Error archiving notification', { notificationId, userId }, error as Error);
       throw new AppError('Failed to archive notification', 500);
     }
   }
 
-  /**
-   * Get unread count for user
-   */
   async getUnreadCount(userId: string): Promise<number> {
     try {
-      // TODO: Implement database query when notification model is added
-      const count = 0;
+      const count = await prisma.userNotification.count({
+        where: { 
+          userId,
+          read: false,
+          archive: false
+        }
+      });
 
       return count;
     } catch (error) {
-      logger.error('Error getting unread count:', error);
+      logger.error('Error getting unread count', { userId }, error as Error);
       throw new AppError('Failed to get unread count', 500);
     }
   }
 
-  /**
-   * Get notification statistics for user
-   */
   async getNotificationStats(userId: string): Promise<NotificationStats> {
     try {
-      // TODO: Implement database query when notification model is added
+      const [total, unread, archived, byTypeData] = await Promise.all([
+        prisma.userNotification.count({ where: { userId } }),
+        prisma.userNotification.count({ where: { userId, read: false } }),
+        prisma.userNotification.count({ where: { userId, archive: true } }),
+        prisma.userNotification.groupBy({
+          by: ['notificationId'],
+          where: { userId },
+          _count: true,
+        })
+      ]);
+
+      // Get notification types
+      const notificationIds = byTypeData.map(item => item.notificationId);
+      const notifications = await prisma.notification.findMany({
+        where: { id: { in: notificationIds } },
+        select: { id: true, type: true }
+      });
+
+      const byType: Record<NotificationType, number> = {} as Record<NotificationType, number>;
+      
+      notifications.forEach(notif => {
+        const type = notif.type as NotificationType;
+        byType[type] = (byType[type] || 0) + 1;
+      });
+
       const stats: NotificationStats = {
-        total: 0,
-        unread: 0,
-        archived: 0,
-        byType: {} as Record<NotificationType, number>,
+        total,
+        unread,
+        archived,
+        byType,
       };
 
       return stats;
     } catch (error) {
-      logger.error('Error getting notification stats:', error);
+      logger.error('Error getting notification stats', { userId }, error as Error);
       throw new AppError('Failed to get notification statistics', 500);
     }
   }
 
-  /**
-   * Get notifications by type
-   */
   async getNotificationsByType(
     type: NotificationType,
     limit: number = 100
   ): Promise<NotificationResult[]> {
     try {
-      // TODO: Implement database query when notification model is added
-      const notifications: NotificationResult[] = [];
+      const notifications = await prisma.notification.findMany({
+        where: { type },
+        orderBy: { createdAt: 'desc' },
+        take: limit,
+      });
 
-      return notifications;
+      return notifications.map(notif => ({
+        id: notif.id,
+        title: notif.title || undefined,
+        message: notif.message,
+        type: notif.type as NotificationType,
+        read: false, // This is not user-specific
+        archive: false,
+        createdAt: notif.createdAt,
+      }));
     } catch (error) {
-      logger.error('Error getting notifications by type:', error);
+      logger.error('Error getting notifications by type', { type }, error as Error);
       throw new AppError('Failed to get notifications by type', 500);
     }
   }
 
-  /**
-   * Delete old notifications (cleanup)
-   */
   async deleteOldNotifications(daysOld: number = 30): Promise<{ count: number }> {
     try {
       const cutoffDate = new Date();
       cutoffDate.setDate(cutoffDate.getDate() - daysOld);
 
-      // TODO: Implement database deletion when notification model is added
-      const count = 0;
+      // Delete UserNotifications first (foreign key constraint)
+      await prisma.userNotification.deleteMany({
+        where: {
+          notification: {
+            createdAt: { lt: cutoffDate }
+          }
+        }
+      });
 
-      logger.info(`Deleted ${count} notifications older than ${daysOld} days`);
+      // Then delete Notifications
+      const result = await prisma.notification.deleteMany({
+        where: {
+          createdAt: { lt: cutoffDate }
+        }
+      });
 
-      return { count };
+      logger.info('Deleted old notifications', { daysOld, count: result.count });
+
+      return { count: result.count };
     } catch (error) {
-      logger.error('Error deleting old notifications:', error);
+      logger.error('Error deleting old notifications', { daysOld }, error as Error);
       throw new AppError('Failed to delete old notifications', 500);
     }
   }
@@ -262,27 +383,7 @@ export class NotificationService {
       });
     });
 
-    logger.debug(`Real-time notifications emitted to ${userIds.length} users`);
-  }
-
-  private async persistNotifications(
-    userIds: string[],
-    notification: NotificationResult
-  ): Promise<void> {
-    // TODO: Implement actual persistence when notification model is added
-    // This could be:
-    // 1. Direct database insert
-    // 2. Queue for batch processing
-    // 3. Cache storage with expiration
-    
-    logger.debug(`Persisting notifications for ${userIds.length} users`);
-  }
-
-  /**
-   * Private: Generate unique ID
-   */
-  private generateId(): string {
-    return `notif_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+    logger.debug('Real-time notifications emitted', { userCount: userIds.length });
   }
 }
 

@@ -533,31 +533,31 @@ class Logger {
   // Socket.IO Operations
   // ============================================================================
   
-  // socketConnected(socketId: string, userId?: string): void {
-  //   this.info('Socket connected', {
-  //     socketId,
-  //     userId,
-  //     operation: 'socket_connection',
-  //   });
-  // }
+  socketConnected(socketId: string, userId?: string): void {
+    this.info('Socket connected', {
+      socketId,
+      userId,
+      operation: 'socket_connection',
+    });
+  }
   
-  // socketDisconnected(socketId: string, userId?: string, reason?: string): void {
-  //   this.info('Socket disconnected', {
-  //     socketId,
-  //     userId,
-  //     reason,
-  //     operation: 'socket_disconnection',
-  //   });
-  // }
+  socketDisconnected(socketId: string, userId?: string, reason?: string): void {
+    this.info('Socket disconnected', {
+      socketId,
+      userId,
+      reason,
+      operation: 'socket_disconnection',
+    });
+  }
   
-  // socketEvent(event: string, socketId: string, data?: any): void {
-  //   this.debug('Socket event', {
-  //     event,
-  //     socketId,
-  //     data: data ? JSON.stringify(data) : undefined,
-  //     operation: 'socket_event',
-  //   });
-  // }
+  socketEvent(event: string, socketId: string, data?: any): void {
+    this.debug('Socket event', {
+      event,
+      socketId,
+      data: data ? JSON.stringify(data) : undefined,
+      operation: 'socket_event',
+    });
+  }
   
   // ============================================================================
   // Utility Methods
