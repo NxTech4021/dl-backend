@@ -1,7 +1,7 @@
 import { prisma } from "../lib/prisma";
 import { Server as SocketIOServer } from 'socket.io';
 import { Server as HttpServer } from 'http';
-import { PrismaClient } from "@prisma/client";
+import { auth } from "../lib/auth";
 
 const activeUsers = new Map<string, string>(); 
 const userSockets = new Map<string, string>();
@@ -32,21 +32,58 @@ export function socketHandler(httpServer: HttpServer) {
 
   console.log("🚀 Socket.IO server initialized");
 
-  // Authentication middleware - verify session token before connection
+  // Updated authentication middleware to match your auth system
   io.use(async (socket, next) => {
     try {
-      const token = socket.handshake.auth.token;
-
-      if (!token || !token.user || !token.user.id) {
-        console.error('❌ Socket.IO: No valid session token provided');
+      // Get session using the same method as your HTTP middleware
+      const session = await auth.api.getSession({ headers: socket.handshake.headers });
+      
+      if (!session || !session.user || !session.user.id) {
+        console.error('❌ Socket.IO: No valid session found');
         return next(new Error('Authentication required'));
       }
 
-      // Store verified userId in socket data
-      socket.data.userId = token.user.id;
-      socket.data.userRole = token.user.role;
+      // Verify user exists in database and get role info (same as HTTP middleware)
+      const user = await prisma.user.findUnique({
+        where: { id: session.user.id },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          username: true,
+          role: true,
+          admin: {
+            select: {
+              id: true,
+              status: true,
+            }
+          }
+        }
+      });
 
-      console.log(`✅ Socket.IO: Authenticated user ${token.user.id}`);
+      if (!user) {
+        console.error(`❌ Socket.IO: User ${session.user.id} not found in database`);
+        return next(new Error('User not found'));
+      }
+
+      // Get admin ID if user has admin record and is active
+      let adminId: string | undefined;
+      if (user.admin && user.admin.status === 'ACTIVE') {
+        adminId = user.admin.id;
+      }
+
+      // Store user info in socket data (same structure as req.user)
+      socket.data.userId = session.user.id;
+      socket.data.user = {
+        id: session.user.id,
+        name: session.user.name,
+        email: session.user.email,
+        username: session.user.username || undefined,
+        role: user.role,
+        adminId,
+      };
+
+      console.log(`✅ Socket.IO: Authenticated user ${session.user.id} (${user.role})`);
       next();
     } catch (error) {
       console.error('❌ Socket.IO: Authentication error:', error);
@@ -55,8 +92,10 @@ export function socketHandler(httpServer: HttpServer) {
   });
 
   io.on('connection', (socket) => {
-    const userId = socket.data.userId; // Use verified userId from middleware
-    console.log(`✅ User connected: ${socket.id} (userId: ${userId}) at ${new Date().toISOString()}`);
+    const userId = socket.data.userId;
+    const user = socket.data.user;
+    
+    console.log(`✅ User connected: ${socket.id} (userId: ${userId}, role: ${user.role}) at ${new Date().toISOString()}`);
 
     // Automatically join user to their personal room using VERIFIED userId
     if (userId) {
@@ -64,17 +103,20 @@ export function socketHandler(httpServer: HttpServer) {
       activeUsers.set(userId, socket.id);
       userSockets.set(userId, socket.id);
       io.emit('user_status_change', { userId, isOnline: true });
+      
+      // Also join admin users to admin room if they have admin privileges
+      if (user.role === 'ADMIN' || user.role === 'SUPERADMIN') {
+        socket.join('admin_room');
+        console.log(`📋 Admin user ${userId} joined admin room`);
+      }
     }
 
-    // 1. DEPRECATED: Remove set_user_id - userId is now verified during auth
-    // Users can no longer claim arbitrary userIds
+    // Remove the deprecated set_user_id handler or keep the warning
     socket.on('set_user_id', (claimedUserId: string) => {
       console.warn(`⚠️  set_user_id is deprecated and ignored. User ${userId} tried to claim ${claimedUserId}`);
-      // Ignore this event - userId is set during authentication
     });
 
     socket.on('disconnect', () => {
-      // Clean up user from active maps
       if (userId) {
         activeUsers.delete(userId);
         userSockets.delete(userId);
@@ -83,27 +125,23 @@ export function socketHandler(httpServer: HttpServer) {
       } else {
         console.log(`❌ User disconnected: ${socket.id}`);
       }
-      // Socket.IO automatically cleans up rooms on disconnect
     });
     
-    // 2. Typing Indicators
+    // Typing Indicators
     socket.on('typing_start', ({ threadId, senderId }) => {
-      // Broadcast to all other members in the thread room
       socket.to(threadId).emit('typing_status', { threadId, senderId, isTyping: true });
     });
 
     socket.on('typing', (data) => {
-    console.log('Received typing event:', data);
-    // Broadcast to everyone in the thread EXCEPT the sender
-    socket.to(data.threadId).emit('user_typing', data);
-  });
+      console.log('Received typing event:', data);
+      socket.to(data.threadId).emit('user_typing', data);
+    });
 
     socket.on('typing_stop', ({ threadId, senderId }) => {
-      // Broadcast to all other members in the thread room
       socket.to(threadId).emit('typing_status', { threadId, senderId, isTyping: false });
     });
     
-    // 3. Thread Rooms: Crucial for targeted messaging
+    // Thread Rooms
     socket.on('join_thread', (threadId: string) => {
       socket.join(threadId);
       console.log(`Socket ${socket.id} joined thread ${threadId}`);
@@ -111,10 +149,30 @@ export function socketHandler(httpServer: HttpServer) {
 
     socket.on('leave_thread', (threadId: string) => {
       socket.leave(threadId);
+      console.log(`Socket ${socket.id} left thread ${threadId}`);
+    });
+
+    // Notification-specific events
+    socket.on('join_notifications', () => {
+      // Users are automatically in their personal room (userId), but this can be used for confirmation
+      socket.emit('notifications_joined', { userId });
     });
     
-    // ... other socket handlers for chat features ...
+    // Admin-specific events
+    socket.on('join_admin_events', () => {
+      if (user.role === 'ADMIN' || user.role === 'SUPERADMIN') {
+        socket.join('admin_events');
+        socket.emit('admin_events_joined', { userId });
+      } else {
+        socket.emit('error', { message: 'Admin access required' });
+      }
+    });
   });
   
   return io;
 }
+
+// Export helper functions for getting active users
+export const getActiveUsers = () => activeUsers;
+export const getUserSocket = (userId: string) => userSockets.get(userId);
+export const isUserOnline = (userId: string) => activeUsers.has(userId);
