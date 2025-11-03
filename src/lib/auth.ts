@@ -42,6 +42,8 @@ const defaultTrustedOrigins = [
   "exp://172.20.10.3:8081",
   "http://10.72.179.58:8081",
   "exp://10.72.179.58:8081",
+  "http://10.72.180.20:8081",
+  "exp://10.72.180.20:8081",
   "https://staging.appdevelopers.my",
 ];
 const envTrustedOrigins = [
@@ -75,18 +77,19 @@ prisma
   });
 
 // Add query logging to debug verification issues
-prisma.$on("query", (e) => {
-  if (e.query.includes("verification")) {
-    console.log("🔍 Verification Query:", e.query);
-    console.log("🔍 Verification Params:", e.params);
-    console.log("🔍 Verification Duration:", e.duration + "ms");
+// TODO: Re-enable query logging when Prisma client is configured with log: ['query']
+// prisma.$on("query", (e) => {
+//   if (e.query.includes("verification")) {
+//     console.log("🔍 Verification Query:", e.query);
+//     console.log("🔍 Verification Params:", e.params);
+//     console.log("🔍 Verification Duration:", e.duration + "ms");
 
-    // Add specific debugging for verification lookups
-    if (e.query.includes("SELECT") && e.query.includes("verification")) {
-      console.log("🔍 Looking up verification records for:", e.params[0]);
-    }
-  }
-});
+//     // Add specific debugging for verification lookups
+//     if (e.query.includes("SELECT") && e.query.includes("verification")) {
+//       console.log("🔍 Looking up verification records for:", e.params[0]);
+//     }
+//   }
+// });
 
 export const auth = betterAuth({
   appName: "DeuceLeague",
