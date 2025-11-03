@@ -34,7 +34,16 @@ export async function getAllSeasons(): Promise<any[]> {
       createdAt: true,
       updatedAt: true,
       categories: {
-        select: { id: true, name: true }
+        select: { 
+          id: true, 
+          name: true,
+          genderRestriction: true,
+          gender_category: true,
+          game_type: true,
+          matchFormat: true,
+          isActive: true,
+          categoryOrder: true
+        }
       },
       leagues: {
         select: { id: true, name: true, sportType: true, gameType: true }
@@ -105,7 +114,11 @@ export async function getSeasonById(id: string): Promise<any | null> {
           id: true,
           name: true,
           genderRestriction: true,
-          matchFormat: true
+          gender_category: true,
+          game_type: true,
+          matchFormat: true,
+          isActive: true,
+          categoryOrder: true
         }
       },
       memberships: {
