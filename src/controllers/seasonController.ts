@@ -471,14 +471,14 @@ export const processWithdrawalRequest = async (req: any, res: any) => {
 };
 
 export const registerPlayerToSeason = async (req: Request, res: Response) => {
-  const { userId, seasonId } = req.body;
+  const { userId, seasonId, payLater } = req.body;
 
   if (!userId || !seasonId) {
     return res.status(400).json({ error: "userId and seasonId are required." });
   }
 
   try {
-    const membership = await registerMembershipService({ userId, seasonId });
+    const membership = await registerMembershipService({ userId, seasonId, payLater: payLater === true });
 
     // 🆕 Send registration confirmation notification
     // const season = await prisma.season.findUnique({

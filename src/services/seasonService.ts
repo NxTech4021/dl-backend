@@ -43,6 +43,7 @@ interface RegisterSeasonMembershipData {
   userId: string;
   seasonId: string;
   divisionId?: string;
+  payLater?: boolean;
 }
 
 interface UpdatePaymentStatusData {
@@ -339,7 +340,7 @@ export const deleteSeasonService = async (seasonId: string) => {
 };
 
 export const registerMembershipService = async (data: RegisterSeasonMembershipData) => {
-  const { userId, seasonId, divisionId } = data;
+  const { userId, seasonId, divisionId, payLater } = data;
 
   const season = await prisma.season.findUnique({ where: { id: seasonId } });
  
@@ -355,9 +356,15 @@ export const registerMembershipService = async (data: RegisterSeasonMembershipDa
   });
   if (existingMembership) throw new Error("User already registered for this season");
 
+  // If payLater is true (development only), set payment status to COMPLETED
+  // Otherwise, use the season's paymentRequired flag
+  const paymentStatus = payLater 
+    ? PaymentStatus.COMPLETED 
+    : (season.paymentRequired ? PaymentStatus.PENDING : PaymentStatus.COMPLETED);
+
    const membershipData: any = { 
     status: "PENDING",
-    paymentStatus: season.paymentRequired ? PaymentStatus.PENDING : PaymentStatus.COMPLETED,
+    paymentStatus,
     
     user: {
       connect: { id: userId }, 
