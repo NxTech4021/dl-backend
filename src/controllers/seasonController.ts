@@ -778,8 +778,8 @@ const createWithdrawalRequest = async (seasonId: string, userId: string, reason:
       season: { select: { id: true, name: true } },
       partnership: {
         include: {
-          player1: { select: { id: true, name: true } },
-          player2: { select: { id: true, name: true } },
+          captain: { select: { id: true, name: true } },
+          partner: { select: { id: true, name: true } },
         },
       },
     },
