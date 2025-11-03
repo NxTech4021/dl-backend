@@ -330,14 +330,17 @@ router.post("/:sport/submit", validateSportParam, async (req, res) => {
           include: { result: true },
         });
 
-        logger.info("Updated existing questionnaire response", {
+        logger.info("Updated existing questionnaire response - questionnaire now completed, sport fully tracked", {
           responseId: response.id,
           userId: submissionRequest.userId,
           sport,
           requestId,
+          wasPlaceholder: !existingResponse.completedAt,
         });
       } else {
-        // Create new response
+        // Create new response with completedAt set
+        // This automatically adds the sport to the user's profile via questionnaireResponses
+        // The profile service extracts sports from all questionnaireResponses (extractSports function)
         response = await prisma.questionnaireResponse.create({
           data: {
             userId: submissionRequest.userId,
@@ -351,7 +354,7 @@ router.post("/:sport/submit", validateSportParam, async (req, res) => {
           include: { result: true },
         });
 
-        logger.info("Created new questionnaire response", {
+        logger.info("Created new questionnaire response - sport automatically added to profile", {
           responseId: response.id,
           userId: submissionRequest.userId,
           sport,
