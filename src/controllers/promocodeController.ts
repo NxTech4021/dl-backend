@@ -10,16 +10,27 @@ export const createPromoCode = async (req: Request, res: Response) => {
     }
 
     try {
+        const data: Prisma.PromoCodeCreateInput = {
+            code,
+            discountValue: new Prisma.Decimal(discountValue),
+            isPercentage: isPercentage ?? false,
+        };
+
+        if (expiresAt) {
+            data.expiresAt = new Date(expiresAt);
+        }
+
+        if (description) {
+            data.description = description;
+        }
+
+        // Connect to existing seasons if seasonIds are provided
+        if (seasonIds && Array.isArray(seasonIds) && seasonIds.length > 0) {
+            data.seasons = { connect: seasonIds.map((id: string) => ({ id })) };
+        }
+
         const newPromoCode = await prisma.promoCode.create({
-            data: {
-                code,
-                discountValue: new Prisma.Decimal(discountValue),
-                isPercentage: isPercentage ?? false,
-                expiresAt: expiresAt ? new Date(expiresAt) : undefined,
-                description,
-                // Connect to existing seasons if seasonIds are provided
-                seasons: seasonIds ? { connect: seasonIds.map((id: string) => ({ id })) } : undefined,
-            },
+            data,
         });
         res.status(201).json(newPromoCode);
     } catch (error: any) {

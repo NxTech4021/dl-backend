@@ -68,6 +68,13 @@ export const getPlayerStats = async (req: Request, res: Response) => {
 export const getPlayerById = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
+    
+    if (!id) {
+      return res
+        .status(400)
+        .json(new ApiResponse(false, 400, null, "Player ID is required"));
+    }
+
     const player = await statsService.getPlayerById(id);
 
     if (!player) {
@@ -136,14 +143,35 @@ export const getPlayerMatchHistory = async (req: AuthenticatedRequest, res: Resp
       endDate
     } = req.query;
 
-    const responseData = await matchHistoryService.getPlayerMatchHistory(userId, {
-      page: page ? Number(page) : undefined,
-      limit: limit ? Number(limit) : undefined,
-      sport: sport as string,
-      outcome: outcome as string,
-      startDate: startDate as string,
-      endDate: endDate as string,
-    });
+    const options: {
+      page?: number;
+      limit?: number;
+      sport?: string;
+      outcome?: string;
+      startDate?: string;
+      endDate?: string;
+    } = {};
+
+    if (page) {
+      options.page = Number(page);
+    }
+    if (limit) {
+      options.limit = Number(limit);
+    }
+    if (sport) {
+      options.sport = sport as string;
+    }
+    if (outcome) {
+      options.outcome = outcome as string;
+    }
+    if (startDate) {
+      options.startDate = startDate as string;
+    }
+    if (endDate) {
+      options.endDate = endDate as string;
+    }
+
+    const responseData = await matchHistoryService.getPlayerMatchHistory(userId, options);
 
     return res
       .status(200)
@@ -169,6 +197,12 @@ export const getMatchDetails = async (req: AuthenticatedRequest, res: Response) 
       return res
         .status(401)
         .json(new ApiResponse(false, 401, null, "Authentication required"));
+    }
+
+    if (!matchId) {
+      return res
+        .status(400)
+        .json(new ApiResponse(false, 400, null, "Match ID is required"));
     }
 
     const detailedMatch = await matchHistoryService.getMatchDetails(matchId, userId);
@@ -200,9 +234,16 @@ export const getMatchDetails = async (req: AuthenticatedRequest, res: Response) 
  * Update player profile
  * PUT /api/player/profile
  */
-export const updatePlayerProfile = async (req: Request, res: Response) => {
+export const updatePlayerProfile = async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const userId = req.user.id;
+    const userId = req.user?.id;
+    
+    if (!userId) {
+      return res
+        .status(401)
+        .json(new ApiResponse(false, 401, null, "Authentication required"));
+    }
+
     const { name, username, email, location, image, phoneNumber, bio } = req.body;
 
     const updatedUser = await profileService.updatePlayerProfile(userId, {
@@ -236,9 +277,16 @@ export const updatePlayerProfile = async (req: Request, res: Response) => {
  * Change player password
  * POST /api/player/password
  */
-export const changePlayerPassword = async (req: Request, res: Response) => {
+export const changePlayerPassword = async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const userId = req.user.id;
+    const userId = req.user?.id;
+    
+    if (!userId) {
+      return res
+        .status(401)
+        .json(new ApiResponse(false, 401, null, "Authentication required"));
+    }
+
     const { currentPassword, newPassword } = req.body;
 
     await profileService.changePlayerPassword(userId, currentPassword, newPassword, req.headers);
@@ -264,9 +312,16 @@ export const changePlayerPassword = async (req: Request, res: Response) => {
  * Get player achievements
  * GET /api/player/achievements
  */
-export const getPlayerAchievements = async (req: Request, res: Response) => {
+export const getPlayerAchievements = async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const userId = req.user.id;
+    const userId = req.user?.id;
+    
+    if (!userId) {
+      return res
+        .status(401)
+        .json(new ApiResponse(false, 401, null, "Authentication required"));
+    }
+
     const result = await profileService.getPlayerAchievements(userId);
 
     return res.json({
@@ -463,6 +518,12 @@ export const addFavorite = async (req: AuthenticatedRequest, res: Response) => {
       );
     }
 
+    if (!favoritedId) {
+      return res.status(400).json(
+        new ApiResponse(false, 400, null, 'User ID is required')
+      );
+    }
+
     const favorite = await favoritesService.addFavorite(userId, favoritedId);
 
     return res.status(201).json(
@@ -490,6 +551,12 @@ export const removeFavorite = async (req: AuthenticatedRequest, res: Response) =
     if (!userId) {
       return res.status(401).json(
         new ApiResponse(false, 401, null, 'Unauthorized')
+      );
+    }
+
+    if (!favoritedId) {
+      return res.status(400).json(
+        new ApiResponse(false, 400, null, 'User ID is required')
       );
     }
 
@@ -545,6 +612,13 @@ export const getPublicPlayerProfile = async (req: AuthenticatedRequest, res: Res
 export const getPlayerLeagueHistory = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
+    
+    if (!id) {
+      return res.status(400).json(
+        new ApiResponse(false, 400, null, 'Player ID is required')
+      );
+    }
+
     const result = await competitionHistoryService.getPlayerLeagueHistory(id);
 
     return res.status(200).json(
@@ -567,6 +641,13 @@ export const getPlayerLeagueHistory = async (req: Request, res: Response) => {
 export const getPlayerSeasonHistory = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
+    
+    if (!id) {
+      return res.status(400).json(
+        new ApiResponse(false, 400, null, 'Player ID is required')
+      );
+    }
+
     const result = await competitionHistoryService.getPlayerSeasonHistory(id);
 
     return res.status(200).json(
@@ -589,6 +670,13 @@ export const getPlayerSeasonHistory = async (req: Request, res: Response) => {
 export const getPlayerDivisionHistory = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
+    
+    if (!id) {
+      return res.status(400).json(
+        new ApiResponse(false, 400, null, 'Player ID is required')
+      );
+    }
+
     const result = await competitionHistoryService.getPlayerDivisionHistory(id);
 
     return res.status(200).json(
@@ -611,6 +699,13 @@ export const getPlayerDivisionHistory = async (req: Request, res: Response) => {
 export const getPlayerMatchHistoryAdmin = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
+    
+    if (!id) {
+      return res.status(400).json(
+        new ApiResponse(false, 400, null, 'Player ID is required')
+      );
+    }
+
     const result = await matchHistoryService.getPlayerMatchHistoryAdmin(id);
 
     return res.status(200).json(
