@@ -250,6 +250,13 @@ export const updatePassword = async (req: Request, res: Response) => {
 export const getAdminById = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
+    
+    if (!id) {
+      return res.status(400).json({
+        message: "Admin ID is required"
+      });
+    }
+    
     const admin = await adminProfileService.getAdminByUserId(id);
     return res.json(admin);
   } catch (error: any) {

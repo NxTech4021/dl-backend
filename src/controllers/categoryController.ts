@@ -34,7 +34,7 @@ export const createCategory = async (req: Request, res: Response) => {
     // Map genderRestriction to gender_category automatically
     // genderRestriction: MALE, FEMALE, MIXED, OPEN
     // gender_category: MALE, FEMALE, MIXED
-    let mappedGenderCategory: string | null = null;
+    let mappedGenderCategory: 'MALE' | 'FEMALE' | 'MIXED' | null = null;
     if (genderRestriction) {
       if (genderRestriction === 'MALE') {
         mappedGenderCategory = 'MALE';
@@ -179,7 +179,8 @@ export const getCategoriesByLeague = async (req: Request, res: Response) => {
       );
     }
 
-    const categories = await prisma.category.findMany({
+    // Get categories directly linked to the league
+    const directCategories = await prisma.category.findMany({
       where: {
         leagues: {
           some: {
@@ -198,6 +199,58 @@ export const getCategoriesByLeague = async (req: Request, res: Response) => {
       },
       orderBy: { categoryOrder: 'asc' }
     });
+
+    // Get categories from the league's seasons
+    // This handles the case where categories are linked to seasons but not directly to the league
+    const league = await prisma.league.findUnique({
+      where: { id: leagueId },
+      include: {
+        seasons: {
+          include: {
+            categories: {
+              include: {
+                leagues: true,
+                seasons: {
+                  select: {
+                    id: true,
+                    name: true,
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    });
+
+    // Extract unique categories from seasons
+    const seasonCategories: any[] = [];
+    if (league?.seasons) {
+      const categoryMap = new Map<string, any>();
+      
+      // First, add direct categories to the map
+      directCategories.forEach(cat => {
+        categoryMap.set(cat.id, cat);
+      });
+
+      // Then, add categories from seasons (only if not already added)
+      league.seasons.forEach(season => {
+        if (season.categories) {
+          season.categories.forEach(cat => {
+            if (!categoryMap.has(cat.id)) {
+              categoryMap.set(cat.id, cat);
+            }
+          });
+        }
+      });
+
+      // Convert map to array and sort by categoryOrder
+      seasonCategories.push(...Array.from(categoryMap.values()));
+      seasonCategories.sort((a, b) => (a.categoryOrder || 0) - (b.categoryOrder || 0));
+    }
+
+    // Use season categories if we found any, otherwise use direct categories
+    const categories = seasonCategories.length > 0 ? seasonCategories : directCategories;
 
     return res.status(200).json(
       new ApiResponse(true, 200, categories, "Categories fetched successfully")
