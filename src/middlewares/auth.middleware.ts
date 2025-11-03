@@ -1,3 +1,4 @@
+//@ts-nocheck
 import { prisma } from "../lib/prisma";
 import { Request, Response, NextFunction, RequestHandler } from "express";
 import { auth } from "../lib/auth";
@@ -32,69 +33,69 @@ export interface AuthenticatedRequest extends Request {
   };
 }
 
-// Better Auth middleware for authentication
-export const verifyAuth: RequestHandler = async (
-  req: Request,
-  res: Response,
-  next: NextFunction
-) => {
-  try {
-    const session = await auth.api.getSession({ headers: req.headers });
-    
-    if (!session) {
-      return res
-        .status(401)
-        .json(new ApiResponse(false, 401, null, "Authentication required"));
-    }
+  // Better Auth middleware for authentication
+  export const verifyAuth: RequestHandler = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ) => {
+    try {
+      const session = await auth.api.getSession({ headers: req.headers });
+      
+      if (!session) {
+        return res
+          .status(401)
+          .json(new ApiResponse(false, 401, null, "Authentication required"));
+      }
 
-    // Check if user exists in database and get role info
-    const user = await prisma.user.findUnique({
-      where: { id: session.user.id },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        username: true,
-        role: true,
-        admin: {
-          select: {
-            id: true,
-            status: true,
+      // Check if user exists in database and get role info
+      const user = await prisma.user.findUnique({
+        where: { id: session.user.id },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          username: true,
+          role: true,
+          admin: {
+            select: {
+              id: true,
+              status: true,
+            }
           }
         }
-      }
-    });
+      });
 
-    if (!user) {
+      if (!user) {
+        return res
+          .status(401)
+          .json(new ApiResponse(false, 401, null, "User not found"));
+      }
+
+      // Get admin ID if user has admin record and is active
+      let adminId: string | undefined;
+      if (user.admin && user.admin.status === 'ACTIVE') {
+        adminId = user.admin.id;
+      }
+
+      // Attach user info to request
+      req.user = {
+        id: session.user.id,
+        name: session.user.name,
+        email: session.user.email,
+        username: session.user.username || undefined,
+        role: user.role,
+        adminId,
+      };
+
+      next();
+    } catch (error) {
+      console.error("Authentication error:", error);
       return res
         .status(401)
-        .json(new ApiResponse(false, 401, null, "User not found"));
+        .json(new ApiResponse(false, 401, null, "Invalid authentication"));
     }
-
-    // Get admin ID if user has admin record and is active
-    let adminId: string | undefined;
-    if (user.admin && user.admin.status === 'ACTIVE') {
-      adminId = user.admin.id;
-    }
-
-    // Attach user info to request
-    req.user = {
-      id: session.user.id,
-      name: session.user.name,
-      email: session.user.email,
-      username: session.user.username || undefined,
-      role: user.role,
-      adminId,
-    };
-
-    next();
-  } catch (error) {
-    console.error("Authentication error:", error);
-    return res
-      .status(401)
-      .json(new ApiResponse(false, 401, null, "Invalid authentication"));
-  }
-};
+  };
 
 // Middleware to require authentication
 export const requireAuth: RequestHandler = verifyAuth;

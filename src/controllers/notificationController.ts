@@ -52,7 +52,7 @@ export const getUserNotifications = async (req: Request, res: Response) => {
       unreadOnly: unreadOnly === 'true',
       archived: archived === 'true',
       category: category as NotificationCategory,
-      categories: parsedCategories,
+      categories: parsedCategories || [], 
       type: type as NotificationType,
       types: parsedTypes,
     });
@@ -232,36 +232,6 @@ export const getNotificationsByCategory = async (req: Request, res: Response) =>
   }
 };
 
-// Get notifications by type
-export const getNotificationsByType = async (req: Request, res: Response) => {
-  try {
-    const { type } = req.params;
-    const { limit = 100 } = req.query;
-
-    if (!type) {
-      return res.status(400).json({ 
-        error: 'Notification type is required',
-        availableTypes: Object.values(NOTIFICATION_TYPES),
-      });
-    }
-
-    const notifications = await notificationService.getNotificationsByType(
-      type as NotificationType,
-      Number(limit)
-    );
-
-    res.json({
-      success: true,
-      data: notifications,
-    });
-  } catch (error) {
-    console.error('Error getting notifications by type:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to get notifications by type',
-    });
-  }
-};
 
 // Send test notification (admin only)
 export const sendTestNotification = async (req: Request, res: Response) => {
