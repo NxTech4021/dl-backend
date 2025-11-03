@@ -127,8 +127,10 @@ export async function getAvailablePlayersForSeason(
   }
 
   // Check if season is MIXED doubles
+  // Note: Category gender values are enums (uppercase), but normalize for comparison
   const categoryGender = season.categories[0]?.gender_category || season.categories[0]?.genderRestriction;
-  const isMixedDoubles = categoryGender === 'MIXED';
+  const categoryGenderUpper = categoryGender?.toUpperCase();
+  const isMixedDoubles = categoryGenderUpper === 'MIXED';
   console.log('🔍 Season:', season.name, '| Category:', categoryGender, '| Mixed:', isMixedDoubles);
 
   // Get user's ACCEPTED friendships (both as requester and recipient)
@@ -168,20 +170,26 @@ export async function getAvailablePlayersForSeason(
   console.log(`🔍 ${activelyPairedPlayerIds.length} players already in active partnerships`);
 
   // Build gender filter based on category
+  // Note: User gender is stored as lowercase ('male', 'female') in the database
+  // Category gender is stored as uppercase ('MALE', 'FEMALE', 'MIXED') as enum values
   const genderFilter: any = {};
   if (currentUser.gender) {
+    // Normalize user gender to lowercase for comparison
+    const userGender = currentUser.gender.toLowerCase();
+    
     if (isMixedDoubles) {
       // Mixed doubles: opposite gender only
-      genderFilter.gender = currentUser.gender === 'MALE' ? 'FEMALE' : 'MALE';
-      console.log(`🔍 Mixed doubles: Filtering for ${genderFilter.gender} partners`);
-    } else if (categoryGender === 'MALE') {
+      // If user is female, filter for male partners; if male, filter for female partners
+      genderFilter.gender = userGender === 'male' ? 'female' : 'male';
+      console.log(`🔍 Mixed doubles: User is ${userGender}, filtering for ${genderFilter.gender} partners`);
+    } else if (categoryGenderUpper === 'MALE') {
       // Men's doubles: only MALE players
-      genderFilter.gender = 'MALE';
-      console.log(`🔍 Men's doubles: Filtering for MALE partners only`);
-    } else if (categoryGender === 'FEMALE') {
+      genderFilter.gender = 'male';
+      console.log(`🔍 Men's doubles: Filtering for male partners only`);
+    } else if (categoryGenderUpper === 'FEMALE') {
       // Women's doubles: only FEMALE players
-      genderFilter.gender = 'FEMALE';
-      console.log(`🔍 Women's doubles: Filtering for FEMALE partners only`);
+      genderFilter.gender = 'female';
+      console.log(`🔍 Women's doubles: Filtering for female partners only`);
     }
   }
 
