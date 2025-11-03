@@ -61,7 +61,26 @@ export async function getPlayerById(playerId: string) {
       id: playerId,
       role: Role.USER,
     },
-    include: {
+    select: {
+      id: true,
+      name: true,
+      username: true,
+      displayUsername: true,
+      email: true,
+      emailVerified: true,
+      phoneNumber: true,
+      image: true,
+      role: true,
+      status: true,
+      gender: true,
+      dateOfBirth: true,
+      area: true,
+      bio: true,
+      createdAt: true,
+      updatedAt: true,
+      lastLogin: true,
+      lastActivityCheck: true,
+      completedOnboarding: true,
       accounts: {
         select: {
           providerId: true,
