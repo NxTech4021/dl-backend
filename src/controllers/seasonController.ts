@@ -478,40 +478,107 @@ export const registerPlayerToSeason = async (req: Request, res: Response) => {
   }
 
   try {
-    const membership = await registerMembershipService({ userId, seasonId });
-
-    // 🆕 Send registration confirmation notification
-    // const season = await prisma.season.findUnique({
-    //   where: { id: seasonId },
-    //   select: { name: true, entryFee: true }
-    // });
-
-    // if (season) {
-    //   const notificationData = notificationSeasonRegistrationConfirmed(
-    //     season.name,
-    //     `$${season.entryFee}`
-    //   );
-
-    //   await notificationService.createNotification({
-    //     userIds: userId,
-    //     ...notificationData,
-    //     seasonId: seasonId
-    //   });
-    // }
-
-    const result = {
-      ...membership,
-      user: { id: membership.user.id, name: membership.user.name },
-      season: { id: membership.season.id, name: membership.season.name },
-      division: membership.division
-        ? { id: membership.division.id, name: membership.division.name }
-        : null,
-    };
-
-    return res.status(201).json({ 
-      message: "User registered successfully", 
-      membership: result 
+    // ✅ Check if user has an active partnership for this season
+    const partnership = await prisma.partnership.findFirst({
+      where: {
+        seasonId,
+        OR: [
+          { captainId: userId },
+          { partnerId: userId }
+        ],
+        status: 'ACTIVE'
+      },
+      include: {
+        captain: { select: { id: true, name: true } },
+        partner: { select: { id: true, name: true } }
+      }
     });
+
+    if (partnership) {
+      // ✅ DOUBLES REGISTRATION: Update existing memberships
+      console.log(`🎾 Doubles registration detected for partnership ${partnership.id}`);
+      const captainId = partnership.captainId;
+      const partnerId = partnership.partnerId;
+
+      const result = await prisma.$transaction(async (tx) => {
+        // Update both memberships to ACTIVE
+        const updatedCount = await tx.seasonMembership.updateMany({
+          where: {
+            seasonId,
+            userId: { in: [captainId, partnerId] },
+            status: 'PENDING'  // Only update if still pending
+          },
+          data: {
+            status: 'ACTIVE',
+            // Keep paymentStatus as PENDING for "Pay Later"
+          }
+        });
+
+        if (updatedCount.count === 0) {
+          throw new Error('No pending memberships found for this partnership. They may have already been registered.');
+        }
+
+        console.log(`✅ Updated ${updatedCount.count} memberships to ACTIVE for partnership`);
+
+        // Fetch the updated memberships
+        const memberships = await tx.seasonMembership.findMany({
+          where: {
+            seasonId,
+            userId: { in: [captainId, partnerId] }
+          },
+          include: {
+            user: { select: { id: true, name: true } },
+            season: { select: { id: true, name: true } }
+          }
+        });
+
+        return { partnership, memberships };
+      });
+
+      return res.status(201).json({
+        message: "Team registered successfully",
+        partnership: result.partnership,
+        memberships: result.memberships
+      });
+
+    } else {
+      // ✅ SINGLES REGISTRATION: Create new membership (existing behavior)
+      console.log(`🎾 Singles registration for user ${userId}`);
+      const membership = await registerMembershipService({ userId, seasonId });
+
+      // 🆕 Send registration confirmation notification
+      // const season = await prisma.season.findUnique({
+      //   where: { id: seasonId },
+      //   select: { name: true, entryFee: true }
+      // });
+
+      // if (season) {
+      //   const notificationData = notificationSeasonRegistrationConfirmed(
+      //     season.name,
+      //     `$${season.entryFee}`
+      //   );
+
+      //   await notificationService.createNotification({
+      //     userIds: userId,
+      //     ...notificationData,
+      //     seasonId: seasonId
+      //   });
+      // }
+
+      const result = {
+        ...membership,
+        user: { id: membership.user.id, name: membership.user.name },
+        season: { id: membership.season.id, name: membership.season.name },
+        division: membership.division
+          ? { id: membership.division.id, name: membership.division.name }
+          : null,
+      };
+
+      return res.status(201).json({
+        message: "User registered successfully",
+        membership: result
+      });
+    }
   } catch (error: any) {
     console.error("Error registering to season:", error);
     return res.status(400).json({ error: error.message });
@@ -629,7 +696,7 @@ const validatePartnership = async (partnershipId: string, userId: string) => {
     return { isValid: false, statusCode: 404, error: "Partnership not found." };
   }
 
-  if (partnership.player1Id !== userId && partnership.player2Id !== userId) {
+  if (partnership.captainId !== userId && partnership.partnerId !== userId) {
     return { isValid: false, statusCode: 403, error: "You are not part of this partnership." };
   }
 
