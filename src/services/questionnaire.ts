@@ -1,6 +1,7 @@
 // Production-grade questionnaire service
 import fs from 'fs/promises';
 import path from 'path';
+import { fileURLToPath } from 'url';
 import crypto from 'crypto';
 import { 
   SportType, 
@@ -10,6 +11,10 @@ import {
 } from '../types/questionnaire';
 import ConfigurationService from '../config/questionnaire';
 import Logger from '../utils/logger';
+
+// Get __dirname equivalent for ES modules
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 interface QuestionnaireLoadResult {
   readonly definition: QuestionnaireDefinition;
@@ -21,7 +26,6 @@ class QuestionnaireService {
   private readonly logger: Logger;
   private readonly config = ConfigurationService.getConfig();
   private readonly questionnaireCache = new Map<string, { data: QuestionnaireLoadResult; timestamp: number }>();
-  private readonly config = ConfigurationService.getConfig();
   
   constructor(logger: Logger) {
     this.logger = logger;
@@ -31,7 +35,6 @@ class QuestionnaireService {
     const startTime = Date.now();
     
     try {
-      // Check cache first
       // Check cache first
       const cached = this.getCachedQuestionnaire(sport);
       if (cached) {

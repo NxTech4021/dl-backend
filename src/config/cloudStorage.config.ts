@@ -1,6 +1,5 @@
 import { Storage } from '@google-cloud/storage';
 import dayjs from 'dayjs';
-import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -14,7 +13,12 @@ export const storage = new Storage({
   keyFilename: pathToJSONKey,
 });
 
-export const uploadProfileImage = async (tempFilePath: string, userId: string): Promise<string> => {
+export const uploadProfileImage = async (
+  buffer: Buffer,
+  userId: string,
+  originalName: string,
+  mimetype: string
+): Promise<string> => {
   try {
     const bucketName = process.env.BUCKET_NAME as string;
     if (!bucketName) {
@@ -23,11 +27,11 @@ export const uploadProfileImage = async (tempFilePath: string, userId: string): 
 
     // Generate unique filename with timestamp
     const timestamp = dayjs().format('YYYY-MM-DD-HH-mm-ss');
-    const fileExtension = path.extname(tempFilePath);
+    const fileExtension = path.extname(originalName) || '.jpg';
     const fileName = `profile-${userId}-${timestamp}${fileExtension}`;
     const destination = `profile-pictures/${fileName}`;
 
-    // Determine content type based on file extension
+    // Determine content type from mimetype or file extension
     const contentTypeMap: { [key: string]: string } = {
       '.jpg': 'image/jpeg',
       '.jpeg': 'image/jpeg',
@@ -35,13 +39,13 @@ export const uploadProfileImage = async (tempFilePath: string, userId: string): 
       '.gif': 'image/gif',
       '.webp': 'image/webp',
     };
-    const contentType = contentTypeMap[fileExtension.toLowerCase()] || 'image/jpeg';
+    const contentType = mimetype || contentTypeMap[fileExtension.toLowerCase()] || 'image/jpeg';
 
     const bucket = storage.bucket(bucketName);
+    const file = bucket.file(destination);
 
-    // Upload the file with correct content type
-    await bucket.upload(tempFilePath, {
-      destination: destination,
+    // Upload the buffer directly to Google Cloud Storage
+    await file.save(buffer, {
       metadata: {
         cacheControl: 'public, max-age=31536000',
         contentType: contentType,
@@ -49,7 +53,6 @@ export const uploadProfileImage = async (tempFilePath: string, userId: string): 
     });
 
     // Make the file public
-    const file = bucket.file(destination);
     await file.makePublic();
 
     // Return the public URL
@@ -72,7 +75,7 @@ export const deleteProfileImage = async (imageUrl: string): Promise<void> => {
     const urlPattern = new RegExp(`https://storage\\.googleapis\\.com/${bucketName}/(.+)`);
     const match = imageUrl.match(urlPattern);
     
-    if (!match) {
+    if (!match || !match[1]) {
       throw new Error('Invalid image URL format');
     }
 

@@ -288,7 +288,8 @@ export const getPlayerAchievements = async (req: Request, res: Response) => {
 
 /**
  * Upload profile image
- * POST /api/player/profile/image
+ * POST /api/player/profile/upload-image
+ * Uses memory storage and uploads directly to Google Cloud Storage
  */
 export const uploadProfileImage = async (req: AuthenticatedRequest, res: Response) => {
   try {
@@ -312,7 +313,21 @@ export const uploadProfileImage = async (req: AuthenticatedRequest, res: Respons
       });
     }
 
-    const result = await profileService.uploadProfileImage(userId, req.file);
+    // Verify file has buffer (from memory storage)
+    if (!req.file.buffer) {
+      return res.status(400).json({
+        success: false,
+        status: 400,
+        data: null,
+        message: 'File buffer not available'
+      });
+    }
+
+    const result = await profileService.uploadProfileImage(userId, {
+      buffer: req.file.buffer,
+      originalname: req.file.originalname,
+      mimetype: req.file.mimetype
+    });
 
     return res.status(200).json({
       success: true,
@@ -322,16 +337,6 @@ export const uploadProfileImage = async (req: AuthenticatedRequest, res: Respons
     });
   } catch (error) {
     console.error('Error uploading profile image:', error);
-
-    // Clean up temporary file on error
-    if (req.file?.path) {
-      try {
-        const fs = require('fs');
-        fs.unlinkSync(req.file.path);
-      } catch (cleanupError) {
-        console.log('Could not delete temporary file:', cleanupError);
-      }
-    }
 
     return res.status(500).json({
       success: false,

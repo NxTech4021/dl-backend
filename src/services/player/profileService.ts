@@ -7,7 +7,6 @@ import { prisma } from '../../lib/prisma';
 import { Role } from "@prisma/client";
 import { auth } from '../../lib/auth';
 import * as bcrypt from "bcryptjs";
-import fs from "fs";
 import {
   uploadProfileImage as uploadToStorage,
   deleteProfileImage
@@ -310,9 +309,9 @@ export async function updatePlayerProfile(
 
 /**
  * Upload profile image
- * Original: playerController.ts lines 974-1064
+ * Uses memory storage and uploads directly to Google Cloud Storage
  */
-export async function uploadProfileImage(userId: string, file: { path: string }) {
+export async function uploadProfileImage(userId: string, file: { buffer: Buffer; originalname: string; mimetype: string }) {
   // Get current user to check for existing image
   const currentUser = await prisma.user.findUnique({
     where: { id: userId },
@@ -329,8 +328,13 @@ export async function uploadProfileImage(userId: string, file: { path: string })
     }
   }
 
-  // Upload new image to cloud storage
-  const imageUrl = await uploadToStorage(file.path, userId);
+  // Upload new image to cloud storage directly from buffer
+  const imageUrl = await uploadToStorage(
+    file.buffer,
+    userId,
+    file.originalname,
+    file.mimetype
+  );
 
   // Update user's image URL in database
   const updatedUser = await prisma.user.update({
@@ -345,13 +349,6 @@ export async function uploadProfileImage(userId: string, file: { path: string })
       displayUsername: true
     }
   });
-
-  // Clean up temporary file
-  try {
-    fs.unlinkSync(file.path);
-  } catch (error) {
-    console.log('Could not delete temporary file:', error);
-  }
 
   return {
     user: updatedUser,
