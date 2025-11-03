@@ -503,9 +503,7 @@ export const registerPlayerToSeason = async (req: Request, res: Response) => {
       ...membership,
       user: { id: membership.user.id, name: membership.user.name },
       season: { id: membership.season.id, name: membership.season.name },
-      division: membership.division
-        ? { id: membership.division.id, name: membership.division.name }
-        : null,
+      division: null, // division is not included in registerMembershipService response
     };
 
     return res.status(201).json({ 
@@ -540,10 +538,12 @@ export const assignPlayerToDivision = async (req: Request, res: Response) => {
         id: membership.season.id,
         name: membership.season.name
       },
-      division: {
-        id: membership.division.id,
-        name: membership.division.name
-      }
+      division: membership.division
+        ? {
+            id: membership.division.id,
+            name: membership.division.name
+          }
+        : null
     };
 
     return res.status(200).json({ 
@@ -641,14 +641,16 @@ const validatePartnership = async (partnershipId: string, userId: string) => {
 };
 
 const createWithdrawalRequest = async (seasonId: string, userId: string, reason: string, partnershipId?: string) => {
+  const data: Prisma.WithdrawalRequestUncheckedCreateInput = {
+    seasonId,
+    userId,
+    reason,
+    partnershipId: partnershipId || null,
+    status: "PENDING",
+  };
+
   return await prisma.withdrawalRequest.create({
-    data: {
-      seasonId,
-      userId,
-      reason,
-      partnershipId,
-      status: "PENDING",
-    },
+    data,
     include: {
       season: { select: { id: true, name: true } },
       partnership: {
