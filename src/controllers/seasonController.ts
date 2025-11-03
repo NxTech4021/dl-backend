@@ -478,7 +478,7 @@ export const registerPlayerToSeason = async (req: Request, res: Response) => {
   }
 
   try {
-    // ✅ Check if user has an active partnership for this season
+    // ✅ Check if user has an active partnership for this season FIRST
     const partnership = await prisma.partnership.findFirst({
       where: {
         seasonId,
@@ -493,39 +493,87 @@ export const registerPlayerToSeason = async (req: Request, res: Response) => {
         partner: { select: { id: true, name: true } }
       }
     });
-    const membership = await registerMembershipService({ userId, seasonId, payLater: payLater === true });
-
-    // 🆕 Send registration confirmation notification
-    // const season = await prisma.season.findUnique({
-    //   where: { id: seasonId },
-    //   select: { name: true, entryFee: true }
-    // });
 
     if (partnership) {
-      // ✅ DOUBLES REGISTRATION: Update existing memberships
+      // ✅ DOUBLES REGISTRATION: Create or update memberships for both players
       console.log(`🎾 Doubles registration detected for partnership ${partnership.id}`);
       const captainId = partnership.captainId;
       const partnerId = partnership.partnerId;
 
+      // If payLater is true (development only), set payment status to COMPLETED
+      const paymentStatus = payLater === true ? PaymentStatus.COMPLETED : undefined;
+
       const result = await prisma.$transaction(async (tx) => {
-        // Update both memberships to ACTIVE
-        const updatedCount = await tx.seasonMembership.updateMany({
+        // Check if memberships exist for both captain and partner
+        const existingMemberships = await tx.seasonMembership.findMany({
           where: {
             seasonId,
-            userId: { in: [captainId, partnerId] },
-            status: 'PENDING'  // Only update if still pending
-          },
-          data: {
-            status: 'ACTIVE',
-            // Keep paymentStatus as PENDING for "Pay Later"
+            userId: { in: [captainId, partnerId] }
           }
         });
 
-        if (updatedCount.count === 0) {
-          throw new Error('No pending memberships found for this partnership. They may have already been registered.');
+        const existingCaptainMembership = existingMemberships.find(m => m.userId === captainId);
+        const existingPartnerMembership = existingMemberships.find(m => m.userId === partnerId);
+
+        let newMembershipCount = 0;
+
+        // Create or update captain membership
+        if (!existingCaptainMembership) {
+          await tx.seasonMembership.create({
+            data: {
+              userId: captainId,
+              seasonId,
+              status: 'ACTIVE',
+              paymentStatus: paymentStatus || PaymentStatus.PENDING,
+            }
+          });
+          newMembershipCount++;
+        } else {
+          const updateData: any = {
+            status: 'ACTIVE',
+          };
+          if (paymentStatus) {
+            updateData.paymentStatus = paymentStatus;
+          }
+          await tx.seasonMembership.update({
+            where: { id: existingCaptainMembership.id },
+            data: updateData,
+          });
         }
 
-        console.log(`✅ Updated ${updatedCount.count} memberships to ACTIVE for partnership`);
+        // Create or update partner membership
+        if (!existingPartnerMembership) {
+          await tx.seasonMembership.create({
+            data: {
+              userId: partnerId,
+              seasonId,
+              status: 'ACTIVE',
+              paymentStatus: paymentStatus || PaymentStatus.PENDING,
+            }
+          });
+          newMembershipCount++;
+        } else {
+          const updateData: any = {
+            status: 'ACTIVE',
+          };
+          if (paymentStatus) {
+            updateData.paymentStatus = paymentStatus;
+          }
+          await tx.seasonMembership.update({
+            where: { id: existingPartnerMembership.id },
+            data: updateData,
+          });
+        }
+
+        // Increment season registeredUserCount if new memberships were created
+        if (newMembershipCount > 0) {
+          await tx.season.update({
+            where: { id: seasonId },
+            data: { registeredUserCount: { increment: newMembershipCount } },
+          });
+        }
+
+        console.log(`✅ Created/updated memberships for partnership`);
 
         // Fetch the updated memberships
         const memberships = await tx.seasonMembership.findMany({
@@ -549,10 +597,11 @@ export const registerPlayerToSeason = async (req: Request, res: Response) => {
       });
 
     } else {
-      // ✅ SINGLES REGISTRATION: Create new membership (existing behavior)
+      // ✅ SINGLES REGISTRATION: Create new membership
       console.log(`🎾 Singles registration for user ${userId}`);
-      const membership = await registerMembershipService({ userId, seasonId });
-
+      
+      const membership = await registerMembershipService({ userId, seasonId, payLater: payLater === true });
+      
       // 🆕 Send registration confirmation notification
       // const season = await prisma.season.findUnique({
       //   where: { id: seasonId },
@@ -571,20 +620,12 @@ export const registerPlayerToSeason = async (req: Request, res: Response) => {
       //     seasonId: seasonId
       //   });
       // }
-    const result = {
-      ...membership,
-      user: { id: membership.user.id, name: membership.user.name },
-      season: { id: membership.season.id, name: membership.season.name },
-      division: null, // division is not included in registerMembershipService response
-    };
 
       const result = {
         ...membership,
         user: { id: membership.user.id, name: membership.user.name },
         season: { id: membership.season.id, name: membership.season.name },
-        division: membership.division
-          ? { id: membership.division.id, name: membership.division.name }
-          : null,
+        division: null, // division is not included in registerMembershipService response
       };
 
       return res.status(201).json({

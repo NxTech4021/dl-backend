@@ -91,7 +91,7 @@ export const sendSeasonInvitation = async (data: {
     }
 
     // Check for existing pending invitation between these two users for this season
-    const existingInvitation = await prisma.seasonInvitation.findFirst({
+    const existingPendingInvitation = await prisma.seasonInvitation.findFirst({
       where: {
         OR: [
           { senderId, recipientId, seasonId, status: 'PENDING' },
@@ -100,8 +100,24 @@ export const sendSeasonInvitation = async (data: {
       }
     });
 
-    if (existingInvitation) {
+    if (existingPendingInvitation) {
       return { success: false, message: 'A pending invitation already exists for this season' };
+    }
+
+    // Check for existing non-PENDING invitations (ACCEPTED, DENIED, CANCELLED, EXPIRED)
+    // and delete them to allow re-inviting after partnership dissolution
+    // Use deleteMany to safely delete old invitations (won't error if already deleted)
+    const deleteResult = await prisma.seasonInvitation.deleteMany({
+      where: {
+        senderId,
+        recipientId,
+        seasonId,
+        status: { in: ['ACCEPTED', 'DENIED', 'CANCELLED', 'EXPIRED'] }
+      }
+    });
+
+    if (deleteResult.count > 0) {
+      console.log(`🗑️ Deleted ${deleteResult.count} old invitation(s) to allow new invitation`);
     }
 
     // Create invitation (expires in 7 days)
@@ -207,126 +223,106 @@ export const acceptSeasonInvitation = async (
       return { success: false, message: 'Invitation is not pending' };
     }
 
-    // Transaction with Serializable isolation: Update invitation + Create partnership + Create memberships
-    const result = await prisma.$transaction(async (tx) => {
-      // Check expiry inside transaction
-      if (invitation.expiresAt < new Date()) {
+      // Transaction with Serializable isolation: Update invitation + Create partnership
+      // Note: Season memberships are NOT created here - they are created when the team captain registers the team
+      const result = await prisma.$transaction(async (tx) => {
+        // Check expiry inside transaction
+        if (invitation.expiresAt < new Date()) {
+          await tx.seasonInvitation.update({
+            where: { id: invitationId },
+            data: { status: 'EXPIRED', respondedAt: new Date() }
+          });
+          throw new Error('Invitation has expired');
+        }
+
+        // Check if sender still doesn't have a partnership (INSIDE transaction to prevent race condition)
+        const senderExistingPartnership = await tx.partnership.findFirst({
+          where: {
+            OR: [
+              { captainId: invitation.senderId, seasonId: invitation.seasonId },
+              { partnerId: invitation.senderId, seasonId: invitation.seasonId }
+            ],
+            status: 'ACTIVE'
+          }
+        });
+
+        if (senderExistingPartnership) {
+          throw new Error('Sender already has a partnership in this season');
+        }
+
+        // Check if recipient doesn't have a partnership (INSIDE transaction to prevent race condition)
+        const recipientExistingPartnership = await tx.partnership.findFirst({
+          where: {
+            OR: [
+              { captainId: userId, seasonId: invitation.seasonId },
+              { partnerId: userId, seasonId: invitation.seasonId }
+            ],
+            status: 'ACTIVE'
+          }
+        });
+
+        if (recipientExistingPartnership) {
+          throw new Error('You already have a partnership in this season');
+        }
+
+        // Note: We keep DISSOLVED partnerships for historical purposes
+        // The old partnership remains with DISSOLVED status
+        // A new partnership with a new ID will be created with ACTIVE status
+
+        // Update invitation status
         await tx.seasonInvitation.update({
           where: { id: invitationId },
-          data: { status: 'EXPIRED', respondedAt: new Date() }
+          data: {
+            status: 'ACCEPTED',
+            respondedAt: new Date()
+          }
         });
-        throw new Error('Invitation has expired');
-      }
 
-      // Check if sender still doesn't have a partnership (INSIDE transaction to prevent race condition)
-      const senderExistingPartnership = await tx.partnership.findFirst({
-        where: {
-          OR: [
-            { captainId: invitation.senderId, seasonId: invitation.seasonId },
-            { partnerId: invitation.senderId, seasonId: invitation.seasonId }
-          ],
-          status: 'ACTIVE'
-        }
-      });
-
-      if (senderExistingPartnership) {
-        throw new Error('Sender already has a partnership in this season');
-      }
-
-      // Check if recipient doesn't have a partnership (INSIDE transaction to prevent race condition)
-      const recipientExistingPartnership = await tx.partnership.findFirst({
-        where: {
-          OR: [
-            { captainId: userId, seasonId: invitation.seasonId },
-            { partnerId: userId, seasonId: invitation.seasonId }
-          ],
-          status: 'ACTIVE'
-        }
-      });
-
-      if (recipientExistingPartnership) {
-        throw new Error('You already have a partnership in this season');
-      }
-
-      // Update invitation status
-      await tx.seasonInvitation.update({
-        where: { id: invitationId },
-        data: {
-          status: 'ACCEPTED',
-          respondedAt: new Date()
-        }
-      });
-
-      // Create partnership
-      const partnership = await tx.partnership.create({
-        data: {
-          captainId: invitation.senderId,
-          partnerId: invitation.recipientId,
-          seasonId: invitation.seasonId,
-          status: 'ACTIVE'
-        },
-        include: {
-          captain: {
-            select: {
-              id: true,
-              name: true,
-              username: true,
-              displayUsername: true,
-              image: true,
-              area: true,
-              gender: true,
-              // Removed questionnaireResponses to prevent N+1 queries
-            }
+        // Create partnership
+        const partnership = await tx.partnership.create({
+          data: {
+            captainId: invitation.senderId,
+            partnerId: invitation.recipientId,
+            seasonId: invitation.seasonId,
+            status: 'ACTIVE'
           },
-          partner: {
-            select: {
-              id: true,
-              name: true,
-              username: true,
-              displayUsername: true,
-              image: true,
-              area: true,
-              gender: true,
-              // Removed questionnaireResponses to prevent N+1 queries
-            }
-          },
-          season: {
-            select: {
-              id: true,
-              name: true
+          include: {
+            captain: {
+              select: {
+                id: true,
+                name: true,
+                username: true,
+                displayUsername: true,
+                image: true,
+                area: true,
+                gender: true,
+                // Removed questionnaireResponses to prevent N+1 queries
+              }
+            },
+            partner: {
+              select: {
+                id: true,
+                name: true,
+                username: true,
+                displayUsername: true,
+                image: true,
+                area: true,
+                gender: true,
+                // Removed questionnaireResponses to prevent N+1 queries
+              }
+            },
+            season: {
+              select: {
+                id: true,
+                name: true
+              }
             }
           }
-        }
-      });
+        });
 
-      // Delete any existing memberships first to avoid data corruption
-      await tx.seasonMembership.deleteMany({
-        where: {
-          userId: { in: [invitation.senderId, invitation.recipientId] },
-          seasonId: invitation.seasonId,
-        },
+        // Season memberships will be created when the team captain registers the team
+        return partnership;
       });
-
-      // Create fresh season memberships for both players
-      await tx.seasonMembership.createMany({
-        data: [
-          {
-            userId: invitation.senderId,
-            seasonId: invitation.seasonId,
-            status: 'PENDING', // Status will be updated once payment is processed
-            paymentStatus: 'PENDING'
-          },
-          {
-            userId: invitation.recipientId,
-            seasonId: invitation.seasonId,
-            status: 'PENDING',
-            paymentStatus: 'PENDING'
-          }
-        ],
-      });
-
-      return partnership;
-    });
 
     // ✅ Emit Socket.IO events to notify both users
     try {

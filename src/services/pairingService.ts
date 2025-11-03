@@ -703,16 +703,27 @@ export const dissolvePartnership = async (
         },
       });
 
-      // Update associated season memberships to WITHDRAWN status
-      await tx.seasonMembership.updateMany({
+      // Update associated season memberships to WITHDRAWN status (if they exist)
+      // Note: Memberships may not exist if the team was never registered
+      const existingMemberships = await tx.seasonMembership.findMany({
         where: {
           userId: { in: [partnership.captainId, partnership.partnerId] },
           seasonId: partnership.seasonId,
         },
-        data: {
-          status: 'WITHDRAWN',
-        },
       });
+
+      // Only update if memberships exist
+      if (existingMemberships.length > 0) {
+        await tx.seasonMembership.updateMany({
+          where: {
+            userId: { in: [partnership.captainId, partnership.partnerId] },
+            seasonId: partnership.seasonId,
+          },
+          data: {
+            status: 'WITHDRAWN',
+          },
+        });
+      }
 
       return dissolved;
     });

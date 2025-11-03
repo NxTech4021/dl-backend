@@ -697,12 +697,12 @@ model Partnership {
   withdrawalRequest WithdrawalRequest[]
   notifications Notification[]
 
-  @@unique([captainId, seasonId])
-  @@unique([partnerId, seasonId])
   @@index([seasonId])
   @@index([status])
   @@index([captainId])
   @@index([partnerId])
+  @@index([captainId, seasonId, status])
+  @@index([partnerId, seasonId, status])
   @@map("partnership")
 }
 
