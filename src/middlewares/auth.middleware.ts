@@ -1,29 +1,40 @@
 import { prisma } from "../lib/prisma";
-import { Request, Response, NextFunction } from "express";
+import { Request, Response, NextFunction, RequestHandler } from "express";
 import { auth } from "../lib/auth";
-import jwt, { JwtPayload } from "jsonwebtoken";
-import { PrismaClient } from "@prisma/client";
 import { ApiResponse } from "../utils/ApiResponse";
+import { Role } from "@prisma/client";
 
+// Extend the Express Request interface instead of creating a new one
+declare global {
+  namespace Express {
+    interface Request {
+      user?: {
+        id: string;
+        name: string;
+        email: string;
+        username?: string;
+        role: Role;
+        adminId?: string;
+      };
+    }
+  }
+}
 
+// Use Express Request directly
 export interface AuthenticatedRequest extends Request {
-  user?: {
+  user: {
     id: string;
     name: string;
     email: string;
     username?: string;
-    role?: string;
+    role: Role;
+    adminId?: string;
   };
 }
 
-interface DecodedToken extends JwtPayload {
-  userId: string;
-  role?: string;
-}
-
-// Better Auth middleware for mobile authentication
-export const verifyAuth = async (
-  req: AuthenticatedRequest,
+// Better Auth middleware for authentication
+export const verifyAuth: RequestHandler = async (
+  req: Request,
   res: Response,
   next: NextFunction
 ) => {
@@ -36,12 +47,44 @@ export const verifyAuth = async (
         .json(new ApiResponse(false, 401, null, "Authentication required"));
     }
 
+    // Check if user exists in database and get role info
+    const user = await prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        username: true,
+        role: true,
+        admin: {
+          select: {
+            id: true,
+            status: true,
+          }
+        }
+      }
+    });
+
+    if (!user) {
+      return res
+        .status(401)
+        .json(new ApiResponse(false, 401, null, "User not found"));
+    }
+
+    // Get admin ID if user has admin record and is active
+    let adminId: string | undefined;
+    if (user.admin && user.admin.status === 'ACTIVE') {
+      adminId = user.admin.id;
+    }
+
     // Attach user info to request
     req.user = {
       id: session.user.id,
       name: session.user.name,
       email: session.user.email,
-      username: session.user.username,
+      username: session.user.username || undefined,
+      role: user.role,
+      adminId,
     };
 
     next();
@@ -53,68 +96,65 @@ export const verifyAuth = async (
   }
 };
 
-// JWT middleware for admin website authentication
-export const verifyJWT = async (
+// Middleware to require authentication
+export const requireAuth: RequestHandler = verifyAuth;
+
+// Middleware to require admin role (ADMIN or SUPERADMIN)
+export const requireAdmin: RequestHandler = async (
   req: Request,
   res: Response,
   next: NextFunction
-): Promise<void | Response> => {
-  try {
-    const token =
-      req.cookies?.accessToken ||
-      req.header("Authorization")?.replace("Bearer ", "");
-
-    if (!token) {
-      return res
-        .status(401)
-        .json(new ApiResponse(false, 401, null, "Unauthorized request"));
-    }
-
-    const decodedToken = jwt.verify(
-      token,
-      process.env.JWT_SECRET as string
-    ) as DecodedToken;
-
-    if (!decodedToken?.userId) {
-      return res
-        .status(401)
-        .json(new ApiResponse(false, 401, null, "Invalid token payload"));
-    }
-
-    const user = await prisma.user.findUnique({
-      where: { id: decodedToken.userId },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        role: true,
-      },
-    });
-
-    if (!user) {
-      return res
-        .status(401)
-        .json(new ApiResponse(false, 401, null, "Invalid Access Token"));
-    }
-
-    // Attach user to req object
-    (req as any).user = user;
-
-    next();
-  } catch (error: any) {
-    if (error?.message === "jwt expired") {
-      return res.status(403).json(new ApiResponse(false, 403, null, "JWT Expired"));
-    }
-
+) => {
+  if (!req.user) {
     return res
       .status(401)
-      .json(
-        new ApiResponse(
-          false,
-          401,
-          null,
-          error.message || "Invalid access token"
-        )
-      );
+      .json(new ApiResponse(false, 401, null, "Authentication required"));
   }
+
+  if (req.user.role === 'USER') {
+    return res
+      .status(403)
+      .json(new ApiResponse(false, 403, null, "Admin access required"));
+  }
+
+  next();
+};
+
+// Middleware to require super admin role
+export const requireSuperAdmin: RequestHandler = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  if (!req.user) {
+    return res
+      .status(401)
+      .json(new ApiResponse(false, 401, null, "Authentication required"));
+  }
+
+  if (req.user.role !== 'SUPERADMIN') {
+    return res
+      .status(403)
+      .json(new ApiResponse(false, 403, null, "Super admin access required"));
+  }
+
+  next();
+};
+
+// Helper functions
+export const isAdmin = (user: Request['user']): boolean => {
+  return user?.role === 'ADMIN' || user?.role === 'SUPERADMIN';
+};
+
+export const isSuperAdmin = (user: Request['user']): boolean => {
+  return user?.role === 'SUPERADMIN';
+};
+
+export const isUser = (user: Request['user']): boolean => {
+  return user?.role === 'USER';
+};
+
+// Check if user has admin record (for operations that require admin table ID)
+export const hasAdminRecord = (user: Request['user']): boolean => {
+  return !!user?.adminId;
 };

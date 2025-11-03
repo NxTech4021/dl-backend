@@ -8,6 +8,7 @@ import {
   // joinLeague, // LeagueMembership model has been removed
   // sendLeagueInvite,
 } from '../controllers/leagueController';
+import { verifyAuth, requireAdmin } from '../middlewares/auth.middleware';
 
 const leagueRoutes = Router();
 
@@ -20,9 +21,9 @@ leagueRoutes.get('/:id', getLeagueById);
 // leagueRoutes.get('/:leagueId/sport', getSportsAtLeague); 
 
 // Admin routes
-leagueRoutes.post('/create', createLeague);                     
-leagueRoutes.put('/:id', updateLeague);                  
-leagueRoutes.delete('/:id', deleteLeague);               
+leagueRoutes.post("/create", verifyAuth, requireAdmin, createLeague);
+leagueRoutes.put("/:id", verifyAuth, requireAdmin, updateLeague);
+leagueRoutes.delete("/:id", verifyAuth, requireAdmin, deleteLeague);            
 
 // Admin routes - LeagueSport management
 // leagueRoutes.post('/:leagueId/sport', addSportToLeague);          // POST /api/league/:leagueId/sport
