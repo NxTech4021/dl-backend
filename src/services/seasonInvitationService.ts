@@ -108,42 +108,54 @@ export const sendSeasonInvitation = async (data: {
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 7);
 
-    const invitation = await prisma.seasonInvitation.create({
-      data: {
-        senderId,
-        recipientId,
-        seasonId,
-        message,
-        status: 'PENDING',
-        expiresAt
-      },
-      include: {
-        sender: {
-          select: {
-            id: true,
-            name: true,
-            username: true,
-            displayUsername: true,
-            image: true
-          }
+    let invitation;
+    try {
+      invitation = await prisma.seasonInvitation.create({
+        data: {
+          senderId,
+          recipientId,
+          seasonId,
+          message,
+          status: 'PENDING',
+          expiresAt
         },
-        recipient: {
-          select: {
-            id: true,
-            name: true,
-            username: true,
-            displayUsername: true,
-            image: true
-          }
-        },
-        season: {
-          select: {
-            id: true,
-            name: true
+        include: {
+          sender: {
+            select: {
+              id: true,
+              name: true,
+              username: true,
+              displayUsername: true,
+              image: true
+            }
+          },
+          recipient: {
+            select: {
+              id: true,
+              name: true,
+              username: true,
+              displayUsername: true,
+              image: true
+            }
+          },
+          season: {
+            select: {
+              id: true,
+              name: true
+            }
           }
         }
+      });
+    } catch (createError: any) {
+      // Handle unique constraint violation (P2002)
+      if (createError.code === 'P2002') {
+        return {
+          success: false,
+          message: 'You have already sent an invitation to this user for this season'
+        };
       }
-    });
+      throw createError;
+    }
 
     // ✅ Emit Socket.IO event to notify recipient in real-time
     try {
@@ -195,46 +207,47 @@ export const acceptSeasonInvitation = async (
       return { success: false, message: 'Invitation is not pending' };
     }
 
-    if (invitation.expiresAt < new Date()) {
-      await prisma.seasonInvitation.update({
-        where: { id: invitationId },
-        data: { status: 'EXPIRED' }
-      });
-      return { success: false, message: 'Invitation has expired' };
-    }
-
-    // Check if sender still doesn't have a partnership in this season
-    const senderExistingPartnership = await prisma.partnership.findFirst({
-      where: {
-        OR: [
-          { captainId: invitation.senderId, seasonId: invitation.seasonId },
-          { partnerId: invitation.senderId, seasonId: invitation.seasonId }
-        ],
-        status: 'ACTIVE'
-      }
-    });
-
-    if (senderExistingPartnership) {
-      return { success: false, message: 'Sender already has a partnership in this season' };
-    }
-
-    // Check if recipient doesn't have a partnership in this season
-    const recipientExistingPartnership = await prisma.partnership.findFirst({
-      where: {
-        OR: [
-          { captainId: userId, seasonId: invitation.seasonId },
-          { partnerId: userId, seasonId: invitation.seasonId }
-        ],
-        status: 'ACTIVE'
-      }
-    });
-
-    if (recipientExistingPartnership) {
-      return { success: false, message: 'You already have a partnership in this season' };
-    }
-
-    // Transaction: Update invitation + Create season partnership + Create season memberships for both players
+    // Transaction with Serializable isolation: Update invitation + Create partnership + Create memberships
     const result = await prisma.$transaction(async (tx) => {
+      // Check expiry inside transaction
+      if (invitation.expiresAt < new Date()) {
+        await tx.seasonInvitation.update({
+          where: { id: invitationId },
+          data: { status: 'EXPIRED', respondedAt: new Date() }
+        });
+        throw new Error('Invitation has expired');
+      }
+
+      // Check if sender still doesn't have a partnership (INSIDE transaction to prevent race condition)
+      const senderExistingPartnership = await tx.partnership.findFirst({
+        where: {
+          OR: [
+            { captainId: invitation.senderId, seasonId: invitation.seasonId },
+            { partnerId: invitation.senderId, seasonId: invitation.seasonId }
+          ],
+          status: 'ACTIVE'
+        }
+      });
+
+      if (senderExistingPartnership) {
+        throw new Error('Sender already has a partnership in this season');
+      }
+
+      // Check if recipient doesn't have a partnership (INSIDE transaction to prevent race condition)
+      const recipientExistingPartnership = await tx.partnership.findFirst({
+        where: {
+          OR: [
+            { captainId: userId, seasonId: invitation.seasonId },
+            { partnerId: userId, seasonId: invitation.seasonId }
+          ],
+          status: 'ACTIVE'
+        }
+      });
+
+      if (recipientExistingPartnership) {
+        throw new Error('You already have a partnership in this season');
+      }
+
       // Update invitation status
       await tx.seasonInvitation.update({
         where: { id: invitationId },
@@ -262,10 +275,7 @@ export const acceptSeasonInvitation = async (
               image: true,
               area: true,
               gender: true,
-              questionnaireResponses: {
-                where: { completedAt: { not: null } },
-                include: { result: true }
-              }
+              // Removed questionnaireResponses to prevent N+1 queries
             }
           },
           partner: {
@@ -277,10 +287,7 @@ export const acceptSeasonInvitation = async (
               image: true,
               area: true,
               gender: true,
-              questionnaireResponses: {
-                where: { completedAt: { not: null } },
-                include: { result: true }
-              }
+              // Removed questionnaireResponses to prevent N+1 queries
             }
           },
           season: {
@@ -292,7 +299,15 @@ export const acceptSeasonInvitation = async (
         }
       });
 
-      // Create season memberships for both players
+      // Delete any existing memberships first to avoid data corruption
+      await tx.seasonMembership.deleteMany({
+        where: {
+          userId: { in: [invitation.senderId, invitation.recipientId] },
+          seasonId: invitation.seasonId,
+        },
+      });
+
+      // Create fresh season memberships for both players
       await tx.seasonMembership.createMany({
         data: [
           {
@@ -308,7 +323,6 @@ export const acceptSeasonInvitation = async (
             paymentStatus: 'PENDING'
           }
         ],
-        skipDuplicates: true // In case membership already exists
       });
 
       return partnership;
@@ -349,9 +363,11 @@ export const acceptSeasonInvitation = async (
       message: 'Season invitation accepted',
       data: result
     };
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error accepting season invitation:', error);
-    return { success: false, message: 'Failed to accept invitation' };
+    // Return specific error message if available
+    const errorMessage = error?.message || 'Failed to accept invitation';
+    return { success: false, message: errorMessage };
   }
 };
 
