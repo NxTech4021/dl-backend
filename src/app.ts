@@ -58,6 +58,10 @@ app.use(
       "exp://192.168.100.53:8081", // Expo development server
       "http://172.20.10.3:8081", // New mobile app origin
       "exp://172.20.10.3:8081", // New Expo development server
+      "http://10.72.179.58:8081", // Previous network IP
+      "exp://10.72.179.58:8081", // Previous Expo origin
+      "http://10.72.180.20:8081", // Current network IP
+      "exp://10.72.180.20:8081", // Current Expo origin
       "https://staging.appdevelopers.my",
     ], // Allow nginx proxy, direct access, and local IP
     credentials: true,

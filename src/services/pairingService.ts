@@ -168,10 +168,10 @@ export const sendPairRequest = async (
       where: {
         seasonId,
         OR: [
-          { player1Id: requesterId },
-          { player2Id: requesterId },
-          { player1Id: recipientId },
-          { player2Id: recipientId },
+          { captainId: requesterId },
+          { partnerId: requesterId },
+          { captainId: recipientId },
+          { partnerId: recipientId },
         ],
       },
     });
@@ -348,14 +348,14 @@ export const acceptPairRequest = async (
       // Create partnership
       const partnership = await tx.partnership.create({
         data: {
-          player1Id: pairRequest.requesterId,
-          player2Id: pairRequest.recipientId,
+          captainId: pairRequest.requesterId,
+          partnerId: pairRequest.recipientId,
           seasonId: pairRequest.seasonId,
           divisionId: assignedDivisionId,
           pairRating,
         },
         include: {
-          player1: {
+          captain: {
             select: {
               id: true,
               name: true,
@@ -364,7 +364,7 @@ export const acceptPairRequest = async (
               image: true,
             },
           },
-          player2: {
+          partner: {
             select: {
               id: true,
               name: true,
@@ -599,12 +599,12 @@ export const getUserPartnerships = async (userId: string) => {
     const partnerships = await prisma.partnership.findMany({
       where: {
         OR: [
-          { player1Id: userId },
-          { player2Id: userId },
+          { captainId: userId },
+          { partnerId: userId },
         ],
       },
       include: {
-        player1: {
+        captain: {
           select: {
             id: true,
             name: true,
@@ -613,7 +613,7 @@ export const getUserPartnerships = async (userId: string) => {
             image: true,
           },
         },
-        player2: {
+        partner: {
           select: {
             id: true,
             name: true,
@@ -663,8 +663,8 @@ export const dissolvePartnership = async (
     const partnership = await prisma.partnership.findUnique({
       where: { id: partnershipId },
       include: {
-        player1: { select: { id: true, name: true } },
-        player2: { select: { id: true, name: true } },
+        captain: { select: { id: true, name: true } },
+        partner: { select: { id: true, name: true } },
         season: { select: { id: true, name: true, status: true } },
       },
     });
@@ -677,7 +677,7 @@ export const dissolvePartnership = async (
     }
 
     // Validate: Only partners can dissolve
-    if (partnership.player1Id !== dissolvingUserId && partnership.player2Id !== dissolvingUserId) {
+    if (partnership.captainId !== dissolvingUserId && partnership.partnerId !== dissolvingUserId) {
       return {
         success: false,
         message: 'You are not authorized to dissolve this partnership',
@@ -692,19 +692,35 @@ export const dissolvePartnership = async (
       };
     }
 
-    // Update partnership status to DISSOLVED
-    const updatedPartnership = await prisma.partnership.update({
-      where: { id: partnershipId },
-      data: {
-        status: 'DISSOLVED',
-        dissolvedAt: new Date(),
-      },
+    // Update partnership status to DISSOLVED and handle memberships in a transaction
+    const updatedPartnership = await prisma.$transaction(async (tx) => {
+      // Update partnership status
+      const dissolved = await tx.partnership.update({
+        where: { id: partnershipId },
+        data: {
+          status: 'DISSOLVED',
+          dissolvedAt: new Date(),
+        },
+      });
+
+      // Update associated season memberships to WITHDRAWN status
+      await tx.seasonMembership.updateMany({
+        where: {
+          userId: { in: [partnership.captainId, partnership.partnerId] },
+          seasonId: partnership.seasonId,
+        },
+        data: {
+          status: 'WITHDRAWN',
+        },
+      });
+
+      return dissolved;
     });
 
     // TODO: Send notification to other partner
-    const otherPartnerId = partnership.player1Id === dissolvingUserId
-      ? partnership.player2Id
-      : partnership.player1Id;
+    const otherPartnerId = partnership.captainId === dissolvingUserId
+      ? partnership.partnerId
+      : partnership.captainId;
 
     console.log(`Partnership ${partnershipId} dissolved by ${dissolvingUserId}. Notify partner ${otherPartnerId}`);
 
@@ -742,29 +758,24 @@ export const getActivePartnership = async (
       },
       include: {
         captain: {
-          select: {
-            id: true,
-            name: true,
-            username: true,
-            displayUsername: true,
-            image: true,
+          include: {
+            questionnaireResponses: {
+              include: {
+                result: true,
+              },
+            },
           },
         },
         partner: {
-          select: {
-            id: true,
-            name: true,
-            username: true,
-            displayUsername: true,
-            image: true,
+          include: {
+            questionnaireResponses: {
+              include: {
+                result: true,
+              },
+            },
           },
         },
-        season: {
-          select: {
-            id: true,
-            name: true,
-          },
-        },
+        season: true,
       },
     });
 

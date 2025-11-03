@@ -6,12 +6,100 @@ class PrismaService {
   private prisma: PrismaClient;
 
   private constructor() {
-    this.prisma = new PrismaClient({
+    const basePrisma = new PrismaClient({
       log: process.env.NODE_ENV === 'development'
         ? ['query', 'info', 'warn', 'error']
         : ['error'],
       errorFormat: process.env.NODE_ENV === 'development' ? 'pretty' : 'minimal',
     });
+
+    // Extend Prisma to automatically exclude password from User queries
+    this.prisma = basePrisma.$extends({
+      query: {
+        user: {
+          async findUnique({ args, query }) {
+            if (!args.select) {
+              // If no select clause, add one that excludes password
+              args.select = {
+                id: true,
+                name: true,
+                username: true,
+                displayUsername: true,
+                email: true,
+                emailVerified: true,
+                phoneNumber: true,
+                image: true,
+                role: true,
+                status: true,
+                gender: true,
+                dateOfBirth: true,
+                area: true,
+                bio: true,
+                createdAt: true,
+                updatedAt: true,
+                lastLogin: true,
+                lastActivityCheck: true,
+                completedOnboarding: true,
+                // password explicitly excluded
+              };
+            }
+            return query(args);
+          },
+          async findFirst({ args, query }) {
+            if (!args.select) {
+              args.select = {
+                id: true,
+                name: true,
+                username: true,
+                displayUsername: true,
+                email: true,
+                emailVerified: true,
+                phoneNumber: true,
+                image: true,
+                role: true,
+                status: true,
+                gender: true,
+                dateOfBirth: true,
+                area: true,
+                bio: true,
+                createdAt: true,
+                updatedAt: true,
+                lastLogin: true,
+                lastActivityCheck: true,
+                completedOnboarding: true,
+              };
+            }
+            return query(args);
+          },
+          async findMany({ args, query }) {
+            if (!args.select) {
+              args.select = {
+                id: true,
+                name: true,
+                username: true,
+                displayUsername: true,
+                email: true,
+                emailVerified: true,
+                phoneNumber: true,
+                image: true,
+                role: true,
+                status: true,
+                gender: true,
+                dateOfBirth: true,
+                area: true,
+                bio: true,
+                createdAt: true,
+                updatedAt: true,
+                lastLogin: true,
+                lastActivityCheck: true,
+                completedOnboarding: true,
+              };
+            }
+            return query(args);
+          },
+        },
+      },
+    }) as unknown as PrismaClient;
 
     // Handle connection errors
     this.prisma.$connect()
@@ -79,14 +167,14 @@ class PrismaService {
   }
 }
 
-// Export singleton instance
-const prismaService = PrismaService.getInstance();
-export const prisma = prismaService.getClient();
-export default prismaService;
+// Export singleton instance with global caching for both dev and prod
+const globalForPrisma = global as unknown as { prisma: PrismaClient | undefined };
 
-// In development, prevent hot reload from creating new instances
-if (process.env.NODE_ENV === 'development') {
-  if (!(global as any).prisma) {
-    (global as any).prisma = prisma;
-  }
-} 
+export const prisma = globalForPrisma.prisma ?? PrismaService.getInstance().getClient();
+
+if (process.env.NODE_ENV !== 'production') {
+  globalForPrisma.prisma = prisma;
+}
+
+const prismaService = PrismaService.getInstance();
+export default prismaService; 

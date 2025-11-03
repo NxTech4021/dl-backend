@@ -27,32 +27,63 @@ export function socketHandler(httpServer: HttpServer) {
       methods: ["GET", "POST"],
       credentials: true
     },
-     transports: ['websocket', 'polling'] 
+     transports: ['websocket', 'polling']
   });
 
   console.log("🚀 Socket.IO server initialized");
 
-  io.on('connection', (socket) => {
-    console.log(`✅ User connected: ${socket.id} at ${new Date().toISOString()}`);
+  // Authentication middleware - verify session token before connection
+  io.use(async (socket, next) => {
+    try {
+      const token = socket.handshake.auth.token;
 
-    // 1. Online Presence: User reports their ID upon connection
-    socket.on('set_user_id', (userId: string) => {
+      if (!token || !token.user || !token.user.id) {
+        console.error('❌ Socket.IO: No valid session token provided');
+        return next(new Error('Authentication required'));
+      }
+
+      // Store verified userId in socket data
+      socket.data.userId = token.user.id;
+      socket.data.userRole = token.user.role;
+
+      console.log(`✅ Socket.IO: Authenticated user ${token.user.id}`);
+      next();
+    } catch (error) {
+      console.error('❌ Socket.IO: Authentication error:', error);
+      return next(new Error('Authentication failed'));
+    }
+  });
+
+  io.on('connection', (socket) => {
+    const userId = socket.data.userId; // Use verified userId from middleware
+    console.log(`✅ User connected: ${socket.id} (userId: ${userId}) at ${new Date().toISOString()}`);
+
+    // Automatically join user to their personal room using VERIFIED userId
+    if (userId) {
+      socket.join(userId);
       activeUsers.set(userId, socket.id);
-      socket.join(userId); // Join a room named after the user for direct pings
-      // Broadcast presence change to all users (or only friends/contacts)
-      io.emit('user_status_change', { userId, isOnline: true }); 
-      
-      // Update DB for lastActivityCheck here or on 'disconnect'
+      userSockets.set(userId, socket.id);
+      io.emit('user_status_change', { userId, isOnline: true });
+    }
+
+    // 1. DEPRECATED: Remove set_user_id - userId is now verified during auth
+    // Users can no longer claim arbitrary userIds
+    socket.on('set_user_id', (claimedUserId: string) => {
+      console.warn(`⚠️  set_user_id is deprecated and ignored. User ${userId} tried to claim ${claimedUserId}`);
+      // Ignore this event - userId is set during authentication
     });
 
     socket.on('disconnect', () => {
-      // 1. Online Presence: Remove user and broadcast status change
-      const userId = Array.from(activeUsers.entries()).find(([key, value]) => value === socket.id)?.[0];
+      // Clean up user from active maps
       if (userId) {
         activeUsers.delete(userId);
+        userSockets.delete(userId);
         io.emit('user_status_change', { userId, isOnline: false });
+        console.log(`❌ User disconnected: ${socket.id} (userId: ${userId})`);
+      } else {
+        console.log(`❌ User disconnected: ${socket.id}`);
       }
-      console.log(`User disconnected: ${socket.id}`);
+      // Socket.IO automatically cleans up rooms on disconnect
     });
     
     // 2. Typing Indicators

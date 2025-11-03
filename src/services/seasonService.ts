@@ -221,20 +221,34 @@ export const getSeasonByIdService = async (id: string) => {
         }
       },
       memberships: {
-        include: {
+        select: {
+          id: true,
+          userId: true,
+          seasonId: true,
+          divisionId: true,
+          status: true,
+          paymentStatus: true,
+          joinedAt: true,
           user: {
-            include: {
-              questionnaireResponses: {
-                include: {
-                  result: true
-                },
-                where: {
-                  completedAt: { not: null }
-                }
-              }
+            select: {
+              id: true,
+              name: true,
+              username: true,
+              displayUsername: true,
+              image: true,
+              gender: true,
+              area: true,
+              // Removed questionnaireResponses to prevent N+1 queries
+              // Fetch separately if needed for specific use cases
             }
           },
-          division: true
+          division: {
+            select: {
+              id: true,
+              name: true,
+              level: true,
+            }
+          }
         },
       },
     },

@@ -103,7 +103,7 @@ export function validatePartnershipOwnership(
     };
   }
 
-  if (partnership.player1Id !== userId && partnership.player2Id !== userId) {
+  if (partnership.captainId !== userId && partnership.partnerId !== userId) {
     return {
       isValid: false,
       error: "You are not part of this partnership",
