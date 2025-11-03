@@ -67,45 +67,47 @@ export const NOTIFICATION_TYPES = {
 export interface NotificationPayload {
   type: NotificationType;
   category: NotificationCategory;
-  title?: string;
+  title?: string | undefined;
   message: string;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, any> | undefined;
 }
 
+
+// FIX THIS LATER, CANNOT BE UNDEFINED 
 export interface CreateNotificationData extends NotificationPayload {
   userIds: string | string[];
-  seasonId?: string;
-  divisionId?: string;
-  matchId?: string;
-  partnershipId?: string;
-  threadId?: string;
-  pairRequestId?: string;
-  achievementId?: string;
-  withdrawalRequestId?: string;
-}
-
-export interface NotificationFilter {
-  page?: number;
-  limit?: number;
-  unreadOnly?: boolean;
-  archived?: boolean;
-  category?: NotificationCategory;
-  categories?: NotificationCategory[];
-  type?: NotificationType;
-  types?: NotificationType[];
+  seasonId?: string | undefined;
+  divisionId?: string | undefined;
+  matchId?: string | undefined;
+  partnershipId?: string | undefined;
+  threadId?: string | undefined;
+  pairRequestId?: string | undefined;
+  achievementId?: string | undefined; 
+  withdrawalRequestId?: string | undefined;
 }
 
 export interface NotificationResult {
   id: string;
-  title?: string;
+  title: string | undefined; 
   message: string;
   category: NotificationCategory;
-  type?: NotificationType;
+  type: string | undefined;
   read: boolean;
   archive: boolean;
   createdAt: Date;
-  readAt?: Date;
+  readAt: Date | undefined;
   metadata?: Record<string, any>;
+}
+
+export interface NotificationFilter {
+  page?: number | undefined;
+  limit?: number | undefined;
+  unreadOnly?: boolean | undefined;
+  archived?: boolean | undefined;
+  category?: NotificationCategory | undefined;
+  categories?: NotificationCategory[] | undefined;
+  type?: NotificationType | undefined;
+  types?: string[] | undefined; 
 }
 
 export interface PaginatedNotifications {

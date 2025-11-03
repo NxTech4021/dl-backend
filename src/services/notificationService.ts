@@ -48,15 +48,26 @@ export class NotificationService {
 
       const validUserIds = users.map(u => u.id);
 
+      // 🔥 Fix: Filter out undefined values for database creation
+      const createData: any = {
+        message,
+        category,
+      };
+
+      // Only add fields if they have values (not undefined)
+      if (title !== undefined) createData.title = title;
+      if (type !== undefined) createData.type = type;
+      
+      // Add entity IDs only if they have values
+      Object.entries(entityIds).forEach(([key, value]) => {
+        if (value !== undefined) {
+          createData[key] = value;
+        }
+      });
+
       // Create notification in database
       const notification = await prisma.notification.create({
-        data: {
-          title,
-          message,
-          category, // Use category from Prisma schema
-          type,     // Store type as string
-          ...entityIds,
-        }
+        data: createData
       });
 
       // Create UserNotification records for each user
@@ -71,17 +82,18 @@ export class NotificationService {
       if (this.io) {
         this.emitNotifications(validUserIds, {
           id: notification.id,
-          title: notification.title || undefined,
+          title: notification.title ?? undefined,
           message: notification.message,
           category: notification.category,
-          type: notification.type || undefined,
+          type: notification.type ?? undefined,
           read: false,
           archive: false,
           createdAt: notification.createdAt,
           metadata: {
             ...metadata,
             ...entityIds,
-          }
+          },
+          readAt: undefined
         });
       }
 
@@ -94,13 +106,14 @@ export class NotificationService {
 
       return validUserIds.map(userId => ({
         id: notification.id,
-        title: notification.title || undefined,
+        title: notification.title ?? undefined,
         message: notification.message,
         category: notification.category,
-        type: notification.type || undefined,
+        type: notification.type ?? undefined,
         read: false,
         archive: false,
         createdAt: notification.createdAt,
+        readAt: undefined,
         metadata: {
           ...metadata,
           ...entityIds,
@@ -345,33 +358,6 @@ export class NotificationService {
     }
   }
 
-  async getNotificationsByType(
-    type: NotificationType,
-    limit: number = 100
-  ): Promise<NotificationResult[]> {
-    try {
-      const notifications = await prisma.notification.findMany({
-        where: { type },
-        orderBy: { createdAt: 'desc' },
-        take: limit,
-      });
-
-      return notifications.map(notif => ({
-        id: notif.id,
-        title: notif.title || undefined,
-        message: notif.message,
-        category: notif.category,
-        type: notif.type || undefined,
-        read: false, // This is not user-specific
-        archive: false,
-        createdAt: notif.createdAt,
-      }));
-    } catch (error) {
-      logger.error('Error getting notifications by type', { type }, error as Error);
-      throw new AppError('Failed to get notifications by type', 500);
-    }
-  }
-
   // Add new method for category filtering
   async getNotificationsByCategory(
     category: NotificationCategory,
@@ -393,6 +379,7 @@ export class NotificationService {
         read: false,
         archive: false,
         createdAt: notif.createdAt,
+        readAt: undefined,
       }));
     } catch (error) {
       logger.error('Error getting notifications by category', { category }, error as Error);
