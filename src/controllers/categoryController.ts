@@ -31,12 +31,22 @@ export const createCategory = async (req: Request, res: Response) => {
       return res.status(400).json(new ApiResponse(false, 400, null, "Category name is required"));
     }
 
-      const mappedGenderCategory =
-      gender_category === "MEN"
-        ? "MALE"
-        : gender_category === "WOMEN"
-        ? "FEMALE"
-        : "MIXED";
+    // Map genderRestriction to gender_category automatically
+    // genderRestriction: MALE, FEMALE, MIXED, OPEN
+    // gender_category: MALE, FEMALE, MIXED
+    let mappedGenderCategory: string | null = null;
+    if (genderRestriction) {
+      if (genderRestriction === 'MALE') {
+        mappedGenderCategory = 'MALE';
+      } else if (genderRestriction === 'FEMALE') {
+        mappedGenderCategory = 'FEMALE';
+      } else if (genderRestriction === 'MIXED') {
+        mappedGenderCategory = 'MIXED';
+      } else if (genderRestriction === 'OPEN') {
+        // OPEN typically means MIXED for doubles
+        mappedGenderCategory = 'MIXED';
+      }
+    }
 
     const leagueConnections = leagueIds?.length ? {
       leagues: {
@@ -218,12 +228,20 @@ export const updateCategory = async (req: Request, res: Response) => {
       );
     }
 
-    const mappedGenderCategory =
-      data.gender_category === "MEN"
-        ? "MALE"
-        : data.gender_category === "WOMEN"
-        ? "FEMALE"
-        : data.gender_category;
+    // Map genderRestriction to gender_category automatically if genderRestriction is being updated
+    let mappedGenderCategory: string | null | undefined = data.gender_category;
+    if (data.genderRestriction) {
+      if (data.genderRestriction === 'MALE') {
+        mappedGenderCategory = 'MALE';
+      } else if (data.genderRestriction === 'FEMALE') {
+        mappedGenderCategory = 'FEMALE';
+      } else if (data.genderRestriction === 'MIXED') {
+        mappedGenderCategory = 'MIXED';
+      } else if (data.genderRestriction === 'OPEN') {
+        // OPEN typically means MIXED for doubles
+        mappedGenderCategory = 'MIXED';
+      }
+    }
 
     // Prepare league connections if provided
     const leagueConnections = leagueIds ? {
@@ -232,10 +250,13 @@ export const updateCategory = async (req: Request, res: Response) => {
       }
     } : {};
 
+    // Remove gender_category from data if we're setting it from genderRestriction
+    const { gender_category: _, ...updateData } = data;
+
     const updatedCategory = await prisma.category.update({
       where: { id },
       data: {
-        ...data,
+        ...updateData,
         gender_category: mappedGenderCategory,
         ...leagueConnections
       },
