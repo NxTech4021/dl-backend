@@ -7,12 +7,15 @@ FROM base AS development
 ENV NODE_ENV=development
 RUN npm i
 COPY . .
-RUN npm install -g prisma
+RUN npm install -g prisma tsx nodemon
 RUN npx prisma generate
 
 EXPOSE 3001
-CMD ["npm", "run", "dev"]
-# CMD ["sh", "-c", "echo 'Waiting for database...' && sleep 5 && echo 'Running Prisma migrations...' && npx prisma migrate dev && echo 'Prisma migration complete' && echo 'Starting development server...' && npm run dev"]
+# Use nodemon with legacy-watch (polling) for Windows Docker compatibility
+# --legacy-watch: Use polling instead of file system events (fixes Windows/WSL2 issues)
+# --poll-interval 1000: Check for changes every 1 second
+# -e ts: Watch TypeScript files
+CMD ["sh", "-c", "echo 'Waiting for database...' && sleep 5 && echo 'Starting server with nodemon + tsx (polling mode)...' && npx nodemon --legacy-watch -e ts --exec tsx src/server.ts"]
 
 FROM node:20-alpine3.17 AS builder
 WORKDIR /app
