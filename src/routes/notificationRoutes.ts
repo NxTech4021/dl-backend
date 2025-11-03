@@ -13,21 +13,21 @@ import {
   deleteOldNotifications,
 } from '../controllers/notificationController';
 // import { authenticateToken } from '../middleware/auth';
-// import { requireAdmin } from '../middleware/adminAuth';
+import { verifyAuth } from '../middlewares/auth.middleware';
 
 const notificationRouter = Router();
 
 // TO DO ADD VERIFY AUTH
 
 // User notification routes
-notificationRouter.get('/', getUserNotifications);
-notificationRouter.get('/unread-count', getUnreadCount);
-notificationRouter.get('/stats', getNotificationStats);
+notificationRouter.get('/',  verifyAuth, getUserNotifications);
+notificationRouter.get('/unread-count', verifyAuth, getUnreadCount);
+notificationRouter.get('/stats', verifyAuth, getNotificationStats);
 
 // Individual notification actions
-notificationRouter.put('/:id/read', markNotificationAsRead);
-notificationRouter.put('/read-all', markAllNotificationsAsRead);
-notificationRouter.put('/:id/archive', archiveNotification);
+notificationRouter.put('/:id/read', verifyAuth, markNotificationAsRead);
+notificationRouter.put('/mark-all-read', verifyAuth, markAllNotificationsAsRead);
+notificationRouter.put('/:id/archive', verifyAuth, archiveNotification);
 
 // Admin routes
 notificationRouter.get('/by-type/:type', getNotificationsByType);

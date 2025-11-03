@@ -41,7 +41,7 @@ router.use("/chat", chatRoutes);
 // Settings
 
 // Notification
-router.use("/notifcation", notificationRouter);
+router.use("/notifications", notificationRouter);
 
 // router.post("/api/")
 
