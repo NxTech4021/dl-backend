@@ -5,10 +5,6 @@
 
 import { prisma } from '../../lib/prisma';
 
-/**
- * Get player's league participation history
- * Original: playerController.ts lines 1722-1821
- */
 export async function getPlayerLeagueHistory(playerId: string) {
   // Validate player exists
   const player = await prisma.user.findUnique({
@@ -20,30 +16,62 @@ export async function getPlayerLeagueHistory(playerId: string) {
     throw new Error('Player not found');
   }
 
-  // Get leagues where player has participated
+  // Get leagues where player has participated through SeasonMemberships
+  // Relationship: League -> seasons -> SeasonMembership -> userId
   const playerLeagues = await prisma.league.findMany({
     where: {
-      memberships: {
+      seasons: {
         some: {
-          userId: playerId
+          memberships: {
+            some: {
+              userId: playerId
+            }
+          }
         }
       }
     },
-    include: {
-      memberships: {
-        where: { userId: playerId },
-        select: {
-          joinedAt: true,
-          id: true
-        }
-      },
+    select: {
+      id: true,
+      name: true,
+      location: true,
+      description: true,
+      status: true,
+      sportType: true,
+      gameType: true,
+      createdAt: true,
+      updatedAt: true,
       seasons: {
+        where: {
+          memberships: {
+            some: {
+              userId: playerId
+            }
+          }
+        },
         select: {
           id: true,
           name: true,
           status: true,
           startDate: true,
-          endDate: true
+          endDate: true,
+          memberships: {
+            where: { userId: playerId },
+            select: {
+              id: true,
+              joinedAt: true,
+              status: true,
+              paymentStatus: true,
+              division: {
+                select: {
+                  id: true,
+                  name: true,
+                  gameType: true,
+                  genderCategory: true,
+                  level: true
+                }
+              }
+            }
+          }
         },
         orderBy: { startDate: 'desc' }
       },
@@ -68,7 +96,6 @@ export async function getPlayerLeagueHistory(playerId: string) {
       },
       _count: {
         select: {
-          memberships: true,
           seasons: true,
           categories: true
         }
@@ -80,11 +107,34 @@ export async function getPlayerLeagueHistory(playerId: string) {
   });
 
   // Transform data for better frontend consumption
-  const transformedLeagues = playerLeagues.map(league => ({
-    ...league,
-    membership: league.memberships[0], // Player's membership details
-    memberships: undefined // Remove the array since we only need the player's membership
-  }));
+  // Each league will have seasons the player participated in
+  const transformedLeagues = playerLeagues.map(league => {
+    // Get all season memberships across all seasons in this league
+    const allMemberships = league.seasons.flatMap(season => 
+      season.memberships.map(membership => ({
+        ...membership,
+        seasonId: season.id,
+        seasonName: season.name,
+        seasonStartDate: season.startDate,
+        seasonEndDate: season.endDate,
+        seasonStatus: season.status
+      }))
+    );
+
+    // Get the most recent membership (based on joinedAt)
+    const mostRecentMembership = allMemberships.length > 0
+      ? allMemberships.sort((a, b) => 
+          new Date(b.joinedAt).getTime() - new Date(a.joinedAt).getTime()
+        )[0]
+      : null;
+
+    return {
+      ...league,
+      seasonMemberships: allMemberships, // All season memberships for this league
+      membership: mostRecentMembership, // Most recent membership for backward compatibility
+      // Keep seasons array with filtered memberships for reference
+    };
+  });
 
   return {
     player: {
