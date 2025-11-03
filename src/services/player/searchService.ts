@@ -106,7 +106,7 @@ export async function getAvailablePlayersForSeason(
     throw new Error('User not found');
   }
 
-  // Get season with category info to check if it's mixed doubles
+  // Get season with category info to check if it's mixed doubles and get sport type
   const season = await prisma.season.findUnique({
     where: { id: seasonId },
     select: {
@@ -117,6 +117,12 @@ export async function getAvailablePlayersForSeason(
           id: true,
           genderRestriction: true,
           gender_category: true
+        }
+      },
+      leagues: {
+        select: {
+          id: true,
+          sportType: true
         }
       }
     },
@@ -270,16 +276,59 @@ export async function getAvailablePlayersForSeason(
   // Add sports, ratings, and friendship flag
   const playersWithDetails = await enrichPlayersWithSkills(playersToReturn);
 
-  // Add isFriend flag to each player
-  const playersWithFriendship = playersWithDetails.map(player => ({
-    ...player,
-    isFriend: friendIds.includes(player.id),
-  }));
+  // Get season sport type (from league sportType or infer from categories)
+  const seasonSport = season.leagues[0]?.sportType?.toLowerCase() || 
+                      (season.categories[0] ? 'pickleball' : null); // Fallback to pickleball if no league sportType
+
+  // Get questionnaire responses for all players to check completion status for season sport
+  const playerIds = playersToReturn.map(p => p.id);
+  const questionnaireResponses = playerIds.length > 0 && seasonSport
+    ? await prisma.questionnaireResponse.findMany({
+        where: {
+          userId: { in: playerIds },
+          sport: { equals: seasonSport, mode: 'insensitive' }
+        },
+        select: {
+          userId: true,
+          sport: true,
+          completedAt: true,
+          startedAt: true
+        }
+      })
+    : [];
+
+  // Create a map of userId -> questionnaire status for the season sport
+  const questionnaireStatusMap = new Map();
+  questionnaireResponses.forEach(res => {
+    questionnaireStatusMap.set(res.userId, {
+      hasSelectedSport: true,
+      hasCompletedQuestionnaire: !!res.completedAt,
+      startedAt: res.startedAt,
+      completedAt: res.completedAt
+    });
+  });
+
+  // Add isFriend flag and questionnaire status to each player
+  const playersWithFriendship = playersWithDetails.map(player => {
+    const questionnaireStatus = questionnaireStatusMap.get(player.id);
+    return {
+      ...player,
+      isFriend: friendIds.includes(player.id),
+      questionnaireStatus: questionnaireStatus || {
+        hasSelectedSport: false,
+        hasCompletedQuestionnaire: false,
+        startedAt: null,
+        completedAt: null
+      },
+      seasonSport: seasonSport // Include season sport for frontend use
+    };
+  });
 
   return {
     players: playersWithFriendship,
     usedFallback,
     totalCount: playersWithFriendship.length,
     friendsCount: usedFallback ? 0 : playersWithFriendship.length,
+    seasonSport: seasonSport, // Include season sport in response
   };
 }

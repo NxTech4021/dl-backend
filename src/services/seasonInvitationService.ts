@@ -37,12 +37,50 @@ export const sendSeasonInvitation = async (data: {
         name: true,
         status: true,
         regiDeadline: true,
-        startDate: true
+        startDate: true,
+        leagues: {
+          select: {
+            id: true,
+            sportType: true
+          }
+        }
       }
     });
 
     if (!season) {
       return { success: false, message: 'Season not found' };
+    }
+
+    // Get season sport type (from league sportType or infer from categories)
+    const seasonSport = season.leagues[0]?.sportType?.toLowerCase() || 'pickleball';
+
+    // Check if recipient has selected the sport for this season
+    const recipientSportResponse = await prisma.questionnaireResponse.findFirst({
+      where: {
+        userId: recipientId,
+        sport: { equals: seasonSport, mode: 'insensitive' }
+      },
+      select: {
+        id: true,
+        completedAt: true,
+        startedAt: true
+      }
+    });
+
+    // Validate: Recipient must have selected the sport
+    if (!recipientSportResponse) {
+      return { 
+        success: false, 
+        message: 'This player needs to complete a questionnaire to join this season' 
+      };
+    }
+
+    // Validate: Recipient must have completed the questionnaire
+    if (!recipientSportResponse.completedAt) {
+      return { 
+        success: false, 
+        message: 'This player has not completed their questionnaire for this sport' 
+      };
     }
 
     // Validate: Registration is still open
