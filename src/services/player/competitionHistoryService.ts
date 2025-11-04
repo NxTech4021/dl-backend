@@ -317,8 +317,7 @@ export async function getPlayerDivisionHistory(playerId: string) {
         select: {
           id: true,
           sponsoredName: true,
-          packageTier: true,
-          prizePoolTotal: true
+          packageTier: true
         }
       },
       _count: {
