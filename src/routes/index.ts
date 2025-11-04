@@ -11,6 +11,7 @@ import onboardingRouter from "./onboarding";
 import chatRoutes from "./threadRoutes";
 import notificationRouter from "./notificationRoutes";
 import matchRoutes from "./matchRoutes";
+import paymentRoutes from "./paymentRoutes";
 
 
 const router = express.Router();
@@ -30,6 +31,7 @@ router.use("/season", seasonRouter);
 router.use("/sponsor", sponsorRoutes);
 router.use("/category", categoryRoutes);
 router.use("/pairing", pairingRouter);
+router.use("/payments", paymentRoutes);
 
 router.use("/match", matchRoutes);
 

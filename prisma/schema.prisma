@@ -33,6 +33,7 @@ model User {
   accounts          Account[]
   sessions          Session[]
   seasonMemberships SeasonMembership[]
+  payments          Payment[]
   matchParticipants MatchParticipant[]
   processedRequests WithdrawalRequest[] @relation("ProcessedByAdmin")
 
@@ -198,7 +199,6 @@ model League {
   sponsorships Sponsorship[]
   categories   Category[]
   divisions    Division[]
-
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -280,6 +280,7 @@ model Season {
   //Relations
   divisions          Division[]
   memberships        SeasonMembership[]
+  payments           Payment[]
   promoCodes         PromoCode[]         @relation("SeasonPromoCodes")
   withdrawalRequests WithdrawalRequest[]
 
@@ -432,6 +433,7 @@ model SeasonMembership {
   user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   season   Season    @relation(fields: [seasonId], references: [id], onDelete: Cascade)
   division Division? @relation("SeasonMembershipDivision", fields: [divisionId], references: [id], onDelete: Cascade)
+  payments Payment[]
 
   @@unique([userId, seasonId, divisionId])
   @@index([userId])
@@ -818,10 +820,44 @@ enum AdminStatus {
   SUSPENDED
 }
 
+model Payment {
+  id                 String         @id @default(cuid())
+  orderId            String         @unique
+  amount             Decimal        @db.Decimal(10, 2)
+  currency           String         @default("MYR")
+  paymentMethod      String?
+  status             PaymentStatus  @default(PENDING)
+  paidAt             DateTime?
+  userId             String?
+  seasonId           String?
+  seasonMembershipId String?
+  fiuuTransactionId  String?
+  fiuuChannel        String?
+  fiuuStatusCode     String?
+  fiuuMessage        String?
+  verificationHash   String?
+  metadata           Json?
+  notes              String?
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+
+  user             User?             @relation(fields: [userId], references: [id], onDelete: SetNull)
+  season           Season?           @relation(fields: [seasonId], references: [id], onDelete: SetNull)
+  seasonMembership SeasonMembership? @relation(fields: [seasonMembershipId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([seasonId])
+  @@index([seasonMembershipId])
+  @@index([status])
+  @@map("payment")
+}
+
 enum PaymentStatus {
   PENDING
   COMPLETED
   FAILED
+  CANCELLED
+  REFUNDED
 }
 
 enum UserStatus {

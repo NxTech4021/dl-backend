@@ -94,6 +94,7 @@ app.all("/api/auth/{*any}", (req, res) => {
 
 // The JSON parser for any other routes you might add later.
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 app.use(pino());
 

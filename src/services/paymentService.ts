@@ -13,7 +13,7 @@ interface PaymentUpdateData {
   amount?: number;
   paymentMethod?: string;
   status?: PaymentStatus;
-  paidAt?: Date;
+  paidAt?: Date | null;
   notes?: string;
 }
 
@@ -22,7 +22,7 @@ interface PaymentUpdateData {
 
 // Business Logic: Payment creation with validation
 export const createPayment = async (data: PaymentCreationData) => {
-  const { amount, status = 'PENDING' } = data;
+  const { amount, status = PaymentStatus.PENDING } = data;
 
   // Business Rule: Amount must be positive
   if (amount <= 0) {
@@ -36,7 +36,7 @@ export const createPayment = async (data: PaymentCreationData) => {
       paymentMethod: data.paymentMethod,
       status: status,
       notes: data.notes,
-      paidAt: status === 'PAID' ? new Date() : undefined,
+      paidAt: status === PaymentStatus.COMPLETED ? new Date() : undefined,
     },
   });
 };
@@ -58,23 +58,23 @@ export const updatePayment = async (id: string, data: PaymentUpdateData) => {
   }
 
   // Business Rule: Cannot modify paid payments (except to refund)
-  if (payment.status === 'PAID' && data.status && data.status !== 'REFUNDED') {
-    throw new Error('Cannot modify paid payments except to refund.');
+  if (payment.status === PaymentStatus.COMPLETED && data.status && data.status !== PaymentStatus.REFUNDED) {
+    throw new Error('Cannot modify completed payments except to refund.');
   }
 
   // Business Rule: Cannot refund unpaid payments
-  if (payment.status !== 'PAID' && data.status === 'REFUNDED') {
-    throw new Error('Cannot refund unpaid payments.');
+  if (payment.status !== PaymentStatus.COMPLETED && data.status === PaymentStatus.REFUNDED) {
+    throw new Error('Cannot refund incomplete payments.');
   }
 
   // Business Logic: Auto-set paidAt when status changes to PAID
   const updateData = { ...data };
-  if (data.status === 'PAID' && payment.status !== 'PAID') {
+  if (data.status === PaymentStatus.COMPLETED && payment.status !== PaymentStatus.COMPLETED) {
     updateData.paidAt = new Date();
   }
 
   // Business Logic: Clear paidAt when status changes from PAID
-  if (data.status && data.status !== 'PAID' && payment.status === 'PAID') {
+  if (data.status && data.status !== PaymentStatus.COMPLETED && payment.status === PaymentStatus.COMPLETED) {
     updateData.paidAt = null;
   }
 
@@ -95,19 +95,19 @@ export const markPaymentAsPaid = async (id: string) => {
     throw new Error(`Payment with ID ${id} not found.`);
   }
 
-  if (payment.status === 'PAID') {
-    throw new Error('Payment is already marked as paid.');
+  if (payment.status === PaymentStatus.COMPLETED) {
+    throw new Error('Payment is already marked as completed.');
   }
 
-  if (payment.status === 'REFUNDED') {
-    throw new Error('Cannot mark refunded payment as paid.');
+  if (payment.status === PaymentStatus.REFUNDED) {
+    throw new Error('Cannot mark refunded payment as completed.');
   }
 
   // Business Logic: Mark as paid with timestamp
   return prisma.payment.update({
     where: { id },
     data: {
-      status: 'PAID',
+      status: PaymentStatus.COMPLETED,
       paidAt: new Date(),
     },
   });
@@ -131,8 +131,8 @@ export const deletePayment = async (id: string) => {
     throw new Error(`Payment with ID ${id} not found.`);
   }
 
-  if (payment.status === 'PAID') {
-    throw new Error('Cannot delete paid payments. Consider refunding instead.');
+  if (payment.status === PaymentStatus.COMPLETED) {
+    throw new Error('Cannot delete completed payments. Consider refunding instead.');
   }
 
   // Business Logic: Delete payment
@@ -151,14 +151,14 @@ export const refundPayment = async (id: string, reason?: string) => {
     throw new Error(`Payment with ID ${id} not found.`);
   }
 
-  if (payment.status !== 'PAID') {
-    throw new Error('Can only refund paid payments.');
+  if (payment.status !== PaymentStatus.COMPLETED) {
+    throw new Error('Can only refund completed payments.');
   }
 
   return prisma.payment.update({
     where: { id },
     data: {
-      status: 'REFUNDED',
+      status: PaymentStatus.REFUNDED,
       notes: reason ? `${payment.notes || ''}\nRefunded: ${reason}` : payment.notes,
     },
   });
