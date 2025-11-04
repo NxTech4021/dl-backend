@@ -90,6 +90,16 @@ export function formatQuestionnaireResponse(response: any): FormattedQuestionnai
  * Extracted from: seasonController lines 134-159, 248-273 (52 lines duplicated!)
  */
 export function formatMembershipWithUser(membership: any): FormattedMembership {
+  // Get the most recent questionnaire response result for initialRatingResult
+  const mostRecentResponse = membership.user?.questionnaireResponses?.[0];
+  const initialRatingResult = mostRecentResponse?.result ? {
+    singles: mostRecentResponse.result.singles ?? null,
+    doubles: mostRecentResponse.result.doubles ?? null,
+    rd: mostRecentResponse.result.rd ?? null,
+    confidence: mostRecentResponse.result.confidence ?? null,
+    source: mostRecentResponse.result.source ?? null
+  } : null;
+
   return {
     id: membership.id,
     userId: membership.userId,
@@ -105,6 +115,7 @@ export function formatMembershipWithUser(membership: any): FormattedMembership {
       email: membership.user.email,
       image: membership.user.image ?? null,
       username: membership.user.username,
+      initialRatingResult: initialRatingResult,
       questionnaireResponses: membership.user.questionnaireResponses
         ?.map(formatQuestionnaireResponse) || []
     } : null
@@ -116,6 +127,16 @@ export function formatMembershipWithUser(membership: any): FormattedMembership {
  * Extracted from: seasonController lines 161-186, 275-300 (52 lines duplicated!)
  */
 export function formatRegistrationAsMembership(registration: any): FormattedMembership {
+  // Get the most recent questionnaire response result for initialRatingResult
+  const mostRecentResponse = registration.player?.questionnaireResponses?.[0];
+  const initialRatingResult = mostRecentResponse?.result ? {
+    singles: mostRecentResponse.result.singles ?? null,
+    doubles: mostRecentResponse.result.doubles ?? null,
+    rd: mostRecentResponse.result.rd ?? null,
+    confidence: mostRecentResponse.result.confidence ?? null,
+    source: mostRecentResponse.result.source ?? null
+  } : null;
+
   return {
     id: `reg_${registration.id}`, // Prefix to avoid ID conflicts with SeasonMembership
     userId: registration.playerId,
@@ -131,6 +152,7 @@ export function formatRegistrationAsMembership(registration: any): FormattedMemb
       email: registration.player.email,
       image: registration.player.image ?? null,
       username: registration.player.username,
+      initialRatingResult: initialRatingResult,
       questionnaireResponses: registration.player.questionnaireResponses
         ?.map(formatQuestionnaireResponse) || []
     } : null
@@ -249,7 +271,7 @@ export function formatSeasonBasic(season: any): Partial<FormattedSeason> {
  * Format withdrawal request with relations
  */
 export function formatWithdrawalRequest(request: any): FormattedWithdrawalRequest {
-  return {
+  const formatted: FormattedWithdrawalRequest = {
     id: request.id,
     seasonId: request.seasonId,
     userId: request.userId,
@@ -259,10 +281,6 @@ export function formatWithdrawalRequest(request: any): FormattedWithdrawalReques
     processedByAdminId: request.processedByAdminId ?? null,
     createdAt: request.createdAt,
     updatedAt: request.updatedAt,
-    season: request.season ? {
-      id: request.season.id,
-      name: request.season.name
-    } : undefined,
     partnership: request.partnership ? {
       id: request.partnership.id,
       player1: {
@@ -279,4 +297,13 @@ export function formatWithdrawalRequest(request: any): FormattedWithdrawalReques
       role: request.processedByAdmin.role
     } : null
   };
+
+  if (request.season) {
+    formatted.season = {
+      id: request.season.id,
+      name: request.season.name
+    };
+  }
+
+  return formatted;
 }
