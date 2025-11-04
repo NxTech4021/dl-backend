@@ -1,5 +1,6 @@
 import { prisma } from '../lib/prisma';
 import { PairRequestStatus } from '@prisma/client';
+import { enrichPlayerWithSkills } from './player/utils/playerTransformer';
 
 /**
  * Pairing Service
@@ -123,7 +124,7 @@ export const sendPairRequest = async (
     }
 
     const now = new Date();
-    if (now > season.regiDeadline || now > season.startDate) {
+    if ((season.regiDeadline && now > season.regiDeadline) || (season.startDate && now > season.startDate)) {
       return {
         success: false,
         message: 'Season registration is not currently open',
@@ -209,7 +210,7 @@ export const sendPairRequest = async (
         requesterId,
         recipientId,
         seasonId,
-        message,
+        message: message ?? null,
         status: PairRequestStatus.PENDING,
         expiresAt,
       },
@@ -351,7 +352,7 @@ export const acceptPairRequest = async (
           captainId: pairRequest.requesterId,
           partnerId: pairRequest.recipientId,
           seasonId: pairRequest.seasonId,
-          divisionId: assignedDivisionId,
+          divisionId: assignedDivisionId ?? null,
           pairRating,
         },
         include: {
@@ -752,6 +753,7 @@ export const dissolvePartnership = async (
 /**
  * Get active partnership for a user in a specific season
  * Returns null if no active partnership exists
+ * Now returns captain and partner with transformed skillRatings for consistency with profile API
  */
 export const getActivePartnership = async (
   userId: string,
@@ -768,29 +770,85 @@ export const getActivePartnership = async (
         ],
       },
       include: {
-        captain: {
-          include: {
-            questionnaireResponses: {
-              include: {
-                result: true,
-              },
-            },
-          },
-        },
-        partner: {
-          include: {
-            questionnaireResponses: {
-              include: {
-                result: true,
-              },
-            },
-          },
-        },
+        captain: true,
+        partner: true,
         season: true,
       },
     });
 
-    return partnership;
+    if (!partnership) {
+      return null;
+    }
+
+    // Transform captain and partner to include skillRatings (same structure as profile API)
+    let enrichedCaptain, enrichedPartner;
+    try {
+      [enrichedCaptain, enrichedPartner] = await Promise.all([
+        enrichPlayerWithSkills(partnership.captain),
+        enrichPlayerWithSkills(partnership.partner),
+      ]);
+    } catch (enrichError) {
+      console.error('Error enriching players with skills:', enrichError);
+      // Fallback: return players without enrichment if enrichment fails
+      enrichedCaptain = partnership.captain;
+      enrichedPartner = partnership.partner;
+    }
+
+    // Debug logging
+    console.log('🔍 getActivePartnership - Captain skillRatings:', {
+      captainId: enrichedCaptain.id,
+      captainName: enrichedCaptain.name,
+      hasSkillRatings: !!enrichedCaptain.skillRatings,
+      skillRatingsKeys: enrichedCaptain.skillRatings ? Object.keys(enrichedCaptain.skillRatings) : [],
+      skillRatings: enrichedCaptain.skillRatings,
+      captainKeys: Object.keys(enrichedCaptain),
+    });
+
+    console.log('🔍 getActivePartnership - Partner skillRatings:', {
+      partnerId: enrichedPartner.id,
+      partnerName: enrichedPartner.name,
+      hasSkillRatings: !!enrichedPartner.skillRatings,
+      skillRatingsKeys: enrichedPartner.skillRatings ? Object.keys(enrichedPartner.skillRatings) : [],
+      skillRatings: enrichedPartner.skillRatings,
+      partnerKeys: Object.keys(enrichedPartner),
+    });
+
+    // Ensure skillRatings is always an object (not null) for consistency
+    // If empty, return empty object instead of null
+    // Remove questionnaireResponses to avoid confusion and reduce payload size
+    const captainWithSkillRatings = {
+      ...enrichedCaptain,
+      skillRatings: enrichedCaptain.skillRatings || {},
+      // Explicitly remove questionnaireResponses to avoid confusion
+      questionnaireResponses: undefined,
+    };
+    delete captainWithSkillRatings.questionnaireResponses;
+    
+    const partnerWithSkillRatings = {
+      ...enrichedPartner,
+      skillRatings: enrichedPartner.skillRatings || {},
+      // Explicitly remove questionnaireResponses to avoid confusion
+      questionnaireResponses: undefined,
+    };
+    delete partnerWithSkillRatings.questionnaireResponses;
+
+    const result = {
+      ...partnership,
+      captain: captainWithSkillRatings,
+      partner: partnerWithSkillRatings,
+    };
+
+    // Final debug log before returning
+    console.log('🔍 getActivePartnership - Final result:', {
+      hasCaptain: !!result.captain,
+      hasPartner: !!result.partner,
+      captainHasSkillRatings: !!result.captain?.skillRatings,
+      partnerHasSkillRatings: !!result.partner?.skillRatings,
+      captainSkillRatingsKeys: result.captain?.skillRatings ? Object.keys(result.captain.skillRatings) : [],
+      partnerSkillRatingsKeys: result.partner?.skillRatings ? Object.keys(result.partner.skillRatings) : [],
+    });
+
+    return result;
   } catch (error) {
     console.error('Error getting active partnership:', error);
     throw error;
