@@ -16,7 +16,6 @@ import {
 } from "../services/seasonService";
 
 import {
-  validateCreateSeasonData,
   validateUpdateSeasonData,
   validateStatusUpdate,
   validateWithdrawalRequest,
@@ -59,8 +58,6 @@ export const createSeason = async (req: Request, res: Response) => {
   } = req.body;
 
   try {
-    const categoryIds = categoryId ? [categoryId] : [];
-
     const season = await createSeasonService({
       name,
       startDate,
@@ -69,7 +66,7 @@ export const createSeason = async (req: Request, res: Response) => {
       description,
       entryFee,
       leagueIds,
-      categoryIds,
+      categoryId,
       isActive,
       paymentRequired,
       promoCodeSupported,
@@ -205,7 +202,7 @@ export const updateSeason = async (req: Request, res: Response) => {
     description,
     entryFee,
     leagueIds,
-    categoryIds,
+    categoryId,
     isActive,
     status,
     paymentRequired,
@@ -218,7 +215,6 @@ export const updateSeason = async (req: Request, res: Response) => {
   }
 
   try {
-    // 🆕 Get current season to compare status changes
     const currentSeason = await prisma.season.findUnique({
       where: { id },
       select: { status: true, name: true }
@@ -232,7 +228,7 @@ export const updateSeason = async (req: Request, res: Response) => {
       description,
       entryFee,
       leagueIds,
-      categoryIds,
+      categoryId,
       isActive,
       status,
       paymentRequired,
@@ -640,7 +636,7 @@ export const registerPlayerToSeason = async (req: Request, res: Response) => {
         ...membership,
         user: { id: membership.user.id, name: membership.user.name },
         season: { id: membership.season.id, name: membership.season.name },
-        division: null, // division is not included in registerMembershipService response
+        division: null,
       };
 
       return res.status(201).json({

@@ -245,7 +245,7 @@ export interface FormattedSeason {
   createdAt: Date;
   updatedAt: Date;
   leagues: FormattedLeague[];
-  categories: FormattedCategory[];
+  category: FormattedCategory | null; 
   memberships: FormattedMembership[];
   divisions?: any[];
   promoCodes?: any[];
