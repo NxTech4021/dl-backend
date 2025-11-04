@@ -77,6 +77,23 @@ export function extractSports(responses: any[]): string[] {
 export function buildSkillRatings(responses: any[]): Record<string, SkillRating> {
   const skillRatings: Record<string, SkillRating> = {};
 
+  console.log('🔍 buildSkillRatings - Input:', {
+    responseCount: responses.length,
+    responses: responses.map(r => ({
+      id: r.id,
+      sport: r.sport,
+      hasResult: !!r.result,
+      hasCompletedAt: !!r.completedAt,
+      completedAt: r.completedAt,
+      result: r.result ? {
+        hasSingles: !!r.result.singles,
+        hasDoubles: !!r.result.doubles,
+        singles: r.result.singles,
+        doubles: r.result.doubles,
+      } : null,
+    })),
+  });
+
   responses.forEach(res => {
     if (res.result && res.completedAt) {
       skillRatings[res.sport.toLowerCase()] = {
@@ -86,7 +103,20 @@ export function buildSkillRatings(responses: any[]): Record<string, SkillRating>
         confidence: res.result.confidence ?? 'N/A',
         rd: res.result.rd ?? 0,
       };
+    } else {
+      console.log('🔍 buildSkillRatings - Skipping response:', {
+        id: res.id,
+        sport: res.sport,
+        reason: !res.result ? 'no result' : 'no completedAt',
+        hasResult: !!res.result,
+        hasCompletedAt: !!res.completedAt,
+      });
     }
+  });
+
+  console.log('🔍 buildSkillRatings - Output:', {
+    skillRatingsKeys: Object.keys(skillRatings),
+    skillRatings,
   });
 
   return skillRatings;
