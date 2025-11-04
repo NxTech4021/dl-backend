@@ -40,17 +40,16 @@ export function formatLeaguesList(leagues: any[]): FormattedLeague[] {
  * Format category list
  * Extracted from: seasonController lines 188-193, 302-307
  */
-export function formatCategoriesList(categories: any[]): FormattedCategory[] {
-  if (!categories) return [];
+export function formatCategory(category: any): FormattedCategory | null {
+  if (!category) return null;
 
-  return categories.map(category => ({
+  return {
     id: category.id,
     name: category.name,
     genderRestriction: category.genderRestriction,
     matchFormat: category.matchFormat
-  }));
+  };
 }
-
 /**
  * Format questionnaire result
  * Extracted from: seasonController nested mapping lines 149-156, 176-183
@@ -229,7 +228,7 @@ export function formatSeasonWithRelations(season: any): FormattedSeason {
     createdAt: season.createdAt,
     updatedAt: season.updatedAt,
     leagues: formatLeaguesList(season.leagues),
-    categories: formatCategoriesList(season.categories),
+    category: formatCategory(season.category),
     memberships: formatMembershipsList(season.memberships, []),
     divisions: season.divisions,
     promoCodes: season.promoCodes,
@@ -259,7 +258,7 @@ export function formatSeasonBasic(season: any): Partial<FormattedSeason> {
     createdAt: season.createdAt,
     updatedAt: season.updatedAt,
     leagues: formatLeaguesList(season.leagues),
-    categories: formatCategoriesList(season.categories)
+    category: formatCategory(season.category),
   };
 }
 

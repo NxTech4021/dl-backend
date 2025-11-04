@@ -44,15 +44,6 @@ export const getAllLeagues = async () => {
   const leagues = await prisma.league.findMany({
     include: {
       sponsorships: true,
-      categories: {
-        select: {
-          id: true,
-          name: true,
-          genderRestriction: true,
-          game_type: true,
-          gender_category: true
-        }
-      },
       seasons: {
         include: {
           _count: {
@@ -83,14 +74,8 @@ export const getAllLeagues = async () => {
     };
   });
 
-  // Calculate total members from all seasons in all leagues
-  const totalMembers = leaguesWithMemberships.reduce((sum: number, league: any) => {
-    return sum + (league.totalSeasonMemberships || 0);
-  }, 0);
 
-  const totalCategories = leagues.reduce((sum: number, league: any) => sum + (league.categories?.length || 0), 0);
-
-  return { leagues: leaguesWithMemberships, totalMembers, totalCategories };
+  return { leagues: leaguesWithMemberships,};
 };
 
 
@@ -99,8 +84,6 @@ export const getLeagueById = async (id: string) => {
     where: { id },
     include: {
       sponsorships: true,
-      // memberships removed - LeagueMembership model no longer exists
-      categories: true,
       seasons: {
         include: {
           divisions: true,
@@ -109,11 +92,6 @@ export const getLeagueById = async (id: string) => {
               user: true
             }
           },
-          _count: {
-            select: {
-              memberships: true
-            }
-          }
         },
       },
       createdBy: {
@@ -125,8 +103,6 @@ export const getLeagueById = async (id: string) => {
         select: {
           seasons: true,
           sponsorships: true,
-          categories: true,
-          // memberships removed
         },
       },
     },
@@ -188,9 +164,6 @@ export const createLeague = async (data: LeagueData) => {
           contractAmount: s.contractAmount ?? null,
           sponsorRevenue: s.sponsorRevenue ?? null,
           sponsoredName: s.sponsoredName ?? null,
-          // startDate: s.startDate,
-          // endDate: s.endDate ?? null,
-          // isActive: s.isActive ?? true,
           createdById: s.createdById ?? null
         })),
       }
@@ -271,9 +244,7 @@ export const deleteLeague = async (id: string) => {
       _count: {
         select: {
           seasons: true,
-          sponsorships: true, 
-          // memberships removed - LeagueMembership model no longer exists
-          categories: true, 
+          sponsorships: true,     
         }
       }
     }

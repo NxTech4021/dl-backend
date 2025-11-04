@@ -11,7 +11,7 @@ interface CreateSeasonData {
   description?: string;
   entryFee: string | number;
   leagueIds: string[];
-  categoryIds: string[];
+  categoryId: string;
   isActive?: boolean;
   paymentRequired?: boolean;
   promoCodeSupported?: boolean;
@@ -26,7 +26,7 @@ interface SeasonUpdateData {
   entryFee?: number;
   description?: string;
   leagueIds?: string[];
-  categoryIds?: string[];
+  categoryId?: string;
   isActive?: boolean;
   status?: "UPCOMING" | "ACTIVE" | "FINISHED" | "CANCELLED";
   paymentRequired?: boolean;
@@ -65,18 +65,21 @@ export const createSeasonService = async (data: CreateSeasonData) => {
     description,
     entryFee,
     leagueIds,
-    categoryIds,
+    categoryId,
     isActive,
     paymentRequired,
     promoCodeSupported,
     withdrawalEnabled,
   } = data;
 
-  const existingSeason = await prisma.season.findFirst({
-    where: { name },
+   const existingSeasonWithCategory = await prisma.season.findFirst({
+    where: {
+      categoryId,
+    },
   });
-  if (existingSeason) {
-    throw new Error("A season with this name already exists.");
+
+  if (existingSeasonWithCategory) {
+    throw new Error("This category is already assigned to another season.");
   }
 
   return prisma.season.create({
@@ -95,8 +98,8 @@ export const createSeasonService = async (data: CreateSeasonData) => {
       leagues: {
         connect: leagueIds.map(id => ({ id }))
       },
-      categories: {
-        connect: categoryIds.map(id => ({ id }))
+      category: {
+        connect: { id: categoryId }
       }
     },
     include: {
@@ -108,7 +111,7 @@ export const createSeasonService = async (data: CreateSeasonData) => {
           gameType: true
         }
       },
-      categories: {
+     category: {
         select: {
           id: true,
           name: true,
@@ -139,7 +142,7 @@ export const getAllSeasonsService = async () => {
       registeredUserCount: true,
       createdAt: true,
       updatedAt: true,
-      categories: {
+      category: {
         select: { 
           id: true, 
           name: true,
@@ -147,7 +150,6 @@ export const getAllSeasonsService = async () => {
           gender_category: true,
           game_type: true,
           matchFormat: true,
-          isActive: true,
           categoryOrder: true
         }
       },
@@ -208,7 +210,7 @@ export const getSeasonByIdService = async (id: string) => {
           gameType: true
         }
       },
-      categories: {
+      category: {
         select: {
           id: true,
           name: true,
@@ -272,7 +274,7 @@ export const getActiveSeasonService = async () => {
     include: {
       divisions: { select: { id: true, name: true } },
       leagues: { select: { id: true, name: true } },
-      categories: { select: { id: true, name: true } },
+      category: { select: { id: true, name: true } },
     },
   });
 };
@@ -308,7 +310,8 @@ export const updateSeasonService = async (id: string, data: SeasonUpdateData) =>
   if (data.entryFee !== undefined) updateData.entryFee = new Prisma.Decimal(data.entryFee);
   if (data.description !== undefined) updateData.description = data.description ?? null;
   if (data.leagueIds !== undefined) updateData.leagues = { set: data.leagueIds.map(id => ({ id })) };
-  if (data.categoryIds !== undefined) updateData.categories = { set: data.categoryIds.map(id => ({ id })) };
+  if (data.categoryId !== undefined) updateData.category = { connect: { id: data.categoryId } };
+  if (data.isActive !== undefined) updateData.isActive = data.isActive;
   if (data.isActive !== undefined) updateData.isActive = data.isActive;
   if (data.status !== undefined) updateData.status = data.status;
   if (data.paymentRequired !== undefined) updateData.paymentRequired = data.paymentRequired;
@@ -327,7 +330,7 @@ export const updateSeasonService = async (id: string, data: SeasonUpdateData) =>
           gameType: true
         }
       },
-      categories: {
+      category: {
         select: {
           id: true,
           name: true,
