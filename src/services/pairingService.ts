@@ -1,5 +1,6 @@
 import { prisma } from '../lib/prisma';
 import { PairRequestStatus } from '@prisma/client';
+import { enrichPlayerWithSkills } from './player/utils/playerTransformer';
 
 /**
  * Pairing Service
@@ -752,6 +753,7 @@ export const dissolvePartnership = async (
 /**
  * Get active partnership for a user in a specific season
  * Returns null if no active partnership exists
+ * Now returns captain and partner with transformed skillRatings for consistency with profile API
  */
 export const getActivePartnership = async (
   userId: string,
@@ -768,29 +770,27 @@ export const getActivePartnership = async (
         ],
       },
       include: {
-        captain: {
-          include: {
-            questionnaireResponses: {
-              include: {
-                result: true,
-              },
-            },
-          },
-        },
-        partner: {
-          include: {
-            questionnaireResponses: {
-              include: {
-                result: true,
-              },
-            },
-          },
-        },
+        captain: true,
+        partner: true,
         season: true,
       },
     });
 
-    return partnership;
+    if (!partnership) {
+      return null;
+    }
+
+    // Transform captain and partner to include skillRatings (same structure as profile API)
+    const [enrichedCaptain, enrichedPartner] = await Promise.all([
+      enrichPlayerWithSkills(partnership.captain),
+      enrichPlayerWithSkills(partnership.partner),
+    ]);
+
+    return {
+      ...partnership,
+      captain: enrichedCaptain,
+      partner: enrichedPartner,
+    };
   } catch (error) {
     console.error('Error getting active partnership:', error);
     throw error;
