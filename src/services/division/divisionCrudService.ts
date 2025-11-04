@@ -1,9 +1,3 @@
-/**
- * Division CRUD Service
- * Handles division create, read, update, delete operations
- * DEPENDS ON: divisionCapacityService (capacity checks), formatters (formatting)
- */
-
 import { prisma } from '../../lib/prisma';
 import { Prisma, DivisionLevel, GameType, GenderType } from "@prisma/client";
 import { formatDivision } from './utils/formatters';

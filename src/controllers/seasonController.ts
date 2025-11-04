@@ -36,22 +36,11 @@ import {
   formatMembershipResponse 
 } from "../services/season/utils/formatters";
 
-// import { notificationService } from '../services/notificationService';
-// import {
-//   notificationSeasonRegistrationConfirmed,
-//   notificationSeasonStartingSoon,
-//   notificationSeasonEnded,
-//   notificationSeasonCancelled,
-//   notificationPaymentConfirmed,
-//   notificationPaymentFailed,
-//   notificationWithdrawalRequestReceived,
-//   notificationWithdrawalRequestApproved,
-//   notificationWithdrawalRequestRejected,
-//   reminderRegistrationDeadline,
-//   reminderPaymentDue
-// } from '../utils/notificationHelpers';
+import { notificationService } from '../services/notificationService';
 
-
+// 🆕 Import notification templates
+import { seasonNotifications, paymentNotifications } from '../helpers/notification';
+import { NOTIFICATION_TYPES } from '../types/notificationTypes';
 
 export const createSeason = async (req: Request, res: Response) => {
   const {
@@ -88,32 +77,32 @@ export const createSeason = async (req: Request, res: Response) => {
     });
 
     // 🆕 Send notification if season is starting soon
-    // if (isActive && startDate) {
-    //   const startDateObj = new Date(startDate);
-    //   const now = new Date();
-    //   const daysDifference = Math.ceil((startDateObj.getTime() - now.getTime()) / (1000 * 3600 * 24));
+    if (isActive && startDate) {
+      const startDateObj = new Date(startDate);
+      const now = new Date();
+      const daysDifference = Math.ceil((startDateObj.getTime() - now.getTime()) / (1000 * 3600 * 24));
       
-    //   if (daysDifference <= 7 && daysDifference > 0) {
-    //     // Get all registered users for this season
-    //     const registeredUsers = await prisma.seasonMembership.findMany({
-    //       where: { seasonId: season.id },
-    //       select: { userId: true }
-    //     });
+      if (daysDifference <= 7 && daysDifference > 0) {
+        // Get all registered users for this season
+        const registeredUsers = await prisma.seasonMembership.findMany({
+          where: { seasonId: season.id },
+          select: { userId: true }
+        });
 
-    //     if (registeredUsers.length > 0) {
-    //       const notificationData = notificationSeasonStartingSoon(
-    //         season.name,
-    //         startDateObj.toLocaleDateString()
-    //       );
+        if (registeredUsers.length > 0) {
+          const notificationData = seasonNotifications.startingSoon(
+            season.name,
+            startDateObj.toLocaleDateString()
+          );
 
-    //       await notificationService.createNotification({
-    //         userIds: registeredUsers.map(u => u.userId),
-    //         ...notificationData,
-    //         seasonId: season.id
-    //       });
-    //     }
-    //   }
-    // }
+          await notificationService.createNotification({
+            userIds: registeredUsers.map(u => u.userId),
+            ...notificationData,
+            seasonId: season.id
+          });
+        }
+      }
+    }
 
     return res.status(201).json({
       success: true,
@@ -229,6 +218,12 @@ export const updateSeason = async (req: Request, res: Response) => {
   }
 
   try {
+    // 🆕 Get current season to compare status changes
+    const currentSeason = await prisma.season.findUnique({
+      where: { id },
+      select: { status: true, name: true }
+    });
+
     const seasonData = {
       name,
       startDate,
@@ -248,36 +243,36 @@ export const updateSeason = async (req: Request, res: Response) => {
     const season = await updateSeasonService(id, seasonData);
 
     // 🆕 Send notifications for status changes
-    if (status && status !== season.status) {
+    if (status && currentSeason && status !== currentSeason.status) {
       const registeredUsers = await prisma.seasonMembership.findMany({
         where: { seasonId: id },
         select: { userId: true }
       });
 
-      // if (registeredUsers.length > 0) {
-      //   let notificationData;
+      if (registeredUsers.length > 0) {
+        let notificationData;
 
-      //   if (status === 'FINISHED') {
-      //     notificationData = notificationSeasonEnded(
-      //       season.name,
-      //       'Your Division', // You may need to get division info per user
-      //       undefined // finalPosition - could be calculated
-      //     );
-      //   } else if (status === 'CANCELLED') {
-      //     notificationData = notificationSeasonCancelled(
-      //       season.name,
-      //       'Season has been cancelled by administration'
-      //     );
-      //   }
+        if (status === 'FINISHED') {
+          notificationData = seasonNotifications.ended(
+            season.name,
+            undefined,
+            undefined 
+          );
+        } else if (status === 'CANCELLED') {
+          notificationData = seasonNotifications.cancelled(
+            season.name,
+            'Season has been cancelled by administration'
+          );
+        }
 
-      //   if (notificationData) {
-      //     await notificationService.createNotification({
-      //       userIds: registeredUsers.map(u => u.userId),
-      //       ...notificationData,
-      //       seasonId: id
-      //     });
-      //   }
-      // }
+        if (notificationData) {
+          await notificationService.createNotification({
+            userIds: registeredUsers.map(u => u.userId),
+            ...notificationData,
+            seasonId: id
+          });
+        }
+      }
     }
 
     return res.status(200).json({
@@ -366,21 +361,22 @@ export const submitWithdrawalRequest = async (req: any, res: any) => {
     });
 
     // 🆕 Send notification to user confirming withdrawal request
-    // const season = await prisma.season.findUnique({
-    //   where: { id: seasonId },
-    //   select: { name: true }
-    // });
+    const season = await prisma.season.findUnique({
+      where: { id: seasonId },
+      select: { name: true }
+    });
 
-    // if (season) {
-    //   const notificationData = notificationWithdrawalRequestReceived(season.name);
-
-    //   await notificationService.createNotification({
-    //     userIds: userId,
-    //     ...notificationData,
-    //     seasonId: seasonId,
-    //     withdrawalRequestId: withdrawalRequest.id
-    //   });
-    // }
+    if (season) {
+      await notificationService.createNotification({
+        userIds: userId,
+        type: NOTIFICATION_TYPES.WITHDRAWAL_REQUEST_RECEIVED,
+        category: 'GENERAL',
+        title: 'Withdrawal Request Received',
+        message: `Your withdrawal request for ${season.name} has been received and is being processed.`,
+        seasonId: seasonId,
+        withdrawalRequestId: withdrawalRequest.id
+      });
+    }
 
     return res.status(201).json(withdrawalRequest);
   } catch (error: any) {
@@ -421,35 +417,39 @@ export const processWithdrawalRequest = async (req: any, res: any) => {
     );
 
     // 🆕 Send notification to user about withdrawal decision
-    // const withdrawalRequest = await prisma.withdrawalRequest.findUnique({
-    //   where: { id },
-    //   include: {
-    //     season: { select: { name: true } }
-    //   }
-    // });
+    const withdrawalRequest = await prisma.withdrawalRequest.findUnique({
+      where: { id },
+      include: {
+        season: { select: { name: true } }
+      }
+    });
 
-    // if (withdrawalRequest) {
-    //   let notificationData;
+    if (withdrawalRequest) {
+      let notificationData;
 
-    //   if (status === 'APPROVED') {
-    //     notificationData = notificationWithdrawalRequestApproved(
-    //       withdrawalRequest.season.name,
-    //       'Your refund will be processed within 5-7 business days'
-    //     );
-    //   } else {
-    //     notificationData = notificationWithdrawalRequestRejected(
-    //       withdrawalRequest.season.name,
-    //       'Please contact support for more information'
-    //     );
-    //   }
+      if (status === 'APPROVED') {
+        notificationData = {
+          type: NOTIFICATION_TYPES.WITHDRAWAL_REQUEST_APPROVED,
+          category: 'GENERAL' as const,
+          title: 'Withdrawal Request Approved',
+          message: `Your withdrawal request for ${withdrawalRequest.season.name} has been approved. Your refund will be processed within 5-7 business days.`
+        };
+      } else {
+        notificationData = {
+          type: NOTIFICATION_TYPES.WITHDRAWAL_REQUEST_REJECTED,
+          category: 'GENERAL' as const,
+          title: 'Withdrawal Request Rejected',
+          message: `Your withdrawal request for ${withdrawalRequest.season.name} has been rejected. Please contact support for more information.`
+        };
+      }
 
-    //   await notificationService.createNotification({
-    //     userIds: withdrawalRequest.userId,
-    //     ...notificationData,
-    //     seasonId: withdrawalRequest.seasonId,
-    //     withdrawalRequestId: id
-    //   });
-    // }
+      await notificationService.createNotification({
+        userIds: withdrawalRequest.userId,
+        ...notificationData,
+        seasonId: withdrawalRequest.seasonId,
+        withdrawalRequestId: id
+      });
+    }
 
     return res.status(200).json(result);
   } catch (error: any) {
@@ -583,12 +583,27 @@ export const registerPlayerToSeason = async (req: Request, res: Response) => {
           },
           include: {
             user: { select: { id: true, name: true } },
-            season: { select: { id: true, name: true } }
+            season: { select: { id: true, name: true, entryFee: true } }
           }
         });
 
         return { partnership, memberships };
       });
+
+      // 🆕 Send registration confirmation notifications for both players
+      const season = result.memberships[0]?.season;
+      if (season) {
+        const notificationData = seasonNotifications.registrationConfirmed(
+          season.name,
+          `$${season.entryFee}`
+        );
+
+        await notificationService.createNotification({
+          userIds: [captainId, partnerId],
+          ...notificationData,
+          seasonId: seasonId
+        });
+      }
 
       return res.status(201).json({
         message: "Team registered successfully",
@@ -603,23 +618,23 @@ export const registerPlayerToSeason = async (req: Request, res: Response) => {
       const membership = await registerMembershipService({ userId, seasonId, payLater: payLater === true });
       
       // 🆕 Send registration confirmation notification
-      // const season = await prisma.season.findUnique({
-      //   where: { id: seasonId },
-      //   select: { name: true, entryFee: true }
-      // });
+      const season = await prisma.season.findUnique({
+        where: { id: seasonId },
+        select: { name: true, entryFee: true }
+      });
 
-      // if (season) {
-      //   const notificationData = notificationSeasonRegistrationConfirmed(
-      //     season.name,
-      //     `$${season.entryFee}`
-      //   );
+      if (season) {
+        const notificationData = seasonNotifications.registrationConfirmed(
+          season.name,
+          `$${season.entryFee}`
+        );
 
-      //   await notificationService.createNotification({
-      //     userIds: userId,
-      //     ...notificationData,
-      //     seasonId: seasonId
-      //   });
-      // }
+        await notificationService.createNotification({
+          userIds: userId,
+          ...notificationData,
+          seasonId: seasonId
+        });
+      }
 
       const result = {
         ...membership,
@@ -696,38 +711,44 @@ export const updatePaymentStatus = async (req: Request, res: Response) => {
     const membership = await updatePaymentStatusService({ membershipId, paymentStatus });
 
     // 🆕 Send payment status notification
-    // const membershipWithSeason = await prisma.seasonMembership.findUnique({
-    //   where: { id: membershipId },
-    //   include: {
-    //     season: { select: { name: true, entryFee: true } }
-    //   }
-    // });
+    const membershipWithSeason = await prisma.seasonMembership.findUnique({
+      where: { id: membershipId },
+      include: {
+        season: { select: { name: true, entryFee: true } }
+      }
+    });
 
-    // if (membershipWithSeason) {
-    //   let notificationData;
+    if (membershipWithSeason) {
+      let notificationData;
 
-    //   if (paymentStatus === 'COMPLETED') {
-    //     notificationData = notificationPaymentConfirmed(
-    //       membershipWithSeason.season.name,
-    //       `$${membershipWithSeason.season.entryFee}`,
-    //       'Credit Card' // You might want to store payment method
-    //     );
-    //   } else if (paymentStatus === 'FAILED') {
-    //     notificationData = notificationPaymentFailed(
-    //       membershipWithSeason.season.name,
-    //       `$${membershipWithSeason.season.entryFee}`,
-    //       'Payment processing failed'
-    //     );
-    //   }
+      if (paymentStatus === 'COMPLETED') {
+        notificationData = paymentNotifications.confirmed(
+          membershipWithSeason.season.name,
+          `$${membershipWithSeason.season.entryFee}`,
+          'Credit Card' 
+        );
+      } else if (paymentStatus === 'FAILED') {
+        notificationData = paymentNotifications.failed(
+          membershipWithSeason.season.name,
+          `$${membershipWithSeason.season.entryFee}`,
+          'Payment processing failed'
+        );
+      } else if (paymentStatus === 'PENDING') {
+        notificationData = paymentNotifications.reminder(
+          membershipWithSeason.season.name,
+          `$${membershipWithSeason.season.entryFee}`,
+          'Please complete your payment soon'
+        );
+      }
 
-    //   if (notificationData) {
-    //     await notificationService.createNotification({
-    //       userIds: membership.userId,
-    //       ...notificationData,
-    //       seasonId: membershipWithSeason.seasonId
-    //     });
-    //   }
-    // }
+      if (notificationData) {
+        await notificationService.createNotification({
+          userIds: membership.userId,
+          ...notificationData,
+          seasonId: membershipWithSeason.seasonId
+        });
+      }
+    }
 
     const result = formatMembershipResponse(membership);
     return res.status(200).json({ 
@@ -739,7 +760,6 @@ export const updatePaymentStatus = async (req: Request, res: Response) => {
     return res.status(400).json({ error: error.message });
   }
 };
-
 
 
 // Helper Functions
@@ -804,4 +824,3 @@ const processWithdrawal = async (id: string, processedByAdminId: string, status:
   }
 
 };
-
