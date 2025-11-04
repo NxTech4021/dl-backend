@@ -97,9 +97,9 @@ export const createDivision = async (req: Request, res: Response) => {
     logger.info("Creating division", { seasonId, name, divisionLevel, gameType, adminId });
 
       const adminRecord = await prisma.admin.findUnique({
-      where: { userId: adminId }, // adminId is actually the userId
+      where: { userId: adminId },
       select: { 
-        id: true, // This is the actual admin table ID
+        id: true,
         userId: true,
         user: { select: { name: true } }
       },
@@ -272,7 +272,7 @@ export const createDivision = async (req: Request, res: Response) => {
           divisionId: result.thread.divisionId,
           members: result.thread.members,
         },
-        notificationsSent: recipientUserIds.length, // Number of members notified (excluding admin)
+        notificationsSent: recipientUserIds.length,
       },
       message: "Division and chat group created successfully",
     });
