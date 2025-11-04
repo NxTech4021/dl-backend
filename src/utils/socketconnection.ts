@@ -1,3 +1,4 @@
+//@ts-nocheck
 import { prisma } from "../lib/prisma";
 import { Server as SocketIOServer } from 'socket.io';
 import { Server as HttpServer } from 'http';

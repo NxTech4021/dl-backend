@@ -196,7 +196,6 @@ model League {
 
   seasons      Season[]           @relation("LeagueToSeason")
   sponsorships Sponsorship[]
-  categories   Category[]
   divisions    Division[]
 
   createdAt DateTime @default(now())
@@ -211,16 +210,16 @@ model Category {
   name String? @db.VarChar(255)
 
   // Restrictions and Format
-  genderRestriction GenderRestriction @default(OPEN) // 'gender_restriction' enum
+  genderRestriction GenderRestriction @default(OPEN)
   matchFormat       String? // 'match_format' e.g., Best of 3 sets
   game_type         GameType?
   gender_category   GenderType?
-  isActive          Boolean           @default(true) // 'is_active'
-  categoryOrder     Int               @default(0) // 'category_order' for display
+  isActive          Boolean           @default(true)
+  categoryOrder     Int               @default(0)
   createdAt         DateTime          @default(now())
   updatedAt         DateTime          @updatedAt
-  leagues           League[]
-  seasons           Season[]
+
+  seasons          Season[]
 
   @@index([isActive])
 }
@@ -288,12 +287,14 @@ model Season {
   partnerships      Partnership[]
   seasonInvitations SeasonInvitation[]
 
-  leagues    League[]   @relation("LeagueToSeason")
-  categories Category[]
-  notifications Notification[]
+  leagues           League[]   @relation("LeagueToSeason")
+  
+  categoryId  String?    @unique
+  category    Category?  @relation(fields: [categoryId], references: [id])
+  notifications     Notification[]
 
-  waitlistId String?
-  waitlist   Waitlist? @relation
+  waitlistId        String?
+  waitlist          Waitlist? @relation
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
