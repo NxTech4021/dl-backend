@@ -233,13 +233,24 @@ export const getSeasonByIdService = async (id: string) => {
             select: {
               id: true,
               name: true,
+              email: true,
               username: true,
               displayUsername: true,
               image: true,
               gender: true,
               area: true,
-              // Removed questionnaireResponses to prevent N+1 queries
-              // Fetch separately if needed for specific use cases
+              questionnaireResponses: {
+                include: {
+                  result: true
+                },
+                where: {
+                  completedAt: { not: null }
+                },
+                orderBy: {
+                  completedAt: 'desc'
+                },
+                take: 1 // Only get the most recent completed response
+              }
             }
           },
           division: {

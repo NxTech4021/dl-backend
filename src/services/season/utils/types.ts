@@ -183,6 +183,13 @@ export interface FormattedUser {
   email: string;
   image: string | null;
   username: string;
+  initialRatingResult?: {
+    singles: number | null;
+    doubles: number | null;
+    rd: number | null;
+    confidence: string | null;
+    source: string;
+  } | null;
   questionnaireResponses?: FormattedQuestionnaireResponse[];
 }
 
