@@ -7,13 +7,13 @@ import { ApiResponse } from '../utils/ApiResponse';
 
 export const getLeagues = async (req: Request, res: Response) => {
   try {
-    const { leagues, totalMembers, totalCategories } = await leagueService.getAllLeagues();
+    const { leagues, totalMembers } = await leagueService.getAllLeagues();
 
     return res.status(200).json(
       new ApiResponse(
         true,
         200,
-        { leagues, totalMembers, totalCategories },
+        { leagues, totalMembers },
         `Found ${leagues.length} league(s)`
       )
     );
