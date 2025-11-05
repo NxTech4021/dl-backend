@@ -30,15 +30,35 @@ export const updateAdminProfile = async ({
     throw new Error("This user is not an admin");
   }
 
+  if (!admin.userId) {
+    throw new Error("Admin record has no associated user ID");
+  }
+
   // Update user record with only provided fields
+  // Build data object only with defined values (not undefined)
+  const updateData: {
+    name?: string;
+    username?: string;
+    gender?: string;
+    area?: string;
+  } = {};
+
+  if (name !== undefined) {
+    updateData.name = name;
+  }
+  if (username !== undefined) {
+    updateData.username = username;
+  }
+  if (gender !== undefined) {
+    updateData.gender = gender;
+  }
+  if (area !== undefined) {
+    updateData.area = area;
+  }
+
   const updatedUser = await prisma.user.update({
     where: { id: admin.userId },
-    data: {
-      name: name !== undefined ? name : undefined,
-      username: username !== undefined ? username : undefined,
-      gender: gender !== undefined ? gender : undefined,
-      area: area !== undefined ? area : undefined,
-    },
+    data: updateData,
   });
 
   // Business Rule: Update admin timestamp

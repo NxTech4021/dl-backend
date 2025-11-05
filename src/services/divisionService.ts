@@ -1,24 +1,25 @@
 import { prisma } from "../lib/prisma";
-import { PrismaClient } from '@prisma/client';
+import { GameType, DivisionLevel, GenderType } from '@prisma/client';
 
 
 interface DivisionCreationData {
-  rank: number;
   name: string;
   description?: string;
-  seasonId: number;
-  maxParticipants?: number;
-  minRating?: number;
-  maxRating?: number;
+  seasonId: string;
+  gameType: GameType;
+  level?: DivisionLevel;
+  genderCategory?: GenderType;
+  pointsThreshold?: number;
+  maxSinglesPlayers?: number;
+  maxDoublesTeams?: number;
 }
 
 interface DivisionUpdateData {
-  rank?: number;
   name?: string;
   description?: string;
-  maxParticipants?: number;
-  minRating?: number;
-  maxRating?: number;
+  pointsThreshold?: number;
+  maxSinglesPlayers?: number;
+  maxDoublesTeams?: number;
 }
 
 // BUSINESS LOGIC SERVICES
@@ -26,20 +27,26 @@ interface DivisionUpdateData {
 
 // Business Logic: Division creation with validation
 export const createDivision = async (data: DivisionCreationData) => {
-  const { seasonId, rank, name, minRating, maxRating } = data;
+  const { seasonId, name } = data;
 
   // Business Rule: Verify season exists
   const season = await prisma.season.findUnique({
     where: { id: seasonId },
+    include: {
+      leagues: {
+        select: { id: true },
+        take: 1
+      }
+    }
   });
   if (!season) {
     throw new Error(`Season with ID ${seasonId} not found.`);
   }
 
-  // Business Rule: Cannot create divisions for completed seasons
-  // if (season.status === 'COMPLETED') {
-  //   throw new Error('Cannot create divisions for completed seasons.');
-  // }
+  const leagueId = season.leagues?.[0]?.id;
+  if (!leagueId) {
+    throw new Error('Season is not linked to any league.');
+  }
 
   // Business Rule: Check for duplicate division names in same season
   const existingDivision = await prisma.division.findFirst({
@@ -52,52 +59,20 @@ export const createDivision = async (data: DivisionCreationData) => {
     throw new Error(`A division with name "${name}" already exists in this season.`);
   }
 
-  // Business Rule: Check for duplicate rank in same season
-  const duplicateRank = await prisma.division.findFirst({
-    where: {
-      seasonId,
-      rank
-    }
-  });
-  if (duplicateRank) {
-    throw new Error(`A division with rank ${rank} already exists in this season.`);
-  }
-
-  // Business Rule: Rating range validation
-  if (minRating && maxRating && minRating >= maxRating) {
-    throw new Error('Minimum rating must be less than maximum rating.');
-  }
-
-  // Business Rule: Check for overlapping rating ranges in same season
-  if (minRating !== undefined || maxRating !== undefined) {
-    const overlappingDivisions = await prisma.division.findMany({
-      where: {
-        seasonId,
-        AND: [
-          minRating !== undefined ? {
-            OR: [
-              { maxRating: null },
-              { maxRating: { gte: minRating } }
-            ]
-          } : {},
-          maxRating !== undefined ? {
-            OR: [
-              { minRating: null },
-              { minRating: { lte: maxRating } }
-            ]
-          } : {}
-        ]
-      }
-    });
-
-    if (overlappingDivisions.length > 0) {
-      throw new Error('Rating range overlaps with existing division in this season.');
-    }
-  }
-
   // Business Logic: Create division
   return prisma.division.create({
-    data,
+    data: {
+      name,
+      description: data.description ?? null,
+      seasonId,
+      leagueId,
+      gameType: data.gameType,
+      level: data.level ?? null,
+      genderCategory: data.genderCategory ?? null,
+      pointsThreshold: data.pointsThreshold ?? null,
+      maxSinglesPlayers: data.maxSinglesPlayers ?? null,
+      maxDoublesTeams: data.maxDoublesTeams ?? null,
+    },
     include: {
       season: { select: { name: true } },
     },
@@ -105,23 +80,23 @@ export const createDivision = async (data: DivisionCreationData) => {
 };
 
 // Business Logic: Division update with validation
-export const updateDivision = async (id: number, data: DivisionUpdateData) => {
+export const updateDivision = async (id: string, data: DivisionUpdateData) => {
   // Business Rule: Verify division exists
   const division = await prisma.division.findUnique({
     where: { id },
     include: {
-      season: { select: { status: true } },
-      _count: { select: { registrations: true } }
+      season: { select: { id: true, name: true } },
+      _count: { 
+        select: { 
+          assignments: true,
+          seasonMemberships: true
+        } 
+      }
     }
   });
   
   if (!division) {
     throw new Error(`Division with ID ${id} not found.`);
-  }
-
-  // Business Rule: Cannot update divisions for completed seasons
-  if (division.season.status === 'COMPLETED') {
-    throw new Error('Cannot update divisions for completed seasons.');
   }
 
   // Business Rule: Check name uniqueness if name is being updated
@@ -138,37 +113,52 @@ export const updateDivision = async (id: number, data: DivisionUpdateData) => {
     }
   }
 
-  // Business Rule: Check rank uniqueness if rank is being updated
-  if (data.rank && data.rank !== division.rank) {
-    const duplicateRank = await prisma.division.findFirst({
-      where: {
-        seasonId: division.seasonId,
-        rank: data.rank,
-        id: { not: id }
-      }
-    });
-    if (duplicateRank) {
-      throw new Error(`A division with rank ${data.rank} already exists in this season.`);
+  // Business Rule: Cannot reduce capacity below current assignments
+  const currentCount = division.gameType === GameType.SINGLES 
+    ? division.currentSinglesCount ?? 0
+    : division.currentDoublesCount ?? 0;
+
+  if (data.maxSinglesPlayers !== undefined && division.gameType === GameType.SINGLES) {
+    if (data.maxSinglesPlayers < currentCount) {
+      throw new Error(`Cannot reduce capacity below current assignment count (${currentCount}).`);
     }
   }
 
-  // Business Rule: Rating range validation
-  const newMinRating = data.minRating !== undefined ? data.minRating : division.minRating;
-  const newMaxRating = data.maxRating !== undefined ? data.maxRating : division.maxRating;
-  
-  if (newMinRating && newMaxRating && newMinRating >= newMaxRating) {
-    throw new Error('Minimum rating must be less than maximum rating.');
+  if (data.maxDoublesTeams !== undefined && division.gameType === GameType.DOUBLES) {
+    if (data.maxDoublesTeams < currentCount) {
+      throw new Error(`Cannot reduce capacity below current assignment count (${currentCount}).`);
+    }
   }
 
-  // Business Rule: Cannot reduce capacity below current registrations
-  if (data.maxParticipants && data.maxParticipants < division._count.registrations) {
-    throw new Error(`Cannot reduce capacity below current registration count (${division._count.registrations}).`);
+  // Build update data object only with defined values
+  const updateData: {
+    name?: string;
+    description?: string | null;
+    pointsThreshold?: number | null;
+    maxSinglesPlayers?: number | null;
+    maxDoublesTeams?: number | null;
+  } = {};
+
+  if (data.name !== undefined) {
+    updateData.name = data.name;
+  }
+  if (data.description !== undefined) {
+    updateData.description = data.description ?? null;
+  }
+  if (data.pointsThreshold !== undefined) {
+    updateData.pointsThreshold = data.pointsThreshold ?? null;
+  }
+  if (data.maxSinglesPlayers !== undefined) {
+    updateData.maxSinglesPlayers = data.maxSinglesPlayers ?? null;
+  }
+  if (data.maxDoublesTeams !== undefined) {
+    updateData.maxDoublesTeams = data.maxDoublesTeams ?? null;
   }
 
   // Business Logic: Update division
   return prisma.division.update({
     where: { id },
-    data,
+    data: updateData,
     include: {
       season: { select: { name: true } },
     },
@@ -176,10 +166,10 @@ export const updateDivision = async (id: number, data: DivisionUpdateData) => {
 };
 
 // Business Logic: Division deletion with constraint checking
-export const deleteDivision = async (id: number) => {
+export const deleteDivision = async (id: string) => {
   // Business Rule: Check if division has members
   const memberCount = await prisma.seasonMembership.count({
-    where: { divisionId: id.toString() },
+    where: { divisionId: id },
   });
 
   if (memberCount > 0) {

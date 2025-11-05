@@ -35,13 +35,15 @@ export async function getFavorites(userId: string) {
   });
 
   // Extract favorited users and enrich with sports/skills
-  const favoritedUsers = favorites.map(fav => fav.favorited);
+  // Filter out null/undefined and preserve the original favorite for timestamp
+  const validFavorites = favorites.filter(fav => fav.favorited !== null);
+  const favoritedUsers = validFavorites.map(fav => fav.favorited!);
   const enrichedUsers = await enrichPlayersWithSkills(favoritedUsers);
 
   // Add favoritedAt timestamp to each user
   const favoritesWithDetails = enrichedUsers.map((user, index) => ({
     ...user,
-    favoritedAt: favorites[index].createdAt,
+    favoritedAt: validFavorites[index]!.createdAt,
   }));
 
   return favoritesWithDetails;

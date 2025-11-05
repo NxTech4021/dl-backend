@@ -91,8 +91,53 @@ export async function getDivisionsBySeasonId(params: DivisionQueryParams) {
 
   const skip = (Number(page) - 1) * Number(limit);
 
+  // Define include type based on whether assignments are included
+  type IncludeOptions = {
+    season: {
+      select: {
+        id: true;
+        name: true;
+        isActive: true;
+        startDate: true;
+        endDate: true;
+      };
+    };
+    divisionSponsor: {
+      select: {
+        id: true;
+        sponsoredName: true;
+        packageTier: true;
+      };
+    };
+    _count: {
+      select: {
+        assignments: true;
+        seasonMemberships: true;
+        matches: true;
+      };
+    };
+  } & (typeof includeAssignments extends true
+    ? {
+        assignments: {
+          include: {
+            user: {
+              select: {
+                id: true;
+                name: true;
+                username: true;
+                image: true;
+              };
+            };
+          };
+          orderBy: {
+            assignedAt: 'desc';
+          };
+        };
+      }
+    : {});
+
   // Build include object based on query parameters
-  const includeOptions: any = {
+  const includeOptions: IncludeOptions = {
     season: {
       select: {
         id: true,
@@ -115,27 +160,25 @@ export async function getDivisionsBySeasonId(params: DivisionQueryParams) {
         seasonMemberships: true,
         matches: true
       }
-    }
-  };
-
-  // Include assignments if requested
-  if (includeAssignments) {
-    includeOptions.assignments = {
-      include: {
-        user: {
-          select: {
-            id: true,
-            name: true,
-            username: true,
-            image: true
+    },
+    ...(includeAssignments ? {
+      assignments: {
+        include: {
+          user: {
+            select: {
+              id: true,
+              name: true,
+              username: true,
+              image: true
+            }
           }
+        },
+        orderBy: {
+          assignedAt: 'desc' as const
         }
-      },
-      orderBy: {
-        assignedAt: 'desc'
       }
-    };
-  }
+    } : {})
+  } as IncludeOptions;
 
   const [divisions, totalCount] = await Promise.all([
     prisma.division.findMany({
@@ -153,8 +196,13 @@ export async function getDivisionsBySeasonId(params: DivisionQueryParams) {
 
   console.log(`✅ Found ${divisions.length} divisions for season ${seasonId}`);
 
+  // Type the division result properly
+  type DivisionWithIncludes = Prisma.DivisionGetPayload<{
+    include: IncludeOptions;
+  }>;
+
   // Format the response data
-  const formattedDivisions = divisions.map(division => ({
+  const formattedDivisions = divisions.map((division: DivisionWithIncludes) => ({
     ...formatDivision(division),
     assignmentCount: division._count?.assignments || 0,
     membershipCount: division._count?.seasonMemberships || 0,
@@ -164,7 +212,7 @@ export async function getDivisionsBySeasonId(params: DivisionQueryParams) {
       name: division.divisionSponsor.sponsoredName,
       tier: division.divisionSponsor.packageTier
     } : null,
-    assignments: includeAssignments ? division.assignments : undefined
+    assignments: includeAssignments && 'assignments' in division ? division.assignments : undefined
   }));
 
   return {

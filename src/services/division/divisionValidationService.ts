@@ -213,7 +213,7 @@ export async function validatePlayerRatingForDivision(
 
   return {
     isValid: true,
-    playerRating: playerRating ?? undefined,
+    ...(playerRating !== null && playerRating !== undefined && { playerRating }),
     divisionThreshold
   };
 }

@@ -1,5 +1,5 @@
 import { prisma } from '../lib/prisma';
-import { SeasonInvitationStatus, PartnershipStatus, FriendshipStatus } from '@prisma/client';
+import { SeasonInvitationStatus, PartnershipStatus, FriendshipStatus, Prisma } from '@prisma/client';
 import { io } from '../app';
 
 interface ServiceResponse {
@@ -86,7 +86,8 @@ export const sendSeasonInvitation = async (data: {
     // Validate: Registration is still open
     const now = new Date();
 
-    if (season.status !== 'UPCOMING' && season.status !== 'ONGOING' && season.status !== 'ACTIVE') {
+    if (season.status !== 'UPCOMING' && season.status !== 'ACTIVE') {
+      // Commented out: 'ONGOING' doesn't exist in SeasonStatus enum (only UPCOMING, ACTIVE, FINISHED, CANCELLED)
       return { success: false, message: 'This season is not accepting registrations' };
     }
 
@@ -162,14 +163,20 @@ export const sendSeasonInvitation = async (data: {
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 7);
 
-    let invitation;
+    let invitation: Prisma.SeasonInvitationGetPayload<{
+      include: {
+        sender: { select: { id: true; name: true; username: true; displayUsername: true; image: true } };
+        recipient: { select: { id: true; name: true; username: true; displayUsername: true; image: true } };
+        season: { select: { id: true; name: true } };
+      };
+    }>;
     try {
       invitation = await prisma.seasonInvitation.create({
         data: {
           senderId,
           recipientId,
           seasonId,
-          message,
+          message: message ?? null, // Convert undefined to null for exactOptionalPropertyTypes
           status: 'PENDING',
           expiresAt
         },
@@ -215,8 +222,8 @@ export const sendSeasonInvitation = async (data: {
     try {
       io.to(recipientId).emit('season_invitation_received', {
         invitationId: invitation.id,
-        sender: invitation.sender,
-        season: invitation.season,
+        sender: invitation.sender, // TypeScript should infer this from the include above
+        season: invitation.season, // TypeScript should infer this from the include above
         message: invitation.message,
         expiresAt: invitation.expiresAt
       });

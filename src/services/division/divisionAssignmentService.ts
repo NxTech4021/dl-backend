@@ -267,7 +267,15 @@ export async function autoAssignPlayersToDivisions(
     include: {
       user: {
         include: {
-          initialRatingResult: true
+          questionnaireResponses: {
+            include: {
+              result: true
+            },
+            orderBy: {
+              completedAt: 'desc'
+            },
+            take: 1
+          }
         }
       }
     }
@@ -295,27 +303,49 @@ export async function autoAssignPlayersToDivisions(
 
   for (const membership of unassignedUsers) {
     try {
-      const userRating = membership.user.initialRatingResult?.[0]?.rating || 0;
+      if (!membership.user) {
+        errors.push({
+          userId: membership.userId,
+          userName: "Unknown",
+          reason: "User not found"
+        });
+        continue;
+      }
+
+      // Get the most recent questionnaire response result
+      const questionnaireResponse = membership.user.questionnaireResponses?.[0];
+      const ratingResult = questionnaireResponse?.result;
 
       // Find appropriate division based on rating and capacity
       let targetDivision = null;
 
       for (const division of divisions) {
+        // Determine the appropriate rating based on game type
+        const userRating = division.gameType === GameType.DOUBLES
+          ? (ratingResult?.doubles ?? null)
+          : (ratingResult?.singles ?? null);
+
         const capacityCheck = await checkDivisionCapacity(division.id, division.gameType);
 
         if (capacityCheck.hasCapacity &&
-          (!division.pointsThreshold || userRating >= division.pointsThreshold)) {
+          (!division.pointsThreshold || !userRating || userRating >= division.pointsThreshold)) {
           targetDivision = division;
+          break;
         }
       }
 
       if (targetDivision) {
+        // Get the rating for the target division's game type
+        const finalRating = targetDivision.gameType === GameType.DOUBLES
+          ? (ratingResult?.doubles ?? null)
+          : (ratingResult?.singles ?? null);
+
         const assignment = await prisma.divisionAssignment.create({
           data: {
             divisionId: targetDivision.id,
             userId: membership.userId,
             assignedBy: assignedBy || null,
-            notes: `Auto-assigned based on rating: ${userRating}`
+            notes: `Auto-assigned based on rating: ${finalRating ?? 'N/A'}`
           },
           include: {
             user: { select: { name: true } },
@@ -336,7 +366,7 @@ export async function autoAssignPlayersToDivisions(
       } else {
         errors.push({
           userId: membership.userId,
-          userName: membership.user.name,
+          userName: membership.user.name ?? "Unknown",
           reason: "No suitable division found or all divisions at capacity"
         });
       }
@@ -344,7 +374,7 @@ export async function autoAssignPlayersToDivisions(
     } catch (error: any) {
       errors.push({
         userId: membership.userId,
-        userName: membership.user.name,
+        userName: membership.user?.name ?? "Unknown",
         reason: error.message
       });
     }

@@ -90,8 +90,8 @@ export async function getPlayerProfile(userId: string) {
 
   // Process recent matches
   const processedMatches = recentMatches.map(match => {
-    const currentUserParticipant = match.participants.find(p => p.userId === userId);
-    const opponentParticipant = match.participants.find(p => p.userId !== userId);
+    const currentUserParticipant = match.participants.find((p: { userId: string }) => p.userId === userId);
+    const opponentParticipant = match.participants.find((p: { userId: string }) => p.userId !== userId);
 
     return {
       id: match.id,
@@ -278,19 +278,40 @@ export async function updatePlayerProfile(
     }
   }
 
+  // Build update data object, filtering out undefined values
+  const updateData: {
+    name: string;
+    username: string;
+    email: string;
+    area?: string;
+    image?: string | null;
+    phoneNumber?: string;
+    bio?: string;
+    updatedAt: Date;
+  } = {
+    name: name.trim(),
+    username: username.trim(),
+    email: email.trim().toLowerCase(),
+    updatedAt: new Date()
+  };
+
+  if (location) {
+    updateData.area = location.trim();
+  }
+  if (image !== undefined) {
+    updateData.image = image || null;
+  }
+  if (phoneNumber) {
+    updateData.phoneNumber = phoneNumber.trim();
+  }
+  if (bio) {
+    updateData.bio = bio.trim();
+  }
+
   // Update user profile
   const updatedUser = await prisma.user.update({
     where: { id: userId },
-    data: {
-      name: name.trim(),
-      username: username.trim(),
-      email: email.trim().toLowerCase(),
-      area: location ? location.trim() : undefined,
-      image: image || undefined,
-      phoneNumber: phoneNumber ? phoneNumber.trim() : undefined,
-      bio: bio ? bio.trim() : undefined,
-      updatedAt: new Date()
-    },
+    data: updateData,
     select: {
       id: true,
       name: true,
@@ -392,9 +413,10 @@ export async function changePlayerPassword(
 
     console.log(`🔑 Better-auth result:`, result);
 
-    if (result.error) {
-      console.log(`❌ Better-auth password change failed:`, result.error);
-      throw new Error(result.error.message || 'Failed to change password');
+    // Check if result indicates failure (better-auth may return error differently)
+    if (!result || !result.user) {
+      console.log(`❌ Better-auth password change failed`);
+      throw new Error('Failed to change password');
     }
   } catch (apiError: any) {
     console.log(`❌ Better-auth API error:`, apiError);
@@ -418,6 +440,10 @@ export async function changePlayerPassword(
 
       if (!emailAccount) {
         throw new Error('No email account found');
+      }
+
+      if (!emailAccount.password) {
+        throw new Error('No password found for email account');
       }
 
       // Verify current password
