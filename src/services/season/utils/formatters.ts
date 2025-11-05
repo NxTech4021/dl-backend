@@ -47,7 +47,11 @@ export function formatCategory(category: any): FormattedCategory | null {
     id: category.id,
     name: category.name,
     genderRestriction: category.genderRestriction,
-    matchFormat: category.matchFormat
+    gender_category: category.gender_category ?? null,
+    game_type: category.game_type ?? null,
+    matchFormat: category.matchFormat,
+    isActive: category.isActive ?? true,
+    categoryOrder: category.categoryOrder ?? 0
   };
 }
 /**

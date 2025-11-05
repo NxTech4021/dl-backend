@@ -158,7 +158,11 @@ export interface FormattedCategory {
   id: string;
   name: string;
   genderRestriction: string | null;
+  gender_category?: string | null;
+  game_type?: string | null;
   matchFormat: string | null;
+  isActive?: boolean;
+  categoryOrder?: number;
 }
 
 export interface FormattedQuestionnaireResult {
