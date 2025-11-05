@@ -46,6 +46,21 @@ export const getAllLeagues = async () => {
       sponsorships: true,
       seasons: {
         include: {
+          memberships: {
+            include: {
+              user: {
+                select: {
+                  id: true,
+                  name: true,
+                  image: true,
+                }
+              }
+            },
+            take: 6,
+            orderBy: {
+              joinedAt: 'asc'
+            }
+          },
           _count: {
             select: {
               memberships: true
@@ -61,16 +76,37 @@ export const getAllLeagues = async () => {
     orderBy: { createdAt: 'desc' },
   });
 
-  // Calculate total season memberships for each league
+  // Calculate total season memberships and flatten memberships for each league
   const leaguesWithMemberships = leagues.map((league: any) => {
     const totalSeasonMemberships = league.seasons?.reduce((sum: number, season: any) => {
       const memberships = season._count?.memberships || 0;
       return sum + memberships;
     }, 0) || 0;
 
+    // Flatten memberships from all seasons into a single array for the frontend
+    // Get up to 6 unique memberships across all seasons
+    const allMemberships: any[] = [];
+    const seenUserIds = new Set<string>();
+    
+    if (league.seasons) {
+      for (const season of league.seasons) {
+        if (season.memberships) {
+          for (const membership of season.memberships) {
+            if (membership.user && !seenUserIds.has(membership.user.id)) {
+              allMemberships.push(membership);
+              seenUserIds.add(membership.user.id);
+              if (allMemberships.length >= 6) break;
+            }
+          }
+        }
+        if (allMemberships.length >= 6) break;
+      }
+    }
+
     return {
       ...league,
-      totalSeasonMemberships
+      totalSeasonMemberships,
+      memberships: allMemberships
     };
   });
 
@@ -93,7 +129,22 @@ export const getLeagueById = async (id: string) => {
           divisions: true,
           memberships: {
             include: {
-              user: true
+              user: {
+                select: {
+                  id: true,
+                  name: true,
+                  image: true,
+                }
+              }
+            },
+            take: 6,
+            orderBy: {
+              joinedAt: 'asc'
+            }
+          },
+          _count: {
+            select: {
+              memberships: true
             }
           },
         },
@@ -122,9 +173,34 @@ export const getLeagueById = async (id: string) => {
     return sum + memberships;
   }, 0) || 0;
 
+  // Flatten memberships from all seasons into a single array for the frontend
+  // Get up to 6 unique memberships across all seasons
+  const allMemberships: any[] = [];
+  const seenUserIds = new Set<string>();
+  
+  if (league.seasons) {
+    for (const season of league.seasons) {
+      if (season.memberships) {
+        for (const membership of season.memberships) {
+          if (membership.user && !seenUserIds.has(membership.user.id)) {
+            allMemberships.push(membership);
+            seenUserIds.add(membership.user.id);
+            if (allMemberships.length >= 6) break;
+          }
+        }
+      }
+      if (allMemberships.length >= 6) break;
+    }
+  }
+
   return {
     ...league,
-    totalSeasonMemberships
+    totalSeasonMemberships,
+    memberships: allMemberships,
+    _count: {
+      ...league._count,
+      memberships: totalSeasonMemberships
+    }
   };
 };
 

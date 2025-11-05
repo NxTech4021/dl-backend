@@ -147,45 +147,46 @@ export const getAllSeasonsService = async () => {
       registeredUserCount: true,
       createdAt: true,
       updatedAt: true,
-      // category: { // Commented out: TypeScript doesn't recognize category relation in select
-      //   select: { 
-      //     id: true, 
-      //     name: true,
-      //     genderRestriction: true,
-      //     gender_category: true,
-      //     game_type: true,
-      //     matchFormat: true,
-      //     categoryOrder: true
-      //   }
-      // },
+      category: {
+        select: { 
+          id: true, 
+          name: true,
+          genderRestriction: true,
+          gender_category: true,
+          game_type: true,
+          matchFormat: true,
+          isActive: true,
+          categoryOrder: true
+        }
+      },
       leagues: { 
         select: { id: true, name: true, sportType: true, gameType: true } 
       },
-      // memberships: { // Commented out: TypeScript doesn't recognize memberships relation in select
-      //   include: {
-      //     user: {
-      //       select: {
-      //         id: true,
-      //         name: true,
-      //         image: true,
-      //       }
-      //     }
-      //   },
-      //   take: 6,
-      //   orderBy: {
-      //     joinedAt: 'asc'
-      //   }
-      // },
+      memberships: {
+        include: {
+          user: {
+            select: {
+              id: true,
+              name: true,
+              image: true,
+            }
+          }
+        },
+        take: 6,
+        orderBy: {
+          joinedAt: 'asc'
+        }
+      } as any,
       _count: {
         select: { memberships: true }
       },
       divisions: {
         select: { id: true, name: true }
       },
-    },
+    } as any,
   });
 
-  return seasons.map(season => ({
+  return seasons.map((season: any) => ({
     ...season,
     // registeredUserCount: season.memberships.length, // Commented out: memberships not included
     registeredUserCount: season._count?.memberships || 0,
@@ -216,18 +217,18 @@ export const getSeasonByIdService = async (id: string) => {
           gameType: true
         }
       },
-      // category: { // Commented out: TypeScript doesn't recognize category relation in include
-      //   select: {
-      //     id: true,
-      //     name: true,
-      //     genderRestriction: true,
-      //     gender_category: true,
-      //     game_type: true,
-      //     matchFormat: true,
-      //     isActive: true,
-      //     categoryOrder: true
-      //   }
-      // },
+      category: {
+        select: {
+          id: true,
+          name: true,
+          genderRestriction: true,
+          gender_category: true,
+          game_type: true,
+          matchFormat: true,
+          isActive: true,
+          categoryOrder: true
+        }
+      },
       memberships: {
         select: {
           id: true,
@@ -269,8 +270,12 @@ export const getSeasonByIdService = async (id: string) => {
             }
           }
         },
+        take: 6,
+        orderBy: {
+          joinedAt: 'asc'
+        }
       },
-    },
+    } as any, 
   });
 };
 
