@@ -97,20 +97,61 @@ export const createDivision = async (req: Request, res: Response) => {
   try {
     logger.info("Creating division", { seasonId, name, divisionLevel, gameType, adminId });
 
-      const adminRecord = await prisma.admin.findUnique({
-      where: { userId: adminId },
-      select: { 
+    // Check if user has admin role first (from auth middleware or verify directly)
+    const user = await prisma.user.findUnique({
+      where: { id: adminId },
+      select: {
         id: true,
-        userId: true,
-        user: { select: { name: true } }
+        name: true,
+        role: true,
+        admin: {
+          select: {
+            id: true,
+            userId: true,
+            status: true
+          }
+        }
       },
     });
 
-     if (!adminRecord) {
-      logger.warn('Admin record not found for userId', { adminId });
-      return res.status(400).json({
+    if (!user) {
+      logger.warn('User not found', { adminId });
+      return res.status(404).json({
         success: false,
-        error: "Admin record not found for the provided user ID.",
+        error: "User not found.",
+      });
+    }
+
+    // Check if user has admin role (ADMIN or SUPERADMIN)
+    if (user.role !== 'ADMIN' && user.role !== 'SUPERADMIN') {
+      logger.warn('User does not have admin role', { adminId, role: user.role });
+      return res.status(403).json({
+        success: false,
+        error: "Admin access required to create divisions.",
+      });
+    }
+
+    // Get or create admin record if needed
+    let adminRecord = user.admin;
+    if (!adminRecord) {
+      // Create admin record for users with admin role but no admin record
+      logger.info('Creating admin record for user with admin role', { adminId });
+      adminRecord = await prisma.admin.create({
+        data: {
+          userId: adminId,
+          status: 'ACTIVE',
+        },
+        select: {
+          id: true,
+          userId: true,
+          status: true
+        }
+      });
+    } else if (adminRecord.status !== 'ACTIVE') {
+      logger.warn('Admin record exists but is not active', { adminId, status: adminRecord.status });
+      return res.status(403).json({
+        success: false,
+        error: "Admin account is not active.",
       });
     }
 
@@ -142,7 +183,8 @@ export const createDivision = async (req: Request, res: Response) => {
 
     logger.divisionCreated(result.division.id, result.division.name, seasonId, { 
       adminId: adminRecord.id,
-      adminUserId: adminId
+      adminUserId: adminId,
+      adminName: user.name
     });
 
    
@@ -159,8 +201,9 @@ export const createDivision = async (req: Request, res: Response) => {
     console.log("✅ Season Members (excluding admin):", seasonMembers.length);
       console.log("🔍 Admin details:", {
       adminUserId: adminId,
-      adminName: adminRecord.user?.name,
-      adminTableId: adminRecord.id
+      adminName: user.name,
+      adminTableId: adminRecord.id,
+      userRole: user.role
     });
     const recipientUserIds = seasonMembers.map((m) => m.userId);
 
