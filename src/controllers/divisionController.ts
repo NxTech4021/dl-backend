@@ -350,9 +350,9 @@ export const createDivision = async (req: Request, res: Response) => {
 
 export const assignPlayerToDivision = async (req: Request, res: Response) => {
   try {
-    const { userId, divisionId, seasonId, assignedBy, notes, autoAssignment } = req.body;
+    const { userId, divisionId, seasonId, assignedBy, notes, autoAssignment, overrideThreshold } = req.body;
 
-    logger.info('Assigning player to division', { userId, divisionId, seasonId });
+    logger.info('Assigning player to division', { userId, divisionId, seasonId, overrideThreshold });
 
     if (!userId || !divisionId || !seasonId) {
       return res.status(400).json({
@@ -398,8 +398,8 @@ export const assignPlayerToDivision = async (req: Request, res: Response) => {
 
     const division = divisionValidation.division;
 
-    // Validate player rating if threshold exists
-    if (division.pointsThreshold) {
+    // Validate player rating if threshold exists (unless overrideThreshold is true)
+    if (division.pointsThreshold && !overrideThreshold) {
       const ratingValidation = await validatePlayerRatingForDivision(
         userId,
         divisionId,
@@ -414,6 +414,14 @@ export const assignPlayerToDivision = async (req: Request, res: Response) => {
           error: ratingValidation.error
         });
       }
+    } else if (division.pointsThreshold && overrideThreshold) {
+      // Log that admin is overriding threshold validation
+      logger.info('Admin overriding threshold validation', {
+        userId,
+        divisionId,
+        threshold: division.pointsThreshold,
+        adminId: assignedBy
+      });
     }
 
     // Check division capacity
@@ -425,16 +433,98 @@ export const assignPlayerToDivision = async (req: Request, res: Response) => {
       });
     }
 
-    // Check if user is already assigned to this division
-    const existingAssignment = await prisma.divisionAssignment.findUnique({
-      where: { divisionId_userId: { divisionId, userId } }
+    // Check if user is assigned to any division in this season (for reassignment detection)
+    // Check both DivisionAssignment and SeasonMembership to ensure consistency
+    const [existingSeasonAssignment, seasonMembership] = await Promise.all([
+      prisma.divisionAssignment.findFirst({
+        where: {
+          userId,
+          division: {
+            seasonId: seasonId
+          }
+        },
+        include: {
+          division: {
+            select: { id: true, name: true, seasonId: true }
+          }
+        }
+      }),
+      prisma.seasonMembership.findFirst({
+        where: {
+          userId,
+          seasonId
+        },
+        select: {
+          divisionId: true
+        }
+      })
+    ]);
+
+    // Log for debugging
+    logger.info('Checking existing assignments', {
+      userId,
+      seasonId,
+      targetDivisionId: divisionId,
+      foundAssignment: !!existingSeasonAssignment,
+      existingDivisionId: existingSeasonAssignment?.divisionId,
+      existingDivisionName: existingSeasonAssignment?.division.name,
+      seasonMembershipDivisionId: seasonMembership?.divisionId,
+      assignmentMatchesMembership: existingSeasonAssignment?.divisionId === seasonMembership?.divisionId
     });
 
-    if (existingAssignment) {
-      return res.status(409).json({
-        success: false,
-        error: "User is already assigned to this division"
+    const hasDataInconsistency = existingSeasonAssignment && 
+      seasonMembership?.divisionId && 
+      existingSeasonAssignment.divisionId !== seasonMembership.divisionId;
+
+    if (hasDataInconsistency) {
+      logger.warn('Data inconsistency detected between DivisionAssignment and SeasonMembership', {
+        userId,
+        assignmentDivisionId: existingSeasonAssignment.divisionId,
+        assignmentDivisionName: existingSeasonAssignment.division.name,
+        membershipDivisionId: seasonMembership.divisionId,
+        targetDivisionId: divisionId
       });
+    }
+
+    // Determine if this is a reassignment
+    // If user is already in target division according to DivisionAssignment, we'll update/refresh it
+    // If user is in a different division, we'll transfer them
+    const isReassignment = existingSeasonAssignment && existingSeasonAssignment.divisionId !== divisionId;
+    const isSameDivision = existingSeasonAssignment && existingSeasonAssignment.divisionId === divisionId;
+    const previousDivisionId = isReassignment ? existingSeasonAssignment.divisionId : null;
+    const previousDivisionName = isReassignment ? existingSeasonAssignment.division.name : null;
+
+    // If user is already assigned to THIS division and data is consistent, allow refresh/update
+    if (isSameDivision && !hasDataInconsistency) {
+      logger.info('User already assigned to this division - refreshing assignment', {
+        userId,
+        divisionId,
+        divisionName: division.name
+      });
+      // Allow the assignment to proceed - it will update the SeasonMembership to ensure consistency
+      // We'll treat this as a refresh rather than a new assignment
+    } else if (isReassignment) {
+      logger.info('Reassignment detected - proceeding with transfer', {
+        userId,
+        fromDivisionId: previousDivisionId,
+        fromDivisionName: previousDivisionName,
+        toDivisionId: divisionId,
+        toDivisionName: division.name
+      });
+    } else if (!existingSeasonAssignment) {
+      logger.info('New assignment - user not yet assigned to any division in this season', {
+        userId,
+        divisionId,
+        divisionName: division.name
+      });
+    } else if (isSameDivision && hasDataInconsistency) {
+      logger.info('User already assigned to this division but data inconsistency found - syncing', {
+        userId,
+        divisionId,
+        divisionName: division.name,
+        membershipDivisionId: seasonMembership?.divisionId
+      });
+      // Allow the assignment to proceed - it will sync the data
     }
 
     // Find the division's group chat thread
@@ -464,9 +554,47 @@ export const assignPlayerToDivision = async (req: Request, res: Response) => {
       }
     });
 
+    // Find the old division's thread if reassigning
+    let oldDivisionThread = null;
+    if (isReassignment && previousDivisionId) {
+      oldDivisionThread = await prisma.thread.findFirst({
+        where: { 
+          divisionId: previousDivisionId,
+          isGroup: true 
+        },
+        select: { id: true, name: true }
+      });
+    }
+
     // Create assignment and add to group chat in a transaction
     const result = await prisma.$transaction(async (tx) => {
-      // Handle season membership
+      // If reassigning, remove from old division first
+      if (isReassignment && previousDivisionId) {
+        // Remove old division assignment
+        await tx.divisionAssignment.delete({
+          where: { divisionId_userId: { divisionId: previousDivisionId, userId } }
+        }).catch(() => {
+          // Ignore if already deleted - allows multiple reassignments
+        });
+
+        // Remove user from old division's group chat if they were a member
+        if (oldDivisionThread) {
+          await tx.userThread.deleteMany({
+            where: {
+              threadId: oldDivisionThread.id,
+              userId: userId
+            }
+          });
+        }
+
+        logger.info('Removed user from previous division for reassignment', {
+          userId,
+          previousDivisionId,
+          newDivisionId: divisionId
+        });
+      }
+
+      // Handle season membership - always update to ensure consistency
       let seasonMembership = await tx.seasonMembership.findFirst({
         where: { userId, seasonId }
       });
@@ -481,19 +609,36 @@ export const assignPlayerToDivision = async (req: Request, res: Response) => {
           }
         });
       } else if (seasonMembership.divisionId !== divisionId) {
+        // Update to sync with DivisionAssignment
         await tx.seasonMembership.update({
           where: { id: seasonMembership.id },
           data: { divisionId }
         });
+        logger.info('Synced SeasonMembership.divisionId with DivisionAssignment', {
+          userId,
+          oldDivisionId: seasonMembership.divisionId,
+          newDivisionId: divisionId
+        });
       }
 
-      // Create division assignment
-      const assignment = await tx.divisionAssignment.create({
-        data: {
+      // Use upsert to handle all cases: create new, update existing, or reassign
+      // This allows admins to reassign unlimited times without errors
+      const assignment = await tx.divisionAssignment.upsert({
+        where: {
+          divisionId_userId: { divisionId, userId }
+        },
+        update: {
+          assignedBy: adminId,
+          notes: notes || (isReassignment ? `Reassigned from ${previousDivisionName || 'previous division'}` : (isSameDivision ? "Refreshed assignment" : (autoAssignment ? "Auto-assigned based on rating" : null))),
+          reassignmentCount: isReassignment ? (existingSeasonAssignment?.reassignmentCount || 0) + 1 : (isSameDivision ? (existingSeasonAssignment?.reassignmentCount || 0) : 0),
+          assignedAt: new Date() // Update timestamp
+        },
+        create: {
           divisionId,
           userId,
           assignedBy: adminId,
-          notes: notes || (autoAssignment ? "Auto-assigned based on rating" : null)
+          notes: notes || (isReassignment ? `Reassigned from ${previousDivisionName || 'previous division'}` : (autoAssignment ? "Auto-assigned based on rating" : null)),
+          reassignmentCount: isReassignment ? (existingSeasonAssignment?.reassignmentCount || 0) + 1 : 0
         },
         include: {
           user: { select: { id: true, name: true, username: true } },
@@ -526,6 +671,10 @@ export const assignPlayerToDivision = async (req: Request, res: Response) => {
 
     // Update division counts
     await updateDivisionCounts(divisionId, true);
+    // If reassigning, decrement old division count
+    if (isReassignment && previousDivisionId) {
+      await updateDivisionCounts(previousDivisionId, false);
+    }
 
     // Get season info for notifications
     const season = await prisma.season.findUnique({
@@ -623,11 +772,60 @@ export const assignPlayerToDivision = async (req: Request, res: Response) => {
     logger.error('Error assigning user to division', { userId: req.body.userId, divisionId: req.body.divisionId }, error);
 
     if (error instanceof Prisma.PrismaClientKnownRequestError) {
+      // P2002 is unique constraint violation - but we're using upsert now, so this shouldn't happen
+      // If it does, we'll retry the assignment
       if (error.code === "P2002") {
-        return res.status(409).json({
-          success: false,
-          error: "User is already assigned to this division"
+        logger.warn('Unique constraint violation during assignment - retrying with upsert', {
+          userId: req.body.userId,
+          divisionId: req.body.divisionId
         });
+        // Try to complete the assignment using upsert
+        try {
+          const retryAssignment = await prisma.divisionAssignment.upsert({
+            where: {
+              divisionId_userId: { divisionId: req.body.divisionId, userId: req.body.userId }
+            },
+            update: {
+              assignedBy: req.body.assignedBy ? (await prisma.admin.findUnique({ where: { userId: req.body.assignedBy }, select: { id: true } }))?.id || null : null,
+              assignedAt: new Date()
+            },
+            create: {
+              divisionId: req.body.divisionId,
+              userId: req.body.userId,
+              assignedBy: req.body.assignedBy ? (await prisma.admin.findUnique({ where: { userId: req.body.assignedBy }, select: { id: true } }))?.id || null : null
+            },
+            include: {
+              user: { select: { id: true, name: true, username: true } },
+              division: { 
+                select: { 
+                  id: true, 
+                  name: true, 
+                  level: true, 
+                  gameType: true,
+                  season: { select: { id: true, name: true } }
+                } 
+              },
+            }
+          });
+          
+          // Sync SeasonMembership
+          await prisma.seasonMembership.updateMany({
+            where: { userId: req.body.userId, seasonId: req.body.seasonId },
+            data: { divisionId: req.body.divisionId }
+          });
+
+          return res.status(200).json({
+            success: true,
+            message: "User assigned to division successfully",
+            data: { assignment: retryAssignment }
+          });
+        } catch (retryError) {
+          logger.error('Retry assignment also failed', { userId: req.body.userId, divisionId: req.body.divisionId }, retryError);
+          return res.status(500).json({
+            success: false,
+            error: "Failed to assign user to division after retry"
+          });
+        }
       }
       if (error.code === "P2003") {
         return res.status(400).json({
