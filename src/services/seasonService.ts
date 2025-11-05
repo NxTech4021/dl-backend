@@ -440,8 +440,11 @@ export const registerMembershipService = async (data: RegisterSeasonMembershipDa
     ? PaymentStatus.COMPLETED 
     : (season.paymentRequired ? PaymentStatus.PENDING : PaymentStatus.COMPLETED);
 
+  // If payment is completed, membership should be ACTIVE; otherwise PENDING
+  const membershipStatus = paymentStatus === PaymentStatus.COMPLETED ? "ACTIVE" : "PENDING";
+
    const membershipData: any = { 
-    status: "PENDING",
+    status: membershipStatus,
     paymentStatus,
     
     user: {
@@ -473,9 +476,16 @@ export const registerMembershipService = async (data: RegisterSeasonMembershipDa
 export const updatePaymentStatusService = async (data: UpdatePaymentStatusData) => {
   const { membershipId, paymentStatus } = data;
 
+  // Update both payment status and membership status
+  // If payment is COMPLETED, membership should be ACTIVE
+  const updateData: any = { paymentStatus };
+  if (paymentStatus === PaymentStatus.COMPLETED) {
+    updateData.status = "ACTIVE";
+  }
+
   const membership = await prisma.seasonMembership.update({
     where: { id: membershipId },
-    data: { paymentStatus },
+    data: updateData,
     include: {
       user: true,
       season: true,
