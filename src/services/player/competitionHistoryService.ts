@@ -75,14 +75,6 @@ export async function getPlayerLeagueHistory(playerId: string) {
         },
         orderBy: { startDate: 'desc' }
       },
-      categories: {
-        select: {
-          id: true,
-          name: true,
-          game_type: true,
-          gender_category: true
-        }
-      },
       createdBy: {
         select: {
           id: true,
@@ -96,8 +88,7 @@ export async function getPlayerLeagueHistory(playerId: string) {
       },
       _count: {
         select: {
-          seasons: true,
-          categories: true
+          seasons: true
         }
       }
     },
@@ -170,12 +161,29 @@ export async function getPlayerSeasonHistory(playerId: string) {
         }
       }
     },
-    include: {
+    select: {
+      id: true,
+      name: true,
+      description: true,
+      status: true,
+      startDate: true,
+      endDate: true,
+      regiDeadline: true,
+      entryFee: true,
+      isActive: true,
+      paymentRequired: true,
+      promoCodeSupported: true,
+      withdrawalEnabled: true,
+      registeredUserCount: true,
+      createdAt: true,
+      updatedAt: true,
       memberships: {
         where: { userId: playerId },
         select: {
+          id: true,
           joinedAt: true,
           status: true,
+          paymentStatus: true,
           division: {
             select: {
               id: true,
@@ -187,20 +195,12 @@ export async function getPlayerSeasonHistory(playerId: string) {
           }
         }
       },
-      categories: {
+      category: {
         select: {
           id: true,
           name: true,
           game_type: true,
-          gender_category: true,
-          leagues: {
-            select: {
-              id: true,
-              name: true,
-              sportType: true,
-              location: true
-            }
-          }
+          gender_category: true
         }
       },
       leagues: {
@@ -232,12 +232,12 @@ export async function getPlayerSeasonHistory(playerId: string) {
     orderBy: {
       startDate: 'desc'
     }
-  });
+  } as any);
 
   // Transform data for better frontend consumption
-  const transformedSeasons = playerSeasons.map(season => ({
+  const transformedSeasons = playerSeasons.map((season: any) => ({
     ...season,
-    membership: season.memberships[0], // Player's membership details
+    membership: season.memberships?.[0] || null, // Player's membership details
     memberships: undefined // Remove the array since we only need the player's membership
   }));
 
