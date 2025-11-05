@@ -74,8 +74,12 @@ export const getAllLeagues = async () => {
     };
   });
 
+  // Calculate total members across all leagues
+  const totalMembers = leaguesWithMemberships.reduce((sum: number, league: any) => {
+    return sum + (league.totalSeasonMemberships || 0);
+  }, 0);
 
-  return { leagues: leaguesWithMemberships,};
+  return { leagues: leaguesWithMemberships, totalMembers };
 };
 
 

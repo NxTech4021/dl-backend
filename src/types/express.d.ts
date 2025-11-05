@@ -9,5 +9,15 @@ declare module "express-serve-static-core" {
       username?: string;
       role?: string;
     };
+    rateLimit?: {
+      limit?: number;
+      current?: number;
+      remaining?: number;
+      resetTime?: Date;
+    };
+    session?: {
+      csrfToken?: string;
+      [key: string]: any;
+    };
   }
 }

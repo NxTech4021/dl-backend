@@ -48,6 +48,8 @@ const defaultTrustedOrigins = [
   "exp://10.72.180.20:8081",
   "http://192.168.100.224:8081",
   "exp://192.168.100.224:8081",
+  "exp://192.168.0.123:8081",
+  "http://192.168.0.123:8081",
   "https://staging.appdevelopers.my",
 ];
 const envTrustedOrigins = [

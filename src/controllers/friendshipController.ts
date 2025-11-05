@@ -2,11 +2,7 @@ import { Request, Response } from 'express';
 import * as friendshipService from '../services/friendshipService';
 import { ApiResponse } from '../utils/ApiResponse';
 
-interface AuthenticatedRequest extends Request {
-  user?: { id: string };
-}
-
-export const sendFriendRequestHandler = async (req: AuthenticatedRequest, res: Response) => {
+export const sendFriendRequestHandler = async (req: Request, res: Response) => {
   try {
     const userId = req.user?.id;
     const { recipientId } = req.body;
@@ -35,13 +31,17 @@ export const sendFriendRequestHandler = async (req: AuthenticatedRequest, res: R
   }
 };
 
-export const acceptFriendRequestHandler = async (req: AuthenticatedRequest, res: Response) => {
+export const acceptFriendRequestHandler = async (req: Request, res: Response) => {
   try {
     const userId = req.user?.id;
     const { friendshipId } = req.params;
 
     if (!userId) {
       return res.status(401).json(new ApiResponse(false, 401, null, 'Unauthorized'));
+    }
+
+    if (!friendshipId) {
+      return res.status(400).json(new ApiResponse(false, 400, null, 'Friendship ID required'));
     }
 
     const friendship = await friendshipService.acceptFriendRequest(friendshipId, userId);
@@ -57,13 +57,17 @@ export const acceptFriendRequestHandler = async (req: AuthenticatedRequest, res:
   }
 };
 
-export const rejectFriendRequestHandler = async (req: AuthenticatedRequest, res: Response) => {
+export const rejectFriendRequestHandler = async (req: Request, res: Response) => {
   try {
     const userId = req.user?.id;
     const { friendshipId } = req.params;
 
     if (!userId) {
       return res.status(401).json(new ApiResponse(false, 401, null, 'Unauthorized'));
+    }
+
+    if (!friendshipId) {
+      return res.status(400).json(new ApiResponse(false, 400, null, 'Friendship ID required'));
     }
 
     const friendship = await friendshipService.rejectFriendRequest(friendshipId, userId);
@@ -79,13 +83,17 @@ export const rejectFriendRequestHandler = async (req: AuthenticatedRequest, res:
   }
 };
 
-export const removeFriendHandler = async (req: AuthenticatedRequest, res: Response) => {
+export const removeFriendHandler = async (req: Request, res: Response) => {
   try {
     const userId = req.user?.id;
     const { friendshipId } = req.params;
 
     if (!userId) {
       return res.status(401).json(new ApiResponse(false, 401, null, 'Unauthorized'));
+    }
+
+    if (!friendshipId) {
+      return res.status(400).json(new ApiResponse(false, 400, null, 'Friendship ID required'));
     }
 
     await friendshipService.removeFriend(friendshipId, userId);
@@ -101,7 +109,7 @@ export const removeFriendHandler = async (req: AuthenticatedRequest, res: Respon
   }
 };
 
-export const getFriendRequestsHandler = async (req: AuthenticatedRequest, res: Response) => {
+export const getFriendRequestsHandler = async (req: Request, res: Response) => {
   try {
     const userId = req.user?.id;
 
@@ -122,7 +130,7 @@ export const getFriendRequestsHandler = async (req: AuthenticatedRequest, res: R
   }
 };
 
-export const getFriendsHandler = async (req: AuthenticatedRequest, res: Response) => {
+export const getFriendsHandler = async (req: Request, res: Response) => {
   try {
     const userId = req.user?.id;
 

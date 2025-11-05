@@ -40,10 +40,14 @@ export const createCategory = async (req: Request, res: Response) => {
         categoryOrder,
         game_type,          
         gender_category: mappedGenderCategory,
-        seasonId: seasonId || null
+        ...(seasonId && {
+          seasons: {
+            connect: [{ id: seasonId }]
+          }
+        })
       },
       include: {
-        season: {
+        seasons: {
           select: {
             id: true,
             name: true,
@@ -176,15 +180,28 @@ export const updateCategory = async (req: Request, res: Response) => {
     // Remove gender_category from data if we're setting it from genderRestriction
     const { gender_category: _, ...updateData } = data;
 
+    const updateDataWithRelations: any = {
+      ...updateData,
+      gender_category: mappedGenderCategory,
+    };
+
+    if (seasonId !== undefined) {
+      if (seasonId) {
+        updateDataWithRelations.seasons = {
+          set: [{ id: seasonId }]
+        };
+      } else {
+        updateDataWithRelations.seasons = {
+          set: []
+        };
+      }
+    }
+
     const updatedCategory = await prisma.category.update({
       where: { id },
-      data: {
-        ...updateData,
-        gender_category: mappedGenderCategory,
-        seasonId: seasonId !== undefined ? seasonId : undefined
-      },
+      data: updateDataWithRelations,
       include: {
-        season: {
+        seasons: {
           select: {
             id: true,
             name: true
@@ -230,6 +247,14 @@ export const deleteCategory = async (req: Request, res: Response) => {
 
     const existingCategory = await prisma.category.findUnique({
       where: { id },
+      include: {
+        seasons: {
+          select: {
+            id: true,
+            name: true
+          }
+        }
+      }
     });
 
     if (!existingCategory) {
@@ -239,11 +264,8 @@ export const deleteCategory = async (req: Request, res: Response) => {
       );
     }
     
-    if (existingCategory.seasonId) {
-      const season = await prisma.season.findUnique({
-        where: { id: existingCategory.seasonId }
-      });
-      
+    if (existingCategory.seasons && existingCategory.seasons.length > 0) {
+      const season = existingCategory.seasons[0];
       if (season) {
         return res.status(400).json(
           new ApiResponse(

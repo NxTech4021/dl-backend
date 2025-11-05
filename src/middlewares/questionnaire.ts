@@ -54,10 +54,10 @@ export const submissionRateLimit = rateLimit({
   },
   handler: (req, res) => {
     logger.warn('Submission rate limit exceeded', {
-      ip: req.ip,
-      userId: req.body?.userId,
-      userAgent: req.headers['user-agent'],
-      sport: req.params?.sport
+      ...(req.ip && { ip: req.ip }),
+      ...(req.body?.userId && { userId: req.body.userId }),
+      ...(req.headers['user-agent'] && { userAgent: req.headers['user-agent'] }),
+      ...(req.params?.sport && { sport: req.params.sport })
     });
     
     res.status(429).json({
@@ -155,11 +155,11 @@ export const healthCheck = (req: Request, res: Response, next: NextFunction) => 
 export const errorBoundary = (error: Error, req: Request, res: Response, next: NextFunction) => {
   logger.error('Unhandled error in questionnaire middleware', {
     error: error.message,
-    stack: error.stack,
+    ...(error.stack && { stack: error.stack }),
     path: req.path,
     method: req.method,
-    ip: req.ip,
-    userAgent: req.headers['user-agent']
+    ...(req.ip && { ip: req.ip }),
+    ...(req.headers['user-agent'] && { userAgent: req.headers['user-agent'] })
   });
   
   res.status(500).json({

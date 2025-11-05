@@ -136,11 +136,11 @@ export class Result<T, E = Error> {
   ) {}
   
   static success<T>(value: T): Result<T, never> {
-    return new Result(value, null, true);
+    return new Result(value, null, true) as Result<T, never>;
   }
   
   static failure<E>(error: E): Result<never, E> {
-    return new Result(null, error, false);
+    return new Result(null, error, false) as Result<never, E>;
   }
   
   isSuccess(): this is Result<T, never> {

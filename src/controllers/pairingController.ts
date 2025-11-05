@@ -1,6 +1,5 @@
-import { Response } from 'express';
+import { Request, Response } from 'express';
 import { ApiResponse } from '../utils/ApiResponse';
-import { AuthenticatedRequest } from '../middlewares/auth.middleware';
 import {
   sendPairRequest as sendPairRequestService,
   acceptPairRequest as acceptPairRequestService,
@@ -17,7 +16,7 @@ import {
  * POST /api/pairing/request
  * Body: { recipientId: string, seasonId: string, message?: string }
  */
-export const sendPairRequest = async (req: AuthenticatedRequest, res: Response) => {
+export const sendPairRequest = async (req: Request, res: Response) => {
   try {
     const userId = req.user?.id;
     const { recipientId, seasonId, message } = req.body;
@@ -62,7 +61,7 @@ export const sendPairRequest = async (req: AuthenticatedRequest, res: Response) 
  * Accept a pair request
  * POST /api/pairing/request/:requestId/accept
  */
-export const acceptPairRequest = async (req: AuthenticatedRequest, res: Response) => {
+export const acceptPairRequest = async (req: Request, res: Response) => {
   try {
     const userId = req.user?.id;
     const { requestId } = req.params;
@@ -102,7 +101,7 @@ export const acceptPairRequest = async (req: AuthenticatedRequest, res: Response
  * Deny a pair request
  * POST /api/pairing/request/:requestId/deny
  */
-export const denyPairRequest = async (req: AuthenticatedRequest, res: Response) => {
+export const denyPairRequest = async (req: Request, res: Response) => {
   try {
     const userId = req.user?.id;
     const { requestId } = req.params;
@@ -142,7 +141,7 @@ export const denyPairRequest = async (req: AuthenticatedRequest, res: Response) 
  * Cancel a pair request (by requester)
  * DELETE /api/pairing/request/:requestId
  */
-export const cancelPairRequest = async (req: AuthenticatedRequest, res: Response) => {
+export const cancelPairRequest = async (req: Request, res: Response) => {
   try {
     const userId = req.user?.id;
     const { requestId } = req.params;
@@ -182,7 +181,7 @@ export const cancelPairRequest = async (req: AuthenticatedRequest, res: Response
  * Get all pair requests for the authenticated user
  * GET /api/pairing/requests
  */
-export const getPairRequests = async (req: AuthenticatedRequest, res: Response) => {
+export const getPairRequests = async (req: Request, res: Response) => {
   try {
     const userId = req.user?.id;
 
@@ -209,7 +208,7 @@ export const getPairRequests = async (req: AuthenticatedRequest, res: Response) 
  * Get user's partnerships
  * GET /api/pairing/partnerships
  */
-export const getUserPartnerships = async (req: AuthenticatedRequest, res: Response) => {
+export const getUserPartnerships = async (req: Request, res: Response) => {
   try {
     const userId = req.user?.id;
 
@@ -236,7 +235,7 @@ export const getUserPartnerships = async (req: AuthenticatedRequest, res: Respon
  * Dissolve a partnership
  * POST /api/pairing/partnership/:partnershipId/dissolve
  */
-export const dissolvePartnership = async (req: AuthenticatedRequest, res: Response) => {
+export const dissolvePartnership = async (req: Request, res: Response) => {
   try {
     const userId = req.user?.id;
     const { partnershipId } = req.params;
@@ -276,7 +275,7 @@ export const dissolvePartnership = async (req: AuthenticatedRequest, res: Respon
  * Get active partnership for a season
  * GET /api/pairing/partnership/active/:seasonId
  */
-export const getActivePartnership = async (req: AuthenticatedRequest, res: Response) => {
+export const getActivePartnership = async (req: Request, res: Response) => {
   try {
     const userId = req.user?.id;
     const { seasonId } = req.params;

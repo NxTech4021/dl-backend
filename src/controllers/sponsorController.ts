@@ -79,6 +79,12 @@ export const getSponsorById = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
 
+    if (!id) {
+      return res.status(400).json(
+        new ApiResponse(false, 400, null, "Sponsor ID is required")
+      );
+    }
+
     const sponsor = await prisma.sponsorship.findUnique({
       where: { id },
       include: {
@@ -113,6 +119,12 @@ export const updateSponsor = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const { sponsoredName, packageTier, contractAmount, sponsorRevenue, leagueIds } = req.body;
+
+    if (!id) {
+      return res.status(400).json(
+        new ApiResponse(false, 400, null, "Sponsor ID is required")
+      );
+    }
 
     // Check if sponsor exists
     const existingSponsor = await prisma.sponsorship.findUnique({
@@ -162,6 +174,12 @@ export const updateSponsor = async (req: Request, res: Response) => {
 export const deleteSponsor = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
+
+    if (!id) {
+      return res.status(400).json(
+        new ApiResponse(false, 400, null, "Sponsor ID is required")
+      );
+    }
 
     // Check if sponsor exists
     const existingSponsor = await prisma.sponsorship.findUnique({

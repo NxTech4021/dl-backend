@@ -1,7 +1,7 @@
 import { prisma } from "../lib/prisma";
 // Production-grade onboarding routes
 import express from "express";
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient, Prisma } from "@prisma/client";
 import QuestionnaireService, {
   loadQuestionnaire,
 } from "../services/questionnaire";
@@ -15,6 +15,7 @@ import {
   DatabaseError,
   ScoringError,
   Result,
+  RatingResult,
 } from "../types/questionnaire";
 import ConfigurationService from "../config/questionnaire";
 import Logger from "../utils/logger";
@@ -61,7 +62,8 @@ function handleQuestionnaireError(error: unknown, res: express.Response): void {
       success: false,
     });
   } else {
-    logger.error("Unknown error in questionnaire route", { error });
+    const errorMessage = typeof error === 'string' ? error : String(error);
+    logger.error("Unknown error in questionnaire route", { error: errorMessage });
     res.status(500).json({
       error: "Internal server error",
       code: "UNKNOWN_ERROR",
@@ -77,6 +79,12 @@ function validateSportParam(
   next: express.NextFunction
 ): void {
   const sport = req.params.sport;
+  if (!sport) {
+    return handleQuestionnaireError(
+      new ValidationError('Sport parameter is required', 'sport'),
+      res
+    );
+  }
   const validation = validator.validateSport(sport);
 
   if (!validation.isValid) {
@@ -246,9 +254,9 @@ router.post("/:sport/submit", validateSportParam, async (req, res) => {
 
     // Score with timeout and error handling
     const scoringStart = Date.now();
-    let scoringResult;
+    let scoringResult: RatingResult;
     try {
-      const scoringPromise = new Promise((resolve, reject) => {
+      const scoringPromise = new Promise<RatingResult>((resolve, reject) => {
         try {
           let result;
           if (sport === "pickleball") {
@@ -258,13 +266,13 @@ router.post("/:sport/submit", validateSportParam, async (req, res) => {
           } else {
             result = scorePadel(sanitizedAnswers);
           }
-          resolve(result);
+          resolve(result as RatingResult);
         } catch (error) {
           reject(error);
         }
       });
 
-      const timeoutPromise = new Promise((_, reject) =>
+      const timeoutPromise = new Promise<never>((_, reject) =>
         setTimeout(
           () => reject(new Error("Scoring timeout")),
           ConfigurationService.getConfig().scoring.timeoutMs
@@ -293,8 +301,8 @@ router.post("/:sport/submit", validateSportParam, async (req, res) => {
     const scoringDuration = Date.now() - scoringStart;
     logger.scoringCompleted(
       sport,
-      (scoringResult as any).singles || 0,
-      (scoringResult as any).confidence || "unknown",
+      scoringResult.singles || 0,
+      scoringResult.confidence || "unknown",
       scoringDuration
     );
 
@@ -318,12 +326,12 @@ router.post("/:sport/submit", validateSportParam, async (req, res) => {
           data: {
             qVersion: version,
             qHash: hash,
-            answersJson: sanitizedAnswers,
+            answersJson: sanitizedAnswers as Prisma.InputJsonValue,
             completedAt: new Date(),
             result: {
               upsert: {
-                create: scoringResult,
-                update: scoringResult,
+                create: scoringResult as any,
+                update: scoringResult as any,
               },
             },
           },
@@ -347,9 +355,9 @@ router.post("/:sport/submit", validateSportParam, async (req, res) => {
             sport,
             qVersion: version,
             qHash: hash,
-            answersJson: sanitizedAnswers,
+            answersJson: sanitizedAnswers as Prisma.InputJsonValue,
             completedAt: new Date(),
-            result: { create: scoringResult },
+            result: { create: scoringResult as any },
           },
           include: { result: true },
         });
@@ -409,7 +417,7 @@ router.post("/:sport/submit", validateSportParam, async (req, res) => {
       responseId: response.id,
       version,
       qHash: hash,
-      result: response.result,
+      result: response.result || scoringResult,
       sport,
       success: true,
     });
@@ -533,7 +541,7 @@ router.get("/responses/:userId/:sport", async (req, res) => {
         include: { result: true },
         orderBy: { completedAt: "desc" },
       }),
-      new Promise((_, reject) =>
+      new Promise<never>((_, reject) =>
         setTimeout(() => reject(new Error("Database timeout")), 10000)
       ),
     ]);
