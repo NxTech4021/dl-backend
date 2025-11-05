@@ -1,9 +1,12 @@
+/// <reference types="node" />
 import {
   Prisma,
   PrismaClient,
   GameType,
   SportType,
   Statuses,
+  User,
+  Season,
 } from "@prisma/client";
 
 const prisma = new PrismaClient();
@@ -152,7 +155,7 @@ async function seedTestUsers() {
     },
   ];
 
-  const createdUsers = [];
+  const createdUsers: User[] = [];
   for (const userData of testUsers) {
     const existingUser = await prisma.user.findUnique({
       where: { email: userData.email },
@@ -296,7 +299,7 @@ async function seedLeagueAndSeason(createdByAdminId?: string) {
 
   // Create seasons for each category
   // Create league-season-category relationship via update
-  const seasons = [];
+  const seasons: Season[] = [];
 
   // Season 1 (Active) - for all categories
   for (const category of categories) {
@@ -390,17 +393,20 @@ async function main() {
     console.log("   - Categories: 5 (Men's/Women's Singles, Men's/Women's/Mixed Doubles)");
     console.log("   - Seasons: 6 (5 Active S1 + 1 Upcoming S2)\n");
 
-    // Add all test users to the league as members
-    if (leagueSeason.league) {
+    // Add all test users to the first season as members
+    // Note: LeagueMembership doesn't exist in the schema - users join seasons, not leagues directly
+    if (leagueSeason.season && leagueSeason.seasons) {
+      const firstSeason = leagueSeason.season;
       for (const user of testUsers) {
-        await prisma.leagueMembership.create({
+        await prisma.seasonMembership.create({
           data: {
             userId: user.id,
-            leagueId: leagueSeason.league.id,
+            seasonId: firstSeason.id,
+            status: "ACTIVE",
           },
         });
       }
-      console.log(`✅ Added ${testUsers.length} users as league members\n`);
+      console.log(`✅ Added ${testUsers.length} users to season "${firstSeason.name}"\n`);
     }
 
     console.log("🌟 Database seeded successfully!");
