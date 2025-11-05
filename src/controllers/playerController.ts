@@ -264,15 +264,17 @@ export const updatePlayerProfile = async (req: AuthenticatedRequest, res: Respon
 
     const { name, username, email, location, image, phoneNumber, bio } = req.body as UpdatePlayerProfileBody;
 
-    const updatedUser = await profileService.updatePlayerProfile(userId, {
-      name,
-      username,
-      email,
-      location,
-      image,
-      phoneNumber,
-      bio
-    });
+    const updateData: Parameters<typeof profileService.updatePlayerProfile>[1] = {};
+    
+    if (name !== undefined) updateData.name = name;
+    if (username !== undefined) updateData.username = username;
+    if (email !== undefined) updateData.email = email;
+    if (location !== undefined) updateData.location = location;
+    if (image !== undefined) updateData.image = image;
+    if (phoneNumber !== undefined) updateData.phoneNumber = phoneNumber;
+    if (bio !== undefined) updateData.bio = bio;
+
+    const updatedUser = await profileService.updatePlayerProfile(userId, updateData);
 
     return res.json({
       success: true,
@@ -308,6 +310,12 @@ export const changePlayerPassword = async (req: AuthenticatedRequest, res: Respo
     }
 
     const { currentPassword, newPassword } = req.body as ChangePlayerPasswordBody;
+
+    if (!currentPassword || !newPassword) {
+      return res
+        .status(400)
+        .json(new ApiResponse(false, 400, null, "Current password and new password are required"));
+    }
 
     await profileService.changePlayerPassword(userId, currentPassword, newPassword, req.headers);
 

@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Router, RequestHandler } from 'express';
 import { verifyAuth } from '../middlewares/auth.middleware';
 import {
   sendPairRequest,
@@ -49,12 +49,12 @@ pairingRouter.get('/partnership/active/:seasonId', getActivePartnership);
 // ==========================================
 // FRIENDSHIP ROUTES (NEW)
 // ==========================================
-pairingRouter.post('/friendship/request', sendFriendRequestHandler);
-pairingRouter.get('/friendship/requests', getFriendRequestsHandler);
-pairingRouter.post('/friendship/:friendshipId/accept', acceptFriendRequestHandler);
-pairingRouter.post('/friendship/:friendshipId/reject', rejectFriendRequestHandler);
-pairingRouter.delete('/friendship/:friendshipId', removeFriendHandler);
-pairingRouter.get('/friends', getFriendsHandler);
+pairingRouter.post('/friendship/request', sendFriendRequestHandler as RequestHandler);
+pairingRouter.get('/friendship/requests', getFriendRequestsHandler as RequestHandler);
+pairingRouter.post('/friendship/:friendshipId/accept', acceptFriendRequestHandler as RequestHandler);
+pairingRouter.post('/friendship/:friendshipId/reject', rejectFriendRequestHandler as RequestHandler);
+pairingRouter.delete('/friendship/:friendshipId', removeFriendHandler as RequestHandler);
+pairingRouter.get('/friends', getFriendsHandler as RequestHandler);
 
 // ==========================================
 // SEASON INVITATION ROUTES (NEW)

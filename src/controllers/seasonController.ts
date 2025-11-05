@@ -121,21 +121,39 @@ export const createSeason = async (req: Request, res: Response) => {
     withdrawalEnabled,
   } = req.body as CreateSeasonBody;
 
+  // Validate required fields
+  if (!name || !startDate || !endDate || !entryFee || !leagueIds || !categoryId) {
+    return res.status(400).json({
+      success: false,
+      error: "Missing required fields: name, startDate, endDate, entryFee, leagueIds, and categoryId are required"
+    });
+  }
+
+  if (!Array.isArray(leagueIds) || leagueIds.length === 0) {
+    return res.status(400).json({
+      success: false,
+      error: "At least one league ID is required"
+    });
+  }
+
   try {
-    const season = await createSeasonService({
+    const seasonData: Parameters<typeof createSeasonService>[0] = {
       name,
       startDate,
       endDate,
-      regiDeadline,
-      description,
       entryFee,
       leagueIds,
       categoryId,
-      isActive,
-      paymentRequired,
-      promoCodeSupported,
-      withdrawalEnabled,
-    });
+    };
+    
+    if (regiDeadline !== undefined) seasonData.regiDeadline = regiDeadline;
+    if (description !== undefined) seasonData.description = description;
+    if (isActive !== undefined) seasonData.isActive = isActive;
+    if (paymentRequired !== undefined) seasonData.paymentRequired = paymentRequired;
+    if (promoCodeSupported !== undefined) seasonData.promoCodeSupported = promoCodeSupported;
+    if (withdrawalEnabled !== undefined) seasonData.withdrawalEnabled = withdrawalEnabled;
+
+    const season = await createSeasonService(seasonData);
 
     // 🆕 Send notification if season is starting soon
     if (isActive && startDate) {
@@ -288,21 +306,25 @@ export const updateSeason = async (req: Request, res: Response) => {
       select: { status: true, name: true }
     });
 
-    const seasonData = {
-      name,
-      startDate,
-      endDate,
-      regiDeadline,
-      description,
-      entryFee,
-      leagueIds,
-      categoryId,
-      isActive,
-      status,
-      paymentRequired,
-      promoCodeSupported,
-      withdrawalEnabled,
-    };
+    const seasonData: Parameters<typeof updateSeasonService>[1] = {};
+    
+    if (name !== undefined) seasonData.name = name;
+    if (startDate !== undefined) seasonData.startDate = startDate;
+    if (endDate !== undefined) seasonData.endDate = endDate;
+    if (regiDeadline !== undefined) seasonData.regiDeadline = regiDeadline;
+    if (description !== undefined) seasonData.description = description;
+    if (entryFee !== undefined) seasonData.entryFee = entryFee;
+    if (leagueIds !== undefined) seasonData.leagueIds = leagueIds;
+    if (categoryId !== undefined) seasonData.categoryId = categoryId;
+    if (isActive !== undefined) seasonData.isActive = isActive;
+    if (status !== undefined) {
+      if (status && ["UPCOMING", "ACTIVE", "FINISHED", "CANCELLED"].includes(status)) {
+        seasonData.status = status as "UPCOMING" | "ACTIVE" | "FINISHED" | "CANCELLED";
+      }
+    }
+    if (paymentRequired !== undefined) seasonData.paymentRequired = paymentRequired;
+    if (promoCodeSupported !== undefined) seasonData.promoCodeSupported = promoCodeSupported;
+    if (withdrawalEnabled !== undefined) seasonData.withdrawalEnabled = withdrawalEnabled;
 
     const season = await updateSeasonService(id, seasonData);
 
@@ -359,7 +381,16 @@ export const updateSeasonStatus = async (req: Request, res: Response) => {
 
   try {
     const { status, isActive } = req.body as UpdateSeasonStatusBody;
-    const season = await updateSeasonStatusService(id, { status, isActive });
+    
+    const statusUpdate: Parameters<typeof updateSeasonStatusService>[1] = {};
+    if (status !== undefined) {
+      if (status && ["UPCOMING", "ACTIVE", "FINISHED", "CANCELLED"].includes(status)) {
+        statusUpdate.status = status as "UPCOMING" | "ACTIVE" | "FINISHED" | "CANCELLED";
+      }
+    }
+    if (isActive !== undefined) statusUpdate.isActive = isActive;
+    
+    const season = await updateSeasonStatusService(id, statusUpdate);
     return res.status(200).json({
       success: true,
       message: "Season status updated successfully",
@@ -418,13 +449,22 @@ export const submitWithdrawalRequest = async (req: AuthenticatedRequest, res: Re
 
   const { seasonId, reason, partnershipId } = req.body as SubmitWithdrawalRequestBody;
 
+  if (!seasonId || !reason) {
+    return res.status(400).json({ error: "seasonId and reason are required" });
+  }
+
   try {
-    const withdrawalRequest = await submitWithdrawalRequestService({
+    const withdrawalData: Parameters<typeof submitWithdrawalRequestService>[0] = {
       userId,
       seasonId,
       reason,
-      partnershipId,
-    });
+    };
+    
+    if (partnershipId !== undefined) {
+      withdrawalData.partnershipId = partnershipId;
+    }
+
+    const withdrawalRequest = await submitWithdrawalRequestService(withdrawalData);
 
     // 🆕 Send notification to user confirming withdrawal request
     const season = await prisma.season.findUnique({
@@ -473,14 +513,18 @@ export const processWithdrawalRequest = async (req: AuthenticatedRequest, res: R
     return res.status(401).json({ error: "Unauthorized" });
   }
 
-  if (!["APPROVED", "REJECTED"].includes(status)) {
-    return res.status(400).json({ error: "Invalid status." });
+  if (!id) {
+    return res.status(400).json({ error: "Withdrawal request ID is required." });
+  }
+
+  if (!status || !["APPROVED", "REJECTED"].includes(status)) {
+    return res.status(400).json({ error: "Invalid status. Must be 'APPROVED' or 'REJECTED'." });
   }
 
   try {
     const result = await processWithdrawalRequestService(
       id,
-      status,
+      status as "APPROVED" | "REJECTED",
       processedByAdminId
     );
 
@@ -781,12 +825,12 @@ export const updatePaymentStatus = async (req: Request, res: Response) => {
     });
   }
 
-  if (!Object.values(PaymentStatus).includes(paymentStatus)) {
+  if (!Object.values(PaymentStatus).includes(paymentStatus as PaymentStatus)) {
     return res.status(400).json({ error: "Invalid paymentStatus value." });
   }
 
   try {
-    const membership = await updatePaymentStatusService({ membershipId, paymentStatus });
+    const membership = await updatePaymentStatusService({ membershipId, paymentStatus: paymentStatus as PaymentStatus });
 
     // 🆕 Send payment status notification
     const membershipWithSeason = await prisma.seasonMembership.findUnique({

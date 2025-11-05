@@ -189,7 +189,9 @@ export const errorHandler = (
   };
 
   if (process.env.NODE_ENV === 'development' && err instanceof Error) {
-    response.stack = err.stack;
+    if (err.stack) {
+      response.stack = err.stack;
+    }
     response.details = err;
   }
 
