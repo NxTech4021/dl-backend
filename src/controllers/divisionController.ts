@@ -1,7 +1,7 @@
-//@ts-nocheck
 import { prisma } from "../lib/prisma";
 import { Request, Response } from "express";
 import { Prisma } from "@prisma/client";
+import { Server as SocketIOServer } from "socket.io";
 
 // Service imports
 import {
@@ -60,6 +60,24 @@ const updateDivisionCounts = async (divisionId: string, increment: boolean) => {
   }
 };
 
+interface CreateDivisionBody {
+  seasonId?: string;
+  name?: string;
+  description?: string;
+  threshold?: number;
+  divisionLevel?: number;
+  gameType?: string;
+  genderCategory?: string;
+  maxSinglesPlayers?: number;
+  maxDoublesTeams?: number;
+  autoAssignmentEnabled?: boolean;
+  isActive?: boolean;
+  prizePoolTotal?: number;
+  sponsorName?: string;
+  adminId?: string;
+}
+
+
 export const createDivision = async (req: Request, res: Response) => {
   const {
     seasonId,
@@ -76,10 +94,13 @@ export const createDivision = async (req: Request, res: Response) => {
     prizePoolTotal,
     sponsorName,
     adminId
-  } = req.body;
+  } = req.body as CreateDivisionBody;
 
   if (!adminId) {
-    logger.warn('Division creation attempted without admin ID', { seasonId, name });
+    const context: Record<string, string> = {};
+    if (seasonId) context.seasonId = seasonId;
+    if (name) context.name = name;
+    logger.warn('Division creation attempted without admin ID', context);
     return res.status(400).json({
       success: false,
       error: "Admin Id is required to create the division thread.",
@@ -87,7 +108,12 @@ export const createDivision = async (req: Request, res: Response) => {
   }
 
   if (!seasonId || !name || !divisionLevel || !gameType) {
-    logger.warn('Division creation with missing required fields', { seasonId, name, divisionLevel, gameType });
+    const context: Record<string, string | number | undefined> = {};
+    if (seasonId) context.seasonId = seasonId;
+    if (name) context.name = name;
+    if (divisionLevel !== undefined) context.divisionLevel = divisionLevel;
+    if (gameType) context.gameType = gameType;
+    logger.warn('Division creation with missing required fields', context);
     return res.status(400).json({
       success: false,
       error: "seasonId, name, divisionLevel, and gameType are required fields.",
@@ -108,7 +134,13 @@ export const createDivision = async (req: Request, res: Response) => {
           select: {
             id: true,
             userId: true,
-            status: true
+            status: true,
+            user: {
+              select: {
+                id: true,
+                name: true
+              }
+            }
           }
         }
       },
@@ -144,7 +176,13 @@ export const createDivision = async (req: Request, res: Response) => {
         select: {
           id: true,
           userId: true,
-          status: true
+          status: true,
+          user: {
+            select: {
+              id: true,
+              name: true
+            }
+          }
         }
       });
     } else if (adminRecord.status !== 'ACTIVE') {
@@ -156,24 +194,22 @@ export const createDivision = async (req: Request, res: Response) => {
     }
 
     // 1️⃣ Create division and its chat thread
-    const result = await createDivisionWithThread(
-      {
-        seasonId,
-        name,
-        description,
-        threshold,
-        divisionLevel,
-        gameType,
-        genderCategory,
-        maxSinglesPlayers,
-        maxDoublesTeams,
-        autoAssignmentEnabled,
-        isActive,
-        prizePoolTotal,
-        sponsorName,
-      },
-      adminId
-    );
+    const divisionData: Parameters<typeof createDivisionWithThread>[0] = {
+      seasonId,
+      name,
+      divisionLevel: typeof divisionLevel === 'number' ? String(divisionLevel) : divisionLevel,
+      gameType,
+      ...(description !== undefined && { description }),
+      ...(threshold !== undefined && { threshold }),
+      ...(genderCategory !== undefined && { genderCategory }),
+      ...(maxSinglesPlayers !== undefined && { maxSinglesPlayers }),
+      ...(maxDoublesTeams !== undefined && { maxDoublesTeams }),
+      ...(autoAssignmentEnabled !== undefined && { autoAssignmentEnabled }),
+      ...(isActive !== undefined && { isActive }),
+      ...(prizePoolTotal !== undefined && { prizePoolTotal }),
+      ...(sponsorName !== undefined && { sponsorName }),
+    };
+    const result = await createDivisionWithThread(divisionData, adminId);
 
    
     const season = await prisma.season.findUnique({
@@ -241,9 +277,9 @@ export const createDivision = async (req: Request, res: Response) => {
         });
 
         // 5️⃣ Emit socket events to season members (NOT the admin)
-        if ((req as any).io) {
+        if (req.io) {
           recipientUserIds.forEach((userId) => {
-            (req as any).io.to(userId).emit("new_notification", {
+            req.io.to(userId).emit("new_notification", {
               type: divisionNotif.type,
               category: divisionNotif.category,
               title: divisionNotif.title,
@@ -281,15 +317,15 @@ export const createDivision = async (req: Request, res: Response) => {
     }
 
   // 6️⃣ ONLY emit socket notifications for thread creation to the admin (not database notifications)
-    if ((req as any).io) {
+    if (req.io && adminId) {
       // Just inform about the thread creation - no persistent notification
-      (req as any).io.to(adminId).emit("new_thread", { // Use adminId (which is userId)
+      req.io.to(adminId).emit("new_thread", { // Use adminId (which is userId)
         thread: result.thread,
         message: `Division chat created for ${result.division.name}`,
         timestamp: new Date().toISOString(),
       });
 
-      (req as any).io.to(adminId).emit("division_created", { // Use adminId (which is userId)
+      req.io.to(adminId).emit("division_created", { // Use adminId (which is userId)
         division: result.division,
         thread: result.thread,
         message: `Division ${result.division.name} created successfully`,
@@ -320,9 +356,10 @@ export const createDivision = async (req: Request, res: Response) => {
       },
       message: "Division and chat group created successfully",
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("❌ Division Creation Error:", error);
-    logger.error("Create division error", { seasonId, name, adminId }, error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    logger.error("Create division error", { seasonId, name, adminId }, error instanceof Error ? error : new Error(errorMessage));
 
     if (error instanceof Prisma.PrismaClientKnownRequestError) {
       if (error.code === "P2002") {
@@ -339,20 +376,34 @@ export const createDivision = async (req: Request, res: Response) => {
       }
     }
 
+    const finalErrorMessage = error instanceof Error ? error.message : "An error occurred while creating the division and chat group.";
     return res.status(500).json({
       success: false,
-      error:
-        error.message ||
-        "An error occurred while creating the division and chat group.",
+      error: finalErrorMessage,
     });
   }
 };
 
+interface AssignPlayerToDivisionBody {
+  userId?: string;
+  divisionId?: string;
+  seasonId?: string;
+  assignedBy?: string;
+  notes?: string;
+  autoAssignment?: boolean;
+  overrideThreshold?: boolean;
+}
+
 export const assignPlayerToDivision = async (req: Request, res: Response) => {
   try {
-    const { userId, divisionId, seasonId, assignedBy, notes, autoAssignment, overrideThreshold } = req.body;
+    const { userId, divisionId, seasonId, assignedBy, notes, autoAssignment, overrideThreshold } = req.body as AssignPlayerToDivisionBody;
 
-    logger.info('Assigning player to division', { userId, divisionId, seasonId, overrideThreshold });
+    const context: Record<string, string | boolean | undefined> = {};
+    if (userId) context.userId = userId;
+    if (divisionId) context.divisionId = divisionId;
+    if (seasonId) context.seasonId = seasonId;
+    if (overrideThreshold !== undefined) context.overrideThreshold = overrideThreshold;
+    logger.info('Assigning player to division', context);
 
     if (!userId || !divisionId || !seasonId) {
       return res.status(400).json({
@@ -416,12 +467,13 @@ export const assignPlayerToDivision = async (req: Request, res: Response) => {
       }
     } else if (division.pointsThreshold && overrideThreshold) {
       // Log that admin is overriding threshold validation
-      logger.info('Admin overriding threshold validation', {
+      const overrideContext: Record<string, string | number> = {
         userId,
         divisionId,
         threshold: division.pointsThreshold,
-        adminId: assignedBy
-      });
+      };
+      if (assignedBy) overrideContext.adminId = assignedBy;
+      logger.info('Admin overriding threshold validation', overrideContext);
     }
 
     // Check division capacity
@@ -717,7 +769,9 @@ export const assignPlayerToDivision = async (req: Request, res: Response) => {
       // Continue execution - notification failure shouldn't block assignment
     }
 
-    logger.playerAssigned(userId, divisionId, seasonId, { adminId: adminId || undefined });
+    const assignedContext: Record<string, string> = {};
+    if (adminId) assignedContext.adminId = adminId;
+    logger.playerAssigned(userId, divisionId, seasonId, assignedContext);
 
     // Socket notifications
     if ((req as any).io) {
@@ -733,27 +787,29 @@ export const assignPlayerToDivision = async (req: Request, res: Response) => {
       });
 
       // Notify the division group chat about new member
-      (req as any).io.to(result.divisionThread.id).emit('member_joined_division', {
-        userId,
-        userName: user.name,
-        divisionId,
-        divisionName: division.name,
-        timestamp: new Date().toISOString()
-      });
+      if (req.io && result.divisionThread) {
+        req.io.to(result.divisionThread.id).emit('member_joined_division', {
+          userId,
+          userName: user.name,
+          divisionId,
+          divisionName: division.name,
+          timestamp: new Date().toISOString()
+        });
 
-      // Notify the assigned user about joining the group chat
-      (req as any).io.to(userId).emit('new_thread', {
+        // Notify the assigned user about joining the group chat
+        req.io.to(userId).emit('new_thread', {
         thread: {
           id: result.divisionThread.id,
           name: result.divisionThread.name,
           isGroup: true,
           divisionId: divisionId
         },
-        message: `Welcome to ${division.name} group chat!`,
-        timestamp: new Date().toISOString()
-      });
+          message: `Welcome to ${division.name} group chat!`,
+          timestamp: new Date().toISOString()
+        });
 
-      logger.socketEvent('division_assignment', userId, { divisionId, threadId: result.divisionThread.id });
+        logger.socketEvent('division_assignment', userId, { divisionId, threadId: result.divisionThread.id });
+      }
     }
 
     return res.status(201).json({
@@ -768,31 +824,39 @@ export const assignPlayerToDivision = async (req: Request, res: Response) => {
       }
     });
 
-  } catch (error: any) {
-    logger.error('Error assigning user to division', { userId: req.body.userId, divisionId: req.body.divisionId }, error);
+  } catch (error: unknown) {
+    const body = req.body as AssignPlayerToDivisionBody;
+    const errorContext: Record<string, string> = {};
+    if (body.userId) errorContext.userId = body.userId;
+    if (body.divisionId) errorContext.divisionId = body.divisionId;
+    logger.error('Error assigning user to division', errorContext, error instanceof Error ? error : new Error('Unknown error'));
 
     if (error instanceof Prisma.PrismaClientKnownRequestError) {
       // P2002 is unique constraint violation - but we're using upsert now, so this shouldn't happen
       // If it does, we'll retry the assignment
       if (error.code === "P2002") {
-        logger.warn('Unique constraint violation during assignment - retrying with upsert', {
-          userId: req.body.userId,
-          divisionId: req.body.divisionId
-        });
+        const body = req.body as AssignPlayerToDivisionBody;
+        const retryContext: Record<string, string> = {};
+        if (body.userId) retryContext.userId = body.userId;
+        if (body.divisionId) retryContext.divisionId = body.divisionId;
+        logger.warn('Unique constraint violation during assignment - retrying with upsert', retryContext);
         // Try to complete the assignment using upsert
         try {
+          if (!body.userId || !body.divisionId) {
+            throw new Error('userId and divisionId are required for retry');
+          }
           const retryAssignment = await prisma.divisionAssignment.upsert({
             where: {
-              divisionId_userId: { divisionId: req.body.divisionId, userId: req.body.userId }
+              divisionId_userId: { divisionId: body.divisionId, userId: body.userId }
             },
             update: {
-              assignedBy: req.body.assignedBy ? (await prisma.admin.findUnique({ where: { userId: req.body.assignedBy }, select: { id: true } }))?.id || null : null,
+              assignedBy: body.assignedBy ? (await prisma.admin.findUnique({ where: { userId: body.assignedBy }, select: { id: true } }))?.id || null : null,
               assignedAt: new Date()
             },
             create: {
-              divisionId: req.body.divisionId,
-              userId: req.body.userId,
-              assignedBy: req.body.assignedBy ? (await prisma.admin.findUnique({ where: { userId: req.body.assignedBy }, select: { id: true } }))?.id || null : null
+              divisionId: body.divisionId,
+              userId: body.userId,
+              assignedBy: body.assignedBy ? (await prisma.admin.findUnique({ where: { userId: body.assignedBy }, select: { id: true } }))?.id || null : null
             },
             include: {
               user: { select: { id: true, name: true, username: true } },
@@ -809,10 +873,12 @@ export const assignPlayerToDivision = async (req: Request, res: Response) => {
           });
           
           // Sync SeasonMembership
-          await prisma.seasonMembership.updateMany({
-            where: { userId: req.body.userId, seasonId: req.body.seasonId },
-            data: { divisionId: req.body.divisionId }
-          });
+          if (body.userId && body.seasonId && body.divisionId) {
+            await prisma.seasonMembership.updateMany({
+              where: { userId: body.userId, seasonId: body.seasonId },
+              data: { divisionId: body.divisionId }
+            });
+          }
 
           return res.status(200).json({
             success: true,
@@ -820,7 +886,11 @@ export const assignPlayerToDivision = async (req: Request, res: Response) => {
             data: { assignment: retryAssignment }
           });
         } catch (retryError) {
-          logger.error('Retry assignment also failed', { userId: req.body.userId, divisionId: req.body.divisionId }, retryError);
+          const body = req.body as AssignPlayerToDivisionBody;
+          const retryErrorContext: Record<string, string> = {};
+          if (body.userId) retryErrorContext.userId = body.userId;
+          if (body.divisionId) retryErrorContext.divisionId = body.divisionId;
+          logger.error('Retry assignment also failed', retryErrorContext, retryError instanceof Error ? retryError : new Error('Unknown retry error'));
           return res.status(500).json({
             success: false,
             error: "Failed to assign user to division after retry"
@@ -835,9 +905,10 @@ export const assignPlayerToDivision = async (req: Request, res: Response) => {
       }
     }
 
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     return res.status(500).json({
       success: false,
-      error: error.message || "Failed to assign user to division"
+      error: errorMessage || "Failed to assign user to division"
     });
   }
 };
@@ -850,7 +921,11 @@ export const removePlayerFromDivision = async (req: Request, res: Response) => {
     const { divisionId, userId } = req.params;
     const { reason } = req.body;
 
-    logger.info('Removing player from division', { userId, divisionId, reason });
+    const removeContext: Record<string, string> = {};
+    if (userId) removeContext.userId = userId;
+    if (divisionId) removeContext.divisionId = divisionId;
+    if (reason) removeContext.reason = reason;
+    logger.info('Removing player from division', removeContext);
 
     if (!divisionId || !userId) {
       return res.status(400).json({
@@ -952,12 +1027,14 @@ export const removePlayerFromDivision = async (req: Request, res: Response) => {
         seasonId: assignment.division.seasonId,
       });
 
-      logger.notificationSent('DIVISION_REMOVED', [userId], { divisionId, reason });
+      const removedNotifContext: Record<string, string> = { divisionId };
+      if (reason) removedNotifContext.reason = reason;
+      logger.notificationSent('DIVISION_REMOVED', [userId], removedNotifContext);
     } catch (notifError) {
       logger.error('Failed to send removal notification', { userId, divisionId }, notifError as Error);
     }
 
-    logger.playerRemoved(userId, divisionId, reason, { seasonId: assignment.division.seasonId });
+    logger.playerRemoved(userId, divisionId, reason || undefined, { seasonId: assignment.division.seasonId });
 
     // Socket notifications for removal
     if ((req as any).io) {
@@ -986,7 +1063,7 @@ export const removePlayerFromDivision = async (req: Request, res: Response) => {
         // Force the user to leave the socket room
         const userSockets = (req as any).io.sockets.sockets;
         for (const [socketId, socket] of userSockets) {
-          if ((socket as any).userId === userId) {
+          if ((socket).userId === userId) {
             socket.leave(divisionThread.id);
           }
         }
@@ -1001,7 +1078,10 @@ export const removePlayerFromDivision = async (req: Request, res: Response) => {
     });
 
   } catch (error: any) {
-    logger.error('Error removing user from division', { userId: req.params.userId, divisionId: req.params.divisionId }, error);
+    const removeErrorContext: Record<string, string> = {};
+    if (req.params.userId) removeErrorContext.userId = req.params.userId;
+    if (req.params.divisionId) removeErrorContext.divisionId = req.params.divisionId;
+    logger.error('Error removing user from division', removeErrorContext, error instanceof Error ? error : new Error('Unknown error'));
     return res.status(500).json({
       success: false,
       error: error.message || "Failed to remove user from division"
@@ -1034,41 +1114,43 @@ export const transferPlayerBetweenDivisions = async (req: Request, res: Response
     );
 
     // 🆕 Send transfer notification
-    if (result.fromDivision && result.toDivision && result.season) {
+    const transferContext: Record<string, string> = { fromDivisionId, toDivisionId };
+    if ('fromDivision' in result && 'toDivision' in result && 'season' in result) {
+      const transferResult = result as { fromDivision: { name: string }; toDivision: { name: string; seasonId: string }; season: { name: string } };
       try {
         const notif = notificationTemplates.division.transferred(
-          result.fromDivision.name,
-          result.toDivision.name,
-          result.season.name
+          transferResult.fromDivision.name,
+          transferResult.toDivision.name,
+          transferResult.season.name
         );
 
         await notificationService.createNotification({
           userIds: userId,
           ...notif,
-          seasonId: result.toDivision.seasonId,
+          seasonId: transferResult.toDivision.seasonId,
         });
 
-        logger.notificationSent('DIVISION_TRANSFERRED', [userId], { 
-          fromDivisionId, 
-          toDivisionId,
-          seasonId: result.toDivision.seasonId 
-        });
+        transferContext.seasonId = transferResult.toDivision.seasonId;
+        logger.notificationSent('DIVISION_TRANSFERRED', [userId], transferContext);
       } catch (notifError) {
         logger.error('Failed to send transfer notification', { userId, fromDivisionId, toDivisionId }, notifError as Error);
       }
     }
 
-    logger.playerTransferred(userId, fromDivisionId, toDivisionId, { 
-      reason, 
-      seasonId: result.toDivision?.seasonId 
-    });
+    const playerTransferredContext: Record<string, string> = {};
+    if (reason) playerTransferredContext.reason = reason;
+    if ('toDivision' in result && (result as { toDivision?: { seasonId?: string } }).toDivision?.seasonId) {
+      playerTransferredContext.seasonId = (result as { toDivision: { seasonId: string } }).toDivision.seasonId;
+    }
+    logger.playerTransferred(userId, fromDivisionId, toDivisionId, playerTransferredContext);
 
     // Socket notifications
-    if ((req as any).io && result.fromDivision && result.toDivision) {
+    if ((req as any).io && 'fromDivision' in result && 'toDivision' in result) {
+      const socketResult = result as { fromDivision: { name: string }; toDivision: { name: string } };
       (req as any).io.to(userId).emit('division_transferred', {
-        fromDivision: result.fromDivision,
-        toDivision: result.toDivision,
-        message: `Transferred from ${result.fromDivision.name} to ${result.toDivision.name}`,
+        fromDivision: socketResult.fromDivision,
+        toDivision: socketResult.toDivision,
+        message: `Transferred from ${socketResult.fromDivision.name} to ${socketResult.toDivision.name}`,
         timestamp: new Date().toISOString()
       });
 
@@ -1235,7 +1317,9 @@ export const getDivisionAssignments = async (req: Request, res: Response) => {
     });
 
   } catch (error) {
-    logger.error('Error fetching division assignments', { divisionId: req.params.divisionId }, error as Error);
+    const assignmentsErrorContext: Record<string, string> = {};
+    if (req.params.divisionId) assignmentsErrorContext.divisionId = req.params.divisionId;
+    logger.error('Error fetching division assignments', assignmentsErrorContext, error as Error);
     return res.status(500).json({
       success: false,
       error: "Failed to fetch division assignments"
@@ -1266,7 +1350,9 @@ export const getUserDivisionAssignments = async (req: Request, res: Response) =>
     });
 
   } catch (error) {
-    logger.error('Error fetching user assignments', { userId: req.params.userId }, error as Error);
+    const userAssignmentsErrorContext: Record<string, string> = {};
+    if (req.params.userId) userAssignmentsErrorContext.userId = req.params.userId;
+    logger.error('Error fetching user assignments', userAssignmentsErrorContext, error as Error);
     return res.status(500).json({
       success: false,
       error: "Failed to fetch user assignments"
@@ -1294,8 +1380,8 @@ export const autoAssignPlayersToDivisions = async (req: Request, res: Response) 
 
     logger.info('Auto-assignment completed', { 
       seasonId, 
-      assignedCount: result.assigned?.length || 0,
-      failedCount: result.failed?.length || 0 
+      assignedCount: result.assignments?.length || 0,
+      failedCount: result.errors?.length || 0 
     });
 
     return res.json({
@@ -1336,16 +1422,23 @@ export const getDivisionsBySeasonId = async (req: Request, res: Response) => {
       });
     }
 
-    const result = await getDivisionsBySeasonIdService({
+    const queryParams: Parameters<typeof getDivisionsBySeasonIdService>[0] = {
       seasonId,
       page: Number(page),
       limit: Number(limit),
-      isActive: isActive === 'true' ? true : isActive === 'false' ? false : undefined,
-      gameType: gameType as string,
-      level: level as string,
-      genderCategory: genderCategory as string,
+      ...(gameType !== undefined && { gameType: gameType as string }),
+      ...(level !== undefined && { level: level as string }),
+      ...(genderCategory !== undefined && { genderCategory: genderCategory as string }),
       includeAssignments: includeAssignments === 'true'
-    });
+    };
+    // Only include isActive if it's a valid boolean value
+    if (isActive !== undefined && isActive !== '') {
+      const isActiveValue = isActive === 'true' ? true : isActive === 'false' ? false : undefined;
+      if (isActiveValue !== undefined) {
+        queryParams.isActive = isActiveValue;
+      }
+    }
+    const result = await getDivisionsBySeasonIdService(queryParams);
 
     return res.json({
       success: true,
@@ -1356,7 +1449,9 @@ export const getDivisionsBySeasonId = async (req: Request, res: Response) => {
     });
 
   } catch (error) {
-    logger.error('Error fetching divisions by season', { seasonId: req.params.seasonId }, error as Error);
+    const divisionsBySeasonErrorContext: Record<string, string> = {};
+    if (req.params.seasonId) divisionsBySeasonErrorContext.seasonId = req.params.seasonId;
+    logger.error('Error fetching divisions by season', divisionsBySeasonErrorContext, error as Error);
 
     if (error instanceof Prisma.PrismaClientValidationError) {
       return res.status(400).json({
@@ -1396,10 +1491,13 @@ export const getDivisionSummaryBySeasonId = async (req: Request, res: Response) 
     });
 
   } catch (error: any) {
-    logger.error('Error fetching division summary', { seasonId: req.params.seasonId }, error);
+    const summaryErrorContext: Record<string, string> = {};
+    if (req.params.seasonId) summaryErrorContext.seasonId = req.params.seasonId;
+    const summaryError = error instanceof Error ? error : new Error('Unknown error');
+    logger.error('Error fetching division summary', summaryErrorContext, summaryError);
     return res.status(500).json({
       success: false,
-      error: error.message || "Failed to fetch division summary"
+      error: summaryError.message || "Failed to fetch division summary"
     });
   }
 };

@@ -1,20 +1,23 @@
 import { prisma } from "../lib/prisma";
-import { PrismaClient, Role } from "@prisma/client";
 import * as superadminService from "../services/admin/superadminService";
 import * as adminInviteService from "../services/admin/adminInviteService";
 import * as adminRegistrationService from "../services/admin/adminRegistrationService";
 import * as adminProfileService from "../services/admin/adminProfileService";
 import * as adminSessionService from "../services/admin/adminSessionService";
-import { inviteEmailTemplate } from "../utils/email";
 import { ApiResponse } from "../utils/ApiResponse";
-import { sendEmail } from "../config/nodemailer";
 import { Request, Response } from "express";
-import { auth } from "../lib/auth";
 
+
+interface CreateSuperadminBody {
+  name?: string;
+  username?: string;
+  email?: string;
+  password?: string;
+}
 
 export const createSuperadmin = async (req: Request, res: Response) => {
   try {
-    const { name, username, email, password } = req.body;
+    const { name, username, email, password } = req.body as CreateSuperadminBody;
 
     if (!name || !username || !email || !password) {
       return res.status(400).json({
@@ -34,11 +37,12 @@ export const createSuperadmin = async (req: Request, res: Response) => {
       user: result.user,
       admin: result.admin,
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error creating superadmin:", error);
-    const status = error.message.includes("already exists") ? 409 : 500;
+    const errorMessage = error instanceof Error ? error.message : "An internal server error occurred.";
+    const status = errorMessage.includes("already exists") ? 409 : 500;
     res.status(status).json({
-      error: error.message || "An internal server error occurred."
+      error: errorMessage
     });
   }
 };
@@ -58,22 +62,46 @@ export const fetchAdmins = async (req: Request, res: Response) => {
   }
 };
 
+interface UpdateAdminBody {
+  adminId?: string;
+  name?: string;
+  username?: string;
+  role?: string;
+  gender?: string;
+  area?: string;
+}
+
 export const updateAdmin = async (req: Request, res: Response) => {
   try {
      console.log("🔹 Incoming updateAdmin request body:", req.body);
-    const { adminId, name, username, role, gender, area  } = req.body;
+    const { adminId, name, username, gender, area  } = req.body as UpdateAdminBody;
 
     if (!adminId) {
       return res.status(400).json({ message: "Admin ID is required" });
     }
 
-     const { updatedUser, updatedAdmin } = await adminProfileService.updateAdminProfile({
-      adminId,
-      name,
-      username,
-      gender,
-      area,
-    });
+    const updatePayload: {
+      adminId: string;
+      name?: string;
+      username?: string;
+      gender?: string;
+      area?: string;
+    } = { adminId };
+
+    if (name !== undefined) {
+      updatePayload.name = name;
+    }
+    if (username !== undefined) {
+      updatePayload.username = username;
+    }
+    if (gender !== undefined) {
+      updatePayload.gender = gender;
+    }
+    if (area !== undefined) {
+      updatePayload.area = area;
+    }
+
+     const { updatedUser, updatedAdmin } = await adminProfileService.updateAdminProfile(updatePayload);
 
     return res.status(200).json({
       message: "Admin updated successfully",
@@ -81,20 +109,24 @@ export const updateAdmin = async (req: Request, res: Response) => {
       user: updatedUser,
       admin: updatedAdmin,
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error updating admin:", error);
 
-    if (error.body?.code === "USERNAME_IS_INVALID") {
-      return res.status(400).json({ message: "Invalid username" });
-    }
-    if (error.body?.code === "USERNAME_ALREADY_EXISTS") {
-      return res.status(400).json({ message: "Username already taken" });
-    }
-    if (error.body?.code === "EMAIL_ALREADY_EXISTS") {
-      return res.status(400).json({ message: "Email already registered" });
+    if (error && typeof error === 'object' && 'body' in error) {
+      const errorBody = error.body as { code?: string };
+      if (errorBody.code === "USERNAME_IS_INVALID") {
+        return res.status(400).json({ message: "Invalid username" });
+      }
+      if (errorBody.code === "USERNAME_ALREADY_EXISTS") {
+        return res.status(400).json({ message: "Username already taken" });
+      }
+      if (errorBody.code === "EMAIL_ALREADY_EXISTS") {
+        return res.status(400).json({ message: "Email already registered" });
+      }
     }
 
-    return res.status(400).json({ message: error.message || "Something went wrong" });
+    const errorMessage = error instanceof Error ? error.message : "Something went wrong";
+    return res.status(400).json({ message: errorMessage });
   }
 };
 
@@ -108,15 +140,23 @@ export const getInviteEmail = async (req: Request, res: Response) => {
 
     const result = await adminInviteService.validateInviteToken(token as string);
     res.json({ email: result.email });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error(err);
-    res.status(400).json({ message: err.message || "Something went wrong" });
+    const errorMessage = err instanceof Error ? err.message : "Something went wrong";
+    res.status(400).json({ message: errorMessage });
   }
 };
 
+interface RegisterAdminBody {
+  token?: string;
+  name?: string;
+  username?: string;
+  password?: string;
+}
+
 export const registerAdmin = async (req: Request, res: Response) => {
   try {
-    const { token, name, username, password } = req.body;
+    const { token, name, username, password } = req.body as RegisterAdminBody;
 
     if (!token || !name || !username || !password) {
       return res
@@ -136,30 +176,38 @@ export const registerAdmin = async (req: Request, res: Response) => {
       status: "SUCCESS",
       newadmin: result.admin,
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error registering admin:", error);
 
+    const errorMessage = error instanceof Error ? error.message : "Something went wrong";
+
     // Map specific errors to appropriate status codes
-    if (error.message.includes("already used")) {
-      return res.status(401).json({ message: error.message, status: "FAILED" });
+    if (errorMessage.includes("already used")) {
+      return res.status(401).json({ message: errorMessage, status: "FAILED" });
     }
-    if (error.message.includes("expired")) {
-      return res.status(400).json({ message: error.message, status: "FAILED" });
+    if (errorMessage.includes("expired")) {
+      return res.status(400).json({ message: errorMessage, status: "FAILED" });
     }
-    if (error.message.includes("already registered")) {
-      return res.status(400).json({ message: error.message, status: "FAILED" });
+    if (errorMessage.includes("already registered")) {
+      return res.status(400).json({ message: errorMessage, status: "FAILED" });
     }
-    if (error.message.includes("already taken")) {
-      return res.status(400).json({ message: error.message, status: "FAILED" });
+    if (errorMessage.includes("already taken")) {
+      return res.status(400).json({ message: errorMessage, status: "FAILED" });
     }
 
     res.status(400).json({ message: "Something went wrong", status: "FAILED" });
   }
 };
 
+interface SendAdminInviteBody {
+  email?: string;
+  name?: string;
+  adminId?: string;
+}
+
 export const sendAdminInvite = async (req: Request, res: Response) => {
   try {
-    const { email, name, adminId } = req.body;
+    const { email, name, adminId } = req.body as SendAdminInviteBody;
 
     let inviteLink: string;
     let targetEmail: string;
@@ -181,7 +229,10 @@ export const sendAdminInvite = async (req: Request, res: Response) => {
           .json({ error: "Cannot resend invite to active or suspended admin." });
       }
 
-      targetEmail = admin.user?.email ?? admin.invite?.email!;
+      targetEmail = admin.user?.email ?? admin.invite?.email ?? '';
+      if (!targetEmail) {
+        return res.status(400).json({ error: "Admin email not found." });
+      }
       inviteLink = await adminInviteService.resendAdminInvite(adminId);
     } else {
       if (!email || !name) {
@@ -196,9 +247,10 @@ export const sendAdminInvite = async (req: Request, res: Response) => {
     await adminInviteService.sendInviteEmail(targetEmail, inviteLink, !!adminId);
 
     res.status(200).json({ message: "Invite sent successfully!", status: "SUCCESS" });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("Error sending invite:", err);
-    res.status(400).json({ error: err.message || "Failed to send invite.", status: "FAILED" });
+    const errorMessage = err instanceof Error ? err.message : "Failed to send invite.";
+    res.status(400).json({ error: errorMessage, status: "FAILED" });
   }
 };
 
@@ -211,22 +263,28 @@ export const getAdminSession = async (req: Request, res: Response) => {
     return res.status(200).json(
       new ApiResponse(true, 200, result, "Session retrieved successfully")
     );
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("❌ Session error:", error);
 
-    const status = error.message === "No active session" ? 401 :
-                   error.message === "Not authorized" ? 403 : 500;
+    const errorMessage = error instanceof Error ? error.message : "Failed to fetch session";
+    const status = errorMessage === "No active session" ? 401 :
+                   errorMessage === "Not authorized" ? 403 : 500;
 
     return res.status(status).json(
-      new ApiResponse(false, status, null, error.message || "Failed to fetch session")
+      new ApiResponse(false, status, null, errorMessage)
     );
   }
 };
 
+interface UpdatePasswordBody {
+  oldPassword?: string;
+  newPassword?: string;
+}
+
 export const updatePassword = async (req: Request, res: Response) => {
   try {
     const headers = adminSessionService.toWebHeaders(req.headers);
-    const { oldPassword, newPassword } = req.body;
+    const { oldPassword, newPassword } = req.body as UpdatePasswordBody;
 
     if (!oldPassword || !newPassword) {
       return res
@@ -239,11 +297,12 @@ export const updatePassword = async (req: Request, res: Response) => {
     return res
       .status(200)
       .json(new ApiResponse(true, 200, null, "Password changed successfully"));
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("❌ Change password error:", error);
+    const errorMessage = error instanceof Error ? error.message : "Password change failed";
     return res
       .status(400)
-      .json(new ApiResponse(false, 400, null, error?.message || "Password change failed"));
+      .json(new ApiResponse(false, 400, null, errorMessage));
   }
 };
 
@@ -259,11 +318,12 @@ export const getAdminById = async (req: Request, res: Response) => {
     
     const admin = await adminProfileService.getAdminByUserId(id);
     return res.json(admin);
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error fetching admin:", error);
-    const status = error.message === "Admin not found" ? 404 : 500;
+    const errorMessage = error instanceof Error ? error.message : "Internal server error";
+    const status = errorMessage === "Admin not found" ? 404 : 500;
     return res.status(status).json({
-      message: error.message || "Internal server error"
+      message: errorMessage
     });
   }
 };

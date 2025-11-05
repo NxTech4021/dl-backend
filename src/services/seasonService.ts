@@ -349,7 +349,7 @@ export const updateSeasonService = async (id: string, data: SeasonUpdateData) =>
   if (data.description !== undefined) updateData.description = data.description ?? null;
   if (data.leagueIds !== undefined) updateData.leagues = { set: data.leagueIds.map(id => ({ id })) };
   if (data.categoryId !== undefined) {
-    (updateData as any).categoryId = data.categoryId; // Use categoryId field directly - type assertion needed
+    (updateData).categoryId = data.categoryId; // Use categoryId field directly - type assertion needed
   }
   if (data.isActive !== undefined) updateData.isActive = data.isActive;
   if (data.isActive !== undefined) updateData.isActive = data.isActive;

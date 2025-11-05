@@ -72,7 +72,7 @@ export async function searchPlayers(
 
   // Filter by sport if provided
   const filteredPlayers = sport
-    ? playersWithDetails.filter((p) => p.sports.includes((sport as string).toLowerCase()))
+    ? playersWithDetails.filter((p) => p.sports.includes((sport).toLowerCase()))
     : playersWithDetails;
 
   return filteredPlayers;

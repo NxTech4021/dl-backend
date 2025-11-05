@@ -18,6 +18,21 @@ import * as favoritesService from '../services/player/favoritesService';
 // Re-export multer config
 export { upload } from '../services/player/utils/multerConfig';
 
+interface UpdatePlayerProfileBody {
+  name?: string;
+  username?: string;
+  email?: string;
+  location?: string;
+  image?: string;
+  phoneNumber?: string;
+  bio?: string;
+}
+
+interface ChangePlayerPasswordBody {
+  currentPassword?: string;
+  newPassword?: string;
+}
+
 /**
  * Get all players with sports and skill ratings
  * GET /api/player
@@ -112,11 +127,12 @@ export const getPlayerProfile = async (req: AuthenticatedRequest, res: Response)
     return res
       .status(200)
       .json(new ApiResponse(true, 200, profileData, "Player profile fetched successfully"));
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("❌ getPlayerProfile: Error fetching player profile:", error);
+    const errorMessage = error instanceof Error ? error.message : "Failed to fetch player profile";
     return res
       .status(500)
-      .json(new ApiResponse(false, 500, null, error.message || "Failed to fetch player profile"));
+      .json(new ApiResponse(false, 500, null, errorMessage));
   }
 };
 
@@ -209,16 +225,18 @@ export const getMatchDetails = async (req: AuthenticatedRequest, res: Response) 
     return res
       .status(200)
       .json(new ApiResponse(true, 200, detailedMatch, "Match details fetched successfully"));
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error fetching match details:", error);
 
-    if (error.message === 'Match not found') {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+
+    if (errorMessage === 'Match not found') {
       return res
         .status(404)
         .json(new ApiResponse(false, 404, null, "Match not found"));
     }
 
-    if (error.message === 'Access denied') {
+    if (errorMessage === 'Access denied') {
       return res
         .status(403)
         .json(new ApiResponse(false, 403, null, "Access denied"));
@@ -244,7 +262,7 @@ export const updatePlayerProfile = async (req: AuthenticatedRequest, res: Respon
         .json(new ApiResponse(false, 401, null, "Authentication required"));
     }
 
-    const { name, username, email, location, image, phoneNumber, bio } = req.body;
+    const { name, username, email, location, image, phoneNumber, bio } = req.body as UpdatePlayerProfileBody;
 
     const updatedUser = await profileService.updatePlayerProfile(userId, {
       name,
@@ -262,13 +280,15 @@ export const updatePlayerProfile = async (req: AuthenticatedRequest, res: Respon
       data: updatedUser,
       message: 'Profile updated successfully'
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error updating player profile:', error);
-    return res.status(error.message.includes('already taken') ? 400 : 500).json({
+    const errorMessage = error instanceof Error ? error.message : 'Failed to update profile';
+    const statusCode = errorMessage.includes('already taken') ? 400 : 500;
+    return res.status(statusCode).json({
       success: false,
-      status: error.message.includes('already taken') ? 400 : 500,
+      status: statusCode,
       data: null,
-      message: error.message || 'Failed to update profile'
+      message: errorMessage
     });
   }
 };
@@ -287,7 +307,7 @@ export const changePlayerPassword = async (req: AuthenticatedRequest, res: Respo
         .json(new ApiResponse(false, 401, null, "Authentication required"));
     }
 
-    const { currentPassword, newPassword } = req.body;
+    const { currentPassword, newPassword } = req.body as ChangePlayerPasswordBody;
 
     await profileService.changePlayerPassword(userId, currentPassword, newPassword, req.headers);
 
@@ -297,13 +317,16 @@ export const changePlayerPassword = async (req: AuthenticatedRequest, res: Respo
       data: null,
       message: 'Password changed successfully'
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('❌ Error changing password:', error);
-    return res.status(error.message.includes('required') || error.message.includes('incorrect') || error.message.includes('8 characters') ? 400 : 500).json({
+    const errorMessage = error instanceof Error ? error.message : 'Failed to change password';
+    const isClientError = errorMessage.includes('required') || errorMessage.includes('incorrect') || errorMessage.includes('8 characters');
+    const statusCode = isClientError ? 400 : 500;
+    return res.status(statusCode).json({
       success: false,
-      status: error.message.includes('required') || error.message.includes('incorrect') || error.message.includes('8 characters') ? 400 : 500,
+      status: statusCode,
       data: null,
-      message: error.message || 'Failed to change password'
+      message: errorMessage
     });
   }
 };
@@ -461,12 +484,14 @@ export const getAvailablePlayersForSeason = async (req: AuthenticatedRequest, re
         ? (searchQuery ? 'Showing search results' : 'No friends available')
         : 'Available friends retrieved successfully')
     );
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error getting available players:', error);
 
-    if (error.message === 'User not found' || error.message === 'Season not found') {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+
+    if (errorMessage === 'User not found' || errorMessage === 'Season not found') {
       return res.status(404).json(
-        new ApiResponse(false, 404, null, error.message)
+        new ApiResponse(false, 404, null, errorMessage)
       );
     }
 
@@ -529,12 +554,13 @@ export const addFavorite = async (req: AuthenticatedRequest, res: Response) => {
     return res.status(201).json(
       new ApiResponse(true, 201, favorite, 'User added to favorites successfully')
     );
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error adding favorite:', error);
 
-    const statusCode = error.message === 'User not found' ? 404 : 400;
+    const errorMessage = error instanceof Error ? error.message : 'Failed to add favorite';
+    const statusCode = errorMessage === 'User not found' ? 404 : 400;
     return res.status(statusCode).json(
-      new ApiResponse(false, statusCode, null, error.message || 'Failed to add favorite')
+      new ApiResponse(false, statusCode, null, errorMessage)
     );
   }
 };
@@ -565,12 +591,13 @@ export const removeFavorite = async (req: AuthenticatedRequest, res: Response) =
     return res.status(200).json(
       new ApiResponse(true, 200, null, 'User removed from favorites successfully')
     );
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error removing favorite:', error);
 
-    const statusCode = error.message === 'Favorite not found' ? 404 : 500;
+    const errorMessage = error instanceof Error ? error.message : 'Failed to remove favorite';
+    const statusCode = errorMessage === 'Favorite not found' ? 404 : 500;
     return res.status(statusCode).json(
-      new ApiResponse(false, statusCode, null, error.message || 'Failed to remove favorite')
+      new ApiResponse(false, statusCode, null, errorMessage)
     );
   }
 };
@@ -595,12 +622,13 @@ export const getPublicPlayerProfile = async (req: AuthenticatedRequest, res: Res
     return res.status(200).json(
       new ApiResponse(true, 200, profileData, 'Player profile retrieved successfully')
     );
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error getting public player profile:', error);
 
-    const statusCode = error.message === 'Player not found' ? 404 : 500;
+    const errorMessage = error instanceof Error ? error.message : 'Failed to get player profile';
+    const statusCode = errorMessage === 'Player not found' ? 404 : 500;
     return res.status(statusCode).json(
-      new ApiResponse(false, statusCode, null, error.message || 'Failed to get player profile')
+      new ApiResponse(false, statusCode, null, errorMessage)
     );
   }
 };
@@ -624,12 +652,13 @@ export const getPlayerLeagueHistory = async (req: Request, res: Response) => {
     return res.status(200).json(
       new ApiResponse(true, 200, result, 'Player league history retrieved successfully')
     );
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error getting player league history:', error);
 
-    const statusCode = error.message === 'Player not found' ? 404 : 500;
+    const errorMessage = error instanceof Error ? error.message : 'Failed to fetch player league history';
+    const statusCode = errorMessage === 'Player not found' ? 404 : 500;
     return res.status(statusCode).json(
-      new ApiResponse(false, statusCode, null, error.message || 'Failed to fetch player league history')
+      new ApiResponse(false, statusCode, null, errorMessage)
     );
   }
 };
@@ -653,12 +682,13 @@ export const getPlayerSeasonHistory = async (req: Request, res: Response) => {
     return res.status(200).json(
       new ApiResponse(true, 200, result, 'Player season history retrieved successfully')
     );
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error getting player season history:', error);
 
-    const statusCode = error.message === 'Player not found' ? 404 : 500;
+    const errorMessage = error instanceof Error ? error.message : 'Failed to fetch player season history';
+    const statusCode = errorMessage === 'Player not found' ? 404 : 500;
     return res.status(statusCode).json(
-      new ApiResponse(false, statusCode, null, error.message || 'Failed to fetch player season history')
+      new ApiResponse(false, statusCode, null, errorMessage)
     );
   }
 };
@@ -682,12 +712,13 @@ export const getPlayerDivisionHistory = async (req: Request, res: Response) => {
     return res.status(200).json(
       new ApiResponse(true, 200, result, 'Player division history retrieved successfully')
     );
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error getting player division history:', error);
 
-    const statusCode = error.message === 'Player not found' ? 404 : 500;
+    const errorMessage = error instanceof Error ? error.message : 'Failed to fetch player division history';
+    const statusCode = errorMessage === 'Player not found' ? 404 : 500;
     return res.status(statusCode).json(
-      new ApiResponse(false, statusCode, null, error.message || 'Failed to fetch player division history')
+      new ApiResponse(false, statusCode, null, errorMessage)
     );
   }
 };
@@ -711,12 +742,13 @@ export const getPlayerMatchHistoryAdmin = async (req: Request, res: Response) =>
     return res.status(200).json(
       new ApiResponse(true, 200, result, 'Player match history retrieved successfully')
     );
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error getting player match history:', error);
 
-    const statusCode = error.message === 'Player not found' ? 404 : 500;
+    const errorMessage = error instanceof Error ? error.message : 'Failed to fetch player match history';
+    const statusCode = errorMessage === 'Player not found' ? 404 : 500;
     return res.status(statusCode).json(
-      new ApiResponse(false, statusCode, null, error.message || 'Failed to fetch player match history')
+      new ApiResponse(false, statusCode, null, errorMessage)
     );
   }
 };

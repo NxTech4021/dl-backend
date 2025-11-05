@@ -1,7 +1,16 @@
 import { prisma } from "../lib/prisma";
 import { Request, Response } from 'express';
-import { Prisma } from '@prisma/client';
+import { Prisma, GenderRestriction, GameType, GenderType } from '@prisma/client';
 import { ApiResponse } from '../utils/ApiResponse';
+
+interface CreateCategoryBody {
+  seasonId?: string;
+  name?: string;
+  genderRestriction?: string;
+  matchFormat?: string;
+  categoryOrder?: number;
+  game_type?: string;
+}
 
 export const createCategory = async (req: Request, res: Response) => {
   try {
@@ -12,7 +21,7 @@ export const createCategory = async (req: Request, res: Response) => {
       matchFormat, 
       categoryOrder, 
       game_type, 
-    } = req.body;
+    } = req.body as CreateCategoryBody;
 
     console.log("Payload received", req.body);
     
@@ -20,32 +29,49 @@ export const createCategory = async (req: Request, res: Response) => {
       return res.status(400).json(new ApiResponse(false, 400, null, "Category name is required"));
     }
 
-    // Map genderRestriction to gender_category automatically
-    let mappedGenderCategory: 'MALE' | 'FEMALE' | 'MIXED' | null = null;
-    if (genderRestriction) {
-      if (genderRestriction === 'MALE') {
-        mappedGenderCategory = 'MALE';
-      } else if (genderRestriction === 'FEMALE') {
-        mappedGenderCategory = 'FEMALE';
-      } else if (genderRestriction === 'MIXED') {
-        mappedGenderCategory = 'MIXED';
+    // Validate and cast enum types
+    let validatedGenderRestriction: GenderRestriction | undefined;
+    if (genderRestriction && Object.values(GenderRestriction).includes(genderRestriction as GenderRestriction)) {
+      validatedGenderRestriction = genderRestriction as GenderRestriction;
+    }
+
+    let validatedGameType: GameType | null | undefined;
+    if (game_type !== undefined) {
+      if (game_type && Object.values(GameType).includes(game_type as GameType)) {
+        validatedGameType = game_type as GameType;
+      } else {
+        validatedGameType = null;
       }
     }
 
+    // Map genderRestriction to gender_category automatically
+    let mappedGenderCategory: GenderType | null = null;
+    if (genderRestriction) {
+      if (genderRestriction === 'MALE') {
+        mappedGenderCategory = GenderType.MALE;
+      } else if (genderRestriction === 'FEMALE') {
+        mappedGenderCategory = GenderType.FEMALE;
+      } else if (genderRestriction === 'MIXED') {
+        mappedGenderCategory = GenderType.MIXED;
+      }
+    }
+
+    const categoryData: Prisma.CategoryCreateInput = {
+      name: name ?? null,
+      ...(validatedGenderRestriction !== undefined && { genderRestriction: validatedGenderRestriction }),
+      ...(matchFormat !== undefined && { matchFormat: matchFormat ?? null }),
+      ...(categoryOrder !== undefined && { categoryOrder }),
+      ...(validatedGameType !== undefined && { game_type: validatedGameType }),
+      ...(mappedGenderCategory !== null && { gender_category: mappedGenderCategory }),
+      ...(seasonId && {
+        seasons: {
+          connect: [{ id: seasonId }]
+        }
+      })
+    };
+
     const newCategory = await prisma.category.create({
-      data: {
-        name,
-        genderRestriction,
-        matchFormat,
-        categoryOrder,
-        game_type,          
-        gender_category: mappedGenderCategory,
-        ...(seasonId && {
-          seasons: {
-            connect: [{ id: seasonId }]
-          }
-        })
-      },
+      data: categoryData,
       include: {
         seasons: {
           select: {
@@ -152,10 +178,20 @@ export const getCategoryById = async (req: Request, res: Response) => {
 };
 
 
+interface UpdateCategoryBody {
+  seasonId?: string;
+  name?: string;
+  genderRestriction?: string;
+  matchFormat?: string;
+  categoryOrder?: number;
+  game_type?: string;
+  gender_category?: string;
+}
+
 export const updateCategory = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { seasonId, ...data } = req.body;
+    const { seasonId, ...data } = req.body as UpdateCategoryBody;
 
     if (!id) {
       return res.status(400).json(
@@ -163,27 +199,56 @@ export const updateCategory = async (req: Request, res: Response) => {
       );
     }
 
+    // Validate and cast enum types
+    let validatedGenderRestriction: GenderRestriction | undefined;
+    if (data.genderRestriction !== undefined) {
+      if (data.genderRestriction && Object.values(GenderRestriction).includes(data.genderRestriction as GenderRestriction)) {
+        validatedGenderRestriction = data.genderRestriction as GenderRestriction;
+      }
+    }
+
+    let validatedGameType: GameType | null | undefined;
+    if (data.game_type !== undefined) {
+      if (data.game_type && Object.values(GameType).includes(data.game_type as GameType)) {
+        validatedGameType = data.game_type as GameType;
+      } else {
+        validatedGameType = null;
+      }
+    }
+
     // Map genderRestriction to gender_category automatically if genderRestriction is being updated
-    let mappedGenderCategory: string | null | undefined = data.gender_category;
+    let mappedGenderCategory: GenderType | null | undefined = undefined;
+    if (data.gender_category !== undefined) {
+      if (data.gender_category && Object.values(GenderType).includes(data.gender_category as GenderType)) {
+        mappedGenderCategory = data.gender_category as GenderType;
+      } else {
+        mappedGenderCategory = null;
+      }
+    }
+    
     if (data.genderRestriction) {
       if (data.genderRestriction === 'MALE') {
-        mappedGenderCategory = 'MALE';
+        mappedGenderCategory = GenderType.MALE;
       } else if (data.genderRestriction === 'FEMALE') {
-        mappedGenderCategory = 'FEMALE';
+        mappedGenderCategory = GenderType.FEMALE;
       } else if (data.genderRestriction === 'MIXED') {
-        mappedGenderCategory = 'MIXED';
+        mappedGenderCategory = GenderType.MIXED;
       } else if (data.genderRestriction === 'OPEN') {
-        mappedGenderCategory = 'MIXED';
+        mappedGenderCategory = GenderType.MIXED;
       }
     }
 
     // Remove gender_category from data if we're setting it from genderRestriction
     const { gender_category: _, ...updateData } = data;
 
-    const updateDataWithRelations: any = {
-      ...updateData,
-      gender_category: mappedGenderCategory,
-    };
+    const updateDataWithRelations: Prisma.CategoryUpdateInput = {};
+    
+    if (updateData.name !== undefined) updateDataWithRelations.name = updateData.name ?? null;
+    if (validatedGenderRestriction !== undefined) updateDataWithRelations.genderRestriction = validatedGenderRestriction;
+    if (updateData.matchFormat !== undefined) updateDataWithRelations.matchFormat = updateData.matchFormat ?? null;
+    if (updateData.categoryOrder !== undefined) updateDataWithRelations.categoryOrder = updateData.categoryOrder;
+    if (validatedGameType !== undefined) updateDataWithRelations.game_type = validatedGameType;
+    if (mappedGenderCategory !== undefined) updateDataWithRelations.gender_category = mappedGenderCategory;
 
     if (seasonId !== undefined) {
       if (seasonId) {
@@ -285,10 +350,10 @@ export const deleteCategory = async (req: Request, res: Response) => {
     return res
       .status(200)
       .json(new ApiResponse(true, 200, null, "Category deleted successfully"));
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("🔥 Error deleting category:", error);
 
-    if (error.code === "P2003") {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2003") {
       console.log("❌ Prisma foreign key constraint error:", error);
       return res.status(400).json(
         new ApiResponse(
@@ -297,6 +362,12 @@ export const deleteCategory = async (req: Request, res: Response) => {
           null,
           "Cannot delete category: It is being used by a season"
         )
+      );
+    }
+    
+    if (error instanceof Prisma.PrismaClientKnownRequestError) {
+      return res.status(500).json(
+        new ApiResponse(false, 500, null, "Database error deleting category")
       );
     }
 

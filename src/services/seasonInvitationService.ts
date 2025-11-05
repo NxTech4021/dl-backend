@@ -1,5 +1,5 @@
 import { prisma } from '../lib/prisma';
-import { SeasonInvitationStatus, PartnershipStatus, FriendshipStatus, Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { io } from '../app';
 
 interface ServiceResponse {

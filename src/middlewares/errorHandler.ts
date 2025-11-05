@@ -32,18 +32,27 @@ export const asyncHandler = (fn: Function) => {
 
 // Global error handler
 export const errorHandler = (
-  err: any,
+  err: unknown,
   req: Request,
   res: Response,
   next: NextFunction
 ) => {
-  let error = { ...err };
-  error.message = err.message;
+  let error: AppError;
+  
+  if (err instanceof AppError) {
+    error = err;
+  } else if (err instanceof Error) {
+    error = new AppError(err.message, 500, 'INTERNAL_ERROR');
+  } else {
+    error = new AppError('An unknown error occurred', 500, 'INTERNAL_ERROR');
+  }
 
   // Log error
+  const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+  const errorStack = err instanceof Error ? err.stack : undefined;
   console.error('Error:', {
-    message: err.message,
-    stack: err.stack,
+    message: errorMessage,
+    stack: errorStack,
     url: req.originalUrl,
     method: req.method,
     ip: req.ip,
@@ -104,8 +113,9 @@ export const errorHandler = (
   }
 
   // MongoDB errors (if using MongoDB)
-  if (err.code === 11000) {
-    const field = Object.keys(err.keyValue || {})[0];
+  if (err && typeof err === 'object' && 'code' in err && err.code === 11000) {
+    const mongoError = err as { keyValue?: Record<string, unknown> };
+    const field = Object.keys(mongoError.keyValue || {})[0] || 'Field';
     error = new AppError(
       `${field} already exists`,
       409,
@@ -114,24 +124,25 @@ export const errorHandler = (
   }
 
   // JWT errors
-  if (err.name === 'JsonWebTokenError') {
+  if (err && typeof err === 'object' && 'name' in err && err.name === 'JsonWebTokenError') {
     error = new AppError('Invalid token', 401, 'INVALID_TOKEN');
   }
 
-  if (err.name === 'TokenExpiredError') {
+  if (err && typeof err === 'object' && 'name' in err && err.name === 'TokenExpiredError') {
     error = new AppError('Token expired', 401, 'TOKEN_EXPIRED');
   }
 
   // Validation errors
-  if (err.name === 'ValidationError') {
-    const message = Object.values(err.errors || {})
-      .map((e: any) => e.message)
+  if (err && typeof err === 'object' && 'name' in err && err.name === 'ValidationError') {
+    const validationError = err as { errors?: Record<string, { message?: string }> };
+    const message = Object.values(validationError.errors || {})
+      .map((e) => e?.message || 'Validation error')
       .join(', ');
     error = new AppError(message, 400, 'VALIDATION_ERROR');
   }
 
   // Multer errors (file upload)
-  if (err.code === 'LIMIT_FILE_SIZE') {
+  if (err && typeof err === 'object' && 'code' in err && err.code === 'LIMIT_FILE_SIZE') {
     error = new AppError(
       'File too large',
       413,
@@ -139,7 +150,7 @@ export const errorHandler = (
     );
   }
 
-  if (err.code === 'LIMIT_FILE_COUNT') {
+  if (err && typeof err === 'object' && 'code' in err && err.code === 'LIMIT_FILE_COUNT') {
     error = new AppError(
       'Too many files',
       400,
@@ -147,7 +158,7 @@ export const errorHandler = (
     );
   }
 
-  if (err.code === 'LIMIT_UNEXPECTED_FILE') {
+  if (err && typeof err === 'object' && 'code' in err && err.code === 'LIMIT_UNEXPECTED_FILE') {
     error = new AppError(
       'Unexpected file field',
       400,
@@ -165,15 +176,24 @@ export const errorHandler = (
   }
 
   // Send error response
-  res.status(error.statusCode || 500).json({
+  const response: {
+    success: boolean;
+    error: string;
+    code: string;
+    stack?: string;
+    details?: unknown;
+  } = {
     success: false,
     error: error.message || 'Internal server error',
     code: error.code || 'INTERNAL_ERROR',
-    ...(process.env.NODE_ENV === 'development' && {
-      stack: err.stack,
-      details: err,
-    }),
-  });
+  };
+
+  if (process.env.NODE_ENV === 'development' && err instanceof Error) {
+    response.stack = err.stack;
+    response.details = err;
+  }
+
+  res.status(error.statusCode || 500).json(response);
 };
 
 // Not found handler
@@ -192,18 +212,26 @@ export const notFoundHandler = (
 
 // Unhandled rejection handler
 export const unhandledRejectionHandler = () => {
-  process.on('unhandledRejection', (err: any) => {
+  process.on('unhandledRejection', (err: unknown) => {
     console.error('UNHANDLED REJECTION! 💥 Shutting down...');
-    console.error(err.name, err.message);
+    if (err instanceof Error) {
+      console.error(err.name, err.message);
+    } else {
+      console.error('Unknown rejection:', err);
+    }
     process.exit(1);
   });
 };
 
 // Uncaught exception handler
 export const uncaughtExceptionHandler = () => {
-  process.on('uncaughtException', (err: any) => {
+  process.on('uncaughtException', (err: unknown) => {
     console.error('UNCAUGHT EXCEPTION! 💥 Shutting down...');
-    console.error(err.name, err.message);
+    if (err instanceof Error) {
+      console.error(err.name, err.message);
+    } else {
+      console.error('Unknown exception:', err);
+    }
     process.exit(1);
   });
 };

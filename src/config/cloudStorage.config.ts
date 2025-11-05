@@ -58,9 +58,10 @@ export const uploadProfileImage = async (
     // Return the public URL
     const publicUrl = `https://storage.googleapis.com/${bucketName}/${destination}`;
     return publicUrl;
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('Error uploading profile image:', err);
-    throw new Error(`Error uploading profile image: ${err.message}`);
+    const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+    throw new Error(`Error uploading profile image: ${errorMessage}`);
   }
 };
 
@@ -88,8 +89,9 @@ export const deleteProfileImage = async (imageUrl: string): Promise<void> => {
       await file.delete();
       console.log(`Profile image deleted: ${filePath}`);
     }
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('Error deleting profile image:', err);
-    throw new Error(`Error deleting profile image: ${err.message}`);
+    const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+    throw new Error(`Error deleting profile image: ${errorMessage}`);
   }
 };

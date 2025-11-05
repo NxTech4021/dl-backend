@@ -1,7 +1,25 @@
 import { Request, Response } from 'express';
 import * as leagueService from '../services/leagueService';
-import { Statuses, PrismaClient, Prisma } from '@prisma/client';
+import { Statuses, SportType, GameType, TierType, PrismaClient, Prisma } from '@prisma/client';
 import { ApiResponse } from '../utils/ApiResponse';
+
+interface CreateLeagueBody {
+  name?: string;
+  location?: string;
+  description?: string;
+  status?: string;
+  sportType?: string;
+  gameType?: string;
+  sponsorships?: Array<Record<string, unknown>>;
+  existingSponsorshipIds?: string[];
+}
+
+interface UpdateLeagueBody {
+  name?: string;
+  location?: string;
+  description?: string;
+  status?: string;
+}
 
 
 
@@ -63,7 +81,7 @@ export const createLeague = async (req: Request, res: Response) => {
     console.log("Body:", JSON.stringify(req.body, null, 2));
     console.log("User (from auth):", JSON.stringify(req.user, null, 2));
 
-   const { name, location, description, status, sportType, gameType, sponsorships, existingSponsorshipIds } = req.body;
+   const { name, location, description, status, sportType, gameType, sponsorships, existingSponsorshipIds } = req.body as CreateLeagueBody;
 
     // Validation
     if (!name || !name.trim()) {
@@ -84,7 +102,7 @@ export const createLeague = async (req: Request, res: Response) => {
       );
     }
 
-    if (status && !Object.values(Statuses).includes(status)) {
+    if (status && !Object.values(Statuses).includes(status as Statuses)) {
       return res.status(400).json(
         new ApiResponse(
           false,
@@ -95,16 +113,78 @@ export const createLeague = async (req: Request, res: Response) => {
       );
     }
 
-     const newLeague = await leagueService.createLeague({
+    if (sportType && !Object.values(SportType).includes(sportType as SportType)) {
+      return res.status(400).json(
+        new ApiResponse(
+          false,
+          400,
+          null,
+          `Invalid sportType. Must be one of: ${Object.values(SportType).join(', ')}`
+        )
+      );
+    }
+
+    if (gameType && !Object.values(GameType).includes(gameType as GameType)) {
+      return res.status(400).json(
+        new ApiResponse(
+          false,
+          400,
+          null,
+          `Invalid gameType. Must be one of: ${Object.values(GameType).join(', ')}`
+        )
+      );
+    }
+
+    const leagueData: Parameters<typeof leagueService.createLeague>[0] = {
       name,
       location,
-      description,
-      status,
-      sportType,
-      gameType,
-      sponsorships: sponsorships?.map((s: any) => ({ ...s, createdById: req.user?.id })),
-      existingSponsorshipIds
-    });
+      ...(description !== undefined && { description }),
+      ...(status !== undefined && { status: status as Statuses }),
+      ...(sportType !== undefined && { sportType: sportType as SportType }),
+      ...(gameType !== undefined && { gameType: gameType as GameType }),
+      ...(sponsorships !== undefined && {
+        sponsorships: sponsorships.map((s) => {
+          const sponsorship = s as {
+            id?: string;
+            companyId: string;
+            packageTier: string;
+            contractAmount: number;
+            sponsoredName?: string;
+            startDate: Date | string;
+            endDate?: Date | string;
+            isActive?: boolean;
+          };
+          
+          if (!Object.values(TierType).includes(sponsorship.packageTier as TierType)) {
+            throw new Error(`Invalid packageTier. Must be one of: ${Object.values(TierType).join(', ')}`);
+          }
+          
+          const result: {
+            id?: string;
+            companyId: string;
+            packageTier: TierType;
+            contractAmount: number;
+            sponsoredName?: string;
+            startDate: Date | string;
+            endDate?: Date | string;
+            isActive?: boolean;
+            createdById?: string;
+          } = {
+            ...sponsorship,
+            packageTier: sponsorship.packageTier as TierType,
+          };
+          
+          if (req.user?.id) {
+            result.createdById = req.user.id;
+          }
+          
+          return result;
+        }),
+      }),
+      ...(existingSponsorshipIds !== undefined && { existingSponsorshipIds }),
+    };
+
+    const newLeague = await leagueService.createLeague(leagueData);
 
 
     return res.status(201).json(
@@ -115,12 +195,14 @@ export const createLeague = async (req: Request, res: Response) => {
         "League created successfully"
       )
     );
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error creating league:", error);
     
-    if (error.message.includes('already exists')) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    
+    if (errorMessage.includes('already exists')) {
       return res.status(409).json(
-        new ApiResponse(false, 409, null, error.message)
+        new ApiResponse(false, 409, null, errorMessage)
       );
     }
     
@@ -151,7 +233,7 @@ export const updateLeague = async (req: Request, res: Response) => {
 
   try {
     const id = req.params.id;
-    const { name, location, description, status} = req.body;
+    const { name, location, description, status} = req.body as UpdateLeagueBody;
     
     if (!id) {
       return res.status(400).json(
@@ -172,7 +254,7 @@ export const updateLeague = async (req: Request, res: Response) => {
         new ApiResponse(false, 400, null, "Location cannot be empty")
       );
     }
-    if (status && !Object.values(Statuses).includes(status)) {
+    if (status && !Object.values(Statuses).includes(status as Statuses)) {
       return res.status(400).json(
         new ApiResponse(
           false,
@@ -183,12 +265,14 @@ export const updateLeague = async (req: Request, res: Response) => {
       );
     }
 
-   const updatedLeague = await leagueService.updateLeague(id, {
-      name,
-      location,
-      description,
-      status: status as Statuses,
-    });
+    const updateData: Parameters<typeof leagueService.updateLeague>[1] = {};
+    
+    if (name !== undefined) updateData.name = name;
+    if (location !== undefined) updateData.location = location;
+    if (description !== undefined) updateData.description = description;
+    if (status !== undefined) updateData.status = status as Statuses;
+
+    const updatedLeague = await leagueService.updateLeague(id, updateData);
 
     return res.status(200).json(
       new ApiResponse(
@@ -198,18 +282,20 @@ export const updateLeague = async (req: Request, res: Response) => {
         "League updated successfully"
       )
     );
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error updating league:", error);
     
-    if (error.message.includes('not found')) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    
+    if (errorMessage.includes('not found')) {
       return res.status(404).json(
-        new ApiResponse(false, 404, null, error.message)
+        new ApiResponse(false, 404, null, errorMessage)
       );
     }
     
-    if (error.message.includes('already exists')) {
+    if (errorMessage.includes('already exists')) {
       return res.status(409).json(
-        new ApiResponse(false, 409, null, error.message)
+        new ApiResponse(false, 409, null, errorMessage)
       );
     }
     
@@ -234,18 +320,20 @@ export const deleteLeague = async (req: Request, res: Response) => {
     return res.status(200).json(
       new ApiResponse(true, 200, null, "League deleted successfully")
     );
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error deleting league:", error);
 
-    if (error.message.includes('not found')) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+
+    if (errorMessage.includes('not found')) {
       return res.status(404).json(
-        new ApiResponse(false, 404, null, error.message)
+        new ApiResponse(false, 404, null, errorMessage)
       );
     }
 
-    if (error.message.includes('Cannot delete')) {
+    if (errorMessage.includes('Cannot delete')) {
       return res.status(400).json(
-        new ApiResponse(false, 400, null, error.message)
+        new ApiResponse(false, 400, null, errorMessage)
       );
     }
 

@@ -14,11 +14,12 @@ import {
   preventSQLInjection,
   ipBlocker,
 } from "./middlewares/security";
-import {
-  generalLimiter,
-  authLimiter,
-  onboardingLimiter,
-} from "./middlewares/rateLimiter";
+// Rate limiters are commented out for development
+// import {
+//   generalLimiter,
+//   authLimiter,
+//   onboardingLimiter,
+// } from "./middlewares/rateLimiter";
 
 const app = express();
 
@@ -85,7 +86,7 @@ app.use(
 app.all("/api/auth/{*any}", (req, res) => {
   console.log(`🔐 Auth request: ${req.method} ${req.path}`);
   try {
-    toNodeHandler(auth)(req, res);
+    void toNodeHandler(auth)(req, res);
   } catch (error) {
     console.error("❌ Auth handler error:", error);
     res.status(500).json({ error: "Authentication error" });

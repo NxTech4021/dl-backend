@@ -69,21 +69,21 @@ export async function getDivisionsBySeasonId(params: DivisionQueryParams) {
   }
 
   if (gameType) {
-    const gameTypeEnum = toEnum(gameType as string, GameType);
+    const gameTypeEnum = toEnum(gameType, GameType);
     if (gameTypeEnum) {
       whereConditions.gameType = gameTypeEnum;
     }
   }
 
   if (level) {
-    const levelEnum = toEnum(level as string, DivisionLevel);
+    const levelEnum = toEnum(level, DivisionLevel);
     if (levelEnum) {
       whereConditions.level = levelEnum;
     }
   }
 
   if (genderCategory) {
-    const genderEnum = toEnum(genderCategory as string, GenderType);
+    const genderEnum = toEnum(genderCategory, GenderType);
     if (genderEnum) {
       whereConditions.genderCategory = genderEnum;
     }

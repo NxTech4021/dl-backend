@@ -37,7 +37,7 @@ export async function getFavorites(userId: string) {
   // Extract favorited users and enrich with sports/skills
   // Filter out null/undefined and preserve the original favorite for timestamp
   const validFavorites = favorites.filter(fav => fav.favorited !== null);
-  const favoritedUsers = validFavorites.map(fav => fav.favorited!);
+  const favoritedUsers = validFavorites.map(fav => fav.favorited);
   const enrichedUsers = await enrichPlayersWithSkills(favoritedUsers);
 
   // Add favoritedAt timestamp to each user

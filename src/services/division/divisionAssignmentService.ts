@@ -371,11 +371,12 @@ export async function autoAssignPlayersToDivisions(
         });
       }
 
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       errors.push({
         userId: membership.userId,
         userName: membership.user?.name ?? "Unknown",
-        reason: error.message
+        reason: errorMessage
       });
     }
   }
