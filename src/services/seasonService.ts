@@ -72,18 +72,8 @@ export const createSeasonService = async (data: CreateSeasonData) => {
     withdrawalEnabled,
   } = data;
 
-   // Check for existing season with this category
-   // Note: categoryId field may not be recognized in SeasonWhereInput - need to regenerate Prisma client
-   // Using raw query as workaround
-   const existingSeasonWithCategory = await prisma.$queryRaw<Array<{ id: string }>>`
-     SELECT id FROM "Season" WHERE "categoryId" = ${categoryId} LIMIT 1
-   `;
-   
-   const hasExistingSeason = existingSeasonWithCategory && existingSeasonWithCategory.length > 0;
-
-  if (hasExistingSeason) {
-    throw new Error("This category is already assigned to another season.");
-  }
+  // Categories can be reused across multiple seasons (one-to-many relationship)
+  // No validation check needed - a category can be linked to multiple seasons
 
   return prisma.season.create({
     data: {
