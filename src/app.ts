@@ -13,12 +13,12 @@ import {
   sanitizeInput,
   preventSQLInjection,
   ipBlocker,
-} from "./middleware/security";
+} from "./middlewares/security";
 import {
   generalLimiter,
   authLimiter,
   onboardingLimiter,
-} from "./middleware/rateLimiter";
+} from "./middlewares/rateLimiter";
 
 const app = express();
 
