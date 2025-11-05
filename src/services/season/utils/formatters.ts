@@ -233,7 +233,8 @@ export function formatSeasonWithRelations(season: any): FormattedSeason {
     divisions: season.divisions,
     promoCodes: season.promoCodes,
     withdrawalRequests: season.withdrawalRequests,
-    waitlist: season.waitlist
+    waitlist: season.waitlist,
+    partnerships: season.partnerships || []
   };
 }
 

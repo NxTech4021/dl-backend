@@ -249,16 +249,28 @@ export const getSeasonByIdService = async (id: string) => {
               gender: true,
               area: true,
               questionnaireResponses: {
-                include: {
-                  result: true
+                select: {
+                  id: true,
+                  sport: true,
+                  completedAt: true,
+                  result: {
+                    select: {
+                      id: true,
+                      singles: true,
+                      doubles: true,
+                      rd: true,
+                      confidence: true,
+                      source: true
+                    }
+                  }
                 },
                 where: {
                   completedAt: { not: null }
                 },
                 orderBy: {
                   completedAt: 'desc'
-                },
-                take: 1 // Only get the most recent completed response
+                }
+                // Removed take: 1 to get all questionnaire responses so frontend can filter by sport type
               }
             }
           },
@@ -273,6 +285,31 @@ export const getSeasonByIdService = async (id: string) => {
         take: 6,
         orderBy: {
           joinedAt: 'asc'
+        }
+      },
+      partnerships: {
+        where: { status: 'ACTIVE' },
+        include: {
+          captain: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              username: true,
+              displayUsername: true,
+              image: true
+            }
+          },
+          partner: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              username: true,
+              displayUsername: true,
+              image: true
+            }
+          }
         }
       },
     } as any, 

@@ -251,6 +251,7 @@ export interface FormattedSeason {
   promoCodes?: any[];
   withdrawalRequests?: any[];
   waitlist?: any;
+  partnerships?: any[];
 }
 
 export interface FormattedWithdrawalRequest {
