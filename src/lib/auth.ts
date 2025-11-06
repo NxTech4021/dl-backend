@@ -8,7 +8,6 @@ import { expo } from "@better-auth/expo";
 import { sendEmail } from "../config/nodemailer";
 import { getBackendBaseURL, getTrustedOrigins } from "../config/network";
 
-
 // Debug environment variables
 console.log("🔐 Better Auth Environment Check:");
 console.log(
@@ -170,7 +169,7 @@ export const auth = betterAuth({
 
   basePath: authBasePath,
 
-  trustedOrigins: combinedTrustedOrigins,
+  // trustedOrigins: combinedTrustedOrigins,
 
   // Session configuration for mobile/Expo compatibility
   session: {
