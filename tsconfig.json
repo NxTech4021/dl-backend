@@ -77,7 +77,7 @@
 
     /* If transpiling with TypeScript: */
 
-    "moduleResolution": "nodenext",
+    "moduleResolution": "bundler",
     "outDir": "dist",
     "rootDir": "src",
 
