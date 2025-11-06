@@ -51,7 +51,7 @@
     /* Base Options: */
     "lib": ["es2022"],
     "target": "es6",
-    "module": "nodenext",
+    "module": "es2015",
 
     // "paths": {
     //   "@/modules/*": ["./src/modules/*"],
