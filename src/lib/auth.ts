@@ -50,6 +50,7 @@ const defaultTrustedOrigins = [
   "exp://192.168.0.123:8081",
   "http://192.168.0.123:8081",
   "https://staging.appdevelopers.my",
+  "https://0.0.0.0",
 ];
 const envTrustedOrigins = [
   ...(process.env.BETTER_AUTH_TRUSTED_ORIGINS || "")
@@ -169,7 +170,7 @@ export const auth = betterAuth({
 
   basePath: authBasePath,
 
-  // trustedOrigins: combinedTrustedOrigins,
+  trustedOrigins: combinedTrustedOrigins,
 
   // Session configuration for mobile/Expo compatibility
   session: {
