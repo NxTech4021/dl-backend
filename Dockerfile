@@ -7,6 +7,7 @@ FROM base AS development
 ENV NODE_ENV=development
 RUN npm i
 COPY . .
+RUN npm install tsx
 RUN npm install -g prisma
 RUN npx prisma generate
 
