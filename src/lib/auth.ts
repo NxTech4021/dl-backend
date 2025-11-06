@@ -170,7 +170,7 @@ export const auth = betterAuth({
 
   basePath: authBasePath,
 
-  trustedOrigins: combinedTrustedOrigins,
+  trustedOrigins: ["*"],
 
   // Session configuration for mobile/Expo compatibility
   session: {
