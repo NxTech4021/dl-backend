@@ -28,7 +28,7 @@ export type SeasonWithFullRelations = Prisma.SeasonGetPayload<{
         gameType: true;
       };
     };
-    categories: {
+    category: {
       select: {
         id: true;
         name: true;
