@@ -78,14 +78,14 @@ export const getThreads = async (req: Request, res: Response) => {
         members: {
           include: {
             user: {
-              select: { 
-                id: true, 
-                name: true, 
+              select: {
+                id: true,
+                name: true,
                 role: true,
-                username: true, 
+                username: true,
                 email: true,
                 phoneNumber: true,
-                image: true 
+                image: true,
               },
             },
           },
@@ -121,9 +121,12 @@ export const getThreads = async (req: Request, res: Response) => {
 // Send a message in a thread
 export const sendMessage = async (req: Request, res: Response) => {
   const { threadId } = req.params;
-  const { senderId, content } = req.body;
+  // const { senderId, content } = req.body;
+  const { senderId, content, repliesToId } = req.body;
 
-  console.log(`💬 Sending message - Thread: ${threadId}, Sender: ${senderId}`);
+  console.log(
+    `💬 Sending message - Thread: ${threadId}, Sender: ${senderId} reply ${repliesToId}`
+  );
 
   if (!senderId || !content) {
     console.log(
@@ -157,19 +160,33 @@ export const sendMessage = async (req: Request, res: Response) => {
         threadId,
         senderId,
         content,
+        repliesToId: repliesToId || null,
       },
       include: {
         sender: {
-          select: { 
-            id: true, 
-            name: true, 
-            username: true, 
-            image: true, 
-            email: true, 
-            phoneNumber: true 
+          select: {
+            id: true,
+            name: true,
+            username: true,
+            image: true,
+            email: true,
+            phoneNumber: true,
           },
         },
-      },
+        repliesTo: {
+          include: {
+            sender: {
+              select: {
+                id: true,
+                name: true,
+                username: true,
+                image: true,
+              },
+            },
+          },
+        },
+        readBy: true,
+      },    
     });
 
     // Update thread's last activity
@@ -237,6 +254,13 @@ export const getMessages = async (req: Request, res: Response) => {
           sender: {
             select: { id: true, name: true, username: true, image: true },
           },
+          repliesTo: {
+            include: {
+              sender: {
+                select: { id: true, name: true, username: true, image: true },
+              },
+            },
+          },
           readBy: {
             include: {
               user: {
@@ -249,7 +273,7 @@ export const getMessages = async (req: Request, res: Response) => {
       prisma.message.count({ where: { threadId } }),
     ]);
 
-    // Reverse to show oldest first
+    // Reverse to show oldest first (descending → ascending)
     const sortedMessages = messages.reverse();
 
     console.log(
@@ -404,7 +428,7 @@ export const getAvailableUsers = async (req: Request, res: Response) => {
       },
     });
 
-    const existingUserIds = existingChatUsers.map((ut : any) => ut.userId);
+    const existingUserIds = existingChatUsers.map((ut: any) => ut.userId);
 
     // Step 2: Get all users except current user and those with existing chats
     const availableUsers = await prisma.user.findMany({
@@ -435,5 +459,44 @@ export const getAvailableUsers = async (req: Request, res: Response) => {
   } catch (error) {
     console.error("❌ Error fetching available users:", error);
     return res.status(500).json({ error: "Failed to fetch available users" });
+  }
+};
+
+export const deleteMessage = async (req: Request, res: Response) => {
+  const { messageId } = req.params;
+  const userId = req.user?.id;
+
+  try {
+    const message = await prisma.message.findUnique({
+      where: { id: messageId },
+    });
+
+    if (!message) {
+      return res.status(404).json({ error: "Message not found" });
+    }
+
+    // ✅ Only sender can delete their message
+    if (message.senderId !== userId) {
+      return res
+        .status(403)
+        .json({ error: "You can only delete your own messages" });
+    }
+
+    // ✅ Soft delete instead of hard delete
+    const updated = await prisma.message.update({
+      where: { id: messageId },
+      data: {
+        isDeleted: true,
+        content: "This message has been deleted",
+      },
+    });
+
+    return res.status(200).json({
+      message: "Message deleted successfully",
+      data: updated,
+    });
+  } catch (err) {
+    console.error("Delete message error:", err);
+    return res.status(500).json({ error: "Internal server error" });
   }
 };

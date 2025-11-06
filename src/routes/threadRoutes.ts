@@ -6,8 +6,10 @@ import {
   getMessages,
   markAsRead,
   getThreadMembers,
-  getAvailableUsers
+  getAvailableUsers,
+  deleteMessage
 } from "../controllers/threadController";
+import { verifyAuth } from "../middlewares/auth.middleware";
 
 const chatRoutes = Router();
 
@@ -21,5 +23,6 @@ chatRoutes.get('/threads/users/available/:userId', getAvailableUsers);
 chatRoutes.post("/threads/:threadId/messages", sendMessage);
 chatRoutes.get("/threads/:threadId/messages", getMessages);
 chatRoutes.post("/messages/:messageId/read", markAsRead);
+chatRoutes.delete("/threads/messages/:messageId", verifyAuth, deleteMessage);
 
 export default chatRoutes;
