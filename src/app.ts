@@ -100,7 +100,7 @@ app.use(pino());
 app.use(socketMiddleware(io));
 
 // Mount API routes under /api prefix
-app.use("/api", router);
+app.use(router);
 
 // Health check endpoint
 app.get("/health", (req, res) => {

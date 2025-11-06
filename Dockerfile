@@ -5,13 +5,16 @@ COPY package-lock.json ./
 
 FROM base AS development
 ENV NODE_ENV=development
+
 RUN npm i
-COPY . .
-RUN npm install tsx
+
+RUN npm install -D tsx
 RUN npm install -g prisma
 RUN npx prisma generate
 
+COPY . .
 EXPOSE 3001
+
 CMD ["npm", "run", "dev"]
 # CMD ["sh", "-c", "echo 'Waiting for database...' && sleep 5 && echo 'Running Prisma migrations...' && npx prisma migrate dev && echo 'Prisma migration complete' && echo 'Starting development server...' && npm run dev"]
 
