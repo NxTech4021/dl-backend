@@ -1,6 +1,6 @@
 import express from "express";
 import cors from "cors";
-import { createServer } from 'http';
+import { createServer } from "http";
 import cookieParser from "cookie-parser";
 import { socketHandler } from "./utils/socketconnection";
 import { toNodeHandler } from "better-auth/node";
@@ -42,7 +42,6 @@ app.use((req, res, next) => {
   console.log("----------------------");
   next();
 });
-
 
 // Set up CORS
 app.use(

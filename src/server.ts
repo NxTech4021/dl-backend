@@ -23,15 +23,17 @@ httpServer.listen(PORT, "0.0.0.0", () => {
 // ==========================================
 
 // Run daily at midnight to expire old invitations and pair requests
-cron.schedule('0 0 * * *', async () => {
-  console.log('🕒 Running scheduled task: Expiring old invitations...');
+cron.schedule("0 0 * * *", async () => {
+  console.log("🕒 Running scheduled task: Expiring old invitations...");
   try {
     const expiredInvitations = await expireOldSeasonInvitations();
     const expiredRequests = await expireOldRequests();
-    console.log(`✅ Expired ${expiredInvitations} season invitations and ${expiredRequests} pair requests`);
+    console.log(
+      `✅ Expired ${expiredInvitations} season invitations and ${expiredRequests} pair requests`
+    );
   } catch (error) {
-    console.error('❌ Error expiring invitations:', error);
+    console.error("❌ Error expiring invitations:", error);
   }
 });
 
-console.log('⏰ Cron job scheduled: Daily expiration check at midnight');
+console.log("⏰ Cron job scheduled: Daily expiration check at midnight");
