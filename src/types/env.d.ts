@@ -10,5 +10,6 @@ declare namespace NodeJS {
     EMAIL_USER: string;
     EMAIL_PASS: string;
     BETTER_AUTH_BASE_PATH: string;
+    API_PREFIX?: string; // Optional: API route prefix (defaults to "/api" in dev, "" in prod)
   }
 }
