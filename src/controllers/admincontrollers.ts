@@ -328,3 +328,26 @@ export const getAdminById = async (req: Request, res: Response) => {
   }
 };
 
+
+export const trackLogin = async (req: Request, res: Response) => {
+  try {
+    const { userId } = req.body;
+
+    if (!userId) {
+      return res.status(400).json({ error: "Missing userId" });
+    }
+
+    await prisma.user.update({
+      where: { id: userId },
+      data: {
+        lastLogin: new Date(),
+        lastActivityCheck: new Date(),
+      },
+    });
+
+    return res.json({ success: true });
+  } catch (err) {
+    console.error("Failed updating login time:", err);
+    return res.status(500).json({ error: "Server error" });
+  }
+};

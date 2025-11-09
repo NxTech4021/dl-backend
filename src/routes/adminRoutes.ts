@@ -9,6 +9,7 @@ import {
   fetchAdmins,
   getAdminById,
   updateAdmin,
+  trackLogin,
   updatePassword
 } from "../controllers/admincontrollers";
 
@@ -21,6 +22,7 @@ adminRouter.get("/session", getAdminSession);
 adminRouter.get("/getadmins", fetchAdmins);
 adminRouter.get("/profile/:id", getAdminById);
 
+adminRouter.put("/activity/tracklogin", trackLogin)
 adminRouter.put("/account/update", updateAdmin)
 adminRouter.post("/superadmin", createSuperadmin);
 adminRouter.post("/register", registerAdmin);
