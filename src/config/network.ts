@@ -105,3 +105,20 @@ export function getTrustedOrigins(): string[] {
 
   return baseOrigins;
 }
+
+/**
+ * Get the API route prefix
+ * - Development: defaults to "/api" (can be overridden with API_PREFIX env var)
+ * - Production: defaults to "" (can be overridden with API_PREFIX env var)
+ * This allows flexibility where production might use nginx to handle the /api prefix
+ */
+export function getApiPrefix(): string {
+  // If API_PREFIX is explicitly set, use it
+  if (process.env.API_PREFIX !== undefined) {
+    return process.env.API_PREFIX;
+  }
+
+  // Default: use "/api" in development, "" in production
+  // Production typically has nginx/reverse proxy handling the /api prefix
+  return process.env.NODE_ENV === "production" ? "" : "/api";
+}

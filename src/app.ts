@@ -7,6 +7,7 @@ import { toNodeHandler } from "better-auth/node";
 import { auth } from "./lib/auth";
 import { socketMiddleware } from "./middlewares/socketmiddleware";
 import router from "./routes/index";
+import { getApiPrefix } from "./config/network";
 import pino from "pino-http";
 import {
   securityHeaders,
@@ -76,13 +77,10 @@ app.use(
   })
 );
 
-// Apply auth rate limiter to authentication routes
-// app.use("/api/auth/{*any}", authLimiter); // Commented out for development
-
 // According to the official Express documentaticlon for better-auth,
 // the auth handler must be mounted BEFORE express.json().
 // Express v5 requires the {*any} syntax for wildcard routes.
-app.all("/auth/{*any}", (req, res) => {
+app.all("/api/auth/{*any}", (req, res) => {
   console.log(`🔐 Auth request: ${req.method} ${req.path}`);
   try {
     void toNodeHandler(auth)(req, res);
@@ -99,8 +97,11 @@ app.use(pino());
 
 app.use(socketMiddleware(io));
 
-// Mount API routes under /api prefix
-app.use(router);
+// Mount API routes with configurable prefix
+// Development: /api, Production: "" (nginx handles /api prefix)
+const apiPrefix = getApiPrefix();
+console.log(`📡 API routes mounted at: ${apiPrefix || "(root)"}`);
+app.use(apiPrefix, router);
 
 // Health check endpoint
 app.get("/health", (req, res) => {
