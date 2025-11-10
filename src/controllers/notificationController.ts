@@ -3,6 +3,7 @@ import { NotificationCategory } from '@prisma/client';
 import { NotificationType, NOTIFICATION_TYPES } from '../types/notificationTypes';
 import { notificationService } from '../services/notificationService';
 
+
 // Get user notifications
 export const getUserNotifications = async (req: Request, res: Response) => {
   try {
@@ -124,8 +125,8 @@ export const markAllNotificationsAsRead = async (req: Request, res: Response) =>
   }
 };
 
-// Archive notification
-export const archiveNotification = async (req: Request, res: Response) => {
+// Delete notification
+export const deleteNotification = async (req: Request, res: Response) => {
   try {
     const userId = req.user?.id;
     const { id } = req.params;
@@ -138,7 +139,7 @@ export const archiveNotification = async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Notification ID is required' });
     }
 
-    await notificationService.archiveNotification(id, userId);
+    await notificationService.deleteNotification(id, userId);
 
     res.json({
       success: true,
@@ -177,29 +178,6 @@ export const getUnreadCount = async (req: Request, res: Response) => {
   }
 };
 
-// Get notification statistics
-export const getNotificationStats = async (req: Request, res: Response) => {
-  try {
-    const userId = req.user?.id;
-
-    if (!userId) {
-      return res.status(401).json({ error: 'Unauthorized' });
-    }
-
-    const stats = await notificationService.getNotificationStats(userId);
-
-    res.json({
-      success: true,
-      data: stats,
-    });
-  } catch (error) {
-    console.error('Error getting notification stats:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to get notification stats',
-    });
-  }
-};
 
 // Get notifications by category
 export const getNotificationsByCategory = async (req: Request, res: Response) => {
@@ -296,28 +274,6 @@ export const sendTestNotification = async (req: Request, res: Response) => {
     res.status(500).json({
       success: false,
       error: 'Failed to send test notification',
-    });
-  }
-};
-
-
-// Delete old notifications (admin only - for cleanup)
-export const deleteOldNotifications = async (req: Request, res: Response) => {
-  try {
-    const { daysOld = 30 } = req.query;
-
-    const result = await notificationService.deleteOldNotifications(Number(daysOld));
-
-    res.json({
-      success: true,
-      data: { deletedCount: result.count },
-      message: `Deleted ${result.count} notifications older than ${daysOld} days`,
-    });
-  } catch (error) {
-    console.error('Error deleting old notifications:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to delete old notifications',
     });
   }
 };
