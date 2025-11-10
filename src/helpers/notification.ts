@@ -169,6 +169,35 @@ export const adminNotifications = {
   }),
 };
 
+/**
+ * Inactivity Notification Templates
+ */
+export const inactivityNotifications = {
+  warning: (daysSinceLastMatch: number, daysRemaining: number): NotificationPayload => ({
+    type: NOTIFICATION_TYPES.INACTIVITY_WARNING,
+    category: getCategoryForNotificationType(NOTIFICATION_TYPES.INACTIVITY_WARNING),
+    title: 'Inactivity Warning',
+    message: `It's been ${daysSinceLastMatch} days since your last match. Play within ${daysRemaining} days to stay active!`,
+    metadata: { daysSinceLastMatch, daysRemaining },
+  }),
+
+  statusChanged: (): NotificationPayload => ({
+    type: NOTIFICATION_TYPES.STATUS_CHANGED_TO_INACTIVE,
+    category: getCategoryForNotificationType(NOTIFICATION_TYPES.STATUS_CHANGED_TO_INACTIVE),
+    title: 'Account Status Changed',
+    message: 'Your account has been marked inactive. Play a match to reactivate your rating!',
+    metadata: { newStatus: 'INACTIVE' },
+  }),
+
+  reactivated: (): NotificationPayload => ({
+    type: NOTIFICATION_TYPES.REACTIVATED,
+    category: getCategoryForNotificationType(NOTIFICATION_TYPES.REACTIVATED),
+    title: 'Welcome Back!',
+    message: 'Your account has been reactivated. Keep playing to maintain your rating!',
+    metadata: { previousStatus: 'INACTIVE' },
+  }),
+};
+
 // Continue with other notification categories...
 // (Withdrawal, reminder, match, pairing notifications with similar pattern)
 
@@ -181,5 +210,6 @@ export const notificationTemplates = {
   season: seasonNotifications,
   payment: paymentNotifications,
   admin: adminNotifications,
+  inactivity: inactivityNotifications,
   // ... other templates
 };
