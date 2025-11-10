@@ -33,23 +33,15 @@ export interface AuthenticatedRequest extends Request {
   };
 }
 
-  // Better Auth middleware for authentication
-  export const verifyAuth: RequestHandler = async (
-    req: Request,
-    res: Response,
-    next: NextFunction
-  ) => {
-    try {
-      const session = await auth.api.getSession({ headers: req.headers });
-      
-      if (!session) {
-        return res
-          .status(401)
-          .json(new ApiResponse(false, 401, null, "Authentication required"));
-      }
+// Better Auth middleware for authentication
+export const verifyAuth: RequestHandler = async (req, res, next) => {
+  try {
+    let user;
 
-      // Check if user exists in database and get role info
-      const user = await prisma.user.findUnique({
+    // --- Web support ---
+    const session = await auth.api.getSession({ headers: req.headers });
+    if (session?.user?.id) {
+      user = await prisma.user.findUnique({
         where: { id: session.user.id },
         select: {
           id: true,
@@ -57,48 +49,56 @@ export interface AuthenticatedRequest extends Request {
           email: true,
           username: true,
           role: true,
-          admin: {
-            select: {
-              id: true,
-              status: true,
-            }
-          }
-        }
+          admin: { select: { id: true, status: true } },
+        },
       });
-
-      if (!user) {
-        return res
-          .status(401)
-          .json(new ApiResponse(false, 401, null, "User not found"));
-      }
-
-      // Get admin ID if user has admin record and is active
-      let adminId: string | undefined;
-      if (user.admin && user.admin.status === 'ACTIVE') {
-        adminId = user.admin.id;
-      }
-
-      // Attach user info to request
-      req.user = {
-        id: session.user.id,
-        name: session.user.name,
-        email: session.user.email,
-        username: session.user.username || undefined,
-        role: user.role,
-        adminId,
-      };
-
-      next();
-    } catch (error) {
-      console.error("Authentication error:", error);
-      return res
-        .status(401)
-        .json(new ApiResponse(false, 401, null, "Invalid authentication"));
     }
-  };
 
-// Middleware to require authentication
-export const requireAuth: RequestHandler = verifyAuth;
+    // --- Mobile support ---
+    if (!user) {
+      const mobileUserId =
+        (req.headers["x-user-id"] as string) || (req.query.userId as string);
+      if (mobileUserId) {
+        user = await prisma.user.findUnique({
+          where: { id: mobileUserId },
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            username: true,
+            role: true,
+            admin: { select: { id: true, status: true } },
+          },
+        });
+      }
+    }
+
+    if (!user) {
+      return res.status(401).json({ success: false, message: "Unauthorized" });
+    }
+
+    let adminId: string | undefined;
+    if (user.admin?.status === "ACTIVE") {
+      adminId = user.admin.id;
+    }
+
+    req.user = {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      username: user.username || undefined,
+      role: user.role,
+      adminId,
+    };
+
+    next();
+  } catch (error) {
+    console.error("Authentication error:", error);
+    return res
+      .status(401)
+      .json({ success: false, message: "Invalid authentication" });
+  }
+};
 
 // Middleware to require admin role (ADMIN or SUPERADMIN)
 export const requireAdmin: RequestHandler = async (
@@ -112,7 +112,7 @@ export const requireAdmin: RequestHandler = async (
       .json(new ApiResponse(false, 401, null, "Authentication required"));
   }
 
-  if (req.user.role === 'USER') {
+  if (req.user.role === "USER") {
     return res
       .status(403)
       .json(new ApiResponse(false, 403, null, "Admin access required"));
@@ -133,7 +133,7 @@ export const requireSuperAdmin: RequestHandler = async (
       .json(new ApiResponse(false, 401, null, "Authentication required"));
   }
 
-  if (req.user.role !== 'SUPERADMIN') {
+  if (req.user.role !== "SUPERADMIN") {
     return res
       .status(403)
       .json(new ApiResponse(false, 403, null, "Super admin access required"));
@@ -143,19 +143,19 @@ export const requireSuperAdmin: RequestHandler = async (
 };
 
 // Helper functions
-export const isAdmin = (user: Request['user']): boolean => {
-  return user?.role === 'ADMIN' || user?.role === 'SUPERADMIN';
+export const isAdmin = (user: Request["user"]): boolean => {
+  return user?.role === "ADMIN" || user?.role === "SUPERADMIN";
 };
 
-export const isSuperAdmin = (user: Request['user']): boolean => {
-  return user?.role === 'SUPERADMIN';
+export const isSuperAdmin = (user: Request["user"]): boolean => {
+  return user?.role === "SUPERADMIN";
 };
 
-export const isUser = (user: Request['user']): boolean => {
-  return user?.role === 'USER';
+export const isUser = (user: Request["user"]): boolean => {
+  return user?.role === "USER";
 };
 
 // Check if user has admin record (for operations that require admin table ID)
-export const hasAdminRecord = (user: Request['user']): boolean => {
+export const hasAdminRecord = (user: Request["user"]): boolean => {
   return !!user?.adminId;
 };

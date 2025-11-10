@@ -73,7 +73,7 @@ const combinedTrustedOrigins = Array.from(
     ...getTrustedOrigins(),
   ])
 );
-console.log("   Trusted origins:", combinedTrustedOrigins);
+// console.log("   Trusted origins:", combinedTrustedOrigins);
 
 // Test database connection
 prisma

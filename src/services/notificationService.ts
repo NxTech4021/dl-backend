@@ -48,7 +48,6 @@ export class NotificationService {
 
       const validUserIds = users.map(u => u.id);
 
-      // 🔥 Fix: Filter out undefined values for database creation
       const createData: any = {
         message,
         category,
@@ -270,25 +269,22 @@ export class NotificationService {
       throw new AppError('Failed to mark all notifications as read', 500);
     }
   }
-
-  async archiveNotification(notificationId: string, userId: string): Promise<void> {
+  
+  async deleteNotification(notificationId: string, userId: string): Promise<void> {
     try {
-      await prisma.userNotification.update({
+      await prisma.userNotification.delete({
         where: {
           userId_notificationId: {
             userId,
-            notificationId
-          }
+            notificationId,
+          },
         },
-        data: {
-          archive: true
-        }
       });
 
-      logger.debug('Notification archived', { notificationId, userId });
+      logger.debug('Notification deleted for user', { notificationId, userId });
     } catch (error) {
-      logger.error('Error archiving notification', { notificationId, userId }, error as Error);
-      throw new AppError('Failed to archive notification', 500);
+      logger.error('Error deleting notification for user', { notificationId, userId }, error as Error);
+      throw new AppError('Failed to delete notification', 500);
     }
   }
 

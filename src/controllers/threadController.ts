@@ -1,5 +1,7 @@
 import { prisma } from "../lib/prisma";
 import { Request, Response } from "express";
+import { notificationService } from '../services/notificationService';
+import { notificationTemplates } from '../helpers/notification';
 
 // Create a new thread (single or group)
 export const createThread = async (req: Request, res: Response) => {
@@ -121,7 +123,6 @@ export const getThreads = async (req: Request, res: Response) => {
 // Send a message in a thread
 export const sendMessage = async (req: Request, res: Response) => {
   const { threadId } = req.params;
-  // const { senderId, content } = req.body;
   const { senderId, content, repliesToId } = req.body;
 
   console.log(
@@ -144,6 +145,26 @@ export const sendMessage = async (req: Request, res: Response) => {
     }
 
     // Verify thread exists and user is a member
+    const thread = await prisma.thread.findUnique({
+      where: { id: threadId },
+      include: {
+        members: {
+          include: {
+            user: {
+              select: { id: true, name: true }
+            }
+          }
+        },
+        division: {
+          select: { id: true, name: true }
+        }
+      }
+    });
+
+    if (!thread) {
+      return res.status(404).json({ error: "Thread not found" });
+    }
+
     const threadUser = await prisma.userThread.findFirst({
       where: { threadId, userId: senderId },
     });
@@ -213,8 +234,38 @@ export const sendMessage = async (req: Request, res: Response) => {
         threadId,
         timestamp: new Date().toISOString(),
       });
-    } else {
-      console.log(`⚠️ Socket.IO not available for message broadcast`);
+    }
+
+    // 🆕 Send notifications to other thread members (not the sender)
+    try {
+      const otherMembers = thread.members
+        .filter(m => m.userId !== senderId)
+        .map(m => m.userId);
+
+      if (otherMembers.length > 0) {
+        // Create message preview (truncate if too long)
+        const messagePreview = content.length > 100 
+          ? `${content.substring(0, 97)}...` 
+          : content;
+
+        const chatNotif = notificationTemplates.chat.newMessage(
+          message.sender.name || 'Someone',
+          thread.name || (thread.division?.name ? `${thread.division.name} Chat` : 'Group Chat'),
+          messagePreview
+        );
+
+        await notificationService.createNotification({
+          userIds: otherMembers,
+          ...chatNotif,
+          threadId: threadId,
+          divisionId: thread.divisionId || undefined,
+        });
+
+        console.log(`📧 Sent chat notifications to ${otherMembers.length} members`);
+      }
+    } catch (notifError) {
+      console.error('Failed to send chat notifications:', notifError);
+      // Don't fail the request if notification fails
     }
 
     return res.status(201).json({

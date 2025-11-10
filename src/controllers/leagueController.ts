@@ -1,7 +1,14 @@
-import { Request, Response } from 'express';
-import * as leagueService from '../services/leagueService';
-import { Statuses, SportType, GameType, TierType, PrismaClient, Prisma } from '@prisma/client';
-import { ApiResponse } from '../utils/ApiResponse';
+import { Request, Response } from "express";
+import * as leagueService from "../services/leagueService";
+import {
+  Statuses,
+  SportType,
+  GameType,
+  TierType,
+  PrismaClient,
+  Prisma,
+} from "@prisma/client";
+import { ApiResponse } from "../utils/ApiResponse";
 
 interface CreateLeagueBody {
   name?: string;
@@ -21,118 +28,144 @@ interface UpdateLeagueBody {
   status?: string;
 }
 
-
-
 export const getLeagues = async (req: Request, res: Response) => {
   try {
     const { leagues, totalMembers } = await leagueService.getAllLeagues();
 
-    return res.status(200).json(
-      new ApiResponse(
-        true,
-        200,
-        { leagues, totalMembers },
-        `Found ${leagues.length} league(s)`
-      )
-    );
+    return res
+      .status(200)
+      .json(
+        new ApiResponse(
+          true,
+          200,
+          { leagues, totalMembers },
+          `Found ${leagues.length} league(s)`
+        )
+      );
   } catch (error) {
     console.error("Error fetching leagues:", error);
-    return res.status(500).json(
-      new ApiResponse(false, 500, null, "Error fetching leagues")
-    );
+    return res
+      .status(500)
+      .json(new ApiResponse(false, 500, null, "Error fetching leagues"));
   }
 };
-
 
 export const getLeagueById = async (req: Request, res: Response) => {
   try {
     const id = req.params.id;
 
     if (!id) {
-      return res.status(400).json(
-        new ApiResponse(false, 400, null, "League ID is required")
-      );
+      return res
+        .status(400)
+        .json(new ApiResponse(false, 400, null, "League ID is required"));
     }
 
     const league = await leagueService.getLeagueById(id);
 
     if (!league) {
-      return res.status(404).json(
-        new ApiResponse(false, 404, null, "League not found")
-      );
+      return res
+        .status(404)
+        .json(new ApiResponse(false, 404, null, "League not found"));
     }
 
-    return res.status(200).json(
-      new ApiResponse(true, 200, { league }, "League fetched successfully")
-    );
+    return res
+      .status(200)
+      .json(
+        new ApiResponse(true, 200, { league }, "League fetched successfully")
+      );
   } catch (error) {
     console.error("Error fetching league:", error);
-    return res.status(500).json(
-      new ApiResponse(false, 500, null, "Error fetching league")
-    );
+    return res
+      .status(500)
+      .json(new ApiResponse(false, 500, null, "Error fetching league"));
   }
 };
 
-
 export const createLeague = async (req: Request, res: Response) => {
   try {
-
-    console.log("Params:", JSON.stringify(req.params, null, 2));
-    console.log("Body:", JSON.stringify(req.body, null, 2));
-    console.log("User (from auth):", JSON.stringify(req.user, null, 2));
-
-   const { name, location, description, status, sportType, gameType, sponsorships, existingSponsorshipIds } = req.body as CreateLeagueBody;
+    const {
+      name,
+      location,
+      description,
+      status,
+      sportType,
+      gameType,
+      sponsorships,
+      existingSponsorshipIds,
+    } = req.body as CreateLeagueBody;
 
     // Validation
     if (!name || !name.trim()) {
-      return res.status(400).json(
-        new ApiResponse(false, 400, null, "League name is required")
-      );
+      return res
+        .status(400)
+        .json(new ApiResponse(false, 400, null, "League name is required"));
     }
 
     if (name.length > 200) {
-      return res.status(400).json(
-        new ApiResponse(false, 400, null, "League name must be 200 characters or less")
-      );
+      return res
+        .status(400)
+        .json(
+          new ApiResponse(
+            false,
+            400,
+            null,
+            "League name must be 200 characters or less"
+          )
+        );
     }
 
     if (!location || !location.trim()) {
-      return res.status(400).json(
-        new ApiResponse(false, 400, null, "Location is required")
-      );
+      return res
+        .status(400)
+        .json(new ApiResponse(false, 400, null, "Location is required"));
     }
 
     if (status && !Object.values(Statuses).includes(status as Statuses)) {
-      return res.status(400).json(
-        new ApiResponse(
-          false,
-          400,
-          null,
-          `Invalid status. Must be one of: ${Object.values(Statuses).join(', ')}`
-        )
-      );
+      return res
+        .status(400)
+        .json(
+          new ApiResponse(
+            false,
+            400,
+            null,
+            `Invalid status. Must be one of: ${Object.values(Statuses).join(
+              ", "
+            )}`
+          )
+        );
     }
 
-    if (sportType && !Object.values(SportType).includes(sportType as SportType)) {
-      return res.status(400).json(
-        new ApiResponse(
-          false,
-          400,
-          null,
-          `Invalid sportType. Must be one of: ${Object.values(SportType).join(', ')}`
-        )
-      );
+    if (
+      sportType &&
+      !Object.values(SportType).includes(sportType as SportType)
+    ) {
+      return res
+        .status(400)
+        .json(
+          new ApiResponse(
+            false,
+            400,
+            null,
+            `Invalid sportType. Must be one of: ${Object.values(SportType).join(
+              ", "
+            )}`
+          )
+        );
     }
 
     if (gameType && !Object.values(GameType).includes(gameType as GameType)) {
-      return res.status(400).json(
-        new ApiResponse(
-          false,
-          400,
-          null,
-          `Invalid gameType. Must be one of: ${Object.values(GameType).join(', ')}`
-        )
-      );
+      return res
+        .status(400)
+        .json(
+          new ApiResponse(
+            false,
+            400,
+            null,
+            `Invalid gameType. Must be one of: ${Object.values(GameType).join(
+              ", "
+            )}`
+          )
+        );
     }
 
     const leagueData: Parameters<typeof leagueService.createLeague>[0] = {
@@ -154,11 +187,19 @@ export const createLeague = async (req: Request, res: Response) => {
             endDate?: Date | string;
             isActive?: boolean;
           };
-          
-          if (!Object.values(TierType).includes(sponsorship.packageTier as TierType)) {
-            throw new Error(`Invalid packageTier. Must be one of: ${Object.values(TierType).join(', ')}`);
+
+          if (
+            !Object.values(TierType).includes(
+              sponsorship.packageTier as TierType
+            )
+          ) {
+            throw new Error(
+              `Invalid packageTier. Must be one of: ${Object.values(
+                TierType
+              ).join(", ")}`
+            );
           }
-          
+
           const result: {
             id?: string;
             companyId: string;
@@ -173,11 +214,11 @@ export const createLeague = async (req: Request, res: Response) => {
             ...sponsorship,
             packageTier: sponsorship.packageTier as TierType,
           };
-          
+
           if (req.user?.id) {
             result.createdById = req.user.id;
           }
-          
+
           return result;
         }),
       }),
@@ -186,37 +227,46 @@ export const createLeague = async (req: Request, res: Response) => {
 
     const newLeague = await leagueService.createLeague(leagueData);
 
-
-    return res.status(201).json(
-      new ApiResponse(
-        true,
-        201,
-        { league: newLeague },
-        "League created successfully"
-      )
-    );
+    return res
+      .status(201)
+      .json(
+        new ApiResponse(
+          true,
+          201,
+          { league: newLeague },
+          "League created successfully"
+        )
+      );
   } catch (error: unknown) {
     console.error("Error creating league:", error);
-    
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    
-    if (errorMessage.includes('already exists')) {
-      return res.status(409).json(
-        new ApiResponse(false, 409, null, errorMessage)
-      );
+
+    const errorMessage =
+      error instanceof Error ? error.message : "Unknown error";
+
+    if (errorMessage.includes("already exists")) {
+      return res
+        .status(409)
+        .json(new ApiResponse(false, 409, null, errorMessage));
     }
-    
+
     if (error instanceof Prisma.PrismaClientKnownRequestError) {
-      if (error.code === 'P2002') {
-        return res.status(409).json(
-          new ApiResponse(false, 409, null, "A league with this name already exists")
-        );
+      if (error.code === "P2002") {
+        return res
+          .status(409)
+          .json(
+            new ApiResponse(
+              false,
+              409,
+              null,
+              "A league with this name already exists"
+            )
+          );
       }
     }
-    
-    return res.status(500).json(
-      new ApiResponse(false, 500, null, "Error creating league")
-    );
+
+    return res
+      .status(500)
+      .json(new ApiResponse(false, 500, null, "Error creating league"));
   }
 };
 
@@ -225,48 +275,57 @@ export const createLeague = async (req: Request, res: Response) => {
  * Admin only
  */
 export const updateLeague = async (req: Request, res: Response) => {
-    
-    console.log("---- updateLeague called ----");
-  console.log("Request params:", req.params);
-  console.log("Request body:", req.body);
-  console.log("Request user:", req.user?.id);
+  // console.log("---- updateLeague called ----");
+  // console.log("Request params:", req.params);
+  // console.log("Request body:", req.body);
+  // console.log("Request user:", req.user?.id);
 
   try {
     const id = req.params.id;
-    const { name, location, description, status} = req.body as UpdateLeagueBody;
-    
-    if (!id) {
-      return res.status(400).json(
-        new ApiResponse(false, 400, null, "Invalid league ID")
-      );
-    }
+    const { name, location, description, status } =
+      req.body as UpdateLeagueBody;
 
-  
+    if (!id) {
+      return res
+        .status(400)
+        .json(new ApiResponse(false, 400, null, "Invalid league ID"));
+    }
 
     // Validation
     if (name !== undefined && (!name.trim() || name.length > 255)) {
-      return res.status(400).json(
-        new ApiResponse(false, 400, null, "League name must be between 1 and 255 characters")
-      );
+      return res
+        .status(400)
+        .json(
+          new ApiResponse(
+            false,
+            400,
+            null,
+            "League name must be between 1 and 255 characters"
+          )
+        );
     }
     if (location !== undefined && !location.trim()) {
-      return res.status(400).json(
-        new ApiResponse(false, 400, null, "Location cannot be empty")
-      );
+      return res
+        .status(400)
+        .json(new ApiResponse(false, 400, null, "Location cannot be empty"));
     }
     if (status && !Object.values(Statuses).includes(status as Statuses)) {
-      return res.status(400).json(
-        new ApiResponse(
-          false,
-          400,
-          null,
-          `Invalid status. Must be one of: ${Object.values(Statuses).join(', ')}`
-        )
-      );
+      return res
+        .status(400)
+        .json(
+          new ApiResponse(
+            false,
+            400,
+            null,
+            `Invalid status. Must be one of: ${Object.values(Statuses).join(
+              ", "
+            )}`
+          )
+        );
     }
 
     const updateData: Parameters<typeof leagueService.updateLeague>[1] = {};
-    
+
     if (name !== undefined) updateData.name = name;
     if (location !== undefined) updateData.location = location;
     if (description !== undefined) updateData.description = description;
@@ -274,71 +333,75 @@ export const updateLeague = async (req: Request, res: Response) => {
 
     const updatedLeague = await leagueService.updateLeague(id, updateData);
 
-    return res.status(200).json(
-      new ApiResponse(
-        true,
-        200,
-        { league: updatedLeague },
-        "League updated successfully"
-      )
-    );
+    return res
+      .status(200)
+      .json(
+        new ApiResponse(
+          true,
+          200,
+          { league: updatedLeague },
+          "League updated successfully"
+        )
+      );
   } catch (error: unknown) {
     console.error("Error updating league:", error);
-    
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    
-    if (errorMessage.includes('not found')) {
-      return res.status(404).json(
-        new ApiResponse(false, 404, null, errorMessage)
-      );
+
+    const errorMessage =
+      error instanceof Error ? error.message : "Unknown error";
+
+    if (errorMessage.includes("not found")) {
+      return res
+        .status(404)
+        .json(new ApiResponse(false, 404, null, errorMessage));
     }
-    
-    if (errorMessage.includes('already exists')) {
-      return res.status(409).json(
-        new ApiResponse(false, 409, null, errorMessage)
-      );
+
+    if (errorMessage.includes("already exists")) {
+      return res
+        .status(409)
+        .json(new ApiResponse(false, 409, null, errorMessage));
     }
-    
-    return res.status(500).json(
-      new ApiResponse(false, 500, null, "Error updating league")
-    );
+
+    return res
+      .status(500)
+      .json(new ApiResponse(false, 500, null, "Error updating league"));
   }
 };
 
 export const deleteLeague = async (req: Request, res: Response) => {
   try {
-    const id = req.params.id; 
+    const id = req.params.id;
 
-    if (!id || typeof id !== 'string') {
-      return res.status(400).json(
-        new ApiResponse(false, 400, null, "Invalid league ID")
-      );
+    if (!id || typeof id !== "string") {
+      return res
+        .status(400)
+        .json(new ApiResponse(false, 400, null, "Invalid league ID"));
     }
 
     await leagueService.deleteLeague(id);
 
-    return res.status(200).json(
-      new ApiResponse(true, 200, null, "League deleted successfully")
-    );
+    return res
+      .status(200)
+      .json(new ApiResponse(true, 200, null, "League deleted successfully"));
   } catch (error: unknown) {
     console.error("Error deleting league:", error);
 
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    const errorMessage =
+      error instanceof Error ? error.message : "Unknown error";
 
-    if (errorMessage.includes('not found')) {
-      return res.status(404).json(
-        new ApiResponse(false, 404, null, errorMessage)
-      );
+    if (errorMessage.includes("not found")) {
+      return res
+        .status(404)
+        .json(new ApiResponse(false, 404, null, errorMessage));
     }
 
-    if (errorMessage.includes('Cannot delete')) {
-      return res.status(400).json(
-        new ApiResponse(false, 400, null, errorMessage)
-      );
+    if (errorMessage.includes("Cannot delete")) {
+      return res
+        .status(400)
+        .json(new ApiResponse(false, 400, null, errorMessage));
     }
 
-    return res.status(500).json(
-      new ApiResponse(false, 500, null, "Error deleting league")
-    );
+    return res
+      .status(500)
+      .json(new ApiResponse(false, 500, null, "Error deleting league"));
   }
 };
