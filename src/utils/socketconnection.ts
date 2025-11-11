@@ -203,14 +203,37 @@ export function socketHandler(httpServer: HttpServer) {
     });
     
     // Thread Rooms
-    socket.on('join_thread', (threadId: string) => {
+    socket.on('join_thread', (data: string | { threadId: string }) => {
+      // Handle both formats: string or { threadId: string }
+      const threadId = typeof data === 'string' ? data : data.threadId;
+      
+      if (!threadId) {
+        console.error(`❌ Socket ${socket.id} tried to join with invalid threadId:`, data);
+        return;
+      }
+      
       socket.join(threadId);
-      console.log(`Socket ${socket.id} joined thread ${threadId}`);
+      console.log(`✅ Socket ${socket.id} joined thread ${threadId}`);
+      
+      // Send acknowledgment back to client
+      socket.emit('thread_joined', { 
+        threadId, 
+        socketId: socket.id,
+        timestamp: new Date().toISOString() 
+      });
     });
 
-    socket.on('leave_thread', (threadId: string) => {
+    socket.on('leave_thread', (data: string | { threadId: string }) => {
+      // Handle both formats: string or { threadId: string }
+      const threadId = typeof data === 'string' ? data : data.threadId;
+      
+      if (!threadId) {
+        console.error(`❌ Socket ${socket.id} tried to leave with invalid threadId:`, data);
+        return;
+      }
+      
       socket.leave(threadId);
-      console.log(`Socket ${socket.id} left thread ${threadId}`);
+      console.log(`✅ Socket ${socket.id} left thread ${threadId}`);
     });
 
     // Notification-specific events
