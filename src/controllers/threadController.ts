@@ -1,12 +1,12 @@
-import { prisma } from "../lib/prisma";
 import { Request, Response } from "express";
-import { notificationService } from '../services/notificationService';
 import { notificationTemplates } from '../helpers/notification';
+import { prisma } from "../lib/prisma";
+import { notificationService } from '../services/notificationService';
 
 // Create a new thread (single or group)
 export const createThread = async (req: Request, res: Response) => {
   try {
-    const { name, isGroup, userIds } = req.body;
+    const { name, isGroup, userIds, divisionId, seasonId } = req.body;
     console.log(
       `📝 Creating thread - Group: ${isGroup}, Users: ${userIds?.length}, Name: ${name}`
     );
@@ -18,23 +18,77 @@ export const createThread = async (req: Request, res: Response) => {
         .json({ error: "At least two users are required to create a thread." });
     }
 
+    // Check if direct message already exists between these users
+    if (!isGroup && userIds.length === 2) {
+      const existingThread = await prisma.thread.findFirst({
+        where: {
+          isGroup: false,
+          members: {
+            every: {
+              userId: { in: userIds }
+            }
+          }
+        },
+        include: {
+          members: {
+            include: {
+              user: {
+                select: {
+                  id: true,
+                  name: true,
+                  username: true,
+                  image: true
+                }
+              }
+            }
+          }
+        }
+      });
+
+      if (existingThread && existingThread.members.length === 2) {
+        console.log(`✅ DM already exists: ${existingThread.id}`);
+        return res.status(200).json({
+          success: true,
+          data: existingThread,
+          message: "Thread already exists",
+          isExisting: true
+        });
+      }
+    }
+
     const thread = await prisma.thread.create({
       data: {
         name: isGroup ? name : null,
         isGroup,
+        divisionId: divisionId || null,
         members: {
           create: userIds.map((userId: string, idx: number) => ({
             userId,
             role: isGroup && idx === 0 ? "admin" : null,
+            unreadCount: 0
           })),
         },
       },
       include: {
         members: {
           include: {
-            user: { select: { id: true, name: true, username: true } },
+            user: { 
+              select: { 
+                id: true, 
+                name: true, 
+                username: true,
+                image: true,
+                email: true
+              } 
+            },
           },
         },
+        division: {
+          select: {
+            id: true,
+            name: true
+          }
+        }
       },
     });
 
@@ -43,14 +97,12 @@ export const createThread = async (req: Request, res: Response) => {
     // 💡 SOCKET INTEGRATION: Notify users about new thread
     if (req.io) {
       userIds.forEach((userId) => {
-        req.io.to(userId).emit("new_thread", {
-          thread,
+        req.io.to(userId).emit("thread_created", {
+          ...thread,
           timestamp: new Date().toISOString(),
         });
-        console.log(`📤 Sent new_thread event to user ${userId}`);
+        console.log(`📤 Sent thread_created event to user ${userId}`);
       });
-    } else {
-      console.log(`⚠️ Socket.IO not available in request object`);
     }
 
     return res.status(201).json({
@@ -75,7 +127,11 @@ export const getThreads = async (req: Request, res: Response) => {
     }
 
     const threads = await prisma.thread.findMany({
-      where: { members: { some: { userId } } },
+      where: { 
+        members: { 
+          some: { userId } 
+        } 
+      },
       include: {
         members: {
           include: {
@@ -97,9 +153,20 @@ export const getThreads = async (req: Request, res: Response) => {
           take: 1,
           include: {
             sender: {
-              select: { id: true, name: true, username: true },
+              select: { 
+                id: true, 
+                name: true, 
+                username: true,
+                image: true
+              },
             },
           },
+        },
+        division: {
+          select: {
+            id: true,
+            name: true
+          }
         },
         _count: {
           select: { messages: true },
@@ -108,10 +175,19 @@ export const getThreads = async (req: Request, res: Response) => {
       orderBy: { updatedAt: "desc" },
     });
 
+    // Get unread count for current user in each thread
+    const threadsWithUnread = threads.map(thread => {
+      const userThread = thread.members.find(m => m.userId === userId);
+      return {
+        ...thread,
+        unreadCount: userThread?.unreadCount || 0
+      };
+    });
+
     console.log(`✅ Found ${threads.length} threads for user ${userId}`);
     return res.json({
       success: true,
-      data: threads,
+      data: threadsWithUnread,
       count: threads.length,
     });
   } catch (error) {
@@ -126,7 +202,7 @@ export const sendMessage = async (req: Request, res: Response) => {
   const { senderId, content, repliesToId } = req.body;
 
   console.log(
-    `💬 Sending message - Thread: ${threadId}, Sender: ${senderId} reply ${repliesToId}`
+    `💬 Sending message - Thread: ${threadId}, Sender: ${senderId}`
   );
 
   if (!senderId || !content) {
@@ -176,80 +252,117 @@ export const sendMessage = async (req: Request, res: Response) => {
         .json({ error: "User is not a member of this thread" });
     }
 
-    const message = await prisma.message.create({
-      data: {
-        threadId,
-        senderId,
-        content,
-        repliesToId: repliesToId || null,
-      },
-      include: {
-        sender: {
-          select: {
-            id: true,
-            name: true,
-            username: true,
-            image: true,
-            email: true,
-            phoneNumber: true,
-          },
+    // Create message and update unread counts in a transaction
+    const result = await prisma.$transaction(async (tx) => {
+      // Create the message
+      const message = await tx.message.create({
+        data: {
+          threadId,
+          senderId,
+          content,
+          repliesToId: repliesToId || null,
         },
-        repliesTo: {
-          include: {
-            sender: {
-              select: {
-                id: true,
-                name: true,
-                username: true,
-                image: true,
+        include: {
+          sender: {
+            select: {
+              id: true,
+              name: true,
+              username: true,
+              image: true,
+              email: true,
+              phoneNumber: true,
+            },
+          },
+          repliesTo: {
+            include: {
+              sender: {
+                select: {
+                  id: true,
+                  name: true,
+                  username: true,
+                  image: true,
+                },
               },
             },
           },
+          readBy: true,
+        },    
+      });
+
+      // Update thread's last activity
+      await tx.thread.update({
+        where: { id: threadId },
+        data: { updatedAt: new Date() },
+      });
+
+      // Increment unread count for all members EXCEPT the sender
+      await tx.userThread.updateMany({
+        where: {
+          threadId: threadId,
+          userId: { not: senderId }
         },
-        readBy: true,
-      },    
+        data: {
+          unreadCount: { increment: 1 }
+        }
+      });
+
+      // Get updated unread counts
+      const updatedUserThreads = await tx.userThread.findMany({
+        where: {
+          threadId: threadId,
+          userId: { not: senderId }
+        },
+        select: {
+          userId: true,
+          unreadCount: true
+        }
+      });
+
+      return { message, updatedUserThreads };
     });
 
-    // Update thread's last activity
-    await prisma.thread.update({
-      where: { id: threadId },
-      data: { updatedAt: new Date() },
-    });
-
-    console.log(`✅ Message created: ${message.id} in thread ${threadId}`);
+    console.log(`✅ Message created: ${result.message.id} in thread ${threadId}`);
 
     // 💡 SOCKET INTEGRATION: Broadcast the new message
     if (req.io) {
       const messageData = {
-        ...message,
+        ...result.message,
         timestamp: new Date().toISOString(),
       };
 
       req.io.to(threadId).emit("new_message", messageData);
       console.log(`📤 Broadcasted new_message to thread ${threadId}`);
 
-      // Also emit to sender's personal room for confirmation
+      // Emit unread count updates to affected users
+      result.updatedUserThreads.forEach(userThread => {
+        req.io.to(userThread.userId).emit('unread_count_update', {
+          threadId: threadId,
+          unreadCount: userThread.unreadCount
+        });
+        console.log(`📤 Sent unread count (${userThread.unreadCount}) to user ${userThread.userId}`);
+      });
+
+      // Confirm to sender
       req.io.to(senderId).emit("message_sent", {
-        messageId: message.id,
+        messageId: result.message.id,
         threadId,
         timestamp: new Date().toISOString(),
       });
     }
 
-    // 🆕 Send notifications to other thread members (not the sender)
+    // 🆕 Send notifications to other thread members
     try {
       const otherMembers = thread.members
         .filter(m => m.userId !== senderId)
         .map(m => m.userId);
 
       if (otherMembers.length > 0) {
-        // Create message preview (truncate if too long)
         const messagePreview = content.length > 100 
           ? `${content.substring(0, 97)}...` 
           : content;
 
         const chatNotif = notificationTemplates.chat.newMessage(
-          message.sender.name || 'Someone',
+          result.message.sender.name || 'Someone',
           thread.name || (thread.division?.name ? `${thread.division.name} Chat` : 'Group Chat'),
           messagePreview
         );
@@ -265,12 +378,11 @@ export const sendMessage = async (req: Request, res: Response) => {
       }
     } catch (notifError) {
       console.error('Failed to send chat notifications:', notifError);
-      // Don't fail the request if notification fails
     }
 
     return res.status(201).json({
       success: true,
-      data: message,
+      data: result.message,
       message: "Message sent successfully",
     });
   } catch (error) {
@@ -297,7 +409,10 @@ export const getMessages = async (req: Request, res: Response) => {
 
     const [messages, totalCount] = await Promise.all([
       prisma.message.findMany({
-        where: { threadId },
+        where: { 
+          threadId,
+          isDeleted: false
+        },
         orderBy: { createdAt: "desc" },
         skip,
         take: Number(limit),
@@ -321,10 +436,15 @@ export const getMessages = async (req: Request, res: Response) => {
           },
         },
       }),
-      prisma.message.count({ where: { threadId } }),
+      prisma.message.count({ 
+        where: { 
+          threadId,
+          isDeleted: false 
+        } 
+      }),
     ]);
 
-    // Reverse to show oldest first (descending → ascending)
+    // Reverse to show oldest first
     const sortedMessages = messages.reverse();
 
     console.log(
@@ -347,79 +467,148 @@ export const getMessages = async (req: Request, res: Response) => {
   }
 };
 
-// Mark a message as read
-export const markAsRead = async (req: Request, res: Response) => {
-  const { messageId } = req.params;
-  const { userId: readerId } = req.body;
+// 🆕 Mark entire thread as read (resets unread count to 0)
+export const markThreadAsRead = async (req: Request, res: Response) => {
+  const { threadId } = req.params;
+  const { userId } = req.body;
 
-  console.log(`👁️ Marking message ${messageId} as read by user ${readerId}`);
+  console.log(`👁️ Marking thread ${threadId} as read by user ${userId}`);
 
-  if (!messageId) {
-    return res.status(400).json({ error: "Message ID is required" });
-  }
-
-  if (!readerId) {
-    return res.status(400).json({ error: "User ID is required" });
+  if (!threadId || !userId) {
+    return res.status(400).json({ error: "Thread ID and User ID are required" });
   }
 
   try {
-    // Find the message and thread info
-    const messageInfo = await prisma.message.findUnique({
-      where: { id: messageId },
-      select: { threadId: true, senderId: true },
+    // Verify user is a member of the thread
+    const userThread = await prisma.userThread.findUnique({
+      where: {
+        threadId_userId: {
+          threadId,
+          userId
+        }
+      }
     });
 
-    if (!messageInfo) {
-      console.log(`❌ Message ${messageId} not found`);
-      return res.status(404).json({ error: "Message not found" });
+    if (!userThread) {
+      return res.status(404).json({ error: "User is not a member of this thread" });
     }
 
-    // Don't mark own messages as read
-    if (messageInfo.senderId === readerId) {
-      console.log(`⏭️ Skipping read receipt for own message`);
+    // Only reset if there's actually unread messages
+    if (userThread.unreadCount === 0) {
       return res.json({
         success: true,
-        message: "Own message, no read receipt needed",
+        message: "Thread already marked as read",
+        unreadCount: 0
       });
     }
 
-    await prisma.messageReadBy.upsert({
-      where: { messageId_userId: { messageId, userId: readerId } },
-      update: { readAt: new Date() },
-      create: { messageId, userId: readerId },
+    // Reset unread count to 0
+    await prisma.userThread.update({
+      where: {
+        threadId_userId: {
+          threadId,
+          userId
+        }
+      },
+      data: {
+        unreadCount: 0
+      }
     });
 
-    // Get the user data separately for the socket broadcast
-    const readerUser = await prisma.user.findUnique({
-      where: { id: readerId },
-      select: { id: true, name: true },
+    // Get total unread count across all threads
+    const allUserThreads = await prisma.userThread.findMany({
+      where: { userId },
+      select: { unreadCount: true }
     });
+    const totalUnread = allUserThreads.reduce((sum, ut) => sum + ut.unreadCount, 0);
 
-    console.log(`✅ Message ${messageId} marked as read by ${readerId}`);
+    console.log(`✅ Thread ${threadId} marked as read by user ${userId}`);
 
-    // 💡 SOCKET INTEGRATION: Broadcast read receipt
+    // 💡 SOCKET: Emit 'thread_marked_read' event (matches frontend listener)
     if (req.io) {
-      const readData = {
-        messageId,
-        threadId: messageInfo.threadId,
-        readerName: readerUser?.name || "Unknown User",
-        timestamp: new Date().toISOString(),
-      };
-
-      req.io.to(messageInfo.threadId).emit("message_read", readData);
-      console.log(
-        `📤 Broadcasted message_read to thread ${messageInfo.threadId}`
-      );
+      req.io.to(userId).emit('thread_marked_read', {
+        threadId,
+        unreadCount: 0,
+        totalUnreadCount: totalUnread,
+        timestamp: new Date().toISOString()
+      });
+      console.log(`📤 Sent thread_marked_read event to user ${userId}`);
     }
 
     return res.json({
       success: true,
-      // data: readReceipt,
-      message: "Message marked as read",
+      message: "Thread marked as read",
+      unreadCount: 0,
+      totalUnreadCount: totalUnread
     });
   } catch (error) {
-    console.error("❌ Error marking message as read:", error);
-    return res.status(500).json({ error: "Failed to mark message as read" });
+    console.error("❌ Error marking thread as read:", error);
+    return res.status(500).json({ error: "Failed to mark thread as read" });
+  }
+};
+
+
+// 🆕 Get unread count for a specific thread
+export const getThreadUnreadCount = async (req: Request, res: Response) => {
+  try {
+    const { threadId } = req.params;
+    const { userId } = req.query;
+
+    if (!threadId || !userId) {
+      return res.status(400).json({ error: "Thread ID and User ID are required" });
+    }
+
+    const userThread = await prisma.userThread.findUnique({
+      where: {
+        threadId_userId: {
+          threadId,
+          userId: userId as string
+        }
+      },
+      select: {
+        unreadCount: true
+      }
+    });
+
+    if (!userThread) {
+      return res.status(404).json({ error: "User is not a member of this thread" });
+    }
+
+    return res.json({
+      success: true,
+      threadId,
+      unreadCount: userThread.unreadCount
+    });
+  } catch (error) {
+    console.error("❌ Error getting unread count:", error);
+    return res.status(500).json({ error: "Failed to get unread count" });
+  }
+};
+
+// 🆕 Get total unread count across all threads for a user
+export const getTotalUnreadCount = async (req: Request, res: Response) => {
+  try {
+    const { userId } = req.params;
+
+    if (!userId) {
+      return res.status(400).json({ error: "User ID is required" });
+    }
+
+    const userThreads = await prisma.userThread.findMany({
+      where: { userId },
+      select: { unreadCount: true }
+    });
+
+    const totalUnread = userThreads.reduce((sum, ut) => sum + ut.unreadCount, 0);
+
+    return res.json({
+      success: true,
+      userId,
+      totalUnreadCount: totalUnread
+    });
+  } catch (error) {
+    console.error("❌ Error getting total unread count:", error);
+    return res.status(500).json({ error: "Failed to get total unread count" });
   }
 };
 
@@ -437,7 +626,13 @@ export const getThreadMembers = async (req: Request, res: Response) => {
       where: { threadId },
       include: {
         user: {
-          select: { id: true, name: true, username: true },
+          select: { 
+            id: true, 
+            name: true, 
+            username: true,
+            image: true,
+            email: true
+          },
         },
       },
     });
@@ -463,7 +658,7 @@ export const getAvailableUsers = async (req: Request, res: Response) => {
       return res.status(400).json({ error: "User ID is required" });
     }
 
-    // Step 1: Get user IDs that already have single chats with current user
+    // Get user IDs that already have DMs with current user
     const existingChatUsers = await prisma.userThread.findMany({
       where: {
         thread: {
@@ -481,7 +676,7 @@ export const getAvailableUsers = async (req: Request, res: Response) => {
 
     const existingUserIds = existingChatUsers.map((ut: any) => ut.userId);
 
-    // Step 2: Get all users except current user and those with existing chats
+    // Get all users except current user and those with existing DMs
     const availableUsers = await prisma.user.findMany({
       where: {
         id: {
@@ -517,23 +712,37 @@ export const deleteMessage = async (req: Request, res: Response) => {
   const { messageId } = req.params;
   const userId = req.user?.id;
 
+  if (!userId) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+
   try {
     const message = await prisma.message.findUnique({
       where: { id: messageId },
+      select: {
+        id: true,
+        senderId: true,
+        threadId: true,
+        isDeleted: true
+      }
     });
 
     if (!message) {
       return res.status(404).json({ error: "Message not found" });
     }
 
-    // ✅ Only sender can delete their message
+    if (message.isDeleted) {
+      return res.status(400).json({ error: "Message already deleted" });
+    }
+
+    // Only sender can delete their message
     if (message.senderId !== userId) {
       return res
         .status(403)
         .json({ error: "You can only delete your own messages" });
     }
 
-    // ✅ Soft delete instead of hard delete
+    // Soft delete
     const updated = await prisma.message.update({
       where: { id: messageId },
       data: {
@@ -542,7 +751,20 @@ export const deleteMessage = async (req: Request, res: Response) => {
       },
     });
 
+    console.log(`✅ Message ${messageId} deleted by user ${userId}`);
+
+    // 💡 SOCKET INTEGRATION: Broadcast deletion
+    if (req.io) {
+      req.io.to(message.threadId).emit('message_deleted', {
+        messageId,
+        threadId: message.threadId,
+        timestamp: new Date().toISOString()
+      });
+      console.log(`📤 Broadcasted message_deleted to thread ${message.threadId}`);
+    }
+
     return res.status(200).json({
+      success: true,
       message: "Message deleted successfully",
       data: updated,
     });

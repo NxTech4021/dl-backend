@@ -152,30 +152,51 @@ export function socketHandler(httpServer: HttpServer) {
 
 
   
-  io.on('connection', (socket) => {
+  io.on('connection', async (socket) => {
     const userId = socket.data.userId;
     const user = socket.data.user;
     
-    console.log(`✅ User connected: ${socket.id} (userId: ${userId}, role: ${user.role}) at ${new Date().toISOString()}`);
+    console.log(`✅ User connected: ${socket.id} (userId: ${userId}, role: ${user.role})`);
 
-    // Automatically join user to their personal room using VERIFIED userId
     if (userId) {
       socket.join(userId);
       activeUsers.set(userId, socket.id);
       userSockets.set(userId, socket.id);
       io.emit('user_status_change', { userId, isOnline: true });
       
-      // Also join admin users to admin room if they have admin privileges
       if (user.role === 'ADMIN' || user.role === 'SUPERADMIN') {
         socket.join('admin_room');
         console.log(`📋 Admin user ${userId} joined admin room`);
       }
-    }
 
-    // Remove the deprecated set_user_id handler or keep the warning
-    socket.on('set_user_id', (claimedUserId: string) => {
-      console.warn(`⚠️  set_user_id is deprecated and ignored. User ${userId} tried to claim ${claimedUserId}`);
-    });
+      // Auto-join user's threads
+      try {
+        const userThreads = await prisma.userThread.findMany({
+          where: { userId },
+          select: { threadId: true, thread: { select: { name: true, isGroup: true } } }
+        });
+
+        console.log(`🔄 Auto-joining ${userThreads.length} thread rooms for user ${userId}...`);
+        
+        userThreads.forEach(ut => {
+          socket.join(ut.threadId);
+          const threadName = ut.thread.name || (ut.thread.isGroup ? 'Group Chat' : 'DM');
+          console.log(`  ✅ Joined thread room: ${ut.threadId} (${threadName})`);
+        });
+
+        console.log(`✅ User ${userId} successfully joined ${userThreads.length} thread rooms`);
+
+        // Send unread notification count
+        const unreadCount = await prisma.userNotification.count({
+          where: { userId, read: false }
+        });
+        
+        socket.emit('unread_notifications_count', { count: unreadCount });
+        console.log(`📧 Sent unread notification count (${unreadCount}) to user ${userId}`);
+      } catch (error) {
+        console.error('❌ Error auto-joining threads:', error);
+      }
+    }
 
     socket.on('disconnect', () => {
       if (userId) {
@@ -188,34 +209,68 @@ export function socketHandler(httpServer: HttpServer) {
       }
     });
     
-    // Typing Indicators
+    // 🆕 Mark notification as read
+    socket.on('mark_notification_read', async (data: { notificationId: string }) => {
+      try {
+        await prisma.userNotification.updateMany({
+          where: { notificationId: data.notificationId, userId },
+          data: { read: true, readAt: new Date() }
+        });
+
+        socket.emit('notification_marked_read', {
+          notificationId: data.notificationId,
+          timestamp: new Date().toISOString()
+        });
+      } catch (error) {
+        console.error('Error marking notification as read:', error);
+      }
+    });
+
+    socket.on('mark_all_notifications_read', async () => {
+      try {
+        await prisma.userNotification.updateMany({
+          where: { userId, read: false },
+          data: { read: true, readAt: new Date() }
+        });
+
+        socket.emit('all_notifications_marked_read', {
+          timestamp: new Date().toISOString()
+        });
+      } catch (error) {
+        console.error('Error marking all notifications as read:', error);
+      }
+    });
+
+    socket.on('request_unread_count', async () => {
+      try {
+        const count = await prisma.userNotification.count({
+          where: { userId, read: false }
+        });
+        socket.emit('unread_notifications_count', { count });
+      } catch (error) {
+        console.error('Error getting unread count:', error);
+      }
+    });
+
+    // Typing indicators
     socket.on('typing_start', ({ threadId, senderId }) => {
       socket.to(threadId).emit('typing_status', { threadId, senderId, isTyping: true });
     });
 
     socket.on('typing', (data) => {
-      console.log('Received typing event:', data);
       socket.to(data.threadId).emit('user_typing', data);
     });
 
     socket.on('typing_stop', ({ threadId, senderId }) => {
       socket.to(threadId).emit('typing_status', { threadId, senderId, isTyping: false });
     });
-    
-    // Thread Rooms
+
+    // Thread room management
     socket.on('join_thread', (data: string | { threadId: string }) => {
-      // Handle both formats: string or { threadId: string }
       const threadId = typeof data === 'string' ? data : data.threadId;
-      
-      if (!threadId) {
-        console.error(`❌ Socket ${socket.id} tried to join with invalid threadId:`, data);
-        return;
-      }
+      if (!threadId) return;
       
       socket.join(threadId);
-      console.log(`✅ Socket ${socket.id} joined thread ${threadId}`);
-      
-      // Send acknowledgment back to client
       socket.emit('thread_joined', { 
         threadId, 
         socketId: socket.id,
@@ -224,25 +279,16 @@ export function socketHandler(httpServer: HttpServer) {
     });
 
     socket.on('leave_thread', (data: string | { threadId: string }) => {
-      // Handle both formats: string or { threadId: string }
       const threadId = typeof data === 'string' ? data : data.threadId;
-      
-      if (!threadId) {
-        console.error(`❌ Socket ${socket.id} tried to leave with invalid threadId:`, data);
-        return;
-      }
+      if (!threadId) return;
       
       socket.leave(threadId);
-      console.log(`✅ Socket ${socket.id} left thread ${threadId}`);
     });
 
-    // Notification-specific events
     socket.on('join_notifications', () => {
-      // Users are automatically in their personal room (userId), but this can be used for confirmation
       socket.emit('notifications_joined', { userId });
     });
-    
-    // Admin-specific events
+
     socket.on('join_admin_events', () => {
       if (user.role === 'ADMIN' || user.role === 'SUPERADMIN') {
         socket.join('admin_events');
