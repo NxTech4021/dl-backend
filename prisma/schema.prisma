@@ -581,6 +581,7 @@ model UserThread {
   thread   Thread   @relation(fields: [threadId], references: [id])
   threadId String
   user     User     @relation(fields: [userId], references: [id])
+  unreadCount Int   @default(0)
   userId   String
   role     String?
   joinedAt DateTime @default(now())
