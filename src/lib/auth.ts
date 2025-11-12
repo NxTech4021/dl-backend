@@ -51,20 +51,24 @@ const defaultTrustedOrigins = [
   "http://192.168.0.123:8081",
   "exp://192.168.1.4:8081",
   "http://192.168.1.4:8081",
-  "https://staging.appdevelopers.my",
+  "https://*.appdevelopers.my",
+  "http://*.appdevelopers.my",
   "https://0.0.0.0",
   "deuceleague://",
 ];
+
 const envTrustedOrigins = [
   ...(process.env.BETTER_AUTH_TRUSTED_ORIGINS || "")
     .split(",")
     .map((origin) => origin.trim())
     .filter(Boolean),
 ];
+
 const corsAllowedOrigins = (process.env.CORS_ALLOWED_ORIGINS || "")
   .split(",")
   .map((origin) => origin.trim())
   .filter(Boolean);
+
 const combinedTrustedOrigins = Array.from(
   new Set([
     ...defaultTrustedOrigins,
@@ -73,7 +77,6 @@ const combinedTrustedOrigins = Array.from(
     ...getTrustedOrigins(),
   ])
 );
-// console.log("   Trusted origins:", combinedTrustedOrigins);
 
 // Test database connection
 prisma
@@ -84,21 +87,6 @@ prisma
   .catch((error) => {
     console.error("❌ Database connection failed:", error);
   });
-
-// Add query logging to debug verification issues
-// TODO: Re-enable query logging when Prisma client is configured with log: ['query']
-// prisma.$on("query", (e) => {
-//   if (e.query.includes("verification")) {
-//     console.log("🔍 Verification Query:", e.query);
-//     console.log("🔍 Verification Params:", e.params);
-//     console.log("🔍 Verification Duration:", e.duration + "ms");
-
-//     // Add specific debugging for verification lookups
-//     if (e.query.includes("SELECT") && e.query.includes("verification")) {
-//       console.log("🔍 Looking up verification records for:", e.params[0]);
-//     }
-//   }
-// });
 
 export const auth = betterAuth({
   appName: "DeuceLeague",
@@ -173,7 +161,7 @@ export const auth = betterAuth({
 
   basePath: authBasePath,
 
-  // trustedOrigins: combinedTrustedOrigins,
+  trustedOrigins: combinedTrustedOrigins,
 
   // Session configuration for mobile/Expo compatibility
   session: {
