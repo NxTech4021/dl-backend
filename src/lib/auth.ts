@@ -188,6 +188,7 @@ export const auth = betterAuth({
   // Advanced configuration for mobile/Expo compatibility
   advanced: {
     useSecureCookies: false, // Set to false for development/localhost
+    disableOriginCheck: true, // Need to remove for prod
     crossSubDomainCookies: {
       enabled: false, // Disable for mobile apps
     },
