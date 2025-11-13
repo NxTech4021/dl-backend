@@ -23,7 +23,8 @@ console.log(
     process.env.BASE_URL || "Using default: http://192.168.1.3:3001"
   }`
 );
-const authBasePath = process.env.BETTER_AUTH_BASE_PATH || "/api/auth";
+// const authBasePath = process.env.BETTER_AUTH_BASE_PATH || "/api/auth";
+const authBasePath = "/auth/";
 console.log(`   BETTER_AUTH_BASE_PATH: ${authBasePath}`);
 const defaultTrustedOrigins = [
   "http://localhost:3030",
