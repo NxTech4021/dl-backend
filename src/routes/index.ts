@@ -15,7 +15,7 @@ import matchRoutes from "./matchRoutes";
 const router = express.Router();
 
 router.get("/health", (req, res) => {
-  res.json({ status: "OK", message: "Server is runninasdasdg" });
+  res.json({ status: "OK", message: "Server is running..." });
 });
 
 router.use("/admin", adminRouter);
