@@ -12,11 +12,10 @@ import chatRoutes from "./threadRoutes";
 import notificationRouter from "./notificationRoutes";
 import matchRoutes from "./matchRoutes";
 
-
 const router = express.Router();
 
 router.get("/health", (req, res) => {
-  res.json({ status: "OK", message: "Server is running" });
+  res.json({ status: "OK", message: "Server is runninasdasdg" });
 });
 
 router.use("/admin", adminRouter);
