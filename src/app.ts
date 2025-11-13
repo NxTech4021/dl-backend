@@ -57,6 +57,8 @@ app.use(
       "http://localhost:8081",
       "http://192.168.1.3:3001", // Added current IP from logs
       "http://192.168.1.7:3001",
+      "http://192.168.100.3:8081", // Mobile app origin
+      "exp://192.168.100.3:8081", // Expo development server
       "http://192.168.100.53:8081", // Mobile app origin
       "exp://192.168.100.53:8081", // Expo development server
       "http://172.20.10.3:8081", // New mobile app origin
@@ -79,10 +81,13 @@ app.use(
   })
 );
 
-// According to the official Express documentaticlon for better-auth,
+// According to the official Express documentation for better-auth,
 // the auth handler must be mounted BEFORE express.json().
 // Express v5 requires the {*any} syntax for wildcard routes.
-app.all("/auth/{*any}", (req, res) => {
+// Register auth handler for both paths to support both development and production:
+// - Development: /api/auth/{*any} (direct access with /api prefix)
+// - Production: /auth/{*any} (nginx strips /api prefix, forwards /auth/...)
+const authHandler = (req: express.Request, res: express.Response) => {
   console.log(`🔐 Auth request: ${req.method} ${req.path}`);
   try {
     void toNodeHandler(auth)(req, res);
@@ -90,7 +95,11 @@ app.all("/auth/{*any}", (req, res) => {
     console.error("❌ Auth handler error:", error);
     res.status(500).json({ error: "Authentication error" });
   }
-});
+};
+
+// Register for both paths to work in both environments
+app.all("/api/auth/{*any}", authHandler);
+app.all("/auth/{*any}", authHandler);
 
 // The JSON parser for any other routes you might add later.
 app.use(express.json());
@@ -103,7 +112,12 @@ app.use(socketMiddleware(io));
 // Development: /api, Production: "" (nginx handles /api prefix)
 const apiPrefix = getApiPrefix();
 console.log(`📡 API routes mounted at: ${apiPrefix || "(root)"}`);
-app.use(router);
+// Only use prefix if it's not empty (development), otherwise mount at root (production)
+if (apiPrefix) {
+  app.use(apiPrefix, router);
+} else {
+  app.use(router);
+}
 
 // Health check endpoint
 app.get("/health", (req, res) => {
