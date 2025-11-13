@@ -24,6 +24,8 @@ import {
 
 const app = express();
 
+app.set("trust proxy", 1);
+
 const httpServer = createServer(app);
 const io = socketHandler(httpServer);
 
@@ -101,7 +103,7 @@ app.use(socketMiddleware(io));
 // Development: /api, Production: "" (nginx handles /api prefix)
 const apiPrefix = getApiPrefix();
 console.log(`📡 API routes mounted at: ${apiPrefix || "(root)"}`);
-app.use(apiPrefix, router);
+app.use(router);
 
 // Health check endpoint
 app.get("/health", (req, res) => {
