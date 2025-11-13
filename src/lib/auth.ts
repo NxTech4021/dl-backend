@@ -6,7 +6,11 @@ import { PrismaClient } from "@prisma/client";
 import { createAuthMiddleware, emailOTP, username } from "better-auth/plugins";
 import { expo } from "@better-auth/expo";
 import { sendEmail } from "../config/nodemailer";
-import { getBackendBaseURL, getTrustedOrigins } from "../config/network";
+import {
+  getBackendBaseURL,
+  getTrustedOrigins,
+  getAuthBasePath,
+} from "../config/network";
 
 // Debug environment variables
 console.log("🔐 Better Auth Environment Check:");
@@ -23,8 +27,9 @@ console.log(
     process.env.BASE_URL || "Using default: http://192.168.1.3:3001"
   }`
 );
-// const authBasePath = process.env.BETTER_AUTH_BASE_PATH || "/api/auth";
-const authBasePath = "/auth/";
+// Get auth base path dynamically based on environment
+// Development: /api/auth/, Production: /auth/ (nginx handles /api prefix)
+const authBasePath = getAuthBasePath();
 console.log(`   BETTER_AUTH_BASE_PATH: ${authBasePath}`);
 const defaultTrustedOrigins = [
   "http://localhost:3030",
@@ -38,6 +43,8 @@ const defaultTrustedOrigins = [
   "exp://192.168.1.5:8081",
   "http://192.168.100.28:8081",
   "exp://192.168.100.28:8081",
+  "http://192.168.100.3:8081",
+  "exp://192.168.100.3:8081",
   "http://192.168.100.53:8081",
   "exp://192.168.100.53:8081",
   "http://172.20.10.3:8081",
