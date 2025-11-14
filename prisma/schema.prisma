@@ -55,7 +55,6 @@ model User {
   //Thread relations
   userThreads  UserThread[]
   messages     Message[]
-  readMessages MessageReadBy[]
 
   // Questionnaire relations
   questionnaireResponses QuestionnaireResponse[]
@@ -607,22 +606,10 @@ model Message {
   isEdited  Boolean @default(false)
   isDeleted Boolean @default(false)
 
-  readBy    MessageReadBy[]
   createdAt DateTime        @default(now())
   updatedAt DateTime        @updatedAt
 
   @@index([threadId, createdAt])
-}
-
-model MessageReadBy {
-  id        String   @id @default(cuid())
-  message   Message  @relation(fields: [messageId], references: [id])
-  messageId String
-  user      User     @relation(fields: [userId], references: [id])
-  userId    String
-  readAt    DateTime?
-
-  @@unique([messageId, userId])
 }
 
 model Friendship {
