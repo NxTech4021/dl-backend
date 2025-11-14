@@ -254,6 +254,7 @@ model Sponsorship {
   leagues   League[]
   createdBy Admin?     @relation("SponsorshipCreatedBy", fields: [createdById], references: [id])
   divisions Division[] @relation("DivisionSponsor")
+  seasons   Season[]   @relation("SeasonSponsor") 
 
   @@map("sponsorship")
 }
@@ -290,6 +291,10 @@ model Season {
   
   categoryId  String?
   category    Category?  @relation(fields: [categoryId], references: [id])
+  sponsorId String?
+  sponsor   Sponsorship? @relation("SeasonSponsor", fields: [sponsorId], references: [id], onDelete: SetNull)
+ 
+
   notifications     Notification[]
 
   waitlistId        String?
@@ -300,6 +305,7 @@ model Season {
 
   @@index([status])
   @@index([isActive])
+  @@index([sponsorId])
 }
 
 model Waitlist {
@@ -381,7 +387,7 @@ model Division {
   isActiveDivision      Boolean @default(true)
   pointsThreshold       Int?
 
-  // Sponsorship fields (from Excel spec)
+  // Sponsorship fields
   divisionSponsorId     String? // division_sponsor_id
   divisionSponsor       Sponsorship? @relation("DivisionSponsor", fields: [divisionSponsorId], references: [id], onDelete: SetNull)
   sponsoredDivisionName String? // sponsored_division_name
