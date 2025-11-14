@@ -285,7 +285,7 @@ export const sendMessage = async (req: Request, res: Response) => {
               },
             },
           },
-          readBy: true,
+          // readBy: true,
         },    
       });
 
@@ -427,13 +427,13 @@ export const getMessages = async (req: Request, res: Response) => {
               },
             },
           },
-          readBy: {
-            include: {
-              user: {
-                select: { id: true, name: true },
-              },
-            },
-          },
+          // readBy: {
+          //   include: {
+          //     user: {
+          //       select: { id: true, name: true },
+          //     },
+          //   },
+          // },
         },
       }),
       prisma.message.count({ 
@@ -741,8 +741,7 @@ export const deleteMessage = async (req: Request, res: Response) => {
         .status(403)
         .json({ error: "You can only delete your own messages" });
     }
-
-    // Soft delete
+    
     const updated = await prisma.message.update({
       where: { id: messageId },
       data: {
