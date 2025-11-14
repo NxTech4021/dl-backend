@@ -55,7 +55,6 @@ model User {
   //Thread relations
   userThreads  UserThread[]
   messages     Message[]
-  readMessages MessageReadBy[]
 
   // Questionnaire relations
   questionnaireResponses QuestionnaireResponse[]
@@ -255,6 +254,7 @@ model Sponsorship {
   leagues   League[]
   createdBy Admin?     @relation("SponsorshipCreatedBy", fields: [createdById], references: [id])
   divisions Division[] @relation("DivisionSponsor")
+  seasons   Season[]   @relation("SeasonSponsor") 
 
   @@map("sponsorship")
 }
@@ -291,6 +291,10 @@ model Season {
   
   categoryId  String?
   category    Category?  @relation(fields: [categoryId], references: [id])
+  sponsorId String?
+  sponsor   Sponsorship? @relation("SeasonSponsor", fields: [sponsorId], references: [id], onDelete: SetNull)
+ 
+
   notifications     Notification[]
 
   waitlistId        String?
@@ -301,6 +305,7 @@ model Season {
 
   @@index([status])
   @@index([isActive])
+  @@index([sponsorId])
 }
 
 model Waitlist {
@@ -382,7 +387,7 @@ model Division {
   isActiveDivision      Boolean @default(true)
   pointsThreshold       Int?
 
-  // Sponsorship fields (from Excel spec)
+  // Sponsorship fields
   divisionSponsorId     String? // division_sponsor_id
   divisionSponsor       Sponsorship? @relation("DivisionSponsor", fields: [divisionSponsorId], references: [id], onDelete: SetNull)
   sponsoredDivisionName String? // sponsored_division_name
@@ -607,22 +612,10 @@ model Message {
   isEdited  Boolean @default(false)
   isDeleted Boolean @default(false)
 
-  readBy    MessageReadBy[]
   createdAt DateTime        @default(now())
   updatedAt DateTime        @updatedAt
 
   @@index([threadId, createdAt])
-}
-
-model MessageReadBy {
-  id        String   @id @default(cuid())
-  message   Message  @relation(fields: [messageId], references: [id])
-  messageId String
-  user      User     @relation(fields: [userId], references: [id])
-  userId    String
-  readAt    DateTime?
-
-  @@unique([messageId, userId])
 }
 
 model Friendship {

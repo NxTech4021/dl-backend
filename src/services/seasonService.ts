@@ -1,38 +1,6 @@
 import { prisma } from "../lib/prisma";
-import { PrismaClient, Prisma, PaymentStatus } from '@prisma/client';
-
-
-
-interface CreateSeasonData {
-  name: string;
-  startDate: string | Date;
-  endDate: string | Date;
-  regiDeadline?: string | Date;
-  description?: string;
-  entryFee: string | number;
-  leagueIds: string[];
-  categoryId: string;
-  isActive?: boolean;
-  paymentRequired?: boolean;
-  promoCodeSupported?: boolean;
-  withdrawalEnabled?: boolean;
-}
-
-interface SeasonUpdateData {
-  name?: string;
-  startDate?: string;
-  endDate?: string;
-  regiDeadline?: string;
-  entryFee?: number;
-  description?: string;
-  leagueIds?: string[];
-  categoryId?: string;
-  isActive?: boolean;
-  status?: "UPCOMING" | "ACTIVE" | "FINISHED" | "CANCELLED";
-  paymentRequired?: boolean;
-  promoCodeSupported?: boolean;
-  withdrawalEnabled?: boolean;
-}
+import { Prisma, PaymentStatus } from '@prisma/client';
+import { CreateSeasonData, UpdateSeasonData } from "../types/seasonTypes";
 
 interface StatusUpdate {
   status?: "UPCOMING" | "ACTIVE" | "FINISHED" | "CANCELLED";
@@ -106,14 +74,14 @@ export const createSeasonService = async (data: CreateSeasonData) => {
           gameType: true
         }
       },
-      // category: { // Commented out: TypeScript doesn't recognize category relation in include
-      //   select: {
-      //     id: true,
-      //     name: true,
-      //     genderRestriction: true,
-      //     matchFormat: true
-      //   }
-      // }
+      category: {
+        select: {
+          id: true,
+          name: true,
+          genderRestriction: true,
+          matchFormat: true
+        }
+      }
     }
   });
 };
@@ -312,7 +280,7 @@ export const getActiveSeasonService = async () => {
     include: {
       divisions: { select: { id: true, name: true } },
       leagues: { select: { id: true, name: true } },
-      // category: { select: { id: true, name: true } }, // Commented out: TypeScript doesn't recognize category relation
+      category: { select: { id: true, name: true } },
     },
   });
 };
@@ -338,7 +306,7 @@ export const updateSeasonStatusService = async (id: string, data: StatusUpdate) 
   return updatedSeason;
 };
 
-export const updateSeasonService = async (id: string, data: SeasonUpdateData) => {
+export const updateSeasonService = async (id: string, data: UpdateSeasonData) => {
   const updateData: any = {};
   
   if (data.name !== undefined) updateData.name = data.name;
@@ -349,7 +317,7 @@ export const updateSeasonService = async (id: string, data: SeasonUpdateData) =>
   if (data.description !== undefined) updateData.description = data.description ?? null;
   if (data.leagueIds !== undefined) updateData.leagues = { set: data.leagueIds.map(id => ({ id })) };
   if (data.categoryId !== undefined) {
-    (updateData).categoryId = data.categoryId; // Use categoryId field directly - type assertion needed
+    (updateData).categoryId = data.categoryId;
   }
   if (data.isActive !== undefined) updateData.isActive = data.isActive;
   if (data.isActive !== undefined) updateData.isActive = data.isActive;
@@ -370,14 +338,14 @@ export const updateSeasonService = async (id: string, data: SeasonUpdateData) =>
           gameType: true
         }
       },
-      // category: { // Commented out: TypeScript doesn't recognize category relation in include
-      //   select: {
-      //     id: true,
-      //     name: true,
-      //     genderRestriction: true,
-      //     matchFormat: true
-      //   }
-      // }
+      category: {
+        select: {
+          id: true,
+          name: true,
+          genderRestriction: true,
+          matchFormat: true
+        }
+      }
     }
   });
 
