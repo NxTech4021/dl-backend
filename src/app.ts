@@ -1,4 +1,5 @@
 import express from "express";
+import type { Request, Response } from "express";
 import cors from "cors";
 import { createServer } from "http";
 import cookieParser from "cookie-parser";
@@ -84,10 +85,7 @@ app.use(
 // According to the official Express documentation for better-auth,
 // the auth handler must be mounted BEFORE express.json().
 // Express v5 requires the {*any} syntax for wildcard routes.
-// Register auth handler for both paths to support both development and production:
-// - Development: /api/auth/{*any} (direct access with /api prefix)
-// - Production: /auth/{*any} (nginx strips /api prefix, forwards /auth/...)
-const authHandler = (req: express.Request, res: express.Response) => {
+const authHandler = (req: Request, res: Response) => {
   console.log(`🔐 Auth request: ${req.method} ${req.path}`);
   try {
     void toNodeHandler(auth)(req, res);
