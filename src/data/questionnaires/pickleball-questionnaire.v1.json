@@ -40,26 +40,26 @@
       },
       {
         "key": "dupr_singles_reliability",
-        "question": "How reliable do you think your DUPR Singles rating is?",
+        "question": "What is your DUPR Singles reliability score?",
         "type": "number",
         "min": 0,
         "max": 100,
         "step": 1,
         "optional": true,
-        "helptext": "0 = not reliable, 100 = perfectly reliable",
+        "helptext": "Your reliability percentage (0-100%). Leave blank if unsure - we'll use a default.",
         "visible_if": [
           { "key": "has_dupr", "op": "==", "value": true }
         ]
       },
       {
         "key": "dupr_doubles_reliability",
-        "question": "How reliable do you think your DUPR Doubles rating is?",
+        "question": "What is your DUPR Doubles reliability score?",
         "type": "number",
         "min": 0,
         "max": 100,
         "step": 1,
         "optional": true,
-        "helptext": "0 = not reliable, 100 = perfectly reliable",
+        "helptext": "Your reliability percentage (0-100%). Leave blank if unsure - we'll use a default.",
         "visible_if": [
           { "key": "has_dupr", "op": "==", "value": true }
         ]
@@ -69,9 +69,8 @@
         "question": "How long have you been playing pickleball?",
         "type": "single_choice",
         "options": [
-          { "label": "Less than 1 month", "weight": -0.7 },
-          { "label": "1-3 months", "weight": -0.4 },
-          { "label": "3-6 months", "weight": -0.1 },
+          { "label": "Less than 3 month", "weight": -0.7 },
+          { "label": "3-6 months", "weight": -0.4 },
           { "label": "6-12 months", "weight": 0.2 },
           { "label": "1-2 years", "weight": 0.5 },
           { "label": "More than 2 years", "weight": 1.0 }
@@ -94,21 +93,22 @@
         "question": "How often do you play pickleball?",
         "type": "single_choice",
         "options": [
-          { "label": "Less than once a week", "weight": -0.6 },
-          { "label": "1-2 times per week", "weight": -0.2 },
-          { "label": "3-4 times per week", "weight": 0.3 },
-          { "label": "5+ times per week", "weight": 0.8 }
+          { "label": "Less than once a month", "weight": -0.4 },
+          { "label": "1-2 times a month", "weight": 0.0 },
+          { "label": "Once a week", "weight": 0.3 },
+          { "label": "2-3 times a week", "weight": 0.7 },
+          { "label": "4+ times a week", "weight": 1.0 }
         ]
       },
       {
         "key": "competitive_level",
-        "question": "What best describes your current competitive level?",
+        "question": "What is the highest level you usually play at??",
         "type": "single_choice",
         "options": [
-          { "label": "Recreational only", "weight": -0.6 },
-          { "label": "Social/Club matches", "weight": -0.2 },
-          { "label": "Local competitive events", "weight": 0.3 },
-          { "label": "Regional/National competitive events", "weight": 0.8 }
+          { "label": "Recreational/social games", "weight": -0.4 },
+          { "label": "Club/DUPR match play", "weight": 0.2 },
+          { "label": "Novice/Intermediate Competitive tournaments", "weight": 0.7 },
+          { "label": "High-level competitive tournaments", "weight": 1.0 }
         ]
       },
       {
@@ -160,25 +160,25 @@
       },
       {
         "key": "self_rating",
-        "question": "How would you rate yourself as a pickleball player?",
+        "question": "How would you rate yourself as a pickleball player on a scale of 1.0 to 5.0?",
         "type": "single_choice",
         "options": [
-          { "label": "Beginner: Just starting, learning the basic rules and strokes.", "weight": -0.8 },
-          { "label": "Improver: Can sustain short rallies but lacks consistency and tactical knowledge.", "weight": -0.4 },
-          { "label": "Intermediate: Can play consistently, understands basic tactics, and uses a variety of shots.", "weight": 0.0 },
-          { "label": "Advanced: Has a strong command of all major shots and a deep understanding of strategy.", "weight": 0.6 },
-          { "label": "Expert/Competitive: Plays at a high level in competitive tournaments.", "weight": 1.0 }
+          { "label": "1.0-1.5 (Beginner)", "weight": -0.8 },
+          { "label": "2.0-2.5 (Lower Intermediate)", "weight": -0.4 },
+          { "label": "3.0-3.5 (Intermediate)", "weight": 0.0 },
+          { "label": "4.0-4.5 (Advanced)", "weight": 0.5 },
+          { "label": "5.0+ (Expert/Pro)", "weight": 1.0 }
         ]
       },
       {
         "key": "tournament",
-        "question": "Have you played in pickleball tournaments?",
+        "question": "Have you competed in pickleball tournaments?",
         "type": "single_choice",
         "options": [
-          { "label": "Never", "weight": -0.6 },
-          { "label": "Local tournaments", "weight": -0.1 },
-          { "label": "Regional tournaments", "weight": 0.4 },
-          { "label": "National/international tournaments", "weight": 0.9 }
+          { "label": "Never", "weight": -0.5 },
+          { "label": "Recreational/social tournaments", "weight": 0.0 },
+          { "label": "Competitive tournaments", "weight": 0.5 },
+          { "label": "Professional tournaments", "weight": 1.0 }
         ]
       }
     ]

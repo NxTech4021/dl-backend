@@ -122,3 +122,20 @@ export function getApiPrefix(): string {
   // Production typically has nginx/reverse proxy handling the /api prefix
   return process.env.NODE_ENV === "production" ? "" : "/api";
 }
+
+/**
+ * Get the auth base path
+ * - Development: defaults to "/api/auth/" (can be overridden with BETTER_AUTH_BASE_PATH env var)
+ * - Production: defaults to "/auth/" (can be overridden with BETTER_AUTH_BASE_PATH env var)
+ * This matches the API prefix pattern where production has nginx handling the /api prefix
+ */
+export function getAuthBasePath(): string {
+  // If BETTER_AUTH_BASE_PATH is explicitly set, use it
+  if (process.env.BETTER_AUTH_BASE_PATH !== undefined) {
+    return process.env.BETTER_AUTH_BASE_PATH;
+  }
+
+  // Default: use "/api/auth/" in development, "/auth/" in production
+  // Production typically has nginx/reverse proxy handling the /api prefix
+  return process.env.NODE_ENV === "production" ? "/auth/" : "/api/auth/";
+}

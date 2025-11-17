@@ -131,34 +131,38 @@ function getWeightForAnswer(category: string, answer: string): number {
       "More than 2 years": 1.0
     },
     sports_background: {
-      "No prior racket/paddle sports": -0.4,
-      "Some casual play (e.g., badminton, tennis, table tennis)": 0.0,
-      "Regular player in another racket/paddle sport": 0.4,
-      "Competitive background in another racket/paddle sport": 0.8
+      "No experience with racquet sports": -0.8,
+      "Casual player in other racquet sports": -0.2,
+      "Intermediate level in tennis or squash": 0.4,
+      "Advanced/competitive player in tennis or squash": 0.8,
+      "Professional athlete in racquet sports": 1.0
     },
     frequency: {
-      "Less than once a week": -0.6,
-      "1-2 times per week": -0.2,
-      "3-4 times per week": 0.3,
-      "5+ times per week": 0.8
+      "Rarely (less than once a month)": -0.6,
+      "Monthly (1-2 times per month)": -0.2,
+      "Weekly (1-2 times per week)": 0.3,
+      "Regular (3-4 times per week)": 0.7,
+      "Daily (5+ times per week)": 1.0
     },
     competitive_level: {
-      "Recreational only": -0.6,
-      "Social/Club matches": -0.2,
-      "Local competitive events": 0.3,
-      "Regional/National competitive events": 0.8
+      "Social/recreational games only": -0.5,
+      "Friendly matches": -0.1,
+      "Club-level social tournaments": 0.3,
+      "Regional tournaments": 0.7,
+      "Professional tournaments": 1.0
     },
     coaching_background: {
-      "No coaching": -0.4,
-      "Few lessons": -0.1,
-      "Regular coaching": 0.3,
-      "High-performance/academy coaching": 0.8
+      "Self-taught/no formal instruction": -0.7,
+      "A few group or private lessons": -0.3,
+      "Regular group lessons": 0.2,
+      "Consistent private coaching sessions": 0.6,
+      "Professional/academy training": 1.0
     },
     tournament: {
-      "Never": -0.6,
-      "Local tournaments": -0.1,
-      "Regional tournaments": 0.4,
-      "National/international tournaments": 0.9
+      "Never played tournaments": -0.6,
+      "Social tournaments only": -0.2,
+      "Club level beginner/novice tournaments": 0.2,
+      "Intermediate/Advanced tournaments": 0.8
     },
     self_rating: {
       "Beginner: Just starting, learning the basic rules and strokes.": -0.8,

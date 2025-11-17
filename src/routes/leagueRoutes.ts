@@ -25,9 +25,4 @@ leagueRoutes.post("/create", verifyAuth, requireAdmin, createLeague);
 leagueRoutes.put("/:id", verifyAuth, requireAdmin, updateLeague);
 leagueRoutes.delete("/:id", verifyAuth, requireAdmin, deleteLeague);            
 
-// Admin routes - LeagueSport management
-// leagueRoutes.post('/:leagueId/sport', addSportToLeague);          // POST /api/league/:leagueId/sport
-// leagueRoutes.put('/:leagueId/sport/:sportId', updateLeagueSport); // PUT /api/league/:leagueId/sport/:sportId
-// leagueRoutes.delete('/:leagueId/sport/:sportId', removeSportFromLeague); // DELETE /api/league/:leagueId/sport/:sportId
-
 export default leagueRoutes;

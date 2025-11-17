@@ -46,6 +46,18 @@ export const getAllLeagues = async () => {
       sponsorships: true,
       seasons: {
         include: {
+          category: {
+            select: {
+              id: true,
+              name: true,
+              genderRestriction: true,
+              gender_category: true,
+              game_type: true,
+              matchFormat: true,
+              isActive: true,
+              categoryOrder: true
+            }
+          },
           memberships: {
             include: {
               user: {
@@ -103,10 +115,31 @@ export const getAllLeagues = async () => {
       }
     }
 
+    // Extract unique categories from all seasons
+    const categoryMap = new Map<string, any>();
+    if (league.seasons) {
+      for (const season of league.seasons) {
+        if (season.category && season.category.isActive) {
+          // Use category id as key to avoid duplicates
+          if (!categoryMap.has(season.category.id)) {
+            categoryMap.set(season.category.id, {
+              id: season.category.id,
+              name: season.category.name,
+              genderRestriction: season.category.genderRestriction,
+              game_type: season.category.game_type,
+              gender_category: season.category.gender_category
+            });
+          }
+        }
+      }
+    }
+    const categories = Array.from(categoryMap.values());
+
     return {
       ...league,
       totalSeasonMemberships,
-      memberships: allMemberships
+      memberships: allMemberships,
+      categories
     };
   });
 
@@ -126,6 +159,18 @@ export const getLeagueById = async (id: string) => {
       sponsorships: true,
       seasons: {
         include: {
+          category: {
+            select: {
+              id: true,
+              name: true,
+              genderRestriction: true,
+              gender_category: true,
+              game_type: true,
+              matchFormat: true,
+              isActive: true,
+              categoryOrder: true
+            }
+          },
           divisions: true,
           memberships: {
             include: {
@@ -193,10 +238,31 @@ export const getLeagueById = async (id: string) => {
     }
   }
 
+  // Extract unique categories from all seasons
+  const categoryMap = new Map<string, any>();
+  if (league.seasons) {
+    for (const season of league.seasons) {
+      if (season.category && season.category.isActive) {
+        // Use category id as key to avoid duplicates
+        if (!categoryMap.has(season.category.id)) {
+          categoryMap.set(season.category.id, {
+            id: season.category.id,
+            name: season.category.name,
+            genderRestriction: season.category.genderRestriction,
+            game_type: season.category.game_type,
+            gender_category: season.category.gender_category
+          });
+        }
+      }
+    }
+  }
+  const categories = Array.from(categoryMap.values());
+
   return {
     ...league,
     totalSeasonMemberships,
     memberships: allMemberships,
+    categories,
     _count: {
       ...league._count,
       memberships: totalSeasonMemberships

@@ -1,8 +1,8 @@
 //@ts-nocheck
-import { prisma } from "../lib/prisma";
-import { Server as SocketIOServer } from 'socket.io';
 import { Server as HttpServer } from 'http';
+import { Server as SocketIOServer } from 'socket.io';
 import { auth } from "../lib/auth";
+import { prisma } from "../lib/prisma";
 
 const activeUsers = new Map<string, string>(); 
 const userSockets = new Map<string, string>();
@@ -33,89 +33,170 @@ export function socketHandler(httpServer: HttpServer) {
 
   console.log("🚀 Socket.IO server initialized");
 
-  // Updated authentication middleware to match your auth system
+  // Dual authentication middleware: Better Auth (web) OR x-user-id header (mobile)
   io.use(async (socket, next) => {
     try {
-      // Get session using the same method as your HTTP middleware
-      const session = await auth.api.getSession({ headers: socket.handshake.headers });
+      console.log('🔐 Socket.IO: Authenticating connection...');
       
-      if (!session || !session.user || !session.user.id) {
-        console.error('❌ Socket.IO: No valid session found');
-        return next(new Error('Authentication required'));
-      }
-
-      // Verify user exists in database and get role info (same as HTTP middleware)
-      const user = await prisma.user.findUnique({
-        where: { id: session.user.id },
-        select: {
-          id: true,
-          name: true,
-          email: true,
-          username: true,
-          role: true,
-          admin: {
+      // OPTION 1: Try Better Auth session first (for Next.js web app)
+      try {
+        const session = await auth.api.getSession({ headers: socket.handshake.headers });
+        
+        if (session && session.user && session.user.id) {
+          console.log('🔐 Socket.IO: Better Auth session found');
+          
+          // Verify user exists in database
+          const user = await prisma.user.findUnique({
+            where: { id: session.user.id },
             select: {
               id: true,
-              status: true,
+              name: true,
+              email: true,
+              username: true,
+              role: true,
+              admin: {
+                select: {
+                  id: true,
+                  status: true,
+                }
+              }
             }
+          });
+
+          if (user) {
+            // Get admin ID if user has admin record and is active
+            let adminId: string | undefined;
+            if (user.admin && user.admin.status === 'ACTIVE') {
+              adminId = user.admin.id;
+            }
+
+            // Store user info in socket data
+            socket.data.userId = session.user.id;
+            socket.data.user = {
+              id: session.user.id,
+              name: session.user.name,
+              email: session.user.email,
+              username: session.user.username || undefined,
+              role: user.role,
+              adminId,
+            };
+
+            console.log(`✅ Socket.IO: Authenticated via Better Auth - ${session.user.id} (${user.role})`);
+            return next();
           }
         }
-      });
-
-      if (!user) {
-        console.error(`❌ Socket.IO: User ${session.user.id} not found in database`);
-        return next(new Error('User not found'));
+      } catch (authError) {
+        console.log('⚠️ Socket.IO: Better Auth failed, trying x-user-id fallback...');
       }
 
-      // Get admin ID if user has admin record and is active
-      let adminId: string | undefined;
-      if (user.admin && user.admin.status === 'ACTIVE') {
-        adminId = user.admin.id;
+      // OPTION 2: Fallback to x-user-id header (for Expo mobile app)
+      const headerUserId = socket.handshake.headers['x-user-id'];
+      
+      if (headerUserId && typeof headerUserId === 'string') {
+        console.log('🔐 Socket.IO: Using x-user-id header:', headerUserId);
+        
+        // Verify user exists in database
+        const user = await prisma.user.findUnique({
+          where: { id: headerUserId },
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            username: true,
+            role: true,
+            admin: {
+              select: {
+                id: true,
+                status: true,
+              }
+            }
+          }
+        });
+
+        if (!user) {
+          console.error(`❌ Socket.IO: User ${headerUserId} not found in database`);
+          return next(new Error('User not found'));
+        }
+
+        // Get admin ID if user has admin record and is active
+        let adminId: string | undefined;
+        if (user.admin && user.admin.status === 'ACTIVE') {
+          adminId = user.admin.id;
+        }
+
+
+        // Store user info in socket data
+        socket.data.userId = user.id;
+        socket.data.user = {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          username: user.username || undefined,
+          role: user.role,
+          adminId,
+        };
+
+        console.log(`✅ Socket.IO: Authenticated via x-user-id - ${user.id} (${user.role})`);
+        return next();
       }
 
-      // Store user info in socket data (same structure as req.user)
-      socket.data.userId = session.user.id;
-      socket.data.user = {
-        id: session.user.id,
-        name: session.user.name,
-        email: session.user.email,
-        username: session.user.username || undefined,
-        role: user.role,
-        adminId,
-      };
-
-      console.log(`✅ Socket.IO: Authenticated user ${session.user.id} (${user.role})`);
-      next();
+      // No valid authentication found
+      console.error('❌ Socket.IO: No valid authentication (no session or x-user-id header)');
+      return next(new Error('Authentication required'));
+      
     } catch (error) {
       console.error('❌ Socket.IO: Authentication error:', error);
       return next(new Error('Authentication failed'));
     }
   });
 
-  io.on('connection', (socket) => {
+
+  
+  io.on('connection', async (socket) => {
     const userId = socket.data.userId;
     const user = socket.data.user;
     
-    console.log(`✅ User connected: ${socket.id} (userId: ${userId}, role: ${user.role}) at ${new Date().toISOString()}`);
+    console.log(`✅ User connected: ${socket.id} (userId: ${userId}, role: ${user.role})`);
 
-    // Automatically join user to their personal room using VERIFIED userId
     if (userId) {
       socket.join(userId);
       activeUsers.set(userId, socket.id);
       userSockets.set(userId, socket.id);
       io.emit('user_status_change', { userId, isOnline: true });
       
-      // Also join admin users to admin room if they have admin privileges
       if (user.role === 'ADMIN' || user.role === 'SUPERADMIN') {
         socket.join('admin_room');
         console.log(`📋 Admin user ${userId} joined admin room`);
       }
-    }
 
-    // Remove the deprecated set_user_id handler or keep the warning
-    socket.on('set_user_id', (claimedUserId: string) => {
-      console.warn(`⚠️  set_user_id is deprecated and ignored. User ${userId} tried to claim ${claimedUserId}`);
-    });
+      // Auto-join user's threads
+      try {
+        const userThreads = await prisma.userThread.findMany({
+          where: { userId },
+          select: { threadId: true, thread: { select: { name: true, isGroup: true } } }
+        });
+
+        console.log(`🔄 Auto-joining ${userThreads.length} thread rooms for user ${userId}...`);
+        
+        userThreads.forEach(ut => {
+          socket.join(ut.threadId);
+          const threadName = ut.thread.name || (ut.thread.isGroup ? 'Group Chat' : 'DM');
+          console.log(`  ✅ Joined thread room: ${ut.threadId} (${threadName})`);
+        });
+
+        console.log(`✅ User ${userId} successfully joined ${userThreads.length} thread rooms`);
+
+        // Send unread notification count
+        const unreadCount = await prisma.userNotification.count({
+          where: { userId, read: false }
+        });
+        
+        socket.emit('unread_notifications_count', { count: unreadCount });
+        console.log(`📧 Sent unread notification count (${unreadCount}) to user ${userId}`);
+      } catch (error) {
+        console.error('❌ Error auto-joining threads:', error);
+      }
+    }
 
     socket.on('disconnect', () => {
       if (userId) {
@@ -128,38 +209,86 @@ export function socketHandler(httpServer: HttpServer) {
       }
     });
     
-    // Typing Indicators
+    // 🆕 Mark notification as read
+    socket.on('mark_notification_read', async (data: { notificationId: string }) => {
+      try {
+        await prisma.userNotification.updateMany({
+          where: { notificationId: data.notificationId, userId },
+          data: { read: true, readAt: new Date() }
+        });
+
+        socket.emit('notification_marked_read', {
+          notificationId: data.notificationId,
+          timestamp: new Date().toISOString()
+        });
+      } catch (error) {
+        console.error('Error marking notification as read:', error);
+      }
+    });
+
+    socket.on('mark_all_notifications_read', async () => {
+      try {
+        await prisma.userNotification.updateMany({
+          where: { userId, read: false },
+          data: { read: true, readAt: new Date() }
+        });
+
+        socket.emit('all_notifications_marked_read', {
+          timestamp: new Date().toISOString()
+        });
+      } catch (error) {
+        console.error('Error marking all notifications as read:', error);
+      }
+    });
+
+    socket.on('request_unread_count', async () => {
+      try {
+        const count = await prisma.userNotification.count({
+          where: { userId, read: false }
+        });
+        socket.emit('unread_notifications_count', { count });
+      } catch (error) {
+        console.error('Error getting unread count:', error);
+      }
+    });
+
+    // Typing indicators
     socket.on('typing_start', ({ threadId, senderId }) => {
       socket.to(threadId).emit('typing_status', { threadId, senderId, isTyping: true });
     });
 
     socket.on('typing', (data) => {
-      console.log('Received typing event:', data);
       socket.to(data.threadId).emit('user_typing', data);
     });
 
     socket.on('typing_stop', ({ threadId, senderId }) => {
       socket.to(threadId).emit('typing_status', { threadId, senderId, isTyping: false });
     });
-    
-    // Thread Rooms
-    socket.on('join_thread', (threadId: string) => {
+
+    // Thread room management
+    socket.on('join_thread', (data: string | { threadId: string }) => {
+      const threadId = typeof data === 'string' ? data : data.threadId;
+      if (!threadId) return;
+      
       socket.join(threadId);
-      console.log(`Socket ${socket.id} joined thread ${threadId}`);
+      socket.emit('thread_joined', { 
+        threadId, 
+        socketId: socket.id,
+        timestamp: new Date().toISOString() 
+      });
     });
 
-    socket.on('leave_thread', (threadId: string) => {
+    socket.on('leave_thread', (data: string | { threadId: string }) => {
+      const threadId = typeof data === 'string' ? data : data.threadId;
+      if (!threadId) return;
+      
       socket.leave(threadId);
-      console.log(`Socket ${socket.id} left thread ${threadId}`);
     });
 
-    // Notification-specific events
     socket.on('join_notifications', () => {
-      // Users are automatically in their personal room (userId), but this can be used for confirmation
       socket.emit('notifications_joined', { userId });
     });
-    
-    // Admin-specific events
+
     socket.on('join_admin_events', () => {
       if (user.role === 'ADMIN' || user.role === 'SUPERADMIN') {
         socket.join('admin_events');

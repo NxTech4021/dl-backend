@@ -39,9 +39,10 @@ import {
 
 import { notificationService } from '../services/notificationService';
 
-// 🆕 Import notification templates
 import { seasonNotifications, paymentNotifications } from '../helpers/notification';
 import { NOTIFICATION_TYPES } from '../types/notificationTypes';
+
+
 
 interface CreateSeasonBody {
   name?: string;
@@ -723,6 +724,33 @@ export const registerPlayerToSeason = async (req: Request, res: Response) => {
           ...notificationData,
           seasonId: seasonId
         });
+      }
+
+      // ✅ Emit Socket.IO events to notify both captain and partner about team registration completion
+      if (req.io && season) {
+        try {
+          // Notify both captain and partner about successful team registration
+          const registrationData = {
+            partnership: {
+              id: result.partnership.id,
+              captainId: captainId,
+              partnerId: partnerId,
+              season: {
+                id: seasonId,
+                name: season.name
+              }
+            },
+            memberships: result.memberships,
+            message: "Team registration completed successfully"
+          };
+          
+          req.io.to(captainId).emit('team_registration_completed', registrationData);
+          req.io.to(partnerId).emit('team_registration_completed', registrationData);
+          console.log(`📨 Socket.IO: Notified captain ${captainId} and partner ${partnerId} of team registration completion`);
+        } catch (socketError) {
+          console.error('Error emitting team registration socket event:', socketError);
+          // Don't fail the whole operation if socket fails
+        }
       }
 
       return res.status(201).json({
