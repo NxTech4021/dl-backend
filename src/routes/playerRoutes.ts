@@ -49,6 +49,36 @@ playerRouter.get('/profile/achievements', verifyAuth, getPlayerAchievements as a
 playerRouter.post('/profile/upload-image', verifyAuth, upload.single('image'), uploadProfileImage as any);
 playerRouter.get('/matches/:matchId', verifyAuth, getMatchDetails as any);
 
+// Activity status route
+playerRouter.get('/activity-status/:playerId', verifyAuth, async (req, res) => {
+  try {
+    const { playerId } = req.params;
+    const { getInactivityService } = await import('../services/inactivityService');
+    const { NotificationService } = await import('../services/notificationService');
+
+    const notificationService = new NotificationService();
+    const inactivityService = getInactivityService(notificationService);
+
+    const status = await inactivityService.getPlayerActivityStatus(playerId);
+
+    res.json({
+      success: true,
+      data: {
+        ...status,
+        thresholds: {
+          warning: 21,
+          inactive: 30,
+        },
+      },
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to fetch activity status',
+    });
+  }
+});
+
 // Phase 2: Player Discovery & Social Features
 playerRouter.get('/search', verifyAuth, searchPlayers as any);
 playerRouter.get('/discover/:seasonId', verifyAuth, getAvailablePlayersForSeason as any);
