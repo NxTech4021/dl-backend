@@ -32,7 +32,7 @@ const RELIABILITY_ASSUMPTIONS = {
 
 const CATEGORY_WEIGHTS: Record<string, Record<string, number>> = {
   experience: {
-    "Less than 3 months": -0.7,
+    "Less than 3 month": -0.7,
     "3-6 months": -0.4,
     "6-12 months": 0.2,
     "1-2 years": 0.5,
@@ -184,10 +184,15 @@ function scoreQuestionnaire(answers: QuestionnaireAnswers) {
     rd = HIGH_CONFIDENCE_RD;
   }
 
-  const singlesRating = Math.round(BASE_RATING + ratingAdjustment);
-  const doublesRating = Math.round(
+  const clampRating = (rating: number) => Math.max(1000, Math.min(8000, rating));
+
+  let singlesRating = Math.round(BASE_RATING + ratingAdjustment);
+  let doublesRating = Math.round(
     singlesRating + (ratingAdjustment < 0 ? 50 : 0)
   );
+
+  singlesRating = clampRating(singlesRating);
+  doublesRating = clampRating(doublesRating);
 
   return {
     source: "questionnaire",
