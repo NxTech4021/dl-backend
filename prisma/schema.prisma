@@ -83,6 +83,11 @@ model User {
   inactivityExempt      Boolean   @default(false)
   statusChanges         PlayerStatusChange[]
 
+  // Bug tracking relations
+  bugReports            BugReport[]       @relation("BugReporter")
+  bugComments           BugComment[]      @relation("BugCommentAuthor")
+  bugStatusChanges      BugStatusChange[] @relation("BugStatusChanger")
+
   @@index([email])
   @@index([lastMatchDate])
   @@index([username])
@@ -128,6 +133,11 @@ model Admin {
   // Inactivity system relations
   inactivitySettingsUpdated InactivitySettings[]  @relation("InactivitySettingsUpdated")
   statusChangesTriggered    PlayerStatusChange[]  @relation("StatusChangesTriggered")
+
+  // Bug tracking relations
+  assignedBugs              BugReport[]           @relation("BugAssignee")
+  resolvedBugs              BugReport[]           @relation("BugResolver")
+  bugDefaultSettings        BugReportSettings[]   @relation("BugDefaultAssignee")
 }
 
 model AdminInviteToken {
@@ -1166,6 +1176,249 @@ model PlayerStatusChange {
 // END INACTIVITY SYSTEM MODELS
 // =============================================
 
+// =============================================
+// BUG TRACKING SYSTEM MODELS
+// =============================================
+
+model App {
+  id              String   @id @default(cuid())
+  code            String   @unique
+  name            String   @unique
+  displayName     String
+  description     String?
+  appUrl          String?
+  logoUrl         String?
+  isActive        Boolean  @default(true)
+
+  // Relations
+  bugReports      BugReport[]
+  bugModules      BugModule[]
+  bugSettings     BugReportSettings?
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([isActive])
+  @@map("app")
+}
+
+model BugModule {
+  id              String   @id @default(cuid())
+  appId           String
+  name            String
+  code            String
+  description     String?
+  isActive        Boolean  @default(true)
+  sortOrder       Int      @default(0)
+
+  // Relations
+  app             App         @relation(fields: [appId], references: [id], onDelete: Cascade)
+  bugReports      BugReport[]
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([appId, code])
+  @@index([appId, isActive])
+  @@map("bug_module")
+}
+
+model BugReport {
+  id                  String          @id @default(cuid())
+  reportNumber        String          @unique
+
+  // Core fields
+  title               String
+  description         String
+  moduleId            String
+  reportType          BugReportType   @default(BUG)
+  severity            BugSeverity     @default(MEDIUM)
+  stepsToReproduce    String?
+  expectedBehavior    String?
+  actualBehavior      String?
+
+  // Admin-managed fields
+  priority            BugPriority     @default(NORMAL)
+  status              BugStatus       @default(NEW)
+  assignedToId        String?
+
+  // Auto-captured context
+  appId               String
+  pageUrl             String?
+  userAgent           String?
+  browserName         String?
+  browserVersion      String?
+  osName              String?
+  osVersion           String?
+  screenWidth         Int?
+  screenHeight        Int?
+  appVersion          String?
+  sessionId           String?
+  consoleErrors       Json?
+  networkRequests     Json?
+  localStorageData    Json?
+
+  // Reporter info
+  reporterId          String
+
+  // Resolution
+  resolvedById        String?
+  resolvedAt          DateTime?
+  resolutionNotes     String?
+  rootCause           String?
+  timeToResolve       Int?
+
+  // Tracking
+  viewCount           Int             @default(0)
+  duplicateOfId       String?
+  externalTicketUrl   String?
+  isPublic            Boolean         @default(false)
+
+  // Google Sheets sync
+  sheetSyncedAt       DateTime?
+  sheetRowId          String?
+
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
+
+  // Relations
+  app                 App             @relation(fields: [appId], references: [id])
+  module              BugModule       @relation(fields: [moduleId], references: [id])
+  reporter            User            @relation("BugReporter", fields: [reporterId], references: [id])
+  assignedTo          Admin?          @relation("BugAssignee", fields: [assignedToId], references: [id])
+  resolvedBy          Admin?          @relation("BugResolver", fields: [resolvedById], references: [id])
+  duplicateOf         BugReport?      @relation("BugDuplicates", fields: [duplicateOfId], references: [id], onDelete: SetNull)
+  duplicates          BugReport[]     @relation("BugDuplicates")
+  screenshots         BugScreenshot[]
+  comments            BugComment[]
+  statusChanges       BugStatusChange[]
+
+  @@index([appId, status])
+  @@index([appId, moduleId])
+  @@index([reporterId])
+  @@index([assignedToId])
+  @@index([status, priority])
+  @@index([createdAt(sort: Desc)])
+  @@index([reportNumber])
+  @@map("bug_report")
+}
+
+model BugScreenshot {
+  id              String   @id @default(cuid())
+  bugReportId     String
+
+  // File info
+  fileName        String
+  fileSize        Int
+  mimeType        String
+  imageUrl        String
+  thumbnailUrl    String?
+
+  // Metadata
+  width           Int?
+  height          Int?
+  caption         String?
+
+  createdAt       DateTime @default(now())
+
+  // Relations
+  bugReport       BugReport @relation(fields: [bugReportId], references: [id], onDelete: Cascade)
+
+  @@index([bugReportId])
+  @@map("bug_screenshot")
+}
+
+model BugComment {
+  id              String   @id @default(cuid())
+  bugReportId     String
+  authorId        String
+
+  content         String
+  isInternal      Boolean  @default(false)
+
+  // Reply threading
+  parentId        String?
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // Relations
+  bugReport       BugReport    @relation(fields: [bugReportId], references: [id], onDelete: Cascade)
+  author          User         @relation("BugCommentAuthor", fields: [authorId], references: [id])
+  parent          BugComment?  @relation("CommentReplies", fields: [parentId], references: [id], onDelete: SetNull)
+  replies         BugComment[] @relation("CommentReplies")
+
+  @@index([bugReportId, createdAt])
+  @@index([authorId])
+  @@map("bug_comment")
+}
+
+model BugStatusChange {
+  id               String       @id @default(cuid())
+  bugReportId      String
+
+  previousStatus   BugStatus?
+  newStatus        BugStatus
+  previousPriority BugPriority?
+  newPriority      BugPriority?
+  changedById      String
+  notes            String?
+
+  createdAt        DateTime     @default(now())
+
+  // Relations
+  bugReport        BugReport    @relation(fields: [bugReportId], references: [id], onDelete: Cascade)
+  changedBy        User         @relation("BugStatusChanger", fields: [changedById], references: [id])
+
+  @@index([bugReportId, createdAt(sort: Desc)])
+  @@map("bug_status_change")
+}
+
+model BugReportSettings {
+  id                      String      @id @default(cuid())
+  appId                   String      @unique
+
+  // Feature toggles
+  enableScreenshots       Boolean     @default(true)
+  enableAutoCapture       Boolean     @default(true)
+  enableConsoleCapture    Boolean     @default(true)
+  enableNetworkCapture    Boolean     @default(false)
+  maxScreenshots          Int         @default(5)
+  maxFileSize             Int         @default(5242880)
+
+  // Notifications
+  notifyEmails            Json?
+  slackWebhookUrl         String?
+  discordWebhookUrl       String?
+  notifyOnNew             Boolean     @default(true)
+  notifyOnStatusChange    Boolean     @default(true)
+
+  // Google Sheets integration
+  googleSheetId           String?
+  googleSheetName         String?
+  syncEnabled             Boolean     @default(false)
+
+  // Defaults
+  defaultAssigneeId       String?
+  defaultPriority         BugPriority @default(NORMAL)
+
+  // Customization
+  customFields            Json?
+
+  updatedAt               DateTime    @updatedAt
+  createdAt               DateTime    @default(now())
+
+  // Relations
+  app                     App         @relation(fields: [appId], references: [id], onDelete: Cascade)
+  defaultAssignee         Admin?      @relation("BugDefaultAssignee", fields: [defaultAssigneeId], references: [id])
+
+  @@map("bug_report_settings")
+}
+
+// =============================================
+// END BUG TRACKING SYSTEM MODELS
+// =============================================
+
 model Achievement {
   id               String            @id @default(cuid())
   title            String
@@ -1699,4 +1952,46 @@ enum StatusChangeReason {
 
 // =============================================
 // END INACTIVITY SYSTEM ENUMS
+// =============================================
+
+// =============================================
+// BUG TRACKING SYSTEM ENUMS
+// =============================================
+
+enum BugReportType {
+  BUG
+  FEEDBACK
+  SUGGESTION
+  QUESTION
+  IMPROVEMENT
+}
+
+enum BugSeverity {
+  CRITICAL
+  HIGH
+  MEDIUM
+  LOW
+}
+
+enum BugPriority {
+  URGENT
+  HIGH
+  NORMAL
+  LOW
+}
+
+enum BugStatus {
+  NEW
+  TRIAGED
+  IN_PROGRESS
+  NEEDS_INFO
+  IN_REVIEW
+  RESOLVED
+  CLOSED
+  WONT_FIX
+  DUPLICATE
+}
+
+// =============================================
+// END BUG TRACKING SYSTEM ENUMS
 // =============================================
