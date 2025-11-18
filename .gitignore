@@ -6,6 +6,8 @@
 node_modules/
 .DS_Store
 test-cs.json
+google-sheets-key.json
+src/config/google-sheets-key.json
 
 # TypeScript compiled output (should not be in src/)
 src/**/*.js
