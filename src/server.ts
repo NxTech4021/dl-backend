@@ -4,6 +4,9 @@ import dotenv from "dotenv";
 import cron from "node-cron";
 import { expireOldSeasonInvitations } from "./services/seasonInvitationService";
 import { expireOldRequests } from "./services/pairingService";
+import { getInactivityService } from "./services/inactivityService";
+import { NotificationService } from "./services/notificationService";
+import { INACTIVITY_CONFIG } from "./config/inactivity.config";
 
 dotenv.config();
 
@@ -36,4 +39,21 @@ cron.schedule("0 0 * * *", async () => {
   }
 });
 
-console.log("⏰ Cron job scheduled: Daily expiration check at midnight");
+// Run inactivity check at configured time (default: daily at 2:00 AM)
+cron.schedule(INACTIVITY_CONFIG.CRON_SCHEDULE, async () => {
+  console.log("🕒 Running scheduled task: Checking player inactivity...");
+  try {
+    const notificationService = new NotificationService();
+    const inactivityService = getInactivityService(notificationService);
+    const results = await inactivityService.checkAndUpdateInactivity();
+    console.log(
+      `✅ Inactivity check complete: ${results.markedInactive} marked inactive, ${results.warnings} warnings sent`
+    );
+  } catch (error) {
+    console.error("❌ Error during inactivity check:", error);
+  }
+});
+
+console.log("⏰ Cron jobs scheduled:");
+console.log("   - Daily expiration check at midnight");
+console.log(`   - Inactivity check at ${INACTIVITY_CONFIG.CRON_SCHEDULE}`);
