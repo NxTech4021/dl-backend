@@ -11,6 +11,7 @@ import onboardingRouter from "./onboarding";
 import chatRoutes from "./threadRoutes";
 import notificationRouter from "./notificationRoutes";
 import matchRoutes from "./matchRoutes";
+import bugRouter from "./bugRoutes";
 
 const router = express.Router();
 
@@ -41,6 +42,9 @@ router.use("/chat", chatRoutes);
 
 // Notification
 router.use("/notifications", notificationRouter);
+
+// Bug Tracking
+router.use("/bug", bugRouter);
 
 // router.post("/api/")
 
