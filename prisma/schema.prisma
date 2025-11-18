@@ -24,7 +24,7 @@ model User {
   completedOnboarding Boolean   @default(false)
   lastActivityCheck   DateTime?
   lastLogin           DateTime?
-  status              String    @default("active")
+  status              UserStatus @default(ACTIVE)
   bio                 String?
   phoneNumber         String?
   admin               Admin?
@@ -72,7 +72,19 @@ model User {
   confirmedWalkovers MatchWalkover[]  @relation("ConfirmedWalkovers")
   penalties          PlayerPenalty[]  @relation("UserPenalties")
 
+  // Rating system relations
+  playerRatings      PlayerRating[]
+  divisionStandings  DivisionStanding[]
+
+  // Inactivity tracking
+  lastMatchDate         DateTime?
+  inactivityWarningAt   DateTime?
+  markedInactiveAt      DateTime?
+  inactivityExempt      Boolean   @default(false)
+  statusChanges         PlayerStatusChange[]
+
   @@index([email])
+  @@index([lastMatchDate])
   @@index([username])
   @@index([status])
   @@index([completedOnboarding])
@@ -105,6 +117,17 @@ model Admin {
   issuedPenalties   PlayerPenalty[]    @relation("IssuedPenalties")
   resolvedAppeals   PlayerPenalty[]    @relation("ResolvedAppeals")
   adminMatchActions MatchAdminAction[] @relation("AdminMatchActions")
+
+  // Rating system relations
+  ratingAdjustments     RatingAdjustment[]    @relation("RatingAdjustments")
+  ratingParameters      RatingParameters[]    @relation("RatingParametersCreated")
+  ratingRecalculations  RatingRecalculation[] @relation("RatingRecalculations")
+  seasonsLocked         SeasonLock[]          @relation("SeasonLockedBy")
+  seasonsOverridden     SeasonLock[]          @relation("SeasonOverrideBy")
+
+  // Inactivity system relations
+  inactivitySettingsUpdated InactivitySettings[]  @relation("InactivitySettingsUpdated")
+  statusChangesTriggered    PlayerStatusChange[]  @relation("StatusChangesTriggered")
 }
 
 model AdminInviteToken {
@@ -214,6 +237,13 @@ model League {
   seasons      Season[]      @relation("LeagueToSeason")
   sponsorships Sponsorship[]
   divisions    Division[]
+  matches      Match[]       @relation("LeagueMatches")
+
+  // Rating system relations
+  ratingParameters RatingParameters[]
+
+  // Inactivity system relations
+  inactivitySettings InactivitySettings?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -228,9 +258,9 @@ model Category {
 
   // Restrictions and Format
   genderRestriction GenderRestriction @default(OPEN)
-  matchFormat       String? // 'match_format' e.g., Best of 3 sets
-  game_type         GameType?
-  gender_category   GenderType?
+  matchFormat       String? // e.g., Best of 3 sets
+  gameType          GameType?
+  genderCategory    GenderType?
   isActive          Boolean           @default(true)
   categoryOrder     Int               @default(0)
   createdAt         DateTime          @default(now())
@@ -240,23 +270,6 @@ model Category {
 
   @@index([isActive])
 }
-
-// Not using now 
-// model Company {
-// id           String   @id @default(cuid())
-// name         String   @db.VarChar(255)
-// contactEmail String?  @unique
-// website      String?
-// logoUrl      String?
-// createdAt    DateTime @default(now())
-// updatedAt    DateTime @updatedAt
-
-//  createdById      String? 
-//  createdBy        Admin?        @relation(fields: [createdById], references: [id])
-//  sponsorshipDeals Sponsorship[]
-//
-//  @@map("company")
-//}
 
 model Sponsorship {
   id             String   @id @default(cuid())
@@ -317,6 +330,16 @@ model Season {
   waitlistId String?
   waitlist   Waitlist? @relation
 
+  // Rating system relations
+  playerRatings     PlayerRating[]
+  divisionStandings DivisionStanding[]
+  ratingParameters  RatingParameters[]
+  seasonLock        SeasonLock?
+  matches           Match[]            @relation("SeasonMatches")
+
+  // Inactivity system relations
+  inactivitySettings InactivitySettings?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -347,6 +370,7 @@ model WaitlistUser {
   waitlist Waitlist @relation(fields: [waitlistId], references: [id])
 
   @@unique([waitlistId, userId])
+  @@index([waitlistId])
   @@index([userId])
 }
 
@@ -430,6 +454,10 @@ model Division {
   // Pairing Relations
   partnerships Partnership[]
 
+  // Rating system relations
+  playerRatings     PlayerRating[]
+  divisionStandings DivisionStanding[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -446,8 +474,8 @@ model SeasonMembership {
   userId           String
   seasonId         String
   divisionId       String?
-  status           String        @default("PENDING") // 'PENDING' | 'ACTIVE' | 'INACTIVE' | 'FLAGGED' | 'REMOVED'
-  joinedAt         DateTime      @default(now())
+  status           MembershipStatus @default(PENDING)
+  joinedAt         DateTime         @default(now())
   withdrawalReason String? // For handling "View Withdrawal Request"
   paymentStatus    PaymentStatus @default(PENDING)
 
@@ -504,11 +532,28 @@ model Match {
   // Enhanced fields for admin management
   status         MatchStatus @default(SCHEDULED)
   isWalkover     Boolean     @default(false)
-  walkoverReason String?
   isDisputed     Boolean     @default(false)
   adminNotes     String?
 
+  // Scheduling fields
+  scheduledStartTime      DateTime?
+  actualStartTime         DateTime?
+
+  // Cancellation tracking
+  cancellationRequestedAt DateTime?
+  isLateCancellation      Boolean   @default(false)
+  cancellationReason      String?
+
+  // Reschedule tracking
+  rescheduledFromId       String?   @unique
+  rescheduleCount         Int       @default(0)
+
+  // Standard walkover scores
+  walkoverScore           Json?
+
   division      Division?          @relation(fields: [divisionId], references: [id], onDelete: Cascade)
+  league        League?            @relation("LeagueMatches", fields: [leagueId], references: [id], onDelete: SetNull)
+  season        Season?            @relation("SeasonMatches", fields: [seasonId], references: [id], onDelete: SetNull)
   participants  MatchParticipant[]
   stats         MatchStats?
   notifications Notification[]
@@ -518,6 +563,17 @@ model Match {
   walkover     MatchWalkover?
   adminActions MatchAdminAction[]
   penalties    PlayerPenalty[]    @relation("MatchPenalties")
+
+  // Rating system relations
+  scores        MatchScore[]
+  ratingHistory RatingHistory[]
+
+  // Inactivity system relations
+  statusChanges PlayerStatusChange[]
+
+  // Reschedule relation
+  rescheduledFrom Match? @relation("Reschedule", fields: [rescheduledFromId], references: [id])
+  rescheduledTo   Match? @relation("Reschedule")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -530,6 +586,8 @@ model Match {
   @@index([status])
   @@index([isDisputed])
   @@index([matchType])
+  @@index([scheduledStartTime])
+  @@index([isLateCancellation])
 }
 
 //TO DO - use this and link with seasonmembership
@@ -601,6 +659,7 @@ model MatchDispute {
   resolvedByAdmin Admin?             @relation("ResolvedDisputes", fields: [resolvedByAdminId], references: [id])
   adminNotes      DisputeAdminNote[]
   comments        DisputeComment[]
+  penalties       PlayerPenalty[]    @relation("DisputePenalties")
 
   @@index([matchId])
   @@index([raisedByUserId])
@@ -669,6 +728,7 @@ model MatchWalkover {
 
   @@index([matchId])
   @@index([defaultingPlayerId])
+  @@index([winningPlayerId])
   @@index([adminVerified])
   @@map("match_walkover")
 }
@@ -699,6 +759,7 @@ model PlayerPenalty {
 
   user                  User            @relation("UserPenalties", fields: [userId], references: [id])
   relatedMatch          Match?          @relation("MatchPenalties", fields: [relatedMatchId], references: [id])
+  relatedDispute        MatchDispute?   @relation("DisputePenalties", fields: [relatedDisputeId], references: [id])
   issuedByAdmin         Admin           @relation("IssuedPenalties", fields: [issuedByAdminId], references: [id])
   appealResolvedByAdmin Admin?          @relation("ResolvedAppeals", fields: [appealResolvedBy], references: [id])
   walkovers             MatchWalkover[]
@@ -737,6 +798,372 @@ model MatchAdminAction {
 
 // =============================================
 // END ADMIN-FOCUSED MATCH MANAGEMENT MODELS
+// =============================================
+
+// =============================================
+// RATING SYSTEM MODELS
+// =============================================
+
+model PlayerRating {
+  id              String    @id @default(cuid())
+  userId          String
+  seasonId        String
+  divisionId      String?
+  sport           SportType
+  gameType        GameType
+
+  // Core rating fields
+  currentRating   Int
+  ratingDeviation Int?
+  volatility      Float?
+
+  // Status
+  isProvisional   Boolean   @default(true)
+  matchesPlayed   Int       @default(0)
+
+  // Tracking
+  lastMatchId     String?
+  lastUpdatedAt   DateTime  @updatedAt
+  peakRating      Int?
+  peakRatingDate  DateTime?
+  lowestRating    Int?
+
+  createdAt       DateTime  @default(now())
+
+  // Relations
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  season          Season    @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  division        Division? @relation(fields: [divisionId], references: [id], onDelete: SetNull)
+  history         RatingHistory[]
+  adjustments     RatingAdjustment[]
+
+  @@unique([userId, seasonId, gameType])
+  @@index([seasonId, divisionId])
+  @@index([currentRating])
+  @@index([isProvisional])
+  @@index([userId])
+  @@map("player_rating")
+}
+
+model RatingHistory {
+  id              String              @id @default(cuid())
+  playerRatingId  String
+  matchId         String?
+
+  // Rating change
+  ratingBefore    Int
+  ratingAfter     Int
+  delta           Int
+
+  // RD change (for Glicko)
+  rdBefore        Int?
+  rdAfter         Int?
+
+  // Reason
+  reason          RatingChangeReason
+  notes           String?
+
+  createdAt       DateTime            @default(now())
+
+  // Relations
+  playerRating    PlayerRating        @relation(fields: [playerRatingId], references: [id], onDelete: Cascade)
+  match           Match?              @relation(fields: [matchId], references: [id], onDelete: SetNull)
+
+  @@index([playerRatingId, createdAt(sort: Desc)])
+  @@index([matchId])
+  @@map("rating_history")
+}
+
+model MatchScore {
+  id              String   @id @default(cuid())
+  matchId         String
+  setNumber       Int
+
+  // Scores per side
+  player1Games    Int
+  player2Games    Int
+
+  // Tiebreak details
+  hasTiebreak     Boolean  @default(false)
+  player1Tiebreak Int?
+  player2Tiebreak Int?
+
+  createdAt       DateTime @default(now())
+
+  match           Match    @relation(fields: [matchId], references: [id], onDelete: Cascade)
+
+  @@unique([matchId, setNumber])
+  @@index([matchId])
+  @@map("match_score")
+}
+
+model DivisionStanding {
+  id                  String   @id @default(cuid())
+  divisionId          String
+  seasonId            String
+
+  // Player or Partnership
+  userId              String?
+  partnershipId       String?
+
+  // Core standings
+  rank                Int
+  wins                Int      @default(0)
+  losses              Int      @default(0)
+  matchesPlayed       Int      @default(0)
+  matchesScheduled    Int      @default(9)
+
+  // Points calculation
+  winPoints           Int      @default(0)
+  setPoints           Int      @default(0)
+  setsWon             Int      @default(0)
+  setsLost            Int      @default(0)
+
+  // Completion bonus
+  completionBonus     Int      @default(0)
+
+  // Total
+  totalPoints         Int      @default(0)
+
+  // Tie-breaker data
+  setDifferential     Int      @default(0)
+  headToHead          Json?
+
+  // Tracking
+  lastCalculatedAt    DateTime @default(now())
+  isLocked            Boolean  @default(false)
+
+  // Relations
+  division            Division    @relation(fields: [divisionId], references: [id], onDelete: Cascade)
+  season              Season      @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  user                User?       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  partnership         Partnership? @relation(fields: [partnershipId], references: [id], onDelete: Cascade)
+
+  @@unique([divisionId, seasonId, userId])
+  @@unique([divisionId, seasonId, partnershipId])
+  @@index([divisionId, rank])
+  @@index([seasonId])
+  @@index([totalPoints(sort: Desc)])
+  @@map("division_standing")
+}
+
+model RatingAdjustment {
+  id                String         @id @default(cuid())
+  playerRatingId    String
+  adminId           String
+
+  // Adjustment details
+  adjustmentType    AdjustmentType
+  ratingBefore      Int
+  ratingAfter       Int
+  delta             Int
+
+  // Documentation
+  reason            String
+  attachmentUrl     String?
+  internalNotes     String?
+
+  // Notification tracking
+  playerNotified    Boolean        @default(false)
+  notifiedAt        DateTime?
+
+  // Audit
+  createdAt         DateTime       @default(now())
+  ipAddress         String?
+
+  // Relations
+  playerRating      PlayerRating   @relation(fields: [playerRatingId], references: [id], onDelete: Cascade)
+  admin             Admin          @relation("RatingAdjustments", fields: [adminId], references: [id])
+
+  @@index([playerRatingId, createdAt(sort: Desc)])
+  @@index([adminId])
+  @@map("rating_adjustment")
+}
+
+model RatingParameters {
+  id                    String    @id @default(cuid())
+
+  // Scope
+  leagueId              String?
+  seasonId              String?
+
+  // Core parameters
+  initialRating         Int       @default(1500)
+  initialRD             Int       @default(350)
+
+  // K-factors
+  kFactorNew            Float     @default(40)
+  kFactorEstablished    Float     @default(20)
+  kFactorThreshold      Int       @default(30)
+
+  // Weightings
+  singlesWeight         Float     @default(1.0)
+  doublesWeight         Float     @default(1.0)
+  oneSetMatchWeight     Float     @default(0.5)
+
+  // Special cases
+  walkoverWinImpact     Float     @default(0.5)
+  walkoverLossImpact    Float     @default(1.0)
+
+  // Provisional settings
+  provisionalThreshold  Int       @default(10)
+
+  // Versioning
+  version               Int       @default(1)
+  effectiveFrom         DateTime
+  effectiveUntil        DateTime?
+  isActive              Boolean   @default(true)
+
+  // Audit
+  createdByAdminId      String
+  createdAt             DateTime  @default(now())
+  notes                 String?
+
+  // Relations
+  league                League?   @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  season                Season?   @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  createdBy             Admin     @relation("RatingParametersCreated", fields: [createdByAdminId], references: [id])
+
+  @@index([leagueId, isActive])
+  @@index([seasonId, isActive])
+  @@index([effectiveFrom])
+  @@map("rating_parameters")
+}
+
+model RatingRecalculation {
+  id                    String              @id @default(cuid())
+
+  // Scope
+  scope                 RecalculationScope
+  matchId               String?
+  userId                String?
+  divisionId            String?
+  seasonId              String?
+  leagueId              String?
+
+  // Execution
+  status                RecalculationStatus @default(PENDING)
+  initiatedByAdminId    String
+
+  // Preview data
+  affectedPlayersCount  Int?
+  changesPreview        Json?
+
+  // Execution timing
+  previewGeneratedAt    DateTime?
+  appliedAt             DateTime?
+  failedAt              DateTime?
+  errorMessage          String?
+
+  // Audit
+  createdAt             DateTime            @default(now())
+
+  // Relations
+  initiatedBy           Admin               @relation("RatingRecalculations", fields: [initiatedByAdminId], references: [id])
+
+  @@index([status])
+  @@index([initiatedByAdminId])
+  @@index([createdAt(sort: Desc)])
+  @@map("rating_recalculation")
+}
+
+model SeasonLock {
+  id                String    @id @default(cuid())
+  seasonId          String    @unique
+
+  // Lock state
+  isLocked          Boolean   @default(true)
+  lockedAt          DateTime  @default(now())
+  lockedByAdminId   String
+
+  // Export
+  finalExportUrl    String?
+  exportGeneratedAt DateTime?
+
+  // Override tracking
+  overrideAllowed   Boolean   @default(false)
+  overrideReason    String?
+  overrideByAdminId String?
+  overrideAt        DateTime?
+
+  // Relations
+  season            Season    @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  lockedBy          Admin     @relation("SeasonLockedBy", fields: [lockedByAdminId], references: [id])
+  overrideBy        Admin?    @relation("SeasonOverrideBy", fields: [overrideByAdminId], references: [id])
+
+  @@index([seasonId])
+  @@map("season_lock")
+}
+
+// =============================================
+// END RATING SYSTEM MODELS
+// =============================================
+
+// =============================================
+// INACTIVITY SYSTEM MODELS
+// =============================================
+
+model InactivitySettings {
+  id                      String    @id @default(cuid())
+
+  // Scope
+  leagueId                String?   @unique
+  seasonId                String?   @unique
+
+  // Configuration
+  inactivityThresholdDays Int       @default(14)
+  warningThresholdDays    Int?
+
+  // Behavior
+  autoMarkInactive        Boolean   @default(true)
+  excludeFromPairing      Boolean   @default(true)
+  sendReminderEmail       Boolean   @default(true)
+  reminderDaysBefore      Int?      @default(3)
+
+  // Audit
+  updatedByAdminId        String
+  updatedAt               DateTime  @updatedAt
+  createdAt               DateTime  @default(now())
+
+  // Relations
+  league                  League?   @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  season                  Season?   @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  updatedBy               Admin     @relation("InactivitySettingsUpdated", fields: [updatedByAdminId], references: [id])
+
+  @@index([leagueId])
+  @@index([seasonId])
+  @@map("inactivity_settings")
+}
+
+model PlayerStatusChange {
+  id              String             @id @default(cuid())
+  userId          String
+
+  // Change details
+  previousStatus  UserStatus
+  newStatus       UserStatus
+  reason          StatusChangeReason
+  notes           String?
+
+  // Trigger
+  triggeredById   String?
+  matchId         String?
+
+  createdAt       DateTime           @default(now())
+
+  // Relations
+  user            User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  triggeredBy     Admin?             @relation("StatusChangesTriggered", fields: [triggeredById], references: [id])
+  match           Match?             @relation(fields: [matchId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([newStatus])
+  @@index([reason])
+  @@map("player_status_change")
+}
+
+// =============================================
+// END INACTIVITY SYSTEM MODELS
 // =============================================
 
 model Achievement {
@@ -799,6 +1226,8 @@ model UserThread {
   joinedAt    DateTime @default(now())
 
   @@unique([threadId, userId]) // Prevent duplicate memberships
+  @@index([userId])
+  @@index([threadId])
 }
 
 model Message {
@@ -899,6 +1328,9 @@ model Partnership {
   withdrawalRequest WithdrawalRequest[]
   notifications     Notification[]
 
+  // Rating system relations
+  divisionStandings DivisionStanding[]
+
   @@index([seasonId])
   @@index([status])
   @@index([captainId])
@@ -932,7 +1364,7 @@ model SeasonInvitation {
 }
 
 model Notification {
-  id        String               @id @unique @default(cuid())
+  id        String               @id @default(cuid())
   title     String?
   message   String
   category  NotificationCategory
@@ -966,7 +1398,7 @@ model Notification {
 }
 
 model UserNotification {
-  id             String    @id @unique @default(cuid())
+  id             String    @id @default(cuid())
   userId         String
   notificationId String
   read           Boolean   @default(false)
@@ -1203,4 +1635,68 @@ enum MatchAdminActionType {
 
 // =============================================
 // END ADMIN-FOCUSED MATCH MANAGEMENT ENUMS
+// =============================================
+
+// =============================================
+// RATING SYSTEM ENUMS
+// =============================================
+
+enum RatingChangeReason {
+  MATCH_WIN
+  MATCH_LOSS
+  WALKOVER_WIN
+  WALKOVER_LOSS
+  MANUAL_ADJUSTMENT
+  RECALCULATION
+  INITIAL_PLACEMENT
+  SEASON_RESET
+}
+
+enum AdjustmentType {
+  MIGRATION
+  CORRECTION
+  APPEAL_RESOLUTION
+  ADMIN_OVERRIDE
+  OTHER
+}
+
+enum RecalculationScope {
+  MATCH
+  PLAYER
+  DIVISION
+  SEASON
+  LEAGUE
+}
+
+enum RecalculationStatus {
+  PENDING
+  GENERATING_PREVIEW
+  PREVIEW_READY
+  APPLYING
+  APPLIED
+  FAILED
+  CANCELLED
+}
+
+// =============================================
+// END RATING SYSTEM ENUMS
+// =============================================
+
+// =============================================
+// INACTIVITY SYSTEM ENUMS
+// =============================================
+
+enum StatusChangeReason {
+  INACTIVITY_THRESHOLD
+  INACTIVITY_WARNING
+  MATCH_PLAYED
+  ADMIN_MANUAL
+  SEASON_START
+  SEASON_END
+  REGISTRATION
+  WITHDRAWAL
+}
+
+// =============================================
+// END INACTIVITY SYSTEM ENUMS
 // =============================================
