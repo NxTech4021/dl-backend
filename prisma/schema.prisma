@@ -53,8 +53,8 @@ model User {
   favoritedByOthers Favorite[] @relation("FavoritedUser")
 
   //Thread relations
-  userThreads  UserThread[]
-  messages     Message[]
+  userThreads UserThread[]
+  messages    Message[]
 
   // Questionnaire relations
   questionnaireResponses QuestionnaireResponse[]
@@ -62,6 +62,15 @@ model User {
   // Notification relations
   notifications     Notification[]
   userNotifications UserNotification[]
+
+  // Admin-focused match management relations
+  raisedDisputes     MatchDispute[]   @relation("RaisedDisputes")
+  disputeComments    DisputeComment[] @relation("DisputeComments")
+  defaultedMatches   MatchWalkover[]  @relation("DefaultedMatches")
+  walkoverWins       MatchWalkover[]  @relation("WalkoverWins")
+  reportedWalkovers  MatchWalkover[]  @relation("ReportedWalkovers")
+  confirmedWalkovers MatchWalkover[]  @relation("ConfirmedWalkovers")
+  penalties          PlayerPenalty[]  @relation("UserPenalties")
 
   @@index([email])
   @@index([username])
@@ -87,6 +96,15 @@ model Admin {
   divisionsCreated    Division[]           @relation("DivisionCreatedBy")
   divisionsUpdated    Division[]           @relation("DivisionUpdatedBy")
   divisionAssignments DivisionAssignment[] @relation("AssignmentsByAdmin")
+
+  // Admin-focused match management relations
+  reviewedDisputes  MatchDispute[]     @relation("ReviewedDisputes")
+  resolvedDisputes  MatchDispute[]     @relation("ResolvedDisputes")
+  disputeNotes      DisputeAdminNote[] @relation("DisputeNotes")
+  verifiedWalkovers MatchWalkover[]    @relation("VerifiedWalkovers")
+  issuedPenalties   PlayerPenalty[]    @relation("IssuedPenalties")
+  resolvedAppeals   PlayerPenalty[]    @relation("ResolvedAppeals")
+  adminMatchActions MatchAdminAction[] @relation("AdminMatchActions")
 }
 
 model AdminInviteToken {
@@ -193,7 +211,7 @@ model League {
   createdById String?
   createdBy   Admin?  @relation(fields: [createdById], references: [id])
 
-  seasons      Season[]           @relation("LeagueToSeason")
+  seasons      Season[]      @relation("LeagueToSeason")
   sponsorships Sponsorship[]
   divisions    Division[]
 
@@ -218,7 +236,7 @@ model Category {
   createdAt         DateTime          @default(now())
   updatedAt         DateTime          @updatedAt
 
-  seasons          Season[]
+  seasons Season[]
 
   @@index([isActive])
 }
@@ -254,7 +272,7 @@ model Sponsorship {
   leagues   League[]
   createdBy Admin?     @relation("SponsorshipCreatedBy", fields: [createdById], references: [id])
   divisions Division[] @relation("DivisionSponsor")
-  seasons   Season[]   @relation("SeasonSponsor") 
+  seasons   Season[]   @relation("SeasonSponsor")
 
   @@map("sponsorship")
 }
@@ -287,18 +305,17 @@ model Season {
   partnerships      Partnership[]
   seasonInvitations SeasonInvitation[]
 
-  leagues           League[]   @relation("LeagueToSeason")
-  
-  categoryId  String?
-  category    Category?  @relation(fields: [categoryId], references: [id])
-  sponsorId String?
-  sponsor   Sponsorship? @relation("SeasonSponsor", fields: [sponsorId], references: [id], onDelete: SetNull)
- 
+  leagues League[] @relation("LeagueToSeason")
 
-  notifications     Notification[]
+  categoryId String?
+  category   Category?    @relation(fields: [categoryId], references: [id])
+  sponsorId  String?
+  sponsor    Sponsorship? @relation("SeasonSponsor", fields: [sponsorId], references: [id], onDelete: SetNull)
 
-  waitlistId        String?
-  waitlist          Waitlist? @relation
+  notifications Notification[]
+
+  waitlistId String?
+  waitlist   Waitlist? @relation
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -357,11 +374,11 @@ model WithdrawalRequest {
   processedByAdminId String?
   partnershipId      String? // For partner change requests
 
-  processedByAdmin User?        @relation("ProcessedByAdmin", fields: [processedByAdminId], references: [id])
+  processedByAdmin User?          @relation("ProcessedByAdmin", fields: [processedByAdminId], references: [id])
   seasonId         String
-  season           Season       @relation(fields: [seasonId], references: [id])
-  partnership      Partnership? @relation(fields: [partnershipId], references: [id])
-  notifications Notification[]
+  season           Season         @relation(fields: [seasonId], references: [id])
+  partnership      Partnership?   @relation(fields: [partnershipId], references: [id])
+  notifications    Notification[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -408,7 +425,7 @@ model Division {
   leagueId          String
   league            League               @relation(fields: [leagueId], references: [id], onDelete: Cascade)
   threads           Thread[]             @relation("DivisionThreads")
-  notifications Notification[]
+  notifications     Notification[]
 
   // Pairing Relations
   partnerships Partnership[]
@@ -472,6 +489,8 @@ model DivisionAssignment {
 model Match {
   id            String   @id @default(cuid())
   divisionId    String?
+  leagueId      String?
+  seasonId      String?
   sport         String
   matchType     String
   playerScore   Int?
@@ -482,17 +501,35 @@ model Match {
   notes         String?
   duration      Int?
 
-  division     Division?          @relation(fields: [divisionId], references: [id], onDelete: Cascade)
-  participants MatchParticipant[]
-  stats        MatchStats?
+  // Enhanced fields for admin management
+  status         MatchStatus @default(SCHEDULED)
+  isWalkover     Boolean     @default(false)
+  walkoverReason String?
+  isDisputed     Boolean     @default(false)
+  adminNotes     String?
+
+  division      Division?          @relation(fields: [divisionId], references: [id], onDelete: Cascade)
+  participants  MatchParticipant[]
+  stats         MatchStats?
   notifications Notification[]
+
+  // Admin-focused relations
+  disputes     MatchDispute[]
+  walkover     MatchWalkover?
+  adminActions MatchAdminAction[]
+  penalties    PlayerPenalty[]    @relation("MatchPenalties")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([divisionId])
+  @@index([leagueId])
+  @@index([seasonId])
   @@index([sport])
   @@index([matchDate])
+  @@index([status])
+  @@index([isDisputed])
+  @@index([matchType])
 }
 
 //TO DO - use this and link with seasonmembership
@@ -531,6 +568,176 @@ model MatchStats {
   updatedAt              DateTime @updatedAt
   match                  Match    @relation(fields: [matchId], references: [id], onDelete: Cascade)
 }
+
+// =============================================
+// ADMIN-FOCUSED MATCH MANAGEMENT MODELS
+// =============================================
+
+model MatchDispute {
+  id              String          @id @default(cuid())
+  matchId         String          @unique
+  raisedByUserId  String
+  disputeCategory DisputeCategory
+  disputeComment  String
+  disputerScore   Json?
+  evidenceUrl     String?
+  submittedAt     DateTime        @default(now())
+
+  // Admin resolution fields
+  adminResolution   String?
+  resolutionAction  DisputeResolutionAction?
+  finalScore        Json?
+  resolvedAt        DateTime?
+  status            DisputeStatus            @default(OPEN)
+  priority          DisputePriority          @default(NORMAL)
+  flaggedForReview  Boolean                  @default(false)
+  reviewedByAdminId String?
+  resolvedByAdminId String?
+
+  // Relations
+  match           Match              @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  raisedByUser    User               @relation("RaisedDisputes", fields: [raisedByUserId], references: [id])
+  reviewedByAdmin Admin?             @relation("ReviewedDisputes", fields: [reviewedByAdminId], references: [id])
+  resolvedByAdmin Admin?             @relation("ResolvedDisputes", fields: [resolvedByAdminId], references: [id])
+  adminNotes      DisputeAdminNote[]
+  comments        DisputeComment[]
+
+  @@index([matchId])
+  @@index([raisedByUserId])
+  @@index([status])
+  @@index([priority])
+  @@index([reviewedByAdminId])
+  @@map("match_dispute")
+}
+
+model DisputeAdminNote {
+  id             String   @id @default(cuid())
+  disputeId      String
+  adminId        String
+  note           String
+  isInternalOnly Boolean  @default(true)
+  createdAt      DateTime @default(now())
+
+  dispute MatchDispute @relation(fields: [disputeId], references: [id], onDelete: Cascade)
+  admin   Admin        @relation("DisputeNotes", fields: [adminId], references: [id])
+
+  @@index([disputeId, createdAt(sort: Desc)])
+  @@map("dispute_admin_note")
+}
+
+model DisputeComment {
+  id          String   @id @default(cuid())
+  disputeId   String
+  senderId    String
+  comment     String
+  attachments Json?
+  createdAt   DateTime @default(now())
+
+  dispute MatchDispute @relation(fields: [disputeId], references: [id], onDelete: Cascade)
+  sender  User         @relation("DisputeComments", fields: [senderId], references: [id])
+
+  @@index([disputeId, createdAt(sort: Asc)])
+  @@map("dispute_comment")
+}
+
+model MatchWalkover {
+  id                   String         @id @default(cuid())
+  matchId              String         @unique
+  walkoverFlag         Boolean        @default(true)
+  walkoverReason       WalkoverReason
+  walkoverReasonDetail String?
+  defaultingPlayerId   String
+  winningPlayerId      String
+  reportedBy           String
+  confirmedBy          String?
+  adminVerified        Boolean        @default(false)
+  adminVerifiedBy      String?
+  adminVerifiedAt      DateTime?
+  penaltyApplied       Boolean        @default(false)
+  penaltyType          PenaltyType?
+  penaltyDetails       String?
+  penaltyId            String?
+  createdAt            DateTime       @default(now())
+
+  match            Match          @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  defaultingPlayer User           @relation("DefaultedMatches", fields: [defaultingPlayerId], references: [id])
+  winningPlayer    User           @relation("WalkoverWins", fields: [winningPlayerId], references: [id])
+  reporter         User           @relation("ReportedWalkovers", fields: [reportedBy], references: [id])
+  confirmer        User?          @relation("ConfirmedWalkovers", fields: [confirmedBy], references: [id])
+  verifiedByAdmin  Admin?         @relation("VerifiedWalkovers", fields: [adminVerifiedBy], references: [id])
+  penalty          PlayerPenalty? @relation(fields: [penaltyId], references: [id])
+
+  @@index([matchId])
+  @@index([defaultingPlayerId])
+  @@index([adminVerified])
+  @@map("match_walkover")
+}
+
+model PlayerPenalty {
+  id                    String          @id @default(cuid())
+  userId                String
+  penaltyType           PenaltyType
+  severity              PenaltySeverity
+  relatedMatchId        String?
+  relatedDisputeId      String?
+  pointsDeducted        Int?
+  suspensionDays        Int?
+  suspensionStartDate   DateTime?
+  suspensionEndDate     DateTime?
+  issuedByAdminId       String
+  reason                String
+  evidenceUrl           String?
+  status                PenaltyStatus   @default(ACTIVE)
+  appealSubmittedAt     DateTime?
+  appealReason          String?
+  appealResolvedBy      String?
+  appealResolvedAt      DateTime?
+  appealResolutionNotes String?
+  expiresAt             DateTime?
+  createdAt             DateTime        @default(now())
+  updatedAt             DateTime        @updatedAt
+
+  user                  User            @relation("UserPenalties", fields: [userId], references: [id])
+  relatedMatch          Match?          @relation("MatchPenalties", fields: [relatedMatchId], references: [id])
+  issuedByAdmin         Admin           @relation("IssuedPenalties", fields: [issuedByAdminId], references: [id])
+  appealResolvedByAdmin Admin?          @relation("ResolvedAppeals", fields: [appealResolvedBy], references: [id])
+  walkovers             MatchWalkover[]
+
+  @@index([userId, status])
+  @@index([penaltyType])
+  @@index([status])
+  @@index([issuedByAdminId])
+  @@index([expiresAt])
+  @@map("player_penalty")
+}
+
+model MatchAdminAction {
+  id                     String               @id @default(cuid())
+  matchId                String
+  adminId                String
+  actionType             MatchAdminActionType
+  oldValue               Json?
+  newValue               Json?
+  reason                 String
+  affectedUserIds        Json?
+  triggeredRecalculation Boolean              @default(false)
+  recalculationDetails   Json?
+  notifiedUsers          Json?
+  ipAddress              String?
+  createdAt              DateTime             @default(now())
+
+  match Match @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  admin Admin @relation("AdminMatchActions", fields: [adminId], references: [id])
+
+  @@index([matchId, createdAt(sort: Desc)])
+  @@index([adminId, createdAt(sort: Desc)])
+  @@index([actionType])
+  @@map("match_admin_action")
+}
+
+// =============================================
+// END ADMIN-FOCUSED MATCH MANAGEMENT MODELS
+// =============================================
 
 model Achievement {
   id               String            @id @default(cuid())
@@ -576,20 +783,20 @@ model Thread {
   members  UserThread[]
   messages Message[]
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
   notifications Notification[]
 }
 
 model UserThread {
-  id       String   @id @default(cuid())
-  thread   Thread   @relation(fields: [threadId], references: [id])
-  threadId String
-  user     User     @relation(fields: [userId], references: [id])
-  unreadCount Int   @default(0)
-  userId   String
-  role     String?
-  joinedAt DateTime @default(now())
+  id          String   @id @default(cuid())
+  thread      Thread   @relation(fields: [threadId], references: [id])
+  threadId    String
+  user        User     @relation(fields: [userId], references: [id])
+  unreadCount Int      @default(0)
+  userId      String
+  role        String?
+  joinedAt    DateTime @default(now())
 
   @@unique([threadId, userId]) // Prevent duplicate memberships
 }
@@ -612,8 +819,8 @@ model Message {
   isEdited  Boolean @default(false)
   isDeleted Boolean @default(false)
 
-  createdAt DateTime        @default(now())
-  updatedAt DateTime        @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([threadId, createdAt])
 }
@@ -638,8 +845,8 @@ model Friendship {
 
 model Favorite {
   id          String   @id @default(cuid())
-  userId      String   // User who is making the favorite
-  favoritedId String   // User who is being favorited
+  userId      String // User who is making the favorite
+  favoritedId String // User who is being favorited
   createdAt   DateTime @default(now())
 
   user      User @relation("UserFavorites", fields: [userId], references: [id], onDelete: Cascade)
@@ -662,9 +869,9 @@ model PairRequest {
   respondedAt DateTime?
   expiresAt   DateTime
 
-  requester User   @relation("SentPairRequests", fields: [requesterId], references: [id], onDelete: Cascade)
-  recipient User   @relation("ReceivedPairRequests", fields: [recipientId], references: [id], onDelete: Cascade)
-  season    Season @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  requester     User           @relation("SentPairRequests", fields: [requesterId], references: [id], onDelete: Cascade)
+  recipient     User           @relation("ReceivedPairRequests", fields: [recipientId], references: [id], onDelete: Cascade)
+  season        Season         @relation(fields: [seasonId], references: [id], onDelete: Cascade)
   notifications Notification[]
 
   @@index([requesterId])
@@ -676,8 +883,8 @@ model PairRequest {
 
 model Partnership {
   id          String            @id @default(cuid())
-  captainId   String            // Requester = Captain
-  partnerId   String            // Recipient = Partner
+  captainId   String // Requester = Captain
+  partnerId   String // Recipient = Partner
   seasonId    String
   divisionId  String?
   pairRating  Int?
@@ -690,7 +897,7 @@ model Partnership {
   season            Season              @relation(fields: [seasonId], references: [id], onDelete: Cascade)
   division          Division?           @relation(fields: [divisionId], references: [id], onDelete: SetNull)
   withdrawalRequest WithdrawalRequest[]
-  notifications Notification[]
+  notifications     Notification[]
 
   @@index([seasonId])
   @@index([status])
@@ -725,49 +932,49 @@ model SeasonInvitation {
 }
 
 model Notification {
-  id               String           @id @unique @default(cuid())
-  title            String?
-  message          String
-  category         NotificationCategory
-  type             String?
-  createdAt        DateTime         @default(now())
-  
-  seasonId         String?
-  divisionId       String?
-  matchId          String?
-  userId           String?
-  partnershipId    String?
-  threadId         String?
-  pairRequestId    String?
+  id        String               @id @unique @default(cuid())
+  title     String?
+  message   String
+  category  NotificationCategory
+  type      String?
+  createdAt DateTime             @default(now())
+
+  seasonId            String?
+  divisionId          String?
+  matchId             String?
+  userId              String?
+  partnershipId       String?
+  threadId            String?
+  pairRequestId       String?
   withdrawalRequestId String?
-  
+
   // Relations
-  season           Season?           @relation(fields: [seasonId], references: [id])
-  division         Division?         @relation(fields: [divisionId], references: [id])
-  match            Match?            @relation(fields: [matchId], references: [id])
-  user             User?             @relation(fields: [userId], references: [id])
-  partnership      Partnership?      @relation(fields: [partnershipId], references: [id])
-  thread           Thread?           @relation(fields: [threadId], references: [id])
-  pairRequest      PairRequest?      @relation(fields: [pairRequestId], references: [id])
+  season            Season?            @relation(fields: [seasonId], references: [id])
+  division          Division?          @relation(fields: [divisionId], references: [id])
+  match             Match?             @relation(fields: [matchId], references: [id])
+  user              User?              @relation(fields: [userId], references: [id])
+  partnership       Partnership?       @relation(fields: [partnershipId], references: [id])
+  thread            Thread?            @relation(fields: [threadId], references: [id])
+  pairRequest       PairRequest?       @relation(fields: [pairRequestId], references: [id])
   withdrawalRequest WithdrawalRequest? @relation(fields: [withdrawalRequestId], references: [id])
-  
+
   userNotifications UserNotification[]
-  
+
   @@index([type])
   @@index([createdAt])
   @@map("notification")
 }
 
 model UserNotification {
-  id             String       @id @unique @default(cuid())
+  id             String    @id @unique @default(cuid())
   userId         String
   notificationId String
-  read           Boolean      @default(false)
-  archive        Boolean      @default(false)
+  read           Boolean   @default(false)
+  archive        Boolean   @default(false)
   readAt         DateTime?
 
-  notification   Notification @relation(fields: [notificationId], references: [id])
-  user           User         @relation(fields: [userId], references: [id])
+  notification Notification @relation(fields: [notificationId], references: [id])
+  user         User         @relation(fields: [userId], references: [id])
 
   @@unique([userId, notificationId])
   @@index([userId, read])
@@ -907,3 +1114,93 @@ enum SeasonInvitationStatus {
   CANCELLED
   EXPIRED
 }
+
+// =============================================
+// ADMIN-FOCUSED MATCH MANAGEMENT ENUMS
+// =============================================
+
+enum MatchStatus {
+  SCHEDULED
+  ONGOING
+  COMPLETED
+  UNFINISHED
+  CANCELLED
+  VOID
+}
+
+enum DisputeCategory {
+  WRONG_SCORE
+  NO_SHOW
+  BEHAVIOR
+  OTHER
+}
+
+enum DisputeStatus {
+  OPEN
+  UNDER_REVIEW
+  RESOLVED
+  REJECTED
+}
+
+enum DisputePriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+
+enum DisputeResolutionAction {
+  UPHOLD_ORIGINAL
+  UPHOLD_DISPUTER
+  CUSTOM_SCORE
+  VOID_MATCH
+  AWARD_WALKOVER
+  REQUEST_MORE_INFO
+}
+
+enum WalkoverReason {
+  NO_SHOW
+  LATE_CANCELLATION
+  INJURY
+  PERSONAL_EMERGENCY
+  OTHER
+}
+
+enum PenaltyType {
+  WARNING
+  POINTS_DEDUCTION
+  SUSPENSION
+  NONE
+}
+
+enum PenaltySeverity {
+  WARNING
+  POINTS_DEDUCTION
+  SUSPENSION
+  PERMANENT_BAN
+}
+
+enum PenaltyStatus {
+  ACTIVE
+  APPEALED
+  OVERTURNED
+  EXPIRED
+  COMPLETED
+}
+
+enum MatchAdminActionType {
+  EDIT_RESULT
+  VOID_MATCH
+  CONVERT_TO_WALKOVER
+  OVERRIDE_DISPUTE
+  APPLY_PENALTY
+  REMOVE_PARTICIPANT
+  ADD_PARTICIPANT
+  APPROVE_LATE_CANCELLATION
+  DENY_LATE_CANCELLATION
+  EDIT_SCHEDULE
+}
+
+// =============================================
+// END ADMIN-FOCUSED MATCH MANAGEMENT ENUMS
+// =============================================
