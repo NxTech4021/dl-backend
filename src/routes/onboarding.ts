@@ -322,6 +322,38 @@ router.post("/:sport/submit", validateSportParam, async (req, res) => {
       scoringDuration
     );
 
+    const normalizedSingles =
+      scoringResult.singles ??
+      scoringResult.singles_rating ??
+      scoringResult.rating ??
+      null;
+    const normalizedDoubles =
+      scoringResult.doubles ??
+      scoringResult.doubles_rating ??
+      scoringResult.rating ??
+      null;
+
+    const detailPayload = JSON.parse(
+      JSON.stringify({
+        ...(typeof scoringResult.detail === "object" ? scoringResult.detail : {}),
+        adjustment_detail: scoringResult.adjustment_detail,
+        confidence_breakdown: scoringResult.confidence_breakdown,
+        rating: scoringResult.rating,
+        singles_rating: scoringResult.singles_rating,
+        doubles_rating: scoringResult.doubles_rating,
+        source_detail: scoringResult.sourceDetail,
+      })
+    ) as Prisma.InputJsonValue;
+
+    const dbResultPayload = {
+      source: scoringResult.source || "questionnaire",
+      singles: normalizedSingles ? Math.round(normalizedSingles) : null,
+      doubles: normalizedDoubles ? Math.round(normalizedDoubles) : null,
+      rd: scoringResult.rd ?? 350,
+      confidence: scoringResult.confidence ?? "low",
+      detail: detailPayload,
+    };
+
     // Database operations with proper error handling
     const dbStart = Date.now();
     let response;
@@ -346,8 +378,8 @@ router.post("/:sport/submit", validateSportParam, async (req, res) => {
             completedAt: new Date(),
             result: {
               upsert: {
-                create: scoringResult as any,
-                update: scoringResult as any,
+                create: dbResultPayload,
+                update: dbResultPayload,
               },
             },
           },
@@ -373,7 +405,7 @@ router.post("/:sport/submit", validateSportParam, async (req, res) => {
             qHash: hash,
             answersJson: sanitizedAnswers as Prisma.InputJsonValue,
             completedAt: new Date(),
-            result: { create: scoringResult as any },
+            result: { create: dbResultPayload },
           },
           include: { result: true },
         });
