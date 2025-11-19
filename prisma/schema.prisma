@@ -88,6 +88,20 @@ model User {
   bugComments           BugComment[]      @relation("BugCommentAuthor")
   bugStatusChanges      BugStatusChange[] @relation("BugStatusChanger")
 
+  // Match invitation system relations
+  matchesCreated        Match[]           @relation("MatchCreator")
+  matchResultsSubmitted Match[]           @relation("MatchResultSubmitter")
+  matchResultsConfirmed Match[]           @relation("MatchResultConfirmer")
+  matchesCancelled      Match[]           @relation("MatchCanceller")
+  matchWalkoversRecorded Match[]          @relation("MatchWalkoverRecorder")
+  matchInvitationsSent      MatchInvitation[] @relation("MatchInvitationsSent")
+  matchInvitationsReceived  MatchInvitation[] @relation("MatchInvitationsReceived")
+  matchTimeSlotsProposed    MatchTimeSlot[]   @relation("MatchTimeSlotsProposed")
+
+  // Bracket system relations
+  bracketPlayer1        BracketMatch[]    @relation("BracketPlayer1")
+  bracketPlayer2        BracketMatch[]    @relation("BracketPlayer2")
+
   @@index([email])
   @@index([lastMatchDate])
   @@index([username])
@@ -138,6 +152,9 @@ model Admin {
   assignedBugs              BugReport[]           @relation("BugAssignee")
   resolvedBugs              BugReport[]           @relation("BugResolver")
   bugDefaultSettings        BugReportSettings[]   @relation("BugDefaultAssignee")
+
+  // Bracket system relations
+  bracketsPublished         Bracket[]             @relation("BracketPublisher")
 }
 
 model AdminInviteToken {
@@ -350,6 +367,9 @@ model Season {
   // Inactivity system relations
   inactivitySettings InactivitySettings?
 
+  // Bracket system relations
+  brackets          Bracket[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -468,6 +488,9 @@ model Division {
   playerRatings     PlayerRating[]
   divisionStandings DivisionStanding[]
 
+  // Bracket system relations
+  brackets          Bracket[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -530,14 +553,22 @@ model Match {
   leagueId      String?
   seasonId      String?
   sport         String
-  matchType     String
+  matchType     MatchType  @default(SINGLES)
   playerScore   Int?
   opponentScore Int?
   outcome       String?
   matchDate     DateTime @default(now())
   location      String?
+  venue         String?    // Specific venue name
   notes         String?
   duration      Int?
+
+  // Match format
+  format        MatchFormat @default(STANDARD)
+  isOneSet      Boolean     @default(false)
+
+  // Creator tracking
+  createdById   String?
 
   // Enhanced fields for admin management
   status         MatchStatus @default(SCHEDULED)
@@ -546,13 +577,36 @@ model Match {
   adminNotes     String?
 
   // Scheduling fields
-  scheduledStartTime      DateTime?
-  actualStartTime         DateTime?
+  proposedTimes         Json?       // Array of proposed times
+  scheduledTime         DateTime?   // Final agreed time
+  scheduledStartTime    DateTime?
+  actualStartTime       DateTime?
+
+  // Team-based scoring (for doubles)
+  team1Score            Int?
+  team2Score            Int?
+  setScores             Json?       // Detailed set scores
+
+  // Result submission tracking
+  resultSubmittedById   String?
+  resultSubmittedAt     DateTime?
+  resultConfirmedById   String?
+  resultConfirmedAt     DateTime?
+  resultComment         String?
+  resultEvidence        String?
+  isAutoApproved        Boolean     @default(false)
 
   // Cancellation tracking
   cancellationRequestedAt DateTime?
   isLateCancellation      Boolean   @default(false)
-  cancellationReason      String?
+  cancellationReason      CancellationReason?
+  cancelledById           String?
+  cancelledAt             DateTime?
+  cancellationComment     String?
+
+  // Walkover tracking
+  walkoverReason          WalkoverReason?
+  walkoverRecordedById    String?
 
   // Reschedule tracking
   rescheduledFromId       String?   @unique
@@ -561,10 +615,22 @@ model Match {
   // Standard walkover scores
   walkoverScore           Json?
 
+  // Admin review
+  requiresAdminReview     Boolean   @default(false)
+
+  // Relations
   division      Division?          @relation(fields: [divisionId], references: [id], onDelete: Cascade)
   league        League?            @relation("LeagueMatches", fields: [leagueId], references: [id], onDelete: SetNull)
   season        Season?            @relation("SeasonMatches", fields: [seasonId], references: [id], onDelete: SetNull)
+  createdBy     User?              @relation("MatchCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  resultSubmittedBy  User?         @relation("MatchResultSubmitter", fields: [resultSubmittedById], references: [id], onDelete: SetNull)
+  resultConfirmedBy  User?         @relation("MatchResultConfirmer", fields: [resultConfirmedById], references: [id], onDelete: SetNull)
+  cancelledBy        User?         @relation("MatchCanceller", fields: [cancelledById], references: [id], onDelete: SetNull)
+  walkoverRecordedBy User?         @relation("MatchWalkoverRecorder", fields: [walkoverRecordedById], references: [id], onDelete: SetNull)
+
   participants  MatchParticipant[]
+  invitations   MatchInvitation[]
+  timeSlots     MatchTimeSlot[]
   stats         MatchStats?
   notifications Notification[]
 
@@ -585,6 +651,9 @@ model Match {
   rescheduledFrom Match? @relation("Reschedule", fields: [rescheduledFromId], references: [id])
   rescheduledTo   Match? @relation("Reschedule")
 
+  // Bracket relation
+  bracketMatch    BracketMatch?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -598,15 +667,28 @@ model Match {
   @@index([matchType])
   @@index([scheduledStartTime])
   @@index([isLateCancellation])
+  @@index([createdById])
+  @@index([format])
+  @@index([requiresAdminReview])
 }
 
-//TO DO - use this and link with seasonmembership
 model MatchParticipant {
   id        String   @id @default(cuid())
   matchId   String
   userId    String
   isStarter Boolean  @default(true)
-  team      String?
+  team      String?  // "team1" or "team2" for doubles
+
+  // Role and invitation tracking
+  role              ParticipantRole    @default(INVITED)
+  invitationStatus  InvitationStatus   @default(PENDING)
+  acceptedAt        DateTime?
+
+  // Attendance tracking
+  didAttend         Boolean?
+  arrivedAt         DateTime?
+  wasLate           Boolean   @default(false)
+
   createdAt DateTime @default(now())
 
   match Match @relation(fields: [matchId], references: [id], onDelete: Cascade)
@@ -615,6 +697,8 @@ model MatchParticipant {
   @@unique([matchId, userId])
   @@index([userId])
   @@index([matchId])
+  @@index([role])
+  @@index([invitationStatus])
 }
 
 model MatchStats {
@@ -636,6 +720,186 @@ model MatchStats {
   updatedAt              DateTime @updatedAt
   match                  Match    @relation(fields: [matchId], references: [id], onDelete: Cascade)
 }
+
+model MatchInvitation {
+  id              String           @id @default(cuid())
+  matchId         String
+  inviterId       String
+  inviteeId       String
+
+  // Invitation details
+  status          InvitationStatus @default(PENDING)
+  message         String?
+  declineReason   String?
+
+  // Timing
+  sentAt          DateTime         @default(now())
+  respondedAt     DateTime?
+  expiresAt       DateTime
+
+  // Reminders
+  reminderSentAt  DateTime?
+  reminderCount   Int              @default(0)
+
+  // Relations
+  match           Match            @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  inviter         User             @relation("MatchInvitationsSent", fields: [inviterId], references: [id], onDelete: Cascade)
+  invitee         User             @relation("MatchInvitationsReceived", fields: [inviteeId], references: [id], onDelete: Cascade)
+
+  @@unique([matchId, inviteeId])
+  @@index([matchId])
+  @@index([inviterId])
+  @@index([inviteeId])
+  @@index([status])
+  @@index([expiresAt])
+  @@map("match_invitation")
+}
+
+model MatchTimeSlot {
+  id              String         @id @default(cuid())
+  matchId         String
+  proposedById    String
+
+  // Time slot details
+  proposedTime    DateTime
+  status          TimeSlotStatus @default(PROPOSED)
+  location        String?
+  notes           String?
+
+  // Voting
+  votes           Json?          // Array of user IDs who voted for this slot
+  voteCount       Int            @default(0)
+
+  // Confirmation
+  confirmedAt     DateTime?
+
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  // Relations
+  match           Match          @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  proposedBy      User           @relation("MatchTimeSlotsProposed", fields: [proposedById], references: [id], onDelete: Cascade)
+
+  @@index([matchId])
+  @@index([proposedById])
+  @@index([status])
+  @@index([proposedTime])
+  @@map("match_time_slot")
+}
+
+// =============================================
+// FINALS BRACKET SYSTEM MODELS
+// =============================================
+
+model Bracket {
+  id              String         @id @default(cuid())
+  seasonId        String
+  divisionId      String
+
+  bracketName     String         // "Division A Finals"
+  bracketType     BracketType    @default(SINGLE_ELIMINATION)
+
+  status          BracketStatus  @default(DRAFT)
+  isLocked        Boolean        @default(false) // Once locked, seeding can't change
+
+  seedingSource   SeedingSource  @default(STANDINGS)
+  numPlayers      Int            @default(8)
+
+  // Scheduling
+  startDate       DateTime?
+  endDate         DateTime?
+
+  // Publication
+  publishedAt     DateTime?
+  publishedById   String?
+
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  // Relations
+  season          Season         @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  division        Division       @relation(fields: [divisionId], references: [id], onDelete: Cascade)
+  publishedBy     Admin?         @relation("BracketPublisher", fields: [publishedById], references: [id])
+  rounds          BracketRound[]
+  matches         BracketMatch[]
+
+  @@unique([seasonId, divisionId])
+  @@index([status])
+  @@index([seasonId])
+  @@index([divisionId])
+  @@map("bracket")
+}
+
+model BracketRound {
+  id              String         @id @default(cuid())
+  bracketId       String
+
+  roundNumber     Int            // 1 = First round, higher = later rounds
+  roundName       String         // "Finals", "Semi-Finals", "Quarter-Finals"
+  startDate       DateTime?
+  endDate         DateTime?
+
+  createdAt       DateTime       @default(now())
+
+  // Relations
+  bracket         Bracket        @relation(fields: [bracketId], references: [id], onDelete: Cascade)
+  matches         BracketMatch[]
+
+  @@unique([bracketId, roundNumber])
+  @@index([bracketId])
+  @@map("bracket_round")
+}
+
+model BracketMatch {
+  id              String             @id @default(cuid())
+  bracketId       String
+  roundId         String
+
+  matchNumber     Int                // Position in bracket (1-N per round)
+  seed1           Int?               // Seeding of player/team 1
+  seed2           Int?               // Seeding of player/team 2
+
+  // Participants (for singles)
+  player1Id       String?
+  player2Id       String?
+
+  // For doubles - partnership IDs
+  team1Id         String?
+  team2Id         String?
+
+  // Link to actual played match
+  matchId         String?            @unique
+
+  // Winner
+  winnerId        String?            // User ID or Partnership ID
+
+  // For double elimination: where does loser go?
+  nextMatchId         String?        // Winner advances to this match
+  loserNextMatchId    String?        // Loser goes to this match (double elim)
+
+  status          BracketMatchStatus @default(PENDING)
+  scheduledTime   DateTime?
+  courtLocation   String?
+
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  // Relations
+  bracket         Bracket            @relation(fields: [bracketId], references: [id], onDelete: Cascade)
+  round           BracketRound       @relation(fields: [roundId], references: [id], onDelete: Cascade)
+  player1         User?              @relation("BracketPlayer1", fields: [player1Id], references: [id])
+  player2         User?              @relation("BracketPlayer2", fields: [player2Id], references: [id])
+  match           Match?             @relation(fields: [matchId], references: [id])
+
+  @@index([bracketId])
+  @@index([roundId])
+  @@index([status])
+  @@map("bracket_match")
+}
+
+// =============================================
+// END FINALS BRACKET SYSTEM MODELS
+// =============================================
 
 // =============================================
 // ADMIN-FOCUSED MATCH MANAGEMENT MODELS
@@ -1994,4 +2258,91 @@ enum BugStatus {
 
 // =============================================
 // END BUG TRACKING SYSTEM ENUMS
+// =============================================
+
+// =============================================
+// MATCH INVITATION SYSTEM ENUMS
+// =============================================
+
+enum MatchFormat {
+  STANDARD      // Best of 3 sets
+  ONE_SET       // Single set match
+}
+
+enum MatchType {
+  SINGLES
+  DOUBLES
+}
+
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+  EXPIRED
+  CANCELLED
+}
+
+enum ParticipantRole {
+  CREATOR       // User who created the match
+  OPPONENT      // Direct opponent (singles) or opposing team
+  PARTNER       // Doubles partner
+  INVITED       // General invitee
+}
+
+enum CancellationReason {
+  PERSONAL_EMERGENCY
+  INJURY
+  WEATHER
+  SCHEDULING_CONFLICT
+  ILLNESS
+  WORK_COMMITMENT
+  FAMILY_EMERGENCY
+  OTHER
+}
+
+enum TimeSlotStatus {
+  PROPOSED
+  VOTED
+  CONFIRMED
+  REJECTED
+}
+
+// =============================================
+// END MATCH INVITATION SYSTEM ENUMS
+// =============================================
+
+// =============================================
+// FINALS BRACKET SYSTEM ENUMS
+// =============================================
+
+enum BracketType {
+  SINGLE_ELIMINATION
+  DOUBLE_ELIMINATION
+  ROUND_ROBIN
+}
+
+enum BracketStatus {
+  DRAFT
+  SEEDED
+  PUBLISHED
+  IN_PROGRESS
+  COMPLETED
+}
+
+enum SeedingSource {
+  STANDINGS
+  MANUAL
+  RATING
+}
+
+enum BracketMatchStatus {
+  PENDING
+  SCHEDULED
+  IN_PROGRESS
+  COMPLETED
+  BYE
+}
+
+// =============================================
+// END FINALS BRACKET SYSTEM ENUMS
 // =============================================

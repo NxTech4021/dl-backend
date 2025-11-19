@@ -12,6 +12,8 @@ import {
   trackLogin,
   updatePassword
 } from "../controllers/admincontrollers";
+import adminMatchRoutes from "./admin/adminMatchRoutes";
+import bracketRoutes from "./admin/bracketRoutes";
 
 
 const adminRouter = Router();
@@ -29,5 +31,10 @@ adminRouter.post("/register", registerAdmin);
 adminRouter.post("/invite", sendAdminInvite);
 adminRouter.post("/updatepassword", updatePassword);
 
+// Admin Match Management Routes (AS1-AS6)
+adminRouter.use("/", adminMatchRoutes);
+
+// Admin Bracket Routes (AS2)
+adminRouter.use("/", bracketRoutes);
 
 export default adminRouter;
