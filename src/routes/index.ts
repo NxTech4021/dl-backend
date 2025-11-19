@@ -12,6 +12,8 @@ import chatRoutes from "./threadRoutes";
 import notificationRouter from "./notificationRoutes";
 import matchRoutes from "./matchRoutes";
 import bugRouter from "./bugRoutes";
+import ratingRoutes from "./ratingRoutes";
+import standingsRoutes from "./standingsRoutes";
 
 const router = express.Router();
 
@@ -33,7 +35,9 @@ router.use("/pairing", pairingRouter);
 
 router.use("/match", matchRoutes);
 
-// LeaderBoard
+// Ratings & Standings
+router.use("/ratings", ratingRoutes);
+router.use("/standings", standingsRoutes);
 
 // Chat
 router.use("/chat", chatRoutes);
