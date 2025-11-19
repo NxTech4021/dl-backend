@@ -10,6 +10,7 @@ import pairingRouter from "./pairingRoutes";
 import onboardingRouter from "./onboarding";
 import chatRoutes from "./threadRoutes";
 import notificationRouter from "./notificationRoutes";
+import notificationPreferenceRouter from "./notificationPreferenceRoutes";
 import matchRoutes from "./matchRoutes";
 import bugRouter from "./bugRoutes";
 import ratingRoutes from "./ratingRoutes";
@@ -46,6 +47,7 @@ router.use("/chat", chatRoutes);
 
 // Notification
 router.use("/notifications", notificationRouter);
+router.use("/notification-preferences", notificationPreferenceRouter);
 
 // Bug Tracking
 router.use("/bug", bugRouter);
