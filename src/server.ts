@@ -7,6 +7,7 @@ import { expireOldRequests } from "./services/pairingService";
 import { getInactivityService } from "./services/inactivityService";
 import { NotificationService } from "./services/notificationService";
 import { INACTIVITY_CONFIG } from "./config/inactivity.config";
+import { getMatchReminderService } from "./services/notification/matchReminderService";
 
 dotenv.config();
 
@@ -54,6 +55,22 @@ cron.schedule(INACTIVITY_CONFIG.CRON_SCHEDULE, async () => {
   }
 });
 
+// Run match reminder check every hour
+cron.schedule("0 * * * *", async () => {
+  console.log("🕒 Running scheduled task: Checking for match reminders...");
+  try {
+    const notificationService = new NotificationService();
+    const matchReminderService = getMatchReminderService(notificationService);
+    const results = await matchReminderService.sendUpcomingMatchReminders();
+    console.log(
+      `✅ Match reminder check complete: ${results.matchesChecked} matches checked, ${results.remindersSent} reminders sent`
+    );
+  } catch (error) {
+    console.error("❌ Error during match reminder check:", error);
+  }
+});
+
 console.log("⏰ Cron jobs scheduled:");
 console.log("   - Daily expiration check at midnight");
 console.log(`   - Inactivity check at ${INACTIVITY_CONFIG.CRON_SCHEDULE}`);
+console.log("   - Match reminder check every hour");
