@@ -14,6 +14,8 @@ import {
 import { logger } from '../../utils/logger';
 import { NotificationService } from '../notificationService';
 import { handlePostMatchCreation } from '../matchService';
+import { calculateMatchRatings, applyMatchRatings } from '../rating/ratingCalculationService';
+import { updateMatchStandings } from '../rating/standingsCalculationService';
 
 // Types
 export interface SubmitResultInput {
@@ -203,6 +205,27 @@ export class MatchResultService {
           isAutoApproved: false
         }
       });
+
+      // Update ratings after confirmation
+      try {
+        const ratingUpdates = await calculateMatchRatings(matchId);
+        if (ratingUpdates) {
+          await applyMatchRatings(matchId, ratingUpdates);
+          logger.info(`Applied rating updates for match ${matchId}`);
+        }
+      } catch (error) {
+        logger.error(`Failed to update ratings for match ${matchId}:`, {}, error as Error);
+        // Don't throw - ratings failure shouldn't block confirmation
+      }
+
+      // Update standings after confirmation
+      try {
+        await updateMatchStandings(matchId);
+        logger.info(`Updated standings for match ${matchId}`);
+      } catch (error) {
+        logger.error(`Failed to update standings for match ${matchId}:`, {}, error as Error);
+        // Don't throw - standings failure shouldn't block confirmation
+      }
 
       // Notify submitter
       await this.sendResultConfirmedNotification(matchId, userId);
