@@ -16,6 +16,8 @@ import { NotificationService } from '../notificationService';
 import { handlePostMatchCreation } from '../matchService';
 import { calculateMatchRatings, applyMatchRatings } from '../rating/ratingCalculationService';
 import { updateMatchStandings } from '../rating/standingsCalculationService';
+import { notifyAdminsDispute } from '../notification/adminNotificationService';
+import { notifyBatchRatingChanges } from '../notification/playerNotificationService';
 
 // Types
 export interface SubmitResultInput {
@@ -212,6 +214,15 @@ export class MatchResultService {
         if (ratingUpdates) {
           await applyMatchRatings(matchId, ratingUpdates);
           logger.info(`Applied rating updates for match ${matchId}`);
+
+          // Send rating change notifications
+          const ratingChanges = ratingUpdates.map(update => ({
+            userId: update.userId,
+            oldRating: update.previousSinglesRating ?? update.previousDoublesRating ?? 1500,
+            newRating: update.newSinglesRating ?? update.newDoublesRating ?? 1500,
+            matchId
+          }));
+          await notifyBatchRatingChanges(this.notificationService, ratingChanges);
         }
       } catch (error) {
         logger.error(`Failed to update ratings for match ${matchId}:`, {}, error as Error);
@@ -267,7 +278,7 @@ export class MatchResultService {
       });
 
       // Notify admin and other participants
-      await this.sendDisputeCreatedNotification(matchId, userId);
+      await this.sendDisputeCreatedNotification(matchId, userId, disputeReason);
 
       logger.info(`Dispute raised for match ${matchId} by user ${userId}`);
     }
@@ -520,7 +531,7 @@ export class MatchResultService {
   /**
    * Send notification when dispute is created
    */
-  private async sendDisputeCreatedNotification(matchId: string, disputerId: string) {
+  private async sendDisputeCreatedNotification(matchId: string, disputerId: string, reason?: string) {
     try {
       const match = await prisma.match.findUnique({
         where: { id: matchId },
@@ -536,16 +547,26 @@ export class MatchResultService {
         select: { name: true }
       });
 
+      const disputerName = disputer?.name || 'A player';
+
+      // Notify other participants
       const otherParticipants = match.participants
         .filter(p => p.userId !== disputerId)
         .map(p => p.userId);
 
       await this.notificationService.createNotification({
         title: 'Match Result Disputed',
-        message: `${disputer?.name} has disputed the match result. An admin will review.`,
+        message: `${disputerName} has disputed the match result. An admin will review.`,
         category: 'MATCH',
         matchId,
-        recipientIds: otherParticipants
+        userIds: otherParticipants
+      });
+
+      // Notify admins
+      await notifyAdminsDispute(this.notificationService, {
+        disputerName,
+        matchId,
+        reason
       });
     } catch (error) {
       logger.error('Error sending dispute created notification', {}, error as Error);
@@ -578,7 +599,7 @@ export class MatchResultService {
         message: `${reporter?.name} has reported a walkover for this match.`,
         category: 'MATCH',
         matchId,
-        recipientIds: participantIds
+        userIds: participantIds
       });
     } catch (error) {
       logger.error('Error sending walkover notification', {}, error as Error);
