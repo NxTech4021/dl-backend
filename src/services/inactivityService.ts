@@ -11,6 +11,7 @@ import {
   InactivityCheckResult,
   PlayerActivityStatus
 } from '../config/inactivity.config';
+import { getEffectiveThreshold } from './admin/adminInactivityService';
 import { logger } from '../utils/logger';
 
 export class InactivityService {
@@ -37,6 +38,10 @@ export class InactivityService {
     };
 
     try {
+      // Get thresholds from database or defaults
+      const thresholds = await getEffectiveThreshold();
+      logger.info(`Using thresholds: inactive=${thresholds.inactivityDays}, warning=${thresholds.warningDays}`);
+
       // Get all eligible users
       const users = await this.getEligibleUsers();
       results.total = users.length;
@@ -46,7 +51,7 @@ export class InactivityService {
       // Process each user
       for (const user of users) {
         try {
-          await this.processUser(user.id, user.createdAt, results);
+          await this.processUserWithThresholds(user.id, user.createdAt, thresholds, results);
         } catch (error) {
           logger.error(`Error processing user ${user.id}:`, {}, error as Error);
           results.errors++;
@@ -60,6 +65,40 @@ export class InactivityService {
     } catch (error) {
       logger.error('Fatal error in inactivity check:', {}, error as Error);
       throw error;
+    }
+  }
+
+  /**
+   * Process individual user with custom thresholds
+   */
+  private async processUserWithThresholds(
+    userId: string,
+    createdAt: Date,
+    thresholds: { inactivityDays: number; warningDays: number },
+    results: InactivityCheckResult
+  ): Promise<void> {
+    // Get days since last match
+    const daysSinceLastMatch = await this.getDaysSinceLastMatch(userId);
+
+    // Handle users who have never played
+    if (daysSinceLastMatch === null) {
+      // Only mark as inactive if user has been registered long enough
+      const daysSinceRegistration = this.calculateDaysSince(createdAt);
+
+      if (daysSinceRegistration >= thresholds.inactivityDays) {
+        await this.markAsInactive(userId, 'Never played a match');
+        results.markedInactive++;
+      }
+      return;
+    }
+
+    // Check thresholds
+    if (daysSinceLastMatch >= thresholds.inactivityDays) {
+      await this.markAsInactive(userId, `${daysSinceLastMatch} days since last match`);
+      results.markedInactive++;
+    } else if (daysSinceLastMatch >= thresholds.warningDays) {
+      await this.sendWarningNotificationWithThreshold(userId, daysSinceLastMatch, thresholds.inactivityDays);
+      results.warnings++;
     }
   }
 
@@ -201,6 +240,38 @@ export class InactivityService {
         daysSinceLastMatch,
         daysRemaining,
         threshold: INACTIVITY_CONFIG.INACTIVE_THRESHOLD,
+      },
+    });
+
+    // Update last activity check
+    await prisma.user.update({
+      where: { id: userId },
+      data: { lastActivityCheck: new Date() },
+    });
+  }
+
+  /**
+   * Send warning notification with custom threshold
+   */
+  private async sendWarningNotificationWithThreshold(
+    userId: string,
+    daysSinceLastMatch: number,
+    inactivityThreshold: number
+  ): Promise<void> {
+    const daysRemaining = inactivityThreshold - daysSinceLastMatch;
+
+    logger.info(`Sending warning to user ${userId}: ${daysSinceLastMatch} days since last match`);
+
+    await this.notificationService.createNotification({
+      userIds: userId,
+      type: 'INACTIVITY_WARNING',
+      category: 'SYSTEM',
+      title: 'Inactivity Warning',
+      message: `It's been ${daysSinceLastMatch} days since your last match. Play within ${daysRemaining} days to stay active!`,
+      metadata: {
+        daysSinceLastMatch,
+        daysRemaining,
+        threshold: inactivityThreshold,
       },
     });
 
