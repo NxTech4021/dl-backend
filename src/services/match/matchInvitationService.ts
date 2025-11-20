@@ -140,7 +140,7 @@ export class MatchInvitationService {
           location,
           venue,
           notes,
-          proposedTimes: proposedTimes ? proposedTimes.map(t => t.toISOString()) : null
+          proposedTimes: proposedTimes ? proposedTimes.map(t => t.toISOString()) : undefined
         }
       });
 
@@ -247,17 +247,16 @@ export class MatchInvitationService {
       // Create time slots from proposed times
       if (proposedTimes && proposedTimes.length > 0) {
         for (const time of proposedTimes) {
-          await tx.matchTimeSlot.create({
-            data: {
-              matchId: newMatch.id,
-              proposedById: createdById,
-              proposedTime: time,
-              status: TimeSlotStatus.PROPOSED,
-              location,
-              votes: [createdById],
-              voteCount: 1
-            }
-          });
+          const timeSlotData: any = {
+            matchId: newMatch.id,
+            proposedById: createdById,
+            proposedTime: time,
+            status: TimeSlotStatus.PROPOSED,
+            votes: [createdById],
+            voteCount: 1
+          };
+          if (location) timeSlotData.location = location;
+          await tx.matchTimeSlot.create({ data: timeSlotData });
         }
       }
 
@@ -479,13 +478,15 @@ export class MatchInvitationService {
 
     await prisma.$transaction(async (tx) => {
       // Update invitation
+      const updateData: any = {
+        status: newStatus,
+        respondedAt: new Date()
+      };
+      if (!accept && declineReason) updateData.declineReason = declineReason;
+
       await tx.matchInvitation.update({
         where: { id: invitationId },
-        data: {
-          status: newStatus,
-          respondedAt: new Date(),
-          declineReason: accept ? null : declineReason
-        }
+        data: updateData
       });
 
       // Update participant

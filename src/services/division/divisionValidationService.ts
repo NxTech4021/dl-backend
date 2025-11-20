@@ -252,7 +252,7 @@ export async function checkSeasonMembershipExists(
     where: {
       userId,
       seasonId,
-      status: { notIn: ['WITHDRAWN', 'CANCELLED'] }
+      status: 'ACTIVE'
     }
   });
 
