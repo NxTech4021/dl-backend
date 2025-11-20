@@ -261,8 +261,7 @@ export class AdminMatchService {
           }
         },
         orderBy: [
-          { priority: 'desc' },
-          { createdAt: 'asc' }
+          { priority: 'desc' }
         ],
         skip: (page - 1) * limit,
         take: limit
@@ -365,7 +364,7 @@ export class AdminMatchService {
           resolvedAt: new Date(),
           adminResolution: reason,
           resolutionAction: action,
-          finalScore: finalScore ? JSON.stringify(finalScore) : null
+          finalScore: finalScore ? JSON.stringify(finalScore) : undefined
         }
       });
 
@@ -671,22 +670,21 @@ export class AdminMatchService {
 
       // Apply penalty if requested
       if (!approved && applyPenalty && penaltySeverity) {
-        await tx.playerPenalty.create({
-          data: {
-            userId: match.cancelledById!,
-            penaltyType: PenaltyType.WARNING, // Late cancellation
-            severity: penaltySeverity,
-            relatedMatchId: matchId,
-            issuedByAdminId: adminId,
-            reason: reason || 'Late cancellation without valid reason',
-            status: PenaltyStatus.ACTIVE,
-            pointsDeducted: penaltySeverity === PenaltySeverity.POINTS_DEDUCTION ? 2 : undefined,
-            suspensionDays: penaltySeverity === PenaltySeverity.SUSPENSION ? 7 : undefined,
-            expiresAt: penaltySeverity === PenaltySeverity.SUSPENSION
-              ? new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
-              : undefined
-          }
-        });
+        const penaltyData: any = {
+          userId: match.cancelledById!,
+          penaltyType: PenaltyType.WARNING, // Late cancellation
+          severity: penaltySeverity,
+          relatedMatchId: matchId,
+          issuedByAdminId: adminId,
+          reason: reason || 'Late cancellation without valid reason',
+          status: PenaltyStatus.ACTIVE
+        };
+        if (penaltySeverity === PenaltySeverity.POINTS_DEDUCTION) penaltyData.pointsDeducted = 2;
+        if (penaltySeverity === PenaltySeverity.SUSPENSION) {
+          penaltyData.suspensionDays = 7;
+          penaltyData.expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+        }
+        await tx.playerPenalty.create({ data: penaltyData });
       }
     });
 
@@ -719,23 +717,27 @@ export class AdminMatchService {
       expiresAt.setDate(expiresAt.getDate() + suspensionDays);
     }
 
+    const penaltyData: any = {
+      userId,
+      penaltyType,
+      severity,
+      issuedByAdminId: adminId,
+      reason,
+      status: PenaltyStatus.ACTIVE
+    };
+    if (relatedMatchId) penaltyData.relatedMatchId = relatedMatchId;
+    if (relatedDisputeId) penaltyData.relatedDisputeId = relatedDisputeId;
+    if (pointsDeducted) penaltyData.pointsDeducted = pointsDeducted;
+    if (suspensionDays) penaltyData.suspensionDays = suspensionDays;
+    if (severity === PenaltySeverity.SUSPENSION) penaltyData.suspensionStartDate = new Date();
+    if (expiresAt) {
+      penaltyData.suspensionEndDate = expiresAt;
+      penaltyData.expiresAt = expiresAt;
+    }
+    if (evidenceUrl) penaltyData.evidenceUrl = evidenceUrl;
+
     const penalty = await prisma.playerPenalty.create({
-      data: {
-        userId,
-        penaltyType,
-        severity,
-        relatedMatchId,
-        relatedDisputeId,
-        pointsDeducted,
-        suspensionDays,
-        suspensionStartDate: severity === PenaltySeverity.SUSPENSION ? new Date() : undefined,
-        suspensionEndDate: expiresAt,
-        issuedByAdminId: adminId,
-        reason,
-        evidenceUrl,
-        status: PenaltyStatus.ACTIVE,
-        expiresAt
-      },
+      data: penaltyData,
       include: {
         user: { select: { id: true, name: true, username: true } },
         issuedByAdmin: { select: { id: true, user: { select: { name: true } } } }
