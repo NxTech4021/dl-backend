@@ -356,16 +356,18 @@ export class AdminMatchService {
 
     await prisma.$transaction(async (tx) => {
       // Update dispute
+      const disputeUpdateData: any = {
+        status: DisputeStatus.RESOLVED,
+        resolvedByAdminId: adminId,
+        resolvedAt: new Date(),
+        adminResolution: reason,
+        resolutionAction: action
+      };
+      if (finalScore) disputeUpdateData.finalScore = JSON.stringify(finalScore);
+
       await tx.matchDispute.update({
         where: { id: disputeId },
-        data: {
-          status: DisputeStatus.RESOLVED,
-          resolvedByAdminId: adminId,
-          resolvedAt: new Date(),
-          adminResolution: reason,
-          resolutionAction: action,
-          finalScore: finalScore ? JSON.stringify(finalScore) : undefined
-        }
+        data: disputeUpdateData
       });
 
       // Handle different resolution actions
