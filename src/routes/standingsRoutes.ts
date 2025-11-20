@@ -4,7 +4,7 @@
  */
 
 import { Router } from 'express';
-import { authenticate } from '../middlewares/auth';
+import { verifyAuth } from '../middlewares/auth.middleware';
 import {
   getDivisionStandingsHandler,
   getMyStanding,
@@ -17,7 +17,7 @@ const router = Router();
 router.get('/division/:divisionId', getDivisionStandingsHandler);
 
 // Authenticated user's standing
-router.get('/me', authenticate, getMyStanding);
+router.get('/me', verifyAuth, getMyStanding);
 
 // Player's standing in division (public)
 router.get('/:userId/division/:divisionId', getPlayerStandingHandler);
