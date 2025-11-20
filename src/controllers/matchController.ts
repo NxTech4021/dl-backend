@@ -1,11 +1,11 @@
 import { prisma } from "../lib/prisma";
 import { Request, Response } from "express";
-import { Prisma } from "@prisma/client";
+import { Prisma, MatchType } from "@prisma/client";
 
 interface CreateMatchBody {
   divisionId?: string;
   sport?: string;
-  matchType?: string;
+  matchType?: MatchType;
   playerScore?: number;
   opponentScore?: number;
   outcome?: string;
@@ -18,7 +18,7 @@ interface CreateMatchBody {
 interface UpdateMatchBody {
   divisionId?: string;
   sport?: string;
-  matchType?: string;
+  matchType?: MatchType;
   playerScore?: number;
   opponentScore?: number;
   outcome?: string;
