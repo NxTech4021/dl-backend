@@ -136,7 +136,7 @@ export const getDisputeById = async (req: AuthenticatedRequest, res: Response) =
  */
 export const resolveDispute = async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const adminId = req.admin?.id;
+    const adminId = req.user?.adminId;
     if (!adminId) {
       return res.status(401).json({ error: 'Admin authentication required' });
     }
@@ -184,7 +184,7 @@ export const resolveDispute = async (req: AuthenticatedRequest, res: Response) =
  */
 export const addDisputeNote = async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const adminId = req.admin?.id;
+    const adminId = req.user?.adminId;
     if (!adminId) {
       return res.status(401).json({ error: 'Admin authentication required' });
     }
@@ -214,7 +214,7 @@ export const addDisputeNote = async (req: AuthenticatedRequest, res: Response) =
  */
 export const editMatchResult = async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const adminId = req.admin?.id;
+    const adminId = req.user?.adminId;
     if (!adminId) {
       return res.status(401).json({ error: 'Admin authentication required' });
     }
@@ -256,7 +256,7 @@ export const editMatchResult = async (req: AuthenticatedRequest, res: Response) 
  */
 export const voidMatch = async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const adminId = req.admin?.id;
+    const adminId = req.user?.adminId;
     if (!adminId) {
       return res.status(401).json({ error: 'Admin authentication required' });
     }
@@ -301,7 +301,7 @@ export const getPendingCancellations = async (req: AuthenticatedRequest, res: Re
  */
 export const reviewCancellation = async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const adminId = req.admin?.id;
+    const adminId = req.user?.adminId;
     if (!adminId) {
       return res.status(401).json({ error: 'Admin authentication required' });
     }
@@ -340,7 +340,7 @@ export const reviewCancellation = async (req: AuthenticatedRequest, res: Respons
  */
 export const applyPenalty = async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const adminId = req.admin?.id;
+    const adminId = req.user?.adminId;
     if (!adminId) {
       return res.status(401).json({ error: 'Admin authentication required' });
     }
@@ -409,7 +409,7 @@ export const getPlayerPenalties = async (req: AuthenticatedRequest, res: Respons
  */
 export const messageParticipants = async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const adminId = req.admin?.id;
+    const adminId = req.user?.adminId;
     if (!adminId) {
       return res.status(401).json({ error: 'Admin authentication required' });
     }
