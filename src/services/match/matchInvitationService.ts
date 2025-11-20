@@ -555,7 +555,7 @@ export class MatchInvitationService {
     }
 
     // Determine role and team
-    let role = ParticipantRole.OPPONENT;
+    let role: ParticipantRole = ParticipantRole.OPPONENT;
     let team: string | null = null;
 
     if (match.matchType === MatchType.DOUBLES) {
