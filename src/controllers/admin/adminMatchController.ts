@@ -3,7 +3,7 @@
  * Handles HTTP requests for admin match management
  */
 
-import { Response } from 'express';
+import { Request, Response } from 'express';
 import { AuthenticatedRequest } from '../../middlewares/auth.middleware';
 import { getAdminMatchService } from '../../services/admin/adminMatchService';
 import {
@@ -21,7 +21,7 @@ const adminMatchService = getAdminMatchService();
  * Get admin matches dashboard (AS6)
  * GET /api/admin/matches
  */
-export const getAdminMatches = async (req: AuthenticatedRequest, res: Response) => {
+export const getAdminMatches = async (req: Request, res: Response) => {
   try {
     const {
       leagueId,
@@ -65,7 +65,7 @@ export const getAdminMatches = async (req: AuthenticatedRequest, res: Response) 
  * Get match statistics (AS6)
  * GET /api/admin/matches/stats
  */
-export const getMatchStats = async (req: AuthenticatedRequest, res: Response) => {
+export const getMatchStats = async (req: Request, res: Response) => {
   try {
     const { leagueId, seasonId, divisionId } = req.query;
 
@@ -86,7 +86,7 @@ export const getMatchStats = async (req: AuthenticatedRequest, res: Response) =>
  * Get all disputes (AS5)
  * GET /api/admin/disputes
  */
-export const getDisputes = async (req: AuthenticatedRequest, res: Response) => {
+export const getDisputes = async (req: Request, res: Response) => {
   try {
     const { status, priority, page = '1', limit = '20' } = req.query;
 
@@ -111,7 +111,7 @@ export const getDisputes = async (req: AuthenticatedRequest, res: Response) => {
  * Get dispute by ID (AS5)
  * GET /api/admin/disputes/:id
  */
-export const getDisputeById = async (req: AuthenticatedRequest, res: Response) => {
+export const getDisputeById = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     if (!id) {
@@ -134,9 +134,10 @@ export const getDisputeById = async (req: AuthenticatedRequest, res: Response) =
  * Resolve a dispute (AS5)
  * POST /api/admin/disputes/:id/resolve
  */
-export const resolveDispute = async (req: AuthenticatedRequest, res: Response) => {
+export const resolveDispute = async (req: Request, res: Response) => {
   try {
-    const adminId = req.user?.adminId;
+    const authReq = req as AuthenticatedRequest;
+    const adminId = authReq.user?.adminId;
     if (!adminId) {
       return res.status(401).json({ error: 'Admin authentication required' });
     }
@@ -182,9 +183,10 @@ export const resolveDispute = async (req: AuthenticatedRequest, res: Response) =
  * Add note to dispute (AS5)
  * POST /api/admin/disputes/:id/notes
  */
-export const addDisputeNote = async (req: AuthenticatedRequest, res: Response) => {
+export const addDisputeNote = async (req: Request, res: Response) => {
   try {
-    const adminId = req.user?.adminId;
+    const authReq = req as AuthenticatedRequest;
+    const adminId = authReq.user?.adminId;
     if (!adminId) {
       return res.status(401).json({ error: 'Admin authentication required' });
     }
@@ -212,9 +214,10 @@ export const addDisputeNote = async (req: AuthenticatedRequest, res: Response) =
  * Edit match result (AS4)
  * PUT /api/admin/matches/:id/result
  */
-export const editMatchResult = async (req: AuthenticatedRequest, res: Response) => {
+export const editMatchResult = async (req: Request, res: Response) => {
   try {
-    const adminId = req.user?.adminId;
+    const authReq = req as AuthenticatedRequest;
+    const adminId = authReq.user?.adminId;
     if (!adminId) {
       return res.status(401).json({ error: 'Admin authentication required' });
     }
@@ -254,9 +257,10 @@ export const editMatchResult = async (req: AuthenticatedRequest, res: Response) 
  * Void a match (AS4)
  * POST /api/admin/matches/:id/void
  */
-export const voidMatch = async (req: AuthenticatedRequest, res: Response) => {
+export const voidMatch = async (req: Request, res: Response) => {
   try {
-    const adminId = req.user?.adminId;
+    const authReq = req as AuthenticatedRequest;
+    const adminId = authReq.user?.adminId;
     if (!adminId) {
       return res.status(401).json({ error: 'Admin authentication required' });
     }
@@ -285,7 +289,7 @@ export const voidMatch = async (req: AuthenticatedRequest, res: Response) => {
  * Get pending late cancellations (AS3)
  * GET /api/admin/cancellations/pending
  */
-export const getPendingCancellations = async (req: AuthenticatedRequest, res: Response) => {
+export const getPendingCancellations = async (req: Request, res: Response) => {
   try {
     const cancellations = await adminMatchService.getPendingCancellations();
     res.json(cancellations);
@@ -299,9 +303,10 @@ export const getPendingCancellations = async (req: AuthenticatedRequest, res: Re
  * Review a late cancellation (AS3)
  * POST /api/admin/cancellations/:id/review
  */
-export const reviewCancellation = async (req: AuthenticatedRequest, res: Response) => {
+export const reviewCancellation = async (req: Request, res: Response) => {
   try {
-    const adminId = req.user?.adminId;
+    const authReq = req as AuthenticatedRequest;
+    const adminId = authReq.user?.adminId;
     if (!adminId) {
       return res.status(401).json({ error: 'Admin authentication required' });
     }
@@ -338,9 +343,10 @@ export const reviewCancellation = async (req: AuthenticatedRequest, res: Respons
  * Apply penalty to player (AS3)
  * POST /api/admin/penalties/apply
  */
-export const applyPenalty = async (req: AuthenticatedRequest, res: Response) => {
+export const applyPenalty = async (req: Request, res: Response) => {
   try {
-    const adminId = req.user?.adminId;
+    const authReq = req as AuthenticatedRequest;
+    const adminId = authReq.user?.adminId;
     if (!adminId) {
       return res.status(401).json({ error: 'Admin authentication required' });
     }
@@ -388,7 +394,7 @@ export const applyPenalty = async (req: AuthenticatedRequest, res: Response) => 
  * Get player's penalty history (AS3)
  * GET /api/admin/penalties/player/:userId
  */
-export const getPlayerPenalties = async (req: AuthenticatedRequest, res: Response) => {
+export const getPlayerPenalties = async (req: Request, res: Response) => {
   try {
     const { userId } = req.params;
     if (!userId) {
@@ -407,9 +413,10 @@ export const getPlayerPenalties = async (req: AuthenticatedRequest, res: Respons
  * Message match participants (AS6)
  * POST /api/admin/matches/:id/message
  */
-export const messageParticipants = async (req: AuthenticatedRequest, res: Response) => {
+export const messageParticipants = async (req: Request, res: Response) => {
   try {
-    const adminId = req.user?.adminId;
+    const authReq = req as AuthenticatedRequest;
+    const adminId = authReq.user?.adminId;
     if (!adminId) {
       return res.status(401).json({ error: 'Admin authentication required' });
     }
