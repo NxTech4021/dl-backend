@@ -127,22 +127,22 @@ export class MatchInvitationService {
     // Create match with transaction
     const match = await prisma.$transaction(async (tx) => {
       // Create the match
-      const newMatch = await tx.match.create({
-        data: {
-          divisionId,
-          seasonId: division.seasonId,
-          leagueId: division.leagueId,
-          sport: division.league?.sportType || 'PADEL',
-          matchType,
-          format,
-          status: MatchStatus.SCHEDULED,
-          createdById,
-          location,
-          venue,
-          notes,
-          proposedTimes: proposedTimes ? proposedTimes.map(t => t.toISOString()) : null
-        }
-      });
+      const matchData: any = {
+        divisionId,
+        seasonId: division.seasonId,
+        leagueId: division.leagueId,
+        sport: division.league?.sportType || 'PADEL',
+        matchType,
+        format,
+        status: MatchStatus.SCHEDULED,
+        createdById
+      };
+      if (location) matchData.location = location;
+      if (venue) matchData.venue = venue;
+      if (notes) matchData.notes = notes;
+      if (proposedTimes) matchData.proposedTimes = proposedTimes.map(t => t.toISOString());
+
+      const newMatch = await tx.match.create({ data: matchData });
 
       // Add creator as participant
       await tx.matchParticipant.create({
@@ -247,17 +247,16 @@ export class MatchInvitationService {
       // Create time slots from proposed times
       if (proposedTimes && proposedTimes.length > 0) {
         for (const time of proposedTimes) {
-          await tx.matchTimeSlot.create({
-            data: {
-              matchId: newMatch.id,
-              proposedById: createdById,
-              proposedTime: time,
-              status: TimeSlotStatus.PROPOSED,
-              location,
-              votes: [createdById],
-              voteCount: 1
-            }
-          });
+          const timeSlotData: any = {
+            matchId: newMatch.id,
+            proposedById: createdById,
+            proposedTime: time,
+            status: TimeSlotStatus.PROPOSED,
+            votes: [createdById],
+            voteCount: 1
+          };
+          if (location) timeSlotData.location = location;
+          await tx.matchTimeSlot.create({ data: timeSlotData });
         }
       }
 
@@ -479,13 +478,15 @@ export class MatchInvitationService {
 
     await prisma.$transaction(async (tx) => {
       // Update invitation
+      const updateData: any = {
+        status: newStatus,
+        respondedAt: new Date()
+      };
+      if (!accept && declineReason) updateData.declineReason = declineReason;
+
       await tx.matchInvitation.update({
         where: { id: invitationId },
-        data: {
-          status: newStatus,
-          respondedAt: new Date(),
-          declineReason: accept ? null : declineReason
-        }
+        data: updateData
       });
 
       // Update participant
@@ -612,17 +613,19 @@ export class MatchInvitationService {
       throw new Error('You must be a participant to propose time slots');
     }
 
+    const timeSlotData: any = {
+      matchId,
+      proposedById,
+      proposedTime,
+      status: TimeSlotStatus.PROPOSED,
+      votes: [proposedById],
+      voteCount: 1
+    };
+    if (location) timeSlotData.location = location;
+    if (notes) timeSlotData.notes = notes;
+
     const timeSlot = await prisma.matchTimeSlot.create({
-      data: {
-        matchId,
-        proposedById,
-        proposedTime,
-        status: TimeSlotStatus.PROPOSED,
-        location,
-        notes,
-        votes: [proposedById],
-        voteCount: 1
-      },
+      data: timeSlotData,
       include: {
         proposedBy: {
           select: { id: true, name: true, username: true }
@@ -775,11 +778,12 @@ export class MatchInvitationService {
 
       for (const invitation of invitations) {
         await this.notificationService.createNotification({
+          type: 'MATCH_INVITATION',
           title: 'Match Invitation',
           message: `${invitation.inviter.name} has invited you to a match in ${invitation.match.division?.name}`,
           category: 'MATCH',
           matchId,
-          recipientIds: [invitation.inviteeId]
+          userIds: [invitation.inviteeId]
         });
       }
     } catch (error) {
@@ -813,11 +817,12 @@ export class MatchInvitationService {
         .map(p => p.userId);
 
       await this.notificationService.createNotification({
+        type: accepted ? 'MATCH_INVITATION_ACCEPTED' : 'MATCH_INVITATION_DECLINED',
         title: accepted ? 'Invitation Accepted' : 'Invitation Declined',
         message: `${user?.name} has ${accepted ? 'accepted' : 'declined'} the match invitation`,
         category: 'MATCH',
         matchId,
-        recipientIds: otherParticipants
+        userIds: otherParticipants
       });
     } catch (error) {
       logger.error('Error sending invitation response notification', {}, error as Error);
@@ -846,11 +851,12 @@ export class MatchInvitationService {
       const participantIds = match.participants.map(p => p.userId);
 
       await this.notificationService.createNotification({
+        type: 'MATCH_TIME_CONFIRMED',
         title: 'Match Time Confirmed',
         message: `Your match has been scheduled for ${confirmedTime.toLocaleString()}`,
         category: 'MATCH',
         matchId,
-        recipientIds: participantIds
+        userIds: participantIds
       });
     } catch (error) {
       logger.error('Error sending time confirmed notification', {}, error as Error);

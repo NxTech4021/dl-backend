@@ -51,8 +51,8 @@ export const getAllLeagues = async () => {
               id: true,
               name: true,
               genderRestriction: true,
-              gender_category: true,
-              game_type: true,
+              genderCategory: true,
+              gameType: true,
               matchFormat: true,
               isActive: true,
               categoryOrder: true
@@ -164,8 +164,8 @@ export const getLeagueById = async (id: string) => {
               id: true,
               name: true,
               genderRestriction: true,
-              gender_category: true,
-              game_type: true,
+              genderCategory: true,
+              gameType: true,
               matchFormat: true,
               isActive: true,
               categoryOrder: true
@@ -249,8 +249,8 @@ export const getLeagueById = async (id: string) => {
             id: season.category.id,
             name: season.category.name,
             genderRestriction: season.category.genderRestriction,
-            game_type: season.category.game_type,
-            gender_category: season.category.gender_category
+            game_type: season.category.gameType,
+            gender_category: season.category.genderCategory
           });
         }
       }

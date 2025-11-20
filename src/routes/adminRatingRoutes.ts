@@ -4,7 +4,7 @@
  */
 
 import { Router } from 'express';
-import { authenticate, requireAdmin } from '../middlewares/auth';
+import { verifyAuth, requireAdmin } from '../middlewares/auth.middleware';
 import {
   getAdminDivisionRatings,
   getAdminDivisionSummary,
@@ -25,7 +25,7 @@ import {
 const router = Router();
 
 // All routes require admin authentication
-router.use(authenticate);
+router.use(verifyAuth);
 router.use(requireAdmin);
 
 // Division ratings

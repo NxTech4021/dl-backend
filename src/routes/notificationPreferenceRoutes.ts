@@ -3,7 +3,7 @@
  */
 
 import { Router } from 'express';
-import { authMiddleware } from '../middlewares/auth.middleware';
+import { verifyAuth } from '../middlewares/auth.middleware';
 import {
   getPreferences,
   updatePreferences,
@@ -13,7 +13,7 @@ import {
 const router = Router();
 
 // All routes require authentication
-router.use(authMiddleware);
+router.use(verifyAuth);
 
 // Get current user's preferences
 router.get('/', getPreferences);

@@ -3,7 +3,7 @@
  * Handles HTTP requests for user notification preferences
  */
 
-import { Response } from 'express';
+import { Request, Response } from 'express';
 import { AuthenticatedRequest } from '../middlewares/auth.middleware';
 import {
   getUserPreferences,
@@ -15,9 +15,10 @@ import { logger } from '../utils/logger';
 /**
  * Get current user's notification preferences
  */
-export async function getPreferences(req: AuthenticatedRequest, res: Response) {
+export async function getPreferences(req: Request, res: Response) {
   try {
-    const userId = req.user?.id;
+    const authReq = req as AuthenticatedRequest;
+    const userId = authReq.user?.id;
 
     if (!userId) {
       return res.status(401).json({ error: 'Unauthorized' });
@@ -38,9 +39,10 @@ export async function getPreferences(req: AuthenticatedRequest, res: Response) {
 /**
  * Update current user's notification preferences
  */
-export async function updatePreferences(req: AuthenticatedRequest, res: Response) {
+export async function updatePreferences(req: Request, res: Response) {
   try {
-    const userId = req.user?.id;
+    const authReq = req as AuthenticatedRequest;
+    const userId = authReq.user?.id;
 
     if (!userId) {
       return res.status(401).json({ error: 'Unauthorized' });
@@ -82,9 +84,10 @@ export async function updatePreferences(req: AuthenticatedRequest, res: Response
 /**
  * Reset preferences to defaults
  */
-export async function resetPreferences(req: AuthenticatedRequest, res: Response) {
+export async function resetPreferences(req: Request, res: Response) {
   try {
-    const userId = req.user?.id;
+    const authReq = req as AuthenticatedRequest;
+    const userId = authReq.user?.id;
 
     if (!userId) {
       return res.status(401).json({ error: 'Unauthorized' });

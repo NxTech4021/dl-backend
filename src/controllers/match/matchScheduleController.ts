@@ -21,6 +21,10 @@ export const cancelMatch = async (req: Request, res: Response) => {
     }
 
     const { id } = req.params;
+    if (!id) {
+      return res.status(400).json({ error: 'Match ID is required' });
+    }
+
     const { reason, comment } = req.body;
 
     if (!reason) {
@@ -63,6 +67,10 @@ export const requestReschedule = async (req: Request, res: Response) => {
     }
 
     const { id } = req.params;
+    if (!id) {
+      return res.status(400).json({ error: 'Match ID is required' });
+    }
+
     const { proposedTimes, reason } = req.body;
 
     if (!proposedTimes || !Array.isArray(proposedTimes) || proposedTimes.length === 0) {

@@ -261,8 +261,7 @@ export class AdminMatchService {
           }
         },
         orderBy: [
-          { priority: 'desc' },
-          { createdAt: 'asc' }
+          { priority: 'desc' }
         ],
         skip: (page - 1) * limit,
         take: limit
@@ -357,16 +356,18 @@ export class AdminMatchService {
 
     await prisma.$transaction(async (tx) => {
       // Update dispute
+      const disputeUpdateData: any = {
+        status: DisputeStatus.RESOLVED,
+        resolvedByAdminId: adminId,
+        resolvedAt: new Date(),
+        adminResolution: reason,
+        resolutionAction: action
+      };
+      if (finalScore) disputeUpdateData.finalScore = JSON.stringify(finalScore);
+
       await tx.matchDispute.update({
         where: { id: disputeId },
-        data: {
-          status: DisputeStatus.RESOLVED,
-          resolvedByAdminId: adminId,
-          resolvedAt: new Date(),
-          adminResolution: reason,
-          resolutionAction: action,
-          finalScore: finalScore ? JSON.stringify(finalScore) : null
-        }
+        data: disputeUpdateData
       });
 
       // Handle different resolution actions
@@ -671,22 +672,21 @@ export class AdminMatchService {
 
       // Apply penalty if requested
       if (!approved && applyPenalty && penaltySeverity) {
-        await tx.playerPenalty.create({
-          data: {
-            userId: match.cancelledById!,
-            penaltyType: PenaltyType.WARNING, // Late cancellation
-            severity: penaltySeverity,
-            relatedMatchId: matchId,
-            issuedByAdminId: adminId,
-            reason: reason || 'Late cancellation without valid reason',
-            status: PenaltyStatus.ACTIVE,
-            pointsDeducted: penaltySeverity === PenaltySeverity.POINTS_DEDUCTION ? 2 : undefined,
-            suspensionDays: penaltySeverity === PenaltySeverity.SUSPENSION ? 7 : undefined,
-            expiresAt: penaltySeverity === PenaltySeverity.SUSPENSION
-              ? new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
-              : undefined
-          }
-        });
+        const penaltyData: any = {
+          userId: match.cancelledById!,
+          penaltyType: PenaltyType.WARNING, // Late cancellation
+          severity: penaltySeverity,
+          relatedMatchId: matchId,
+          issuedByAdminId: adminId,
+          reason: reason || 'Late cancellation without valid reason',
+          status: PenaltyStatus.ACTIVE
+        };
+        if (penaltySeverity === PenaltySeverity.POINTS_DEDUCTION) penaltyData.pointsDeducted = 2;
+        if (penaltySeverity === PenaltySeverity.SUSPENSION) {
+          penaltyData.suspensionDays = 7;
+          penaltyData.expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+        }
+        await tx.playerPenalty.create({ data: penaltyData });
       }
     });
 
@@ -719,23 +719,27 @@ export class AdminMatchService {
       expiresAt.setDate(expiresAt.getDate() + suspensionDays);
     }
 
+    const penaltyData: any = {
+      userId,
+      penaltyType,
+      severity,
+      issuedByAdminId: adminId,
+      reason,
+      status: PenaltyStatus.ACTIVE
+    };
+    if (relatedMatchId) penaltyData.relatedMatchId = relatedMatchId;
+    if (relatedDisputeId) penaltyData.relatedDisputeId = relatedDisputeId;
+    if (pointsDeducted) penaltyData.pointsDeducted = pointsDeducted;
+    if (suspensionDays) penaltyData.suspensionDays = suspensionDays;
+    if (severity === PenaltySeverity.SUSPENSION) penaltyData.suspensionStartDate = new Date();
+    if (expiresAt) {
+      penaltyData.suspensionEndDate = expiresAt;
+      penaltyData.expiresAt = expiresAt;
+    }
+    if (evidenceUrl) penaltyData.evidenceUrl = evidenceUrl;
+
     const penalty = await prisma.playerPenalty.create({
-      data: {
-        userId,
-        penaltyType,
-        severity,
-        relatedMatchId,
-        relatedDisputeId,
-        pointsDeducted,
-        suspensionDays,
-        suspensionStartDate: severity === PenaltySeverity.SUSPENSION ? new Date() : undefined,
-        suspensionEndDate: expiresAt,
-        issuedByAdminId: adminId,
-        reason,
-        evidenceUrl,
-        status: PenaltyStatus.ACTIVE,
-        expiresAt
-      },
+      data: penaltyData,
       include: {
         user: { select: { id: true, name: true, username: true } },
         issuedByAdmin: { select: { id: true, user: { select: { name: true } } } }
@@ -744,10 +748,11 @@ export class AdminMatchService {
 
     // Notify user
     await this.notificationService.createNotification({
+      type: 'ADMIN_PENALTY_ISSUED',
       title: 'Penalty Applied',
       message: `You have received a ${severity.toLowerCase()} for: ${reason}`,
       category: 'ADMIN',
-      recipientIds: [userId]
+      userIds: [userId]
     });
 
     logger.info(`Penalty applied to user ${userId} by admin ${adminId}: ${severity}`);
@@ -803,11 +808,12 @@ export class AdminMatchService {
     const recipientIds = match.participants.map(p => p.userId);
 
     await this.notificationService.createNotification({
+      type: 'ADMIN_MESSAGE',
       title: 'Message from Admin',
       message,
       category: 'ADMIN',
       matchId,
-      recipientIds
+      userIds: recipientIds
     });
 
     logger.info(`Admin ${adminId} messaged participants of match ${matchId}`);
@@ -845,11 +851,12 @@ export class AdminMatchService {
       const recipientIds = dispute.match.participants.map(p => p.userId);
 
       await this.notificationService.createNotification({
+        type: 'MATCH_DISPUTE_RESOLVED',
         title: 'Dispute Resolved',
         message: `${actionText}. ${reason}`,
         category: 'MATCH',
         matchId: dispute.matchId,
-        recipientIds
+        userIds: recipientIds
       });
     } catch (error) {
       logger.error('Error sending dispute resolved notification', {}, error as Error);
@@ -871,11 +878,12 @@ export class AdminMatchService {
       const recipientIds = match.participants.map(p => p.userId);
 
       await this.notificationService.createNotification({
+        type: 'MATCH_RESULT_UPDATED',
         title: 'Match Result Updated',
         message: 'An admin has updated the match result. Please review.',
         category: 'MATCH',
         matchId,
-        recipientIds
+        userIds: recipientIds
       });
     } catch (error) {
       logger.error('Error sending result edited notification', {}, error as Error);

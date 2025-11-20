@@ -65,6 +65,10 @@ export async function createBracket(req: Request, res: Response) {
 export async function seedBracket(req: Request, res: Response) {
   try {
     const { id: bracketId } = req.params;
+    if (!bracketId) {
+      return res.status(400).json({ error: 'Bracket ID is required' });
+    }
+
     const adminId = (req as any).user?.id || req.body.adminId;
     const { seedingSource, manualSeeds } = req.body;
 
@@ -103,6 +107,10 @@ export async function seedBracket(req: Request, res: Response) {
 export async function publishBracket(req: Request, res: Response) {
   try {
     const { id: bracketId } = req.params;
+    if (!bracketId) {
+      return res.status(400).json({ error: 'Bracket ID is required' });
+    }
+
     const adminId = (req as any).user?.id || req.body.adminId;
     const { notifyPlayers } = req.body;
 
@@ -140,6 +148,10 @@ export async function publishBracket(req: Request, res: Response) {
 export async function updateBracketMatch(req: Request, res: Response) {
   try {
     const { id: bracketMatchId } = req.params;
+    if (!bracketMatchId) {
+      return res.status(400).json({ error: 'Bracket match ID is required' });
+    }
+
     const adminId = (req as any).user?.id || req.body.adminId;
     const { scheduledTime, courtLocation, player1Id, player2Id } = req.body;
 
@@ -180,6 +192,10 @@ export async function updateBracketMatch(req: Request, res: Response) {
 export async function recordBracketMatchResult(req: Request, res: Response) {
   try {
     const { id: bracketMatchId } = req.params;
+    if (!bracketMatchId) {
+      return res.status(400).json({ error: 'Bracket match ID is required' });
+    }
+
     const { winnerId, matchId } = req.body;
 
     if (!winnerId) {
@@ -212,6 +228,9 @@ export async function recordBracketMatchResult(req: Request, res: Response) {
 export async function getBracketById(req: Request, res: Response) {
   try {
     const { id: bracketId } = req.params;
+    if (!bracketId) {
+      return res.status(400).json({ error: 'Bracket ID is required' });
+    }
 
     const bracket = await bracketService.getBracketById(bracketId);
 
@@ -242,6 +261,9 @@ export async function getBracketById(req: Request, res: Response) {
 export async function getBracketsBySeason(req: Request, res: Response) {
   try {
     const { seasonId } = req.params;
+    if (!seasonId) {
+      return res.status(400).json({ error: 'Season ID is required' });
+    }
 
     const brackets = await bracketService.getBracketsBySeason(seasonId);
 

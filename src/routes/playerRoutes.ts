@@ -53,6 +53,10 @@ playerRouter.get('/matches/:matchId', verifyAuth, getMatchDetails as any);
 playerRouter.get('/activity-status/:playerId', verifyAuth, async (req, res) => {
   try {
     const { playerId } = req.params;
+    if (!playerId) {
+      return res.status(400).json({ error: 'Player ID is required' });
+    }
+
     const { getInactivityService } = await import('../services/inactivityService');
     const { NotificationService } = await import('../services/notificationService');
 

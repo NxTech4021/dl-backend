@@ -247,8 +247,8 @@ export const updateCategory = async (req: Request, res: Response) => {
     if (validatedGenderRestriction !== undefined) updateDataWithRelations.genderRestriction = validatedGenderRestriction;
     if (updateData.matchFormat !== undefined) updateDataWithRelations.matchFormat = updateData.matchFormat ?? null;
     if (updateData.categoryOrder !== undefined) updateDataWithRelations.categoryOrder = updateData.categoryOrder;
-    if (validatedGameType !== undefined) updateDataWithRelations.game_type = validatedGameType;
-    if (mappedGenderCategory !== undefined) updateDataWithRelations.gender_category = mappedGenderCategory;
+    if (validatedGameType !== undefined) updateDataWithRelations.gameType = validatedGameType;
+    if (mappedGenderCategory !== undefined) updateDataWithRelations.genderCategory = mappedGenderCategory;
 
     if (seasonId !== undefined) {
       if (seasonId) {

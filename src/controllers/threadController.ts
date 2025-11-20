@@ -716,6 +716,10 @@ export const deleteMessage = async (req: Request, res: Response) => {
     return res.status(401).json({ error: "Unauthorized" });
   }
 
+  if (!messageId) {
+    return res.status(400).json({ error: "Message ID is required" });
+  }
+
   try {
     const message = await prisma.message.findUnique({
       where: { id: messageId },

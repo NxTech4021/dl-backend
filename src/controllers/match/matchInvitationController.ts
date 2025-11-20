@@ -87,18 +87,20 @@ export const getMatches = async (req: Request, res: Response) => {
       limit = '20'
     } = req.query;
 
+    const filters: any = {
+      hasOpenSlots: hasOpenSlots === 'true'
+    };
+    if (divisionId) filters.divisionId = divisionId as string;
+    if (seasonId) filters.seasonId = seasonId as string;
+    if (status) filters.status = status as MatchStatus;
+    if (matchType) filters.matchType = matchType as MatchType;
+    if (userId) filters.userId = userId as string;
+    if (excludeUserId) filters.excludeUserId = excludeUserId as string;
+    if (fromDate) filters.fromDate = new Date(fromDate as string);
+    if (toDate) filters.toDate = new Date(toDate as string);
+
     const result = await matchInvitationService.getMatches(
-      {
-        divisionId: divisionId as string,
-        seasonId: seasonId as string,
-        status: status as MatchStatus,
-        matchType: matchType as MatchType,
-        userId: userId as string,
-        excludeUserId: excludeUserId as string,
-        fromDate: fromDate ? new Date(fromDate as string) : undefined,
-        toDate: toDate ? new Date(toDate as string) : undefined,
-        hasOpenSlots: hasOpenSlots === 'true'
-      },
+      filters,
       parseInt(page as string),
       parseInt(limit as string)
     );
@@ -117,6 +119,9 @@ export const getMatches = async (req: Request, res: Response) => {
 export const getMatchById = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
+    if (!id) {
+      return res.status(400).json({ error: 'Match ID is required' });
+    }
 
     const match = await matchInvitationService.getMatchById(id);
     if (!match) {
@@ -195,6 +200,10 @@ export const joinMatch = async (req: Request, res: Response) => {
     }
 
     const { id } = req.params;
+    if (!id) {
+      return res.status(400).json({ error: 'Match ID is required' });
+    }
+
     const { asPartner = false } = req.body;
 
     const match = await matchInvitationService.joinMatch(id, userId, asPartner);
@@ -218,6 +227,10 @@ export const respondToInvitation = async (req: Request, res: Response) => {
     }
 
     const { id } = req.params;
+    if (!id) {
+      return res.status(400).json({ error: 'Invitation ID is required' });
+    }
+
     const { accept, declineReason } = req.body;
 
     if (typeof accept !== 'boolean') {
@@ -251,6 +264,10 @@ export const proposeTimeSlot = async (req: Request, res: Response) => {
     }
 
     const { id } = req.params;
+    if (!id) {
+      return res.status(400).json({ error: 'Match ID is required' });
+    }
+
     const { proposedTime, location, notes } = req.body;
 
     if (!proposedTime) {
@@ -285,6 +302,9 @@ export const voteForTimeSlot = async (req: Request, res: Response) => {
     }
 
     const { id } = req.params;
+    if (!id) {
+      return res.status(400).json({ error: 'Time slot ID is required' });
+    }
 
     const timeSlot = await matchInvitationService.voteForTimeSlot({
       timeSlotId: id,
@@ -311,6 +331,9 @@ export const confirmTimeSlot = async (req: Request, res: Response) => {
     }
 
     const { id } = req.params;
+    if (!id) {
+      return res.status(400).json({ error: 'Time slot ID is required' });
+    }
 
     const match = await matchInvitationService.confirmTimeSlot(id);
     res.json(match);

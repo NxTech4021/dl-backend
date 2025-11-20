@@ -21,6 +21,10 @@ export const submitResult = async (req: Request, res: Response) => {
     }
 
     const { id } = req.params;
+    if (!id) {
+      return res.status(400).json({ error: 'Match ID is required' });
+    }
+
     const { setScores, comment, evidence } = req.body;
 
     if (!setScores || !Array.isArray(setScores) || setScores.length === 0) {
@@ -55,6 +59,10 @@ export const confirmResult = async (req: Request, res: Response) => {
     }
 
     const { id } = req.params;
+    if (!id) {
+      return res.status(400).json({ error: 'Match ID is required' });
+    }
+
     const { confirmed, disputeReason, disputeCategory, disputerScore, evidenceUrl } = req.body;
 
     if (typeof confirmed !== 'boolean') {
@@ -95,6 +103,10 @@ export const submitWalkover = async (req: Request, res: Response) => {
     }
 
     const { id } = req.params;
+    if (!id) {
+      return res.status(400).json({ error: 'Match ID is required' });
+    }
+
     const { defaultingUserId, reason, reasonDetail } = req.body;
 
     if (!defaultingUserId) {
@@ -128,6 +140,9 @@ export const submitWalkover = async (req: Request, res: Response) => {
 export const getMatchResult = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
+    if (!id) {
+      return res.status(400).json({ error: 'Match ID is required' });
+    }
 
     const match = await matchResultService.getMatchWithResults(id);
     if (!match) {

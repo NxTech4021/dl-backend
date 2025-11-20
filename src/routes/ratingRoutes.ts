@@ -4,7 +4,7 @@
  */
 
 import { Router } from 'express';
-import { authenticate } from '../middlewares/auth';
+import { verifyAuth } from '../middlewares/auth.middleware';
 import {
   getMyRating,
   getMyRatingSummary,
@@ -18,10 +18,10 @@ import {
 const router = Router();
 
 // Authenticated user's ratings
-router.get('/me', authenticate, getMyRating);
-router.get('/me/summary', authenticate, getMyRatingSummary);
-router.get('/me/history', authenticate, getMyRatingHistory);
-router.get('/me/stats', authenticate, getMyRatingStats);
+router.get('/me', verifyAuth, getMyRating);
+router.get('/me/summary', verifyAuth, getMyRatingSummary);
+router.get('/me/history', verifyAuth, getMyRatingHistory);
+router.get('/me/stats', verifyAuth, getMyRatingStats);
 
 // Public player ratings
 router.get('/:userId', getPlayerRatingById);

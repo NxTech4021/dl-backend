@@ -4,6 +4,7 @@
  */
 
 import { Request, Response } from 'express';
+import { AuthenticatedRequest } from '../../middlewares/auth.middleware';
 import { getAdminMatchService } from '../../services/admin/adminMatchService';
 import {
   MatchStatus,
@@ -36,19 +37,22 @@ export const getAdminMatches = async (req: Request, res: Response) => {
       limit = '20'
     } = req.query;
 
-    const result = await adminMatchService.getAdminMatches({
-      leagueId: leagueId as string,
-      seasonId: seasonId as string,
-      divisionId: divisionId as string,
-      status: status ? (status as string).split(',') as MatchStatus[] : undefined,
-      startDate: startDate ? new Date(startDate as string) : undefined,
-      endDate: endDate ? new Date(endDate as string) : undefined,
-      search: search as string,
-      isDisputed: isDisputed === 'true' ? true : isDisputed === 'false' ? false : undefined,
-      hasLateCancellation: hasLateCancellation === 'true',
+    const filters: any = {
       page: parseInt(page as string),
       limit: parseInt(limit as string)
-    });
+    };
+
+    if (leagueId) filters.leagueId = leagueId as string;
+    if (seasonId) filters.seasonId = seasonId as string;
+    if (divisionId) filters.divisionId = divisionId as string;
+    if (status) filters.status = (status as string).split(',') as MatchStatus[];
+    if (startDate) filters.startDate = new Date(startDate as string);
+    if (endDate) filters.endDate = new Date(endDate as string);
+    if (search) filters.search = search as string;
+    if (isDisputed !== undefined) filters.isDisputed = isDisputed === 'true';
+    if (hasLateCancellation !== undefined) filters.hasLateCancellation = hasLateCancellation === 'true';
+
+    const result = await adminMatchService.getAdminMatches(filters);
 
     res.json(result);
   } catch (error) {
@@ -86,12 +90,15 @@ export const getDisputes = async (req: Request, res: Response) => {
   try {
     const { status, priority, page = '1', limit = '20' } = req.query;
 
-    const result = await adminMatchService.getDisputes({
-      status: status ? (status as string).split(',') as DisputeStatus[] : undefined,
-      priority: priority as DisputePriority,
+    const disputeFilters: any = {
       page: parseInt(page as string),
       limit: parseInt(limit as string)
-    });
+    };
+
+    if (status) disputeFilters.status = (status as string).split(',') as DisputeStatus[];
+    if (priority) disputeFilters.priority = priority as DisputePriority;
+
+    const result = await adminMatchService.getDisputes(disputeFilters);
 
     res.json(result);
   } catch (error) {
@@ -107,6 +114,9 @@ export const getDisputes = async (req: Request, res: Response) => {
 export const getDisputeById = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
+    if (!id) {
+      return res.status(400).json({ error: 'Dispute ID is required' });
+    }
 
     const dispute = await adminMatchService.getDisputeById(id);
     if (!dispute) {
@@ -126,12 +136,17 @@ export const getDisputeById = async (req: Request, res: Response) => {
  */
 export const resolveDispute = async (req: Request, res: Response) => {
   try {
-    const adminId = req.admin?.id;
+    const authReq = req as AuthenticatedRequest;
+    const adminId = authReq.user?.adminId;
     if (!adminId) {
       return res.status(401).json({ error: 'Admin authentication required' });
     }
 
     const { id } = req.params;
+    if (!id) {
+      return res.status(400).json({ error: 'Dispute ID is required' });
+    }
+
     const { action, finalScore, reason, notifyPlayers } = req.body;
 
     if (!action || !reason) {
@@ -170,12 +185,17 @@ export const resolveDispute = async (req: Request, res: Response) => {
  */
 export const addDisputeNote = async (req: Request, res: Response) => {
   try {
-    const adminId = req.admin?.id;
+    const authReq = req as AuthenticatedRequest;
+    const adminId = authReq.user?.adminId;
     if (!adminId) {
       return res.status(401).json({ error: 'Admin authentication required' });
     }
 
     const { id } = req.params;
+    if (!id) {
+      return res.status(400).json({ error: 'Dispute ID is required' });
+    }
+
     const { note, isInternalOnly = true } = req.body;
 
     if (!note) {
@@ -196,12 +216,17 @@ export const addDisputeNote = async (req: Request, res: Response) => {
  */
 export const editMatchResult = async (req: Request, res: Response) => {
   try {
-    const adminId = req.admin?.id;
+    const authReq = req as AuthenticatedRequest;
+    const adminId = authReq.user?.adminId;
     if (!adminId) {
       return res.status(401).json({ error: 'Admin authentication required' });
     }
 
     const { id } = req.params;
+    if (!id) {
+      return res.status(400).json({ error: 'Match ID is required' });
+    }
+
     const { team1Score, team2Score, setScores, outcome, isWalkover, walkoverReason, reason } = req.body;
 
     if (!reason) {
@@ -234,12 +259,17 @@ export const editMatchResult = async (req: Request, res: Response) => {
  */
 export const voidMatch = async (req: Request, res: Response) => {
   try {
-    const adminId = req.admin?.id;
+    const authReq = req as AuthenticatedRequest;
+    const adminId = authReq.user?.adminId;
     if (!adminId) {
       return res.status(401).json({ error: 'Admin authentication required' });
     }
 
     const { id } = req.params;
+    if (!id) {
+      return res.status(400).json({ error: 'Match ID is required' });
+    }
+
     const { reason } = req.body;
 
     if (!reason) {
@@ -275,12 +305,17 @@ export const getPendingCancellations = async (req: Request, res: Response) => {
  */
 export const reviewCancellation = async (req: Request, res: Response) => {
   try {
-    const adminId = req.admin?.id;
+    const authReq = req as AuthenticatedRequest;
+    const adminId = authReq.user?.adminId;
     if (!adminId) {
       return res.status(401).json({ error: 'Admin authentication required' });
     }
 
     const { id } = req.params;
+    if (!id) {
+      return res.status(400).json({ error: 'Match ID is required' });
+    }
+
     const { approved, applyPenalty, penaltySeverity, reason } = req.body;
 
     if (typeof approved !== 'boolean') {
@@ -310,7 +345,8 @@ export const reviewCancellation = async (req: Request, res: Response) => {
  */
 export const applyPenalty = async (req: Request, res: Response) => {
   try {
-    const adminId = req.admin?.id;
+    const authReq = req as AuthenticatedRequest;
+    const adminId = authReq.user?.adminId;
     if (!adminId) {
       return res.status(401).json({ error: 'Admin authentication required' });
     }
@@ -361,6 +397,9 @@ export const applyPenalty = async (req: Request, res: Response) => {
 export const getPlayerPenalties = async (req: Request, res: Response) => {
   try {
     const { userId } = req.params;
+    if (!userId) {
+      return res.status(400).json({ error: 'User ID is required' });
+    }
 
     const penalties = await adminMatchService.getPlayerPenalties(userId);
     res.json(penalties);
@@ -376,12 +415,17 @@ export const getPlayerPenalties = async (req: Request, res: Response) => {
  */
 export const messageParticipants = async (req: Request, res: Response) => {
   try {
-    const adminId = req.admin?.id;
+    const authReq = req as AuthenticatedRequest;
+    const adminId = authReq.user?.adminId;
     if (!adminId) {
       return res.status(401).json({ error: 'Admin authentication required' });
     }
 
     const { id } = req.params;
+    if (!id) {
+      return res.status(400).json({ error: 'Match ID is required' });
+    }
+
     const { message } = req.body;
 
     if (!message) {

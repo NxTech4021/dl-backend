@@ -661,10 +661,7 @@ export const registerPlayerToSeason = async (req: Request, res: Response) => {
           });
           newMembershipCount++;
         } else {
-          const updateData: {
-            status: string;
-            paymentStatus?: PaymentStatus;
-          } = {
+          const updateData: any = {
             status: 'ACTIVE',
           };
           if (paymentStatus) {
@@ -688,10 +685,7 @@ export const registerPlayerToSeason = async (req: Request, res: Response) => {
           });
           newMembershipCount++;
         } else {
-          const updateData: {
-            status: string;
-            paymentStatus?: PaymentStatus;
-          } = {
+          const updateData: any = {
             status: 'ACTIVE',
           };
           if (paymentStatus) {

@@ -112,35 +112,36 @@ export class MatchResultService {
 
       // Create new scores
       for (const score of setScores) {
-        await tx.matchScore.create({
-          data: {
-            matchId,
-            setNumber: score.setNumber,
-            player1Games: score.team1Games,
-            player2Games: score.team2Games,
-            hasTiebreak: !!(score.team1Tiebreak || score.team2Tiebreak),
-            player1Tiebreak: score.team1Tiebreak,
-            player2Tiebreak: score.team2Tiebreak
-          }
-        });
+        const scoreData: any = {
+          matchId,
+          setNumber: score.setNumber,
+          player1Games: score.team1Games,
+          player2Games: score.team2Games,
+          hasTiebreak: !!(score.team1Tiebreak || score.team2Tiebreak)
+        };
+        if (score.team1Tiebreak !== undefined) scoreData.player1Tiebreak = score.team1Tiebreak;
+        if (score.team2Tiebreak !== undefined) scoreData.player2Tiebreak = score.team2Tiebreak;
+
+        await tx.matchScore.create({ data: scoreData });
       }
 
       // Update match
+      const matchUpdateData: any = {
+        status: MatchStatus.COMPLETED,
+        team1Score,
+        team2Score,
+        setScores: JSON.stringify(setScores),
+        outcome: winner,
+        resultSubmittedById: submittedById,
+        resultSubmittedAt: new Date(),
+        requiresAdminReview: false
+      };
+      if (comment) matchUpdateData.resultComment = comment;
+      if (evidence) matchUpdateData.resultEvidence = evidence;
+
       await tx.match.update({
         where: { id: matchId },
-        data: {
-          status: MatchStatus.COMPLETED,
-          team1Score,
-          team2Score,
-          setScores: JSON.stringify(setScores),
-          outcome: winner,
-          resultSubmittedById: submittedById,
-          resultSubmittedAt: new Date(),
-          resultComment: comment,
-          resultEvidence: evidence,
-          // If only 2 participants (singles) or result submitted by creator, may auto-approve
-          requiresAdminReview: false
-        }
+        data: matchUpdateData
       });
     });
 
@@ -555,6 +556,7 @@ export class MatchResultService {
         .map(p => p.userId);
 
       await this.notificationService.createNotification({
+        type: 'MATCH_DISPUTED',
         title: 'Match Result Disputed',
         message: `${disputerName} has disputed the match result. An admin will review.`,
         category: 'MATCH',
@@ -595,6 +597,7 @@ export class MatchResultService {
       const participantIds = match.participants.map(p => p.userId);
 
       await this.notificationService.createNotification({
+        type: 'MATCH_WALKOVER',
         title: 'Walkover Reported',
         message: `${reporter?.name} has reported a walkover for this match.`,
         category: 'MATCH',

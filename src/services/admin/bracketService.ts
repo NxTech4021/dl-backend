@@ -100,18 +100,20 @@ export class BracketService {
 
     // Create bracket with rounds
     const bracket = await prisma.$transaction(async (tx) => {
+      const bracketData: any = {
+        seasonId,
+        divisionId,
+        bracketName,
+        bracketType,
+        seedingSource,
+        numPlayers,
+        status: 'DRAFT'
+      };
+      if (startDate) bracketData.startDate = startDate;
+      if (endDate) bracketData.endDate = endDate;
+
       const newBracket = await tx.bracket.create({
-        data: {
-          seasonId,
-          divisionId,
-          bracketName,
-          bracketType,
-          seedingSource,
-          numPlayers,
-          startDate,
-          endDate,
-          status: BracketStatus.DRAFT
-        }
+        data: bracketData
       });
 
       // Create rounds
@@ -347,10 +349,11 @@ export class BracketService {
       });
 
       await this.notificationService.createNotification({
+        type: 'BRACKET_PUBLISHED',
         title: 'Finals Bracket Published',
         message: `The finals bracket for ${bracket.bracketName} has been published. Check your matches!`,
         category: 'MATCH',
-        recipientIds: Array.from(playerIds)
+        userIds: Array.from(playerIds)
       });
     }
 
