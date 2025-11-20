@@ -744,6 +744,7 @@ export class AdminMatchService {
 
     // Notify user
     await this.notificationService.createNotification({
+      type: 'ADMIN_PENALTY_ISSUED',
       title: 'Penalty Applied',
       message: `You have received a ${severity.toLowerCase()} for: ${reason}`,
       category: 'ADMIN',
@@ -807,7 +808,7 @@ export class AdminMatchService {
       message,
       category: 'ADMIN',
       matchId,
-      recipientIds
+      userIds: recipientIds
     });
 
     logger.info(`Admin ${adminId} messaged participants of match ${matchId}`);
@@ -849,7 +850,7 @@ export class AdminMatchService {
         message: `${actionText}. ${reason}`,
         category: 'MATCH',
         matchId: dispute.matchId,
-        recipientIds
+        userIds: recipientIds
       });
     } catch (error) {
       logger.error('Error sending dispute resolved notification', {}, error as Error);
@@ -875,7 +876,7 @@ export class AdminMatchService {
         message: 'An admin has updated the match result. Please review.',
         category: 'MATCH',
         matchId,
-        recipientIds
+        userIds: recipientIds
       });
     } catch (error) {
       logger.error('Error sending result edited notification', {}, error as Error);

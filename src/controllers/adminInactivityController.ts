@@ -162,6 +162,10 @@ export async function removeSettings(req: Request, res: Response) {
       });
     }
 
+    if (!settingsId) {
+      return res.status(400).json({ error: 'Settings ID is required' });
+    }
+
     await deleteInactivitySettings(settingsId, adminId);
 
     return res.status(200).json({
