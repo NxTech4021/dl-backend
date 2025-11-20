@@ -21,7 +21,7 @@ async function generateReportNumber(appId: string): Promise<string> {
   let nextNumber = 1;
   if (lastReport) {
     const match = lastReport.reportNumber.match(/(\d+)$/);
-    if (match) nextNumber = parseInt(match[1]) + 1;
+    if (match && match[1]) nextNumber = parseInt(match[1]) + 1;
   }
 
   return `${app.code}-BUG-${nextNumber.toString().padStart(4, "0")}`;
