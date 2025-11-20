@@ -21,7 +21,7 @@ import {
   getSeasonLockStatus,
   generateSeasonExport
 } from '../services/rating/adminRatingService';
-import { sendNotification } from '../services/notificationService';
+import { notificationService } from '../services/notificationService';
 import { logger } from '../utils/logger';
 
 /**
@@ -104,11 +104,12 @@ export async function adjustRating(req: Request, res: Response) {
 
     // Send notification to player
     try {
-      await sendNotification({
-        userId,
+      await notificationService.createNotification({
+        userIds: userId,
         title: 'Rating Adjusted',
         message: `Your rating has been adjusted to ${newRating}. Reason: ${reason || 'Admin adjustment'}`,
-        type: 'RATING_UPDATE'
+        type: 'RATING_UPDATE',
+        category: 'GENERAL'
       });
     } catch (notifError) {
       logger.warn('Failed to send rating adjustment notification:', notifError);

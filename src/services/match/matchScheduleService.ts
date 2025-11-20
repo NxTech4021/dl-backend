@@ -330,7 +330,7 @@ export class MatchScheduleService {
         message: `${canceller?.name} has cancelled the match.${lateWarning}`,
         category: 'MATCH',
         matchId,
-        recipientIds: otherParticipants
+        userIds: otherParticipants
       });
     } catch (error) {
       logger.error('Error sending cancellation notification', {}, error as Error);
@@ -363,7 +363,7 @@ export class MatchScheduleService {
         message: `${requester?.name} has requested to reschedule the match. Please vote on new times.`,
         category: 'MATCH',
         matchId,
-        recipientIds: otherParticipants
+        userIds: otherParticipants
       });
     } catch (error) {
       logger.error('Error sending reschedule request notification', {}, error as Error);
@@ -389,7 +389,7 @@ export class MatchScheduleService {
         message: 'Your match has been rescheduled. Please confirm the new time.',
         category: 'MATCH',
         matchId: newMatchId,
-        recipientIds: participantIds
+        userIds: participantIds
       });
     } catch (error) {
       logger.error('Error sending rescheduled notification', {}, error as Error);

@@ -747,7 +747,7 @@ export class AdminMatchService {
       title: 'Penalty Applied',
       message: `You have received a ${severity.toLowerCase()} for: ${reason}`,
       category: 'ADMIN',
-      recipientIds: [userId]
+      userIds: [userId]
     });
 
     logger.info(`Penalty applied to user ${userId} by admin ${adminId}: ${severity}`);

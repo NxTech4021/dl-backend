@@ -779,7 +779,7 @@ export class MatchInvitationService {
           message: `${invitation.inviter.name} has invited you to a match in ${invitation.match.division?.name}`,
           category: 'MATCH',
           matchId,
-          recipientIds: [invitation.inviteeId]
+          userIds: [invitation.inviteeId]
         });
       }
     } catch (error) {
@@ -817,7 +817,7 @@ export class MatchInvitationService {
         message: `${user?.name} has ${accepted ? 'accepted' : 'declined'} the match invitation`,
         category: 'MATCH',
         matchId,
-        recipientIds: otherParticipants
+        userIds: otherParticipants
       });
     } catch (error) {
       logger.error('Error sending invitation response notification', {}, error as Error);
@@ -850,7 +850,7 @@ export class MatchInvitationService {
         message: `Your match has been scheduled for ${confirmedTime.toLocaleString()}`,
         category: 'MATCH',
         matchId,
-        recipientIds: participantIds
+        userIds: participantIds
       });
     } catch (error) {
       logger.error('Error sending time confirmed notification', {}, error as Error);

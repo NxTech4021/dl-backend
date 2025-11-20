@@ -350,7 +350,7 @@ export class BracketService {
         title: 'Finals Bracket Published',
         message: `The finals bracket for ${bracket.bracketName} has been published. Check your matches!`,
         category: 'MATCH',
-        recipientIds: Array.from(playerIds)
+        userIds: Array.from(playerIds)
       });
     }
 
