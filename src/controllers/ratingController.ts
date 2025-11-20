@@ -163,6 +163,10 @@ export async function getMyRatingStats(req: Request, res: Response) {
 export async function getPlayerRatingById(req: Request, res: Response) {
   try {
     const { userId } = req.params;
+    if (!userId) {
+      return res.status(400).json({ error: 'User ID is required' });
+    }
+
     const { seasonId, gameType } = req.query;
 
     const rating = await getPlayerRating(
@@ -198,6 +202,9 @@ export async function getPlayerRatingById(req: Request, res: Response) {
 export async function getAllPlayerRatings(req: Request, res: Response) {
   try {
     const { userId } = req.params;
+    if (!userId) {
+      return res.status(400).json({ error: 'User ID is required' });
+    }
 
     const ratings = await getPlayerRatings(userId);
 
@@ -221,6 +228,10 @@ export async function getAllPlayerRatings(req: Request, res: Response) {
 export async function getPlayerRatingHistoryById(req: Request, res: Response) {
   try {
     const { userId } = req.params;
+    if (!userId) {
+      return res.status(400).json({ error: 'User ID is required' });
+    }
+
     const { seasonId, gameType, limit } = req.query;
 
     const history = await getPlayerRatingHistory(
@@ -250,6 +261,9 @@ export async function getPlayerRatingHistoryById(req: Request, res: Response) {
 export async function getDivisionStandingsHandler(req: Request, res: Response) {
   try {
     const { divisionId } = req.params;
+    if (!divisionId) {
+      return res.status(400).json({ error: 'Division ID is required' });
+    }
 
     const standings = await getDivisionStandings(divisionId);
 
@@ -318,6 +332,9 @@ export async function getMyStanding(req: Request, res: Response) {
 export async function getPlayerStandingHandler(req: Request, res: Response) {
   try {
     const { userId, divisionId } = req.params;
+    if (!userId || !divisionId) {
+      return res.status(400).json({ error: 'User ID and Division ID are required' });
+    }
 
     const standing = await getPlayerStanding(userId, divisionId);
 
