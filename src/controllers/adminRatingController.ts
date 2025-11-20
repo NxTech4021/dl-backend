@@ -117,7 +117,7 @@ export async function adjustRating(req: Request, res: Response) {
         type: 'RATING_UPDATE',
         category: 'GENERAL'
       });
-    } catch (notifError) {
+    } catch (notifError: any) {
       logger.warn('Failed to send rating adjustment notification:', notifError);
     }
 
