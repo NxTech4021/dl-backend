@@ -804,6 +804,7 @@ export class AdminMatchService {
     const recipientIds = match.participants.map(p => p.userId);
 
     await this.notificationService.createNotification({
+      type: 'ADMIN_MESSAGE',
       title: 'Message from Admin',
       message,
       category: 'ADMIN',
@@ -846,6 +847,7 @@ export class AdminMatchService {
       const recipientIds = dispute.match.participants.map(p => p.userId);
 
       await this.notificationService.createNotification({
+        type: 'MATCH_DISPUTE_RESOLVED',
         title: 'Dispute Resolved',
         message: `${actionText}. ${reason}`,
         category: 'MATCH',
@@ -872,6 +874,7 @@ export class AdminMatchService {
       const recipientIds = match.participants.map(p => p.userId);
 
       await this.notificationService.createNotification({
+        type: 'MATCH_RESULT_UPDATED',
         title: 'Match Result Updated',
         message: 'An admin has updated the match result. Please review.',
         category: 'MATCH',

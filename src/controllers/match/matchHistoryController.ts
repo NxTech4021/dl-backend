@@ -32,18 +32,20 @@ export const getMatchHistory = async (req: Request, res: Response) => {
       limit = '20'
     } = req.query;
 
-    const result = await matchHistoryService.getMatchHistory({
+    const filters: any = {
       userId,
-      divisionId: divisionId as string,
-      seasonId: seasonId as string,
-      status: status as MatchStatus,
-      matchType: matchType as MatchType,
-      fromDate: fromDate ? new Date(fromDate as string) : undefined,
-      toDate: toDate ? new Date(toDate as string) : undefined,
       outcome: outcome as 'win' | 'loss' | 'all',
       page: parseInt(page as string),
       limit: parseInt(limit as string)
-    });
+    };
+    if (divisionId) filters.divisionId = divisionId as string;
+    if (seasonId) filters.seasonId = seasonId as string;
+    if (status) filters.status = status as MatchStatus;
+    if (matchType) filters.matchType = matchType as MatchType;
+    if (fromDate) filters.fromDate = new Date(fromDate as string);
+    if (toDate) filters.toDate = new Date(toDate as string);
+
+    const result = await matchHistoryService.getMatchHistory(filters);
 
     res.json(result);
   } catch (error) {

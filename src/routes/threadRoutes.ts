@@ -4,7 +4,6 @@ import {
   getThreads,
   sendMessage,
   getMessages,
-  markAsRead,
   getThreadMembers,
   getAvailableUsers,
   deleteMessage,
