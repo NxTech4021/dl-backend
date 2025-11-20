@@ -59,7 +59,13 @@ export class InactivityService {
       }
 
       results.duration = Date.now() - startTime;
-      logger.info('✅ Inactivity check complete:', results);
+      logger.info('✅ Inactivity check complete:', {
+        total: results.total,
+        warnings: results.warnings,
+        markedInactive: results.markedInactive,
+        errors: results.errors,
+        duration: results.duration
+      });
 
       return results;
     } catch (error) {
