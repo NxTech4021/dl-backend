@@ -3,7 +3,8 @@
  * Handles HTTP requests for admin match management
  */
 
-import { Request, Response } from 'express';
+import { Response } from 'express';
+import { AuthenticatedRequest } from '../../middlewares/auth.middleware';
 import { getAdminMatchService } from '../../services/admin/adminMatchService';
 import {
   MatchStatus,
@@ -20,7 +21,7 @@ const adminMatchService = getAdminMatchService();
  * Get admin matches dashboard (AS6)
  * GET /api/admin/matches
  */
-export const getAdminMatches = async (req: Request, res: Response) => {
+export const getAdminMatches = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const {
       leagueId,
@@ -36,19 +37,22 @@ export const getAdminMatches = async (req: Request, res: Response) => {
       limit = '20'
     } = req.query;
 
-    const result = await adminMatchService.getAdminMatches({
-      leagueId: leagueId as string,
-      seasonId: seasonId as string,
-      divisionId: divisionId as string,
-      status: status ? (status as string).split(',') as MatchStatus[] : undefined,
-      startDate: startDate ? new Date(startDate as string) : undefined,
-      endDate: endDate ? new Date(endDate as string) : undefined,
-      search: search as string,
-      isDisputed: isDisputed === 'true' ? true : isDisputed === 'false' ? false : undefined,
-      hasLateCancellation: hasLateCancellation === 'true',
+    const filters: any = {
       page: parseInt(page as string),
       limit: parseInt(limit as string)
-    });
+    };
+
+    if (leagueId) filters.leagueId = leagueId as string;
+    if (seasonId) filters.seasonId = seasonId as string;
+    if (divisionId) filters.divisionId = divisionId as string;
+    if (status) filters.status = (status as string).split(',') as MatchStatus[];
+    if (startDate) filters.startDate = new Date(startDate as string);
+    if (endDate) filters.endDate = new Date(endDate as string);
+    if (search) filters.search = search as string;
+    if (isDisputed !== undefined) filters.isDisputed = isDisputed === 'true';
+    if (hasLateCancellation !== undefined) filters.hasLateCancellation = hasLateCancellation === 'true';
+
+    const result = await adminMatchService.getAdminMatches(filters);
 
     res.json(result);
   } catch (error) {
@@ -61,7 +65,7 @@ export const getAdminMatches = async (req: Request, res: Response) => {
  * Get match statistics (AS6)
  * GET /api/admin/matches/stats
  */
-export const getMatchStats = async (req: Request, res: Response) => {
+export const getMatchStats = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { leagueId, seasonId, divisionId } = req.query;
 
@@ -82,16 +86,19 @@ export const getMatchStats = async (req: Request, res: Response) => {
  * Get all disputes (AS5)
  * GET /api/admin/disputes
  */
-export const getDisputes = async (req: Request, res: Response) => {
+export const getDisputes = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { status, priority, page = '1', limit = '20' } = req.query;
 
-    const result = await adminMatchService.getDisputes({
-      status: status ? (status as string).split(',') as DisputeStatus[] : undefined,
-      priority: priority as DisputePriority,
+    const disputeFilters: any = {
       page: parseInt(page as string),
       limit: parseInt(limit as string)
-    });
+    };
+
+    if (status) disputeFilters.status = (status as string).split(',') as DisputeStatus[];
+    if (priority) disputeFilters.priority = priority as DisputePriority;
+
+    const result = await adminMatchService.getDisputes(disputeFilters);
 
     res.json(result);
   } catch (error) {
@@ -104,9 +111,12 @@ export const getDisputes = async (req: Request, res: Response) => {
  * Get dispute by ID (AS5)
  * GET /api/admin/disputes/:id
  */
-export const getDisputeById = async (req: Request, res: Response) => {
+export const getDisputeById = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { id } = req.params;
+    if (!id) {
+      return res.status(400).json({ error: 'Dispute ID is required' });
+    }
 
     const dispute = await adminMatchService.getDisputeById(id);
     if (!dispute) {
@@ -124,7 +134,7 @@ export const getDisputeById = async (req: Request, res: Response) => {
  * Resolve a dispute (AS5)
  * POST /api/admin/disputes/:id/resolve
  */
-export const resolveDispute = async (req: Request, res: Response) => {
+export const resolveDispute = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const adminId = req.admin?.id;
     if (!adminId) {
@@ -132,6 +142,10 @@ export const resolveDispute = async (req: Request, res: Response) => {
     }
 
     const { id } = req.params;
+    if (!id) {
+      return res.status(400).json({ error: 'Dispute ID is required' });
+    }
+
     const { action, finalScore, reason, notifyPlayers } = req.body;
 
     if (!action || !reason) {
@@ -168,7 +182,7 @@ export const resolveDispute = async (req: Request, res: Response) => {
  * Add note to dispute (AS5)
  * POST /api/admin/disputes/:id/notes
  */
-export const addDisputeNote = async (req: Request, res: Response) => {
+export const addDisputeNote = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const adminId = req.admin?.id;
     if (!adminId) {
@@ -176,6 +190,10 @@ export const addDisputeNote = async (req: Request, res: Response) => {
     }
 
     const { id } = req.params;
+    if (!id) {
+      return res.status(400).json({ error: 'Dispute ID is required' });
+    }
+
     const { note, isInternalOnly = true } = req.body;
 
     if (!note) {
@@ -194,7 +212,7 @@ export const addDisputeNote = async (req: Request, res: Response) => {
  * Edit match result (AS4)
  * PUT /api/admin/matches/:id/result
  */
-export const editMatchResult = async (req: Request, res: Response) => {
+export const editMatchResult = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const adminId = req.admin?.id;
     if (!adminId) {
@@ -202,6 +220,10 @@ export const editMatchResult = async (req: Request, res: Response) => {
     }
 
     const { id } = req.params;
+    if (!id) {
+      return res.status(400).json({ error: 'Match ID is required' });
+    }
+
     const { team1Score, team2Score, setScores, outcome, isWalkover, walkoverReason, reason } = req.body;
 
     if (!reason) {
@@ -232,7 +254,7 @@ export const editMatchResult = async (req: Request, res: Response) => {
  * Void a match (AS4)
  * POST /api/admin/matches/:id/void
  */
-export const voidMatch = async (req: Request, res: Response) => {
+export const voidMatch = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const adminId = req.admin?.id;
     if (!adminId) {
@@ -240,6 +262,10 @@ export const voidMatch = async (req: Request, res: Response) => {
     }
 
     const { id } = req.params;
+    if (!id) {
+      return res.status(400).json({ error: 'Match ID is required' });
+    }
+
     const { reason } = req.body;
 
     if (!reason) {
@@ -259,7 +285,7 @@ export const voidMatch = async (req: Request, res: Response) => {
  * Get pending late cancellations (AS3)
  * GET /api/admin/cancellations/pending
  */
-export const getPendingCancellations = async (req: Request, res: Response) => {
+export const getPendingCancellations = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const cancellations = await adminMatchService.getPendingCancellations();
     res.json(cancellations);
@@ -273,7 +299,7 @@ export const getPendingCancellations = async (req: Request, res: Response) => {
  * Review a late cancellation (AS3)
  * POST /api/admin/cancellations/:id/review
  */
-export const reviewCancellation = async (req: Request, res: Response) => {
+export const reviewCancellation = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const adminId = req.admin?.id;
     if (!adminId) {
@@ -281,6 +307,10 @@ export const reviewCancellation = async (req: Request, res: Response) => {
     }
 
     const { id } = req.params;
+    if (!id) {
+      return res.status(400).json({ error: 'Match ID is required' });
+    }
+
     const { approved, applyPenalty, penaltySeverity, reason } = req.body;
 
     if (typeof approved !== 'boolean') {
@@ -308,7 +338,7 @@ export const reviewCancellation = async (req: Request, res: Response) => {
  * Apply penalty to player (AS3)
  * POST /api/admin/penalties/apply
  */
-export const applyPenalty = async (req: Request, res: Response) => {
+export const applyPenalty = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const adminId = req.admin?.id;
     if (!adminId) {
@@ -358,9 +388,12 @@ export const applyPenalty = async (req: Request, res: Response) => {
  * Get player's penalty history (AS3)
  * GET /api/admin/penalties/player/:userId
  */
-export const getPlayerPenalties = async (req: Request, res: Response) => {
+export const getPlayerPenalties = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { userId } = req.params;
+    if (!userId) {
+      return res.status(400).json({ error: 'User ID is required' });
+    }
 
     const penalties = await adminMatchService.getPlayerPenalties(userId);
     res.json(penalties);
@@ -374,7 +407,7 @@ export const getPlayerPenalties = async (req: Request, res: Response) => {
  * Message match participants (AS6)
  * POST /api/admin/matches/:id/message
  */
-export const messageParticipants = async (req: Request, res: Response) => {
+export const messageParticipants = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const adminId = req.admin?.id;
     if (!adminId) {
@@ -382,6 +415,10 @@ export const messageParticipants = async (req: Request, res: Response) => {
     }
 
     const { id } = req.params;
+    if (!id) {
+      return res.status(400).json({ error: 'Match ID is required' });
+    }
+
     const { message } = req.body;
 
     if (!message) {
