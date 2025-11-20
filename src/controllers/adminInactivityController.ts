@@ -201,7 +201,13 @@ export async function triggerInactivityCheck(req: Request, res: Response) {
 
     const results = await inactivityService.checkAndUpdateInactivity();
 
-    logger.info(`Manual inactivity check triggered by admin ${adminId}`, results);
+    logger.info(`Manual inactivity check triggered by admin ${adminId}`, {
+      total: results.total,
+      warnings: results.warnings,
+      markedInactive: results.markedInactive,
+      errors: results.errors,
+      duration: results.duration
+    });
 
     return res.status(200).json({
       success: true,
