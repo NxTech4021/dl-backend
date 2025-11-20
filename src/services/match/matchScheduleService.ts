@@ -92,17 +92,19 @@ export class MatchScheduleService {
       isLateCancellation = hoursUntilMatch < this.lateCancellationThresholdHours;
     }
 
+    const updateData: any = {
+      status: MatchStatus.CANCELLED,
+      cancellationRequestedAt: new Date(),
+      isLateCancellation,
+      cancellationReason: reason,
+      cancelledById,
+      cancelledAt: new Date()
+    };
+    if (comment) updateData.cancellationComment = comment;
+
     await prisma.match.update({
       where: { id: matchId },
-      data: {
-        status: MatchStatus.CANCELLED,
-        cancellationRequestedAt: new Date(),
-        isLateCancellation,
-        cancellationReason: reason,
-        cancelledById,
-        cancelledAt: new Date(),
-        cancellationComment: comment
-      }
+      data: updateData
     });
 
     // Send notifications
@@ -326,6 +328,7 @@ export class MatchScheduleService {
       const lateWarning = isLate ? ' (Late cancellation - penalties may apply)' : '';
 
       await this.notificationService.createNotification({
+        type: 'MATCH_CANCELLED',
         title: 'Match Cancelled',
         message: `${canceller?.name} has cancelled the match.${lateWarning}`,
         category: 'MATCH',
@@ -359,6 +362,7 @@ export class MatchScheduleService {
         .map(p => p.userId);
 
       await this.notificationService.createNotification({
+        type: 'MATCH_RESCHEDULED',
         title: 'Reschedule Requested',
         message: `${requester?.name} has requested to reschedule the match. Please vote on new times.`,
         category: 'MATCH',
@@ -385,6 +389,7 @@ export class MatchScheduleService {
       const participantIds = newMatch.participants.map(p => p.userId);
 
       await this.notificationService.createNotification({
+        type: 'MATCH_RESCHEDULED',
         title: 'Match Rescheduled',
         message: 'Your match has been rescheduled. Please confirm the new time.',
         category: 'MATCH',
