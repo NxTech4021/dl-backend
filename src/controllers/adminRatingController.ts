@@ -31,6 +31,9 @@ import { logger } from '../utils/logger';
 export async function getAdminDivisionRatings(req: Request, res: Response) {
   try {
     const { divisionId } = req.params;
+    if (!divisionId) {
+      return res.status(400).json({ error: 'Division ID is required' });
+    }
 
     const ratings = await getDivisionPlayerRatings(divisionId);
 
@@ -54,6 +57,9 @@ export async function getAdminDivisionRatings(req: Request, res: Response) {
 export async function getAdminDivisionSummary(req: Request, res: Response) {
   try {
     const { divisionId } = req.params;
+    if (!divisionId) {
+      return res.status(400).json({ error: 'Division ID is required' });
+    }
 
     const summary = await getDivisionRatingSummary(divisionId);
 
@@ -144,6 +150,10 @@ export async function recalculateRatings(req: Request, res: Response) {
       });
     }
 
+    if (!seasonId) {
+      return res.status(400).json({ error: 'Season ID is required' });
+    }
+
     const result = await recalculateSeasonRatings(seasonId, adminId);
 
     return res.status(200).json({
@@ -167,6 +177,9 @@ export async function recalculateRatings(req: Request, res: Response) {
 export async function getParameters(req: Request, res: Response) {
   try {
     const { seasonId } = req.params;
+    if (!seasonId) {
+      return res.status(400).json({ error: 'Season ID is required' });
+    }
 
     const params = await getRatingParameters(seasonId);
 
@@ -228,6 +241,10 @@ export async function lockSeason(req: Request, res: Response) {
       });
     }
 
+    if (!seasonId) {
+      return res.status(400).json({ error: 'Season ID is required' });
+    }
+
     await lockSeasonRatings({
       seasonId,
       adminId,
@@ -263,6 +280,10 @@ export async function unlockSeason(req: Request, res: Response) {
       });
     }
 
+    if (!seasonId) {
+      return res.status(400).json({ error: 'Season ID is required' });
+    }
+
     await unlockSeasonRatings(seasonId, adminId);
 
     return res.status(200).json({
@@ -285,6 +306,9 @@ export async function unlockSeason(req: Request, res: Response) {
 export async function getLockStatus(req: Request, res: Response) {
   try {
     const { seasonId } = req.params;
+    if (!seasonId) {
+      return res.status(400).json({ error: 'Season ID is required' });
+    }
 
     const status = await getSeasonLockStatus(seasonId);
 
@@ -347,6 +371,10 @@ export async function recalculateMatch(req: Request, res: Response) {
       });
     }
 
+    if (!matchId) {
+      return res.status(400).json({ error: 'Match ID is required' });
+    }
+
     const result = await recalculateMatchRatings(matchId, adminId);
 
     return res.status(200).json({
@@ -386,6 +414,10 @@ export async function recalculatePlayer(req: Request, res: Response) {
       });
     }
 
+    if (!userId) {
+      return res.status(400).json({ error: 'User ID is required' });
+    }
+
     const result = await recalculatePlayerRatings(userId, seasonId, adminId);
 
     return res.status(200).json({
@@ -418,6 +450,10 @@ export async function recalculateDivision(req: Request, res: Response) {
       });
     }
 
+    if (!divisionId) {
+      return res.status(400).json({ error: 'Division ID is required' });
+    }
+
     const result = await recalculateDivisionRatings(divisionId, adminId);
 
     return res.status(200).json({
@@ -441,6 +477,10 @@ export async function recalculateDivision(req: Request, res: Response) {
 export async function getSeasonExport(req: Request, res: Response) {
   try {
     const { seasonId } = req.params;
+    if (!seasonId) {
+      return res.status(400).json({ error: 'Season ID is required' });
+    }
+
     const format = (req.query.format as 'csv' | 'json') || 'json';
 
     const result = await generateSeasonExport(seasonId, format);
