@@ -25,7 +25,7 @@ import {
 const router = Router();
 
 // All routes require admin authentication
-router.use(authenticate);
+router.use(verifyAuth);
 router.use(requireAdmin);
 
 // Division ratings
