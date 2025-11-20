@@ -14,6 +14,8 @@ import {
 } from "../controllers/admincontrollers";
 import adminMatchRoutes from "./admin/adminMatchRoutes";
 import bracketRoutes from "./admin/bracketRoutes";
+import adminRatingRoutes from "./adminRatingRoutes";
+import adminInactivityRoutes from "./adminInactivityRoutes";
 
 
 const adminRouter = Router();
@@ -36,5 +38,11 @@ adminRouter.use("/", adminMatchRoutes);
 
 // Admin Bracket Routes (AS2)
 adminRouter.use("/", bracketRoutes);
+
+// Admin Rating Routes (Ratings & Standings Module)
+adminRouter.use("/ratings", adminRatingRoutes);
+
+// Admin Inactivity Routes
+adminRouter.use("/inactivity", adminInactivityRoutes);
 
 export default adminRouter;

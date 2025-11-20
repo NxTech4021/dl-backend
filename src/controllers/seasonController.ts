@@ -41,6 +41,7 @@ import { notificationService } from '../services/notificationService';
 
 import { seasonNotifications, paymentNotifications } from '../helpers/notification';
 import { NOTIFICATION_TYPES } from '../types/notificationTypes';
+import { notifyAdminsWithdrawalRequest } from '../services/notification/adminNotificationService';
 
 
 
@@ -474,12 +475,28 @@ export const submitWithdrawalRequest = async (req: AuthenticatedRequest, res: Re
     });
 
     if (season) {
+      // Notify user
       await notificationService.createNotification({
         userIds: userId,
         type: NOTIFICATION_TYPES.WITHDRAWAL_REQUEST_RECEIVED,
         category: 'GENERAL',
         title: 'Withdrawal Request Received',
         message: `Your withdrawal request for ${season.name} has been received and is being processed.`,
+        seasonId: seasonId,
+        withdrawalRequestId: withdrawalRequest.id
+      });
+
+      // Get user name for admin notification
+      const user = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { name: true }
+      });
+
+      // Notify admins
+      await notifyAdminsWithdrawalRequest(notificationService, {
+        playerName: user?.name || 'Unknown Player',
+        seasonName: season.name,
+        reason: reason,
         seasonId: seasonId,
         withdrawalRequestId: withdrawalRequest.id
       });
