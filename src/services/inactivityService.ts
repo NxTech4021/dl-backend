@@ -209,7 +209,7 @@ export class InactivityService {
     await this.notificationService.createNotification({
       userIds: userId,
       type: 'STATUS_CHANGED_TO_INACTIVE',
-      category: 'SYSTEM',
+      category: 'GENERAL',
       title: 'Account Status Changed',
       message: 'Your account has been marked inactive due to not playing matches. Play a match to reactivate!',
       metadata: {
@@ -233,7 +233,7 @@ export class InactivityService {
     await this.notificationService.createNotification({
       userIds: userId,
       type: 'INACTIVITY_WARNING',
-      category: 'SYSTEM',
+      category: 'GENERAL',
       title: 'Inactivity Warning',
       message: `It's been ${daysSinceLastMatch} days since your last match. Play within ${daysRemaining} days to stay active!`,
       metadata: {
@@ -265,7 +265,7 @@ export class InactivityService {
     await this.notificationService.createNotification({
       userIds: userId,
       type: 'INACTIVITY_WARNING',
-      category: 'SYSTEM',
+      category: 'GENERAL',
       title: 'Inactivity Warning',
       message: `It's been ${daysSinceLastMatch} days since your last match. Play within ${daysRemaining} days to stay active!`,
       metadata: {
@@ -309,7 +309,7 @@ export class InactivityService {
       await this.notificationService.createNotification({
         userIds: userId,
         type: 'REACTIVATED',
-        category: 'SYSTEM',
+        category: 'GENERAL',
         title: 'Welcome Back!',
         message: 'Your account has been reactivated. Keep playing to maintain your rating!',
         metadata: { previousStatus: 'INACTIVE' },

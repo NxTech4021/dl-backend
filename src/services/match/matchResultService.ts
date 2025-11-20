@@ -555,6 +555,7 @@ export class MatchResultService {
         .map(p => p.userId);
 
       await this.notificationService.createNotification({
+        type: 'MATCH_DISPUTED',
         title: 'Match Result Disputed',
         message: `${disputerName} has disputed the match result. An admin will review.`,
         category: 'MATCH',
@@ -595,6 +596,7 @@ export class MatchResultService {
       const participantIds = match.participants.map(p => p.userId);
 
       await this.notificationService.createNotification({
+        type: 'MATCH_WALKOVER',
         title: 'Walkover Reported',
         message: `${reporter?.name} has reported a walkover for this match.`,
         category: 'MATCH',

@@ -14,7 +14,10 @@ export {
   isPushEnabled,
   isEmailEnabled,
   createDefaultPreferences,
-  deleteUserPreferences,
+  deleteUserPreferences
+} from './notificationPreferenceService';
+
+export type {
   NotificationPreferenceKey,
   NotificationPreferenceInput
 } from './notificationPreferenceService';

@@ -35,8 +35,7 @@ export class MatchReminderService {
           gte: in23Hours,
           lt: in24Hours
         },
-        status: { in: ['SCHEDULED', 'CONFIRMED'] },
-        reminderSent: false // We'll need to add this field
+        status: 'SCHEDULED'
       },
       include: {
         participants: {
@@ -45,9 +44,6 @@ export class MatchReminderService {
               select: { id: true, name: true }
             }
           }
-        },
-        venue: {
-          select: { name: true, address: true }
         },
         division: {
           select: { name: true }
@@ -61,12 +57,6 @@ export class MatchReminderService {
       try {
         await this.sendReminderForMatch(match);
         remindersSent++;
-
-        // Mark reminder as sent
-        await prisma.match.update({
-          where: { id: match.id },
-          data: { reminderSent: true }
-        });
       } catch (error) {
         logger.error('Failed to send reminder for match', {
           matchId: match.id
@@ -122,8 +112,8 @@ export class MatchReminderService {
         .map((p: any) => p.user.name)
         .join(' & ');
 
-      const locationInfo = match.venue
-        ? `at ${match.venue.name}`
+      const locationInfo = match.venue || match.location
+        ? `at ${match.venue || match.location}`
         : 'Location TBD';
 
       await this.notificationService.createNotification({
@@ -155,9 +145,6 @@ export class MatchReminderService {
               select: { id: true, name: true }
             }
           }
-        },
-        venue: {
-          select: { name: true, address: true }
         },
         division: {
           select: { name: true }
