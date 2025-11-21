@@ -316,7 +316,6 @@ export class BracketService {
       where: { id: bracketId },
       include: {
         matches: {
-          where: { roundId: { not: null } },
           include: { player1: true, player2: true }
         }
       }
@@ -576,12 +575,13 @@ export class BracketService {
       const player1 = seededPlayers.find(p => p.seed === pos1);
       const player2 = seededPlayers.find(p => p.seed === pos2);
 
-      matches.push({
-        seed1: pos1,
-        seed2: pos2,
-        player1Id: player1?.playerId,
-        player2Id: player2?.playerId
-      });
+      const matchEntry: any = {};
+      if (pos1 !== undefined) matchEntry.seed1 = pos1;
+      if (pos2 !== undefined) matchEntry.seed2 = pos2;
+      if (player1?.playerId) matchEntry.player1Id = player1.playerId;
+      if (player2?.playerId) matchEntry.player2Id = player2.playerId;
+
+      matches.push(matchEntry);
     }
 
     return matches;
