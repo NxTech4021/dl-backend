@@ -16,7 +16,7 @@ export const sendFriendRequest = async (data: SendFriendRequestData) => {
 
   // Check if recipient exists
   const recipient = await prisma.user.findUnique({
-    where: { id: recipientId, role: 'USER', status: 'active' },
+    where: { id: recipientId, role: 'USER', status: 'ACTIVE' },
   });
 
   if (!recipient) {

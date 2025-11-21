@@ -223,11 +223,16 @@ class Logger {
   // ============================================================================
   
   startPerformanceTracking(operationId: string, operation: string, metadata?: Record<string, any>): void {
-    this.performanceTracking.set(operationId, {
+    const metrics: PerformanceMetrics = {
       operation,
       startTime: Date.now(),
-      metadata,
-    });
+    };
+    
+    if (metadata !== undefined) {
+      metrics.metadata = metadata;
+    }
+    
+    this.performanceTracking.set(operationId, metrics);
     
     this.debug(`Started tracking: ${operation}`, { operationId, ...metadata });
   }
@@ -245,7 +250,7 @@ class Logger {
     
     this.info(`Completed: ${tracking.operation}`, {
       operationId,
-      duration: `${tracking.duration}ms`,
+      duration: tracking.duration,
       ...tracking.metadata,
       ...additionalContext,
     });
@@ -264,7 +269,7 @@ class Logger {
       method,
       url,
       statusCode,
-      duration: `${duration}ms`,
+      duration,
       ...context,
     });
   }
@@ -277,7 +282,7 @@ class Logger {
     this.debug('Database operation completed', {
       operation,
       table,
-      duration: `${duration}ms`,
+      duration,
       operation_type: 'database',
       ...context,
     });
@@ -330,7 +335,7 @@ class Logger {
       sport,
       rating,
       confidence,
-      duration: `${duration}ms`,
+      duration,
       operation: 'scoring',
       ...context,
     });
@@ -514,7 +519,7 @@ class Logger {
     this.debug('External service call', {
       service,
       endpoint,
-      duration: `${duration}ms`,
+      duration,
       operation: 'external_service',
       ...context,
     });
@@ -536,7 +541,7 @@ class Logger {
   socketConnected(socketId: string, userId?: string): void {
     this.info('Socket connected', {
       socketId,
-      userId,
+      ...(userId !== undefined && { userId }),
       operation: 'socket_connection',
     });
   }
@@ -544,8 +549,8 @@ class Logger {
   socketDisconnected(socketId: string, userId?: string, reason?: string): void {
     this.info('Socket disconnected', {
       socketId,
-      userId,
-      reason,
+      ...(userId !== undefined && { userId }),
+      ...(reason !== undefined && { reason }),
       operation: 'socket_disconnection',
     });
   }

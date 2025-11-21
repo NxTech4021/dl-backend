@@ -1,6 +1,8 @@
 import { Request, Response } from "express";
 import { prisma } from "../lib/prisma";
 import { Prisma, PaymentStatus } from "@prisma/client";
+import { AuthenticatedRequest } from "../middlewares/auth.middleware";
+import { ApiResponse } from "../utils/ApiResponse";
 
 import {
   getActiveSeasonService,
@@ -16,7 +18,6 @@ import {
 } from "../services/seasonService";
 
 import {
-  validateCreateSeasonData,
   validateUpdateSeasonData,
   validateStatusUpdate,
   validateWithdrawalRequest,
@@ -38,9 +39,73 @@ import {
 
 import { notificationService } from '../services/notificationService';
 
-// 🆕 Import notification templates
 import { seasonNotifications, paymentNotifications } from '../helpers/notification';
 import { NOTIFICATION_TYPES } from '../types/notificationTypes';
+import { notifyAdminsWithdrawalRequest } from '../services/notification/adminNotificationService';
+
+
+
+interface CreateSeasonBody {
+  name?: string;
+  startDate?: string;
+  endDate?: string;
+  regiDeadline?: string;
+  description?: string;
+  entryFee?: number;
+  leagueIds?: string[];
+  categoryId?: string;
+  isActive?: boolean;
+  paymentRequired?: boolean;
+  promoCodeSupported?: boolean;
+  withdrawalEnabled?: boolean;
+}
+
+interface UpdateSeasonBody {
+  name?: string;
+  startDate?: string;
+  endDate?: string;
+  regiDeadline?: string;
+  description?: string;
+  entryFee?: number;
+  leagueIds?: string[];
+  categoryId?: string;
+  isActive?: boolean;
+  status?: string;
+  paymentRequired?: boolean;
+  promoCodeSupported?: boolean;
+  withdrawalEnabled?: boolean;
+}
+
+interface UpdateSeasonStatusBody {
+  status?: string;
+  isActive?: boolean;
+}
+
+interface RegisterPlayerToSeasonBody {
+  userId?: string;
+  seasonId?: string;
+  payLater?: boolean;
+}
+
+interface AssignPlayerToDivisionBody {
+  membershipId?: string;
+  divisionId?: string;
+}
+
+interface UpdatePaymentStatusBody {
+  membershipId?: string;
+  paymentStatus?: string;
+}
+
+interface SubmitWithdrawalRequestBody {
+  seasonId?: string;
+  reason?: string;
+  partnershipId?: string;
+}
+
+interface ProcessWithdrawalRequestBody {
+  status?: string;
+}
 
 export const createSeason = async (req: Request, res: Response) => {
   const {
@@ -56,25 +121,41 @@ export const createSeason = async (req: Request, res: Response) => {
     paymentRequired,
     promoCodeSupported,
     withdrawalEnabled,
-  } = req.body;
+  } = req.body as CreateSeasonBody;
+
+  // Validate required fields
+  if (!name || !startDate || !endDate || !entryFee || !leagueIds || !categoryId) {
+    return res.status(400).json({
+      success: false,
+      error: "Missing required fields: name, startDate, endDate, entryFee, leagueIds, and categoryId are required"
+    });
+  }
+
+  if (!Array.isArray(leagueIds) || leagueIds.length === 0) {
+    return res.status(400).json({
+      success: false,
+      error: "At least one league ID is required"
+    });
+  }
 
   try {
-    const categoryIds = categoryId ? [categoryId] : [];
-
-    const season = await createSeasonService({
+    const seasonData: Parameters<typeof createSeasonService>[0] = {
       name,
       startDate,
       endDate,
-      regiDeadline,
-      description,
       entryFee,
       leagueIds,
-      categoryIds,
-      isActive,
-      paymentRequired,
-      promoCodeSupported,
-      withdrawalEnabled,
-    });
+      categoryId,
+    };
+    
+    if (regiDeadline !== undefined) seasonData.regiDeadline = regiDeadline;
+    if (description !== undefined) seasonData.description = description;
+    if (isActive !== undefined) seasonData.isActive = isActive;
+    if (paymentRequired !== undefined) seasonData.paymentRequired = paymentRequired;
+    if (promoCodeSupported !== undefined) seasonData.promoCodeSupported = promoCodeSupported;
+    if (withdrawalEnabled !== undefined) seasonData.withdrawalEnabled = withdrawalEnabled;
+
+    const season = await createSeasonService(seasonData);
 
     // 🆕 Send notification if season is starting soon
     if (isActive && startDate) {
@@ -109,23 +190,25 @@ export const createSeason = async (req: Request, res: Response) => {
       message: "Season created successfully",
       data: season,
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error creating season:", error);
+    
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
 
     // Handle validation errors
-    if (error.message?.includes("Missing required fields") ||
-        error.message?.includes("At least one league")) {
+    if (errorMessage.includes("Missing required fields") ||
+        errorMessage.includes("At least one league")) {
       return res.status(400).json({
         success: false,
-        error: error.message,
+        error: errorMessage,
       });
     }
 
     // Handle duplicate season name
-    if (error.message?.includes("already exists")) {
+    if (errorMessage.includes("already exists")) {
       return res.status(409).json({
         success: false,
-        error: error.message,
+        error: errorMessage,
       });
     }
 
@@ -158,8 +241,10 @@ export const getSeasons = async (req: Request, res: Response) => {
 
     // Get all seasons
     const seasons = await getAllSeasonsService();
-    return res.status(200).json(seasons);
-  } catch (error: any) {
+    return res.status(200).json(
+      new ApiResponse(true, 200, seasons, `Found ${seasons.length} season(s)`)
+    );
+  } catch (error: unknown) {
     console.error("Error fetching seasons:", error);
 
     if (error instanceof Prisma.PrismaClientValidationError) {
@@ -189,7 +274,7 @@ export const getSeasonById = async (req: Request, res: Response) => {
 
     const result = formatSeasonWithRelations(season);
     return res.status(200).json(result);
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error(`Error fetching season ${id}:`, error);
     return res.status(500).json({ error: "Failed to retrieve season details." });
   }
@@ -205,40 +290,43 @@ export const updateSeason = async (req: Request, res: Response) => {
     description,
     entryFee,
     leagueIds,
-    categoryIds,
+    categoryId,
     isActive,
     status,
     paymentRequired,
     promoCodeSupported,
     withdrawalEnabled,
-  } = req.body;
+  } = req.body as UpdateSeasonBody;
 
   if (!id) {
     return res.status(400).json({ error: "Season ID is required." });
   }
 
   try {
-    // 🆕 Get current season to compare status changes
     const currentSeason = await prisma.season.findUnique({
       where: { id },
       select: { status: true, name: true }
     });
 
-    const seasonData = {
-      name,
-      startDate,
-      endDate,
-      regiDeadline,
-      description,
-      entryFee,
-      leagueIds,
-      categoryIds,
-      isActive,
-      status,
-      paymentRequired,
-      promoCodeSupported,
-      withdrawalEnabled,
-    };
+    const seasonData: Parameters<typeof updateSeasonService>[1] = {};
+    
+    if (name !== undefined) seasonData.name = name;
+    if (startDate !== undefined) seasonData.startDate = startDate;
+    if (endDate !== undefined) seasonData.endDate = endDate;
+    if (regiDeadline !== undefined) seasonData.regiDeadline = regiDeadline;
+    if (description !== undefined) seasonData.description = description;
+    if (entryFee !== undefined) seasonData.entryFee = entryFee;
+    if (leagueIds !== undefined) seasonData.leagueIds = leagueIds;
+    if (categoryId !== undefined) seasonData.categoryId = categoryId;
+    if (isActive !== undefined) seasonData.isActive = isActive;
+    if (status !== undefined) {
+      if (status && ["UPCOMING", "ACTIVE", "FINISHED", "CANCELLED"].includes(status)) {
+        seasonData.status = status as "UPCOMING" | "ACTIVE" | "FINISHED" | "CANCELLED";
+      }
+    }
+    if (paymentRequired !== undefined) seasonData.paymentRequired = paymentRequired;
+    if (promoCodeSupported !== undefined) seasonData.promoCodeSupported = promoCodeSupported;
+    if (withdrawalEnabled !== undefined) seasonData.withdrawalEnabled = withdrawalEnabled;
 
     const season = await updateSeasonService(id, seasonData);
 
@@ -280,7 +368,7 @@ export const updateSeason = async (req: Request, res: Response) => {
       message: "Season updated successfully",
       data: season
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error updating season:", error);
     return handlePrismaError(error, res, "Failed to update season");
   }
@@ -294,14 +382,23 @@ export const updateSeasonStatus = async (req: Request, res: Response) => {
   }
 
   try {
-    const { status, isActive } = req.body;
-    const season = await updateSeasonStatusService(id, { status, isActive });
+    const { status, isActive } = req.body as UpdateSeasonStatusBody;
+    
+    const statusUpdate: Parameters<typeof updateSeasonStatusService>[1] = {};
+    if (status !== undefined) {
+      if (status && ["UPCOMING", "ACTIVE", "FINISHED", "CANCELLED"].includes(status)) {
+        statusUpdate.status = status as "UPCOMING" | "ACTIVE" | "FINISHED" | "CANCELLED";
+      }
+    }
+    if (isActive !== undefined) statusUpdate.isActive = isActive;
+    
+    const season = await updateSeasonStatusService(id, statusUpdate);
     return res.status(200).json({
       success: true,
       message: "Season status updated successfully",
       data: season
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error updating season status:", error);
     return handlePrismaError(error, res, "Failed to update season status");
   }
@@ -323,22 +420,24 @@ export const deleteSeason = async (req: Request, res: Response) => {
       message: `Season "${deletedSeason.name}" deleted successfully.`,
       data: deletedSeason,
     });
-  } catch (error: any) {
-    console.error("Error deleting season:", error.message);
+  } catch (error: unknown) {
+    console.error("Error deleting season:", error);
+    
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
 
-    if (error.message.includes("Cannot delete season")) {
-      return res.status(400).json({ error: error.message });
+    if (errorMessage.includes("Cannot delete season")) {
+      return res.status(400).json({ error: errorMessage });
     }
 
-    if (error.message.includes("not found")) {
-      return res.status(404).json({ error: error.message });
+    if (errorMessage.includes("not found")) {
+      return res.status(404).json({ error: errorMessage });
     }
 
     return res.status(500).json({ error: "Failed to delete season." });
   }
 };
 
-export const submitWithdrawalRequest = async (req: any, res: any) => {
+export const submitWithdrawalRequest = async (req: AuthenticatedRequest, res: Response) => {
   const userId = req.user?.id;
 
   if (!userId) {
@@ -350,15 +449,24 @@ export const submitWithdrawalRequest = async (req: any, res: any) => {
     return res.status(400).json({ error: validation.error });
   }
 
-  const { seasonId, reason, partnershipId } = req.body;
+  const { seasonId, reason, partnershipId } = req.body as SubmitWithdrawalRequestBody;
+
+  if (!seasonId || !reason) {
+    return res.status(400).json({ error: "seasonId and reason are required" });
+  }
 
   try {
-    const withdrawalRequest = await submitWithdrawalRequestService({
+    const withdrawalData: Parameters<typeof submitWithdrawalRequestService>[0] = {
       userId,
       seasonId,
       reason,
-      partnershipId,
-    });
+    };
+    
+    if (partnershipId !== undefined) {
+      withdrawalData.partnershipId = partnershipId;
+    }
+
+    const withdrawalRequest = await submitWithdrawalRequestService(withdrawalData);
 
     // 🆕 Send notification to user confirming withdrawal request
     const season = await prisma.season.findUnique({
@@ -367,6 +475,7 @@ export const submitWithdrawalRequest = async (req: any, res: any) => {
     });
 
     if (season) {
+      // Notify user
       await notificationService.createNotification({
         userIds: userId,
         type: NOTIFICATION_TYPES.WITHDRAWAL_REQUEST_RECEIVED,
@@ -376,16 +485,33 @@ export const submitWithdrawalRequest = async (req: any, res: any) => {
         seasonId: seasonId,
         withdrawalRequestId: withdrawalRequest.id
       });
+
+      // Get user name for admin notification
+      const user = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { name: true }
+      });
+
+      // Notify admins
+      await notifyAdminsWithdrawalRequest(notificationService, {
+        playerName: user?.name || 'Unknown Player',
+        seasonName: season.name,
+        reason: reason,
+        seasonId: seasonId,
+        withdrawalRequestId: withdrawalRequest.id
+      });
     }
 
     return res.status(201).json(withdrawalRequest);
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error submitting withdrawal request:", error);
 
-    if (error.message?.includes("not found") ||
-        error.message?.includes("not part of this partnership") ||
-        error.message?.includes("not active")) {
-      return res.status(400).json({ error: error.message });
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+
+    if (errorMessage.includes("not found") ||
+        errorMessage.includes("not part of this partnership") ||
+        errorMessage.includes("not active")) {
+      return res.status(400).json({ error: errorMessage });
     }
 
     if (error instanceof Prisma.PrismaClientValidationError) {
@@ -396,23 +522,27 @@ export const submitWithdrawalRequest = async (req: any, res: any) => {
   }
 };
 
-export const processWithdrawalRequest = async (req: any, res: any) => {
+export const processWithdrawalRequest = async (req: AuthenticatedRequest, res: Response) => {
   const { id } = req.params;
   const processedByAdminId = req.user?.id;
-  const { status } = req.body;
+  const { status } = req.body as ProcessWithdrawalRequestBody;
 
   if (!processedByAdminId) {
     return res.status(401).json({ error: "Unauthorized" });
   }
 
-  if (!["APPROVED", "REJECTED"].includes(status)) {
-    return res.status(400).json({ error: "Invalid status." });
+  if (!id) {
+    return res.status(400).json({ error: "Withdrawal request ID is required." });
+  }
+
+  if (!status || !["APPROVED", "REJECTED"].includes(status)) {
+    return res.status(400).json({ error: "Invalid status. Must be 'APPROVED' or 'REJECTED'." });
   }
 
   try {
     const result = await processWithdrawalRequestService(
       id,
-      status,
+      status as "APPROVED" | "REJECTED",
       processedByAdminId
     );
 
@@ -452,12 +582,14 @@ export const processWithdrawalRequest = async (req: any, res: any) => {
     }
 
     return res.status(200).json(result);
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error(`Error processing withdrawal request ${id}:`, error);
 
-    if (error.message?.includes("not found") ||
-        error.message?.includes("already processed")) {
-      return res.status(400).json({ error: error.message });
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+
+    if (errorMessage.includes("not found") ||
+        errorMessage.includes("already processed")) {
+      return res.status(400).json({ error: errorMessage });
     }
 
     if (error instanceof Prisma.PrismaClientKnownRequestError) {
@@ -471,7 +603,7 @@ export const processWithdrawalRequest = async (req: any, res: any) => {
 };
 
 export const registerPlayerToSeason = async (req: Request, res: Response) => {
-  const { userId, seasonId, payLater } = req.body;
+  const { userId, seasonId, payLater } = req.body as RegisterPlayerToSeasonBody;
 
   if (!userId || !seasonId) {
     return res.status(400).json({ error: "userId and seasonId are required." });
@@ -605,6 +737,33 @@ export const registerPlayerToSeason = async (req: Request, res: Response) => {
         });
       }
 
+      // ✅ Emit Socket.IO events to notify both captain and partner about team registration completion
+      if (req.io && season) {
+        try {
+          // Notify both captain and partner about successful team registration
+          const registrationData = {
+            partnership: {
+              id: result.partnership.id,
+              captainId: captainId,
+              partnerId: partnerId,
+              season: {
+                id: seasonId,
+                name: season.name
+              }
+            },
+            memberships: result.memberships,
+            message: "Team registration completed successfully"
+          };
+          
+          req.io.to(captainId).emit('team_registration_completed', registrationData);
+          req.io.to(partnerId).emit('team_registration_completed', registrationData);
+          console.log(`📨 Socket.IO: Notified captain ${captainId} and partner ${partnerId} of team registration completion`);
+        } catch (socketError) {
+          console.error('Error emitting team registration socket event:', socketError);
+          // Don't fail the whole operation if socket fails
+        }
+      }
+
       return res.status(201).json({
         message: "Team registered successfully",
         partnership: result.partnership,
@@ -640,7 +799,7 @@ export const registerPlayerToSeason = async (req: Request, res: Response) => {
         ...membership,
         user: { id: membership.user.id, name: membership.user.name },
         season: { id: membership.season.id, name: membership.season.name },
-        division: null, // division is not included in registerMembershipService response
+        division: null,
       };
 
       return res.status(201).json({
@@ -648,14 +807,15 @@ export const registerPlayerToSeason = async (req: Request, res: Response) => {
         membership: result
       });
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error registering to season:", error);
-    return res.status(400).json({ error: error.message });
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    return res.status(400).json({ error: errorMessage });
   }
 };
 
 export const assignPlayerToDivision = async (req: Request, res: Response) => {
-  const { membershipId, divisionId } = req.body;
+  const { membershipId, divisionId } = req.body as AssignPlayerToDivisionBody;
 
   if (!membershipId || !divisionId) {
     return res.status(400).json({ 
@@ -688,14 +848,15 @@ export const assignPlayerToDivision = async (req: Request, res: Response) => {
       message: "Player assigned to division successfully", 
       membership: result 
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error assigning player to division:", error);
-    return res.status(400).json({ error: error.message });
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    return res.status(400).json({ error: errorMessage });
   }
 };
 
 export const updatePaymentStatus = async (req: Request, res: Response) => {
-  const { membershipId, paymentStatus } = req.body;
+  const { membershipId, paymentStatus } = req.body as UpdatePaymentStatusBody;
 
   if (!membershipId || !paymentStatus) {
     return res.status(400).json({ 
@@ -703,12 +864,12 @@ export const updatePaymentStatus = async (req: Request, res: Response) => {
     });
   }
 
-  if (!Object.values(PaymentStatus).includes(paymentStatus)) {
+  if (!Object.values(PaymentStatus).includes(paymentStatus as PaymentStatus)) {
     return res.status(400).json({ error: "Invalid paymentStatus value." });
   }
 
   try {
-    const membership = await updatePaymentStatusService({ membershipId, paymentStatus });
+    const membership = await updatePaymentStatusService({ membershipId, paymentStatus: paymentStatus as PaymentStatus });
 
     // 🆕 Send payment status notification
     const membershipWithSeason = await prisma.seasonMembership.findUnique({
@@ -755,9 +916,10 @@ export const updatePaymentStatus = async (req: Request, res: Response) => {
       message: "Payment status updated", 
       membership: result 
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error updating payment status:", error);
-    return res.status(400).json({ error: error.message });
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    return res.status(400).json({ error: errorMessage });
   }
 };
 

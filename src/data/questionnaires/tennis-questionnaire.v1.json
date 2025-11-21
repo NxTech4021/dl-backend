@@ -23,17 +23,17 @@
           { "label": "Monthly (1-2 times per month)", "weight": -0.2 },
           { "label": "Weekly (1-2 times per week)", "weight": 0.3 },
           { "label": "Regular (3-4 times per week)", "weight": 0.7 },
-          { "label": "Daily/Intensive (5+ times per week)", "weight": 1.0 }
+          { "label": "Daily (5+ times per week)", "weight": 1.0 }
         ]
       },
       {
         "key": "competitive_level",
-        "question": "What level do you typically play at?",
+        "question": "What is the highest level of tennis you usually compete in??",
         "type": "single_choice",
         "options": [
-          { "label": "Recreational/social tennis with friends", "weight": -0.5 },
-          { "label": "Social/friendly matches", "weight": -0.1 },
-          { "label": "Local/small tournaments", "weight": 0.4 },
+          { "label": "Recreational/social play with friends", "weight": -0.5 },
+          { "label": "Friendly matches (informal, but with some competitiveness)", "weight": -0.1 },
+          { "label": "Local club/small tournaments", "weight": 0.4 },
           { "label": "Regional/state tournaments", "weight": 0.8 },
           { "label": "National tournaments", "weight": 1.0 }
         ]
@@ -44,10 +44,10 @@
         "type": "single_choice",
         "options": [
           { "label": "Self-taught/no formal instruction", "weight": -0.7 },
-          { "label": "Some coaching experience (group or private)", "weight": -0.3 },
-          { "label": "Regular coaching in the past or ongoing group lessons", "weight": 0.2 },
-          { "label": "Extensive private coaching experience", "weight": 0.6 },
-          { "label": "Professional/academy training background", "weight": 1.0 }
+          { "label": "A few group or private lessons", "weight": -0.3 },
+          { "label": "Regular group or private lessons", "weight": 0.2 },
+          { "label": "Extensive private coaching", "weight": 0.6 },
+          { "label": "Professional/academy training", "weight": 1.0 }
         ]
       },
       {
@@ -72,9 +72,9 @@
             "question": "Serving",
             "options": [
               { "label": "Beginner (learning basic serve motion)", "weight": -0.8 },
-              { "label": "Developing (consistent first serve, learning second serve)", "weight": -0.3 },
-              { "label": "Intermediate (good first serve placement, reliable second serve)", "weight": 0.3 },
-              { "label": "Advanced (variety of serves with good placement and power)", "weight": 0.8 }
+              { "label": "Developing (improving first serve; learning second serve)", "weight": -0.3 },
+              { "label": "Intermediate (good placement; reliable second serve)", "weight": 0.3 },
+              { "label": "Advanced (variety with strong placement and power)", "weight": 0.8 }
             ]
           },
           {

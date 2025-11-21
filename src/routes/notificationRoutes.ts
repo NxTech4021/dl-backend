@@ -5,9 +5,7 @@ import {
   markAllNotificationsAsRead,
   getUnreadCount,
   sendTestNotification,
-//   sendBulkNotification,
-//   getNotificationTypes,
-  deleteOldNotifications,
+  deleteNotification
 } from '../controllers/notificationController';
 import { verifyAuth } from '../middlewares/auth.middleware';
 
@@ -22,8 +20,8 @@ notificationRouter.put('/:id/read', verifyAuth, markNotificationAsRead);
 notificationRouter.put('/mark-all-read', verifyAuth, markAllNotificationsAsRead);
 // notificationRouter.put('/:id/archive', verifyAuth, archiveNotification);
 
+notificationRouter.delete('/:id', verifyAuth, deleteNotification);
 
-notificationRouter.delete('/cleanup', deleteOldNotifications);
 
 // routes for testing 
 notificationRouter.post('/test', sendTestNotification);

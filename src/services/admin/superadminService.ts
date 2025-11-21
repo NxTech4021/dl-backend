@@ -40,9 +40,9 @@ export const createSuperadmin = async (data: {
     } as any,
   });
 
-  if (!signUpResult || (signUpResult as any).error) {
+  if (!signUpResult || (signUpResult).error) {
     const message =
-      (signUpResult as any)?.error?.message || "Failed to create user via auth";
+      (signUpResult)?.error?.message || "Failed to create user via auth";
     throw new Error(message);
   }
 

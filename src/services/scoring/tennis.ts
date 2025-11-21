@@ -99,6 +99,8 @@ export function scoreTennis(answers: Record<string, any>) {
     source: 'questionnaire',
     singles: finalRating,
     doubles: finalRating, // Same for tennis initially
+    singles_rating: finalRating,
+    doubles_rating: finalRating,
     rd,
     confidence,
     detail: {
@@ -123,21 +125,21 @@ function getWeightForAnswer(category: string, answer: string): number {
       "Monthly (1-2 times per month)": -0.2,
       "Weekly (1-2 times per week)": 0.3,
       "Regular (3-4 times per week)": 0.7,
-      "Daily/Intensive (5+ times per week)": 1.0
+      "Daily (5+ times per week)": 1.0
     },
     competitive_level: {
-      "Recreational/social tennis with friends": -0.5,
-      "Social/friendly matches": -0.1,
-      "Local/small tournaments": 0.4,
+      "Recreational/social play with friends": -0.5,
+      "Friendly matches (informal, but with some competitiveness)": -0.1,
+      "Local club/small tournaments": 0.4,
       "Regional/state tournaments": 0.8,
       "National tournaments": 1.0
     },
     coaching_background: {
       "Self-taught/no formal instruction": -0.7,
-      "Some coaching experience (group or private)": -0.3,
-      "Regular coaching in the past or ongoing group lessons": 0.2,
-      "Extensive private coaching experience": 0.6,
-      "Professional/academy training background": 1.0
+      "A few group or private lessons": -0.3,
+      "Regular group or private lessons": 0.2,
+      "Extensive private coaching": 0.6,
+      "Professional/academy training": 1.0
     },
     tournament: {
       "Never played tournaments": -0.6,
@@ -165,17 +167,17 @@ function getSkillWeight(skill: string, answer: string): number {
     "Beginner (rarely come to net, basic volley technique)": -0.8,
     "Beginner (learning basic court positioning)": -0.8,
     "Beginner (focus mainly on hitting the ball back)": -0.8,
-    "Developing (consistent first serve, learning second serve)": -0.3,
+    "Developing (improving first serve; learning second serve)": -0.3,
     "Developing (can rally consistently from baseline)": -0.3,
     "Developing (comfortable with basic volleys)": -0.3,
     "Developing (understand basic court coverage)": -0.3,
     "Developing (basic understanding of tactics)": -0.3,
-    "Intermediate (good first serve placement, reliable second serve)": 0.3,
+    "Intermediate (good placement; reliable second serve)": 0.3,
     "Intermediate (good power and placement from baseline)": 0.3,
     "Intermediate (good net coverage and volley placement)": 0.3,
     "Intermediate (good court movement and recovery)": 0.3,
     "Intermediate (good match strategy and point construction)": 0.3,
-    "Advanced (variety of serves with good placement and power)": 0.8,
+    "Advanced (variety with strong placement and power)": 0.8,
     "Advanced (excellent control, variety, and tactical awareness)": 0.8,
     "Advanced (excellent net game and transition play)": 0.8,
     "Advanced (excellent anticipation and court positioning)": 0.8,

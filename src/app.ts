@@ -1,26 +1,31 @@
 import express from "express";
+import type { Request, Response } from "express";
 import cors from "cors";
-import { createServer } from 'http';
+import { createServer } from "http";
 import cookieParser from "cookie-parser";
 import { socketHandler } from "./utils/socketconnection";
 import { toNodeHandler } from "better-auth/node";
 import { auth } from "./lib/auth";
 import { socketMiddleware } from "./middlewares/socketmiddleware";
 import router from "./routes/index";
+import { getApiPrefix } from "./config/network";
 import pino from "pino-http";
 import {
   securityHeaders,
   sanitizeInput,
   preventSQLInjection,
   ipBlocker,
-} from "./middleware/security";
-import {
-  generalLimiter,
-  authLimiter,
-  onboardingLimiter,
-} from "./middleware/rateLimiter";
+} from "./middlewares/security";
+// Rate limiters are commented out for development
+// import {
+//   generalLimiter,
+//   authLimiter,
+//   onboardingLimiter,
+// } from "./middlewares/rateLimiter";
 
 const app = express();
+
+app.set("trust proxy", 1);
 
 const httpServer = createServer(app);
 const io = socketHandler(httpServer);
@@ -42,7 +47,6 @@ app.use((req, res, next) => {
   next();
 });
 
-
 // Set up CORS
 app.use(
   cors({
@@ -54,6 +58,8 @@ app.use(
       "http://localhost:8081",
       "http://192.168.1.3:3001", // Added current IP from logs
       "http://192.168.1.7:3001",
+      "http://192.168.100.3:8081", // Mobile app origin
+      "exp://192.168.100.3:8081", // Expo development server
       "http://192.168.100.53:8081", // Mobile app origin
       "exp://192.168.100.53:8081", // Expo development server
       "http://172.20.10.3:8081", // New mobile app origin
@@ -76,21 +82,22 @@ app.use(
   })
 );
 
-// Apply auth rate limiter to authentication routes
-// app.use("/api/auth/{*any}", authLimiter); // Commented out for development
-
-// According to the official Express documentaticlon for better-auth,
+// According to the official Express documentation for better-auth,
 // the auth handler must be mounted BEFORE express.json().
 // Express v5 requires the {*any} syntax for wildcard routes.
-app.all("/api/auth/{*any}", (req, res) => {
+const authHandler = (req: Request, res: Response) => {
   console.log(`🔐 Auth request: ${req.method} ${req.path}`);
   try {
-    toNodeHandler(auth)(req, res);
+    void toNodeHandler(auth)(req, res);
   } catch (error) {
     console.error("❌ Auth handler error:", error);
     res.status(500).json({ error: "Authentication error" });
   }
-});
+};
+
+// Register for both paths to work in both environments
+app.all("/api/auth/{*any}", authHandler);
+app.all("/auth/{*any}", authHandler);
 
 // The JSON parser for any other routes you might add later.
 app.use(express.json());
@@ -100,8 +107,16 @@ app.use(pino());
 
 app.use(socketMiddleware(io));
 
-// Mount API routes under /api prefix
-app.use("/api", router);
+// Mount API routes with configurable prefix
+// Development: /api, Production: "" (nginx handles /api prefix)
+const apiPrefix = getApiPrefix();
+console.log(`📡 API routes mounted at: ${apiPrefix || "(root)"}`);
+// Only use prefix if it's not empty (development), otherwise mount at root (production)
+if (apiPrefix) {
+  app.use(apiPrefix, router);
+} else {
+  app.use(router);
+}
 
 // Health check endpoint
 app.get("/health", (req, res) => {

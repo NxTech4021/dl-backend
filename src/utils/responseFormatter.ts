@@ -56,6 +56,16 @@ export const formatCategories = (categories: any[]) => {
   })) ?? [];
 };
 
+export const formatCategory = (category: any) => {
+  if (!category) return null;
+  return {
+    id: category.id,
+    name: category.name,
+    genderRestriction: category.genderRestriction,
+    matchFormat: category.matchFormat
+  };
+};
+
 export const formatMemberships = (memberships: any[], registrations: any[]) => {
   const formattedMemberships = memberships?.map(membership => ({
     id: membership.id,
@@ -88,7 +98,7 @@ export const formatSeasonResponse = (season: any) => {
   return {
     ...season,
     leagues: formatLeagues(season.leagues),
-    categories: formatCategories(season.categories),
+    category: formatCategory(season.category),
     memberships: formatMemberships(season.memberships, season.registrations)
   };
 };

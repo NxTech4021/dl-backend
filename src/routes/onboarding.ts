@@ -1,7 +1,7 @@
 import { prisma } from "../lib/prisma";
 // Production-grade onboarding routes
 import express from "express";
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient, Prisma } from "@prisma/client";
 import QuestionnaireService, {
   loadQuestionnaire,
 } from "../services/questionnaire";
@@ -15,6 +15,7 @@ import {
   DatabaseError,
   ScoringError,
   Result,
+  RatingResult,
 } from "../types/questionnaire";
 import ConfigurationService from "../config/questionnaire";
 import Logger from "../utils/logger";
@@ -27,6 +28,22 @@ const logger = Logger.getInstance(
 );
 const questionnaireService = new QuestionnaireService(logger);
 const validator = new QuestionnaireValidator(logger);
+
+// Nominatim rate limiter: 1 request per second (OSM Foundation policy)
+let lastNominatimRequestTime = 0;
+const NOMINATIM_RATE_LIMIT_MS = 1000; // 1 second between requests
+
+async function waitForNominatimRateLimit(): Promise<void> {
+  const now = Date.now();
+  const timeSinceLastRequest = now - lastNominatimRequestTime;
+
+  if (timeSinceLastRequest < NOMINATIM_RATE_LIMIT_MS) {
+    const waitTime = NOMINATIM_RATE_LIMIT_MS - timeSinceLastRequest;
+    await new Promise(resolve => setTimeout(resolve, waitTime));
+  }
+
+  lastNominatimRequestTime = Date.now();
+}
 
 // Middleware for request logging and correlation ID
 router.use((req, res, next) => {
@@ -61,7 +78,8 @@ function handleQuestionnaireError(error: unknown, res: express.Response): void {
       success: false,
     });
   } else {
-    logger.error("Unknown error in questionnaire route", { error });
+    const errorMessage = typeof error === 'string' ? error : String(error);
+    logger.error("Unknown error in questionnaire route", { error: errorMessage });
     res.status(500).json({
       error: "Internal server error",
       code: "UNKNOWN_ERROR",
@@ -77,6 +95,12 @@ function validateSportParam(
   next: express.NextFunction
 ): void {
   const sport = req.params.sport;
+  if (!sport) {
+    return handleQuestionnaireError(
+      new ValidationError('Sport parameter is required', 'sport'),
+      res
+    );
+  }
   const validation = validator.validateSport(sport);
 
   if (!validation.isValid) {
@@ -246,9 +270,9 @@ router.post("/:sport/submit", validateSportParam, async (req, res) => {
 
     // Score with timeout and error handling
     const scoringStart = Date.now();
-    let scoringResult;
+    let scoringResult: RatingResult;
     try {
-      const scoringPromise = new Promise((resolve, reject) => {
+      const scoringPromise = new Promise<RatingResult>((resolve, reject) => {
         try {
           let result;
           if (sport === "pickleball") {
@@ -258,13 +282,13 @@ router.post("/:sport/submit", validateSportParam, async (req, res) => {
           } else {
             result = scorePadel(sanitizedAnswers);
           }
-          resolve(result);
+          resolve(result as RatingResult);
         } catch (error) {
           reject(error);
         }
       });
 
-      const timeoutPromise = new Promise((_, reject) =>
+      const timeoutPromise = new Promise<never>((_, reject) =>
         setTimeout(
           () => reject(new Error("Scoring timeout")),
           ConfigurationService.getConfig().scoring.timeoutMs
@@ -293,10 +317,42 @@ router.post("/:sport/submit", validateSportParam, async (req, res) => {
     const scoringDuration = Date.now() - scoringStart;
     logger.scoringCompleted(
       sport,
-      (scoringResult as any).singles || 0,
-      (scoringResult as any).confidence || "unknown",
+      scoringResult.singles || 0,
+      scoringResult.confidence || "unknown",
       scoringDuration
     );
+
+    const normalizedSingles =
+      scoringResult.singles ??
+      scoringResult.singles_rating ??
+      scoringResult.rating ??
+      null;
+    const normalizedDoubles =
+      scoringResult.doubles ??
+      scoringResult.doubles_rating ??
+      scoringResult.rating ??
+      null;
+
+    const detailPayload = JSON.parse(
+      JSON.stringify({
+        ...(typeof scoringResult.detail === "object" ? scoringResult.detail : {}),
+        adjustment_detail: scoringResult.adjustment_detail,
+        confidence_breakdown: scoringResult.confidence_breakdown,
+        rating: scoringResult.rating,
+        singles_rating: scoringResult.singles_rating,
+        doubles_rating: scoringResult.doubles_rating,
+        source_detail: scoringResult.sourceDetail,
+      })
+    ) as Prisma.InputJsonValue;
+
+    const dbResultPayload = {
+      source: scoringResult.source || "questionnaire",
+      singles: normalizedSingles ? Math.round(normalizedSingles) : null,
+      doubles: normalizedDoubles ? Math.round(normalizedDoubles) : null,
+      rd: scoringResult.rd ?? 350,
+      confidence: scoringResult.confidence ?? "low",
+      detail: detailPayload,
+    };
 
     // Database operations with proper error handling
     const dbStart = Date.now();
@@ -318,12 +374,12 @@ router.post("/:sport/submit", validateSportParam, async (req, res) => {
           data: {
             qVersion: version,
             qHash: hash,
-            answersJson: sanitizedAnswers,
+            answersJson: sanitizedAnswers as Prisma.InputJsonValue,
             completedAt: new Date(),
             result: {
               upsert: {
-                create: scoringResult,
-                update: scoringResult,
+                create: dbResultPayload,
+                update: dbResultPayload,
               },
             },
           },
@@ -347,9 +403,9 @@ router.post("/:sport/submit", validateSportParam, async (req, res) => {
             sport,
             qVersion: version,
             qHash: hash,
-            answersJson: sanitizedAnswers,
+            answersJson: sanitizedAnswers as Prisma.InputJsonValue,
             completedAt: new Date(),
-            result: { create: scoringResult },
+            result: { create: dbResultPayload },
           },
           include: { result: true },
         });
@@ -409,7 +465,7 @@ router.post("/:sport/submit", validateSportParam, async (req, res) => {
       responseId: response.id,
       version,
       qHash: hash,
-      result: response.result,
+      result: response.result || scoringResult,
       sport,
       success: true,
     });
@@ -533,7 +589,7 @@ router.get("/responses/:userId/:sport", async (req, res) => {
         include: { result: true },
         orderBy: { completedAt: "desc" },
       }),
-      new Promise((_, reject) =>
+      new Promise<never>((_, reject) =>
         setTimeout(() => reject(new Error("Database timeout")), 10000)
       ),
     ]);
@@ -1217,7 +1273,8 @@ router.get("/locations/search", async (req, res) => {
       });
     }
 
-    const searchLimit = Math.min(parseInt(limit as string) || 5, 10);
+    // Increase limit to get comprehensive results (Nominatim max is 40)
+    const searchLimit = Math.min(parseInt(limit as string) || 40, 40);
 
     logger.info("Searching locations", {
       query,
@@ -1226,19 +1283,27 @@ router.get("/locations/search", async (req, res) => {
       operation: "search_locations",
     });
 
-    // Call Nominatim API
+    // Respect Nominatim's 1 request/second rate limit (OSM Foundation policy)
+    await waitForNominatimRateLimit();
+
+    // Call Nominatim API with optimized parameters
     const nominatimUrl =
       `https://nominatim.openstreetmap.org/search?` +
       `q=${encodeURIComponent(query.trim())}&` +
-      `format=json&` +
+      `format=jsonv2&` +              // Use jsonv2 for better structure
       `addressdetails=1&` +
+      `extratags=1&` +                // Get additional tags (POI info)
+      `namedetails=1&` +              // Get alternative names
       `limit=${searchLimit}&` +
-      `countrycodes=my`; // Restrict to Malaysia
+      `countrycodes=my&` +            // Restrict to Malaysia
+      // NO layer filter - include all location types (cities, suburbs, railways, etc.)
+      `dedupe=1&` +                   // Remove duplicate results
+      `email=nexeatech@gmail.com`; // Contact email (required for production use)
 
     const response = await fetch(nominatimUrl, {
       headers: {
         "User-Agent": "DeuceLeague/1.0", // Required by Nominatim
-        "Accept-Language": "en",
+        "Accept-Language": "ms,en", // Prefer Malay names (ms), fallback to English (en)
       },
     });
 
@@ -1257,21 +1322,54 @@ router.get("/locations/search", async (req, res) => {
 
     const data = await response.json();
 
-    // Transform Nominatim response to our format
+    // Transform Nominatim response to our format (optimized)
     const results = data.map((place: any) => {
       const address = place.address || {};
-      const city =
-        address.city || address.town || address.village || address.suburb || "";
-      const postcode = address.postcode || "";
-      const state = address.state || "";
 
-      // Format: "City, Postcode State"
+      // Extract suburb/neighborhood with fallbacks
+      // For Malaysia: suburb is most granular, then neighbourhood, quarter, or retail area
+      const suburb =
+        address.suburb ||
+        address.neighbourhood ||
+        address.quarter ||
+        address.retail ||
+        address.commercial ||
+        "";
+
+      // Extract city/town
+      let city =
+        address.city ||
+        address.town ||
+        address.village ||
+        address.municipality ||
+        "";
+
+      const postcode = address.postcode || "";
+      const state = address.state || address.state_district || "";
+
+      // Use place name as fallback if suburb/city not in address
+      const placeName = place.name || "";
+
+      // If no city but we have placeName, use it as city (e.g., "Klang")
+      if (!city && placeName) {
+        city = placeName;
+      }
+
+      // Format: "Suburb, City" (e.g., "Bandar Sunway, Subang Jaya")
       let formattedAddress = "";
-      if (city && postcode && state) {
-        formattedAddress = `${city}, ${postcode} ${state}`;
+      if (suburb && city) {
+        formattedAddress = `${suburb}, ${city}`;
+      } else if (suburb && state) {
+        formattedAddress = `${suburb}, ${state}`;
+      } else if (placeName && city) {
+        // Use place name if no suburb
+        formattedAddress = `${placeName}, ${city}`;
       } else if (city && state) {
         formattedAddress = `${city}, ${state}`;
+      } else if (suburb || placeName) {
+        formattedAddress = suburb || placeName;
       } else {
+        // Last resort: use Nominatim's display_name
         formattedAddress = place.display_name;
       }
 
@@ -1285,11 +1383,16 @@ router.get("/locations/search", async (req, res) => {
           },
         },
         components: {
+          suburb,
           city,
           postcode,
           state,
         },
         display_name: place.display_name,
+        // Include OSM reference for debugging
+        osm_type: place.osm_type,
+        osm_id: place.osm_id,
+        importance: place.importance, // Nominatim's relevance score
       };
     });
 

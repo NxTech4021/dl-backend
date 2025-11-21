@@ -44,17 +44,35 @@ export const getAllLeagues = async () => {
   const leagues = await prisma.league.findMany({
     include: {
       sponsorships: true,
-      categories: {
-        select: {
-          id: true,
-          name: true,
-          genderRestriction: true,
-          game_type: true,
-          gender_category: true
-        }
-      },
       seasons: {
         include: {
+          category: {
+            select: {
+              id: true,
+              name: true,
+              genderRestriction: true,
+              genderCategory: true,
+              gameType: true,
+              matchFormat: true,
+              isActive: true,
+              categoryOrder: true
+            }
+          },
+          memberships: {
+            include: {
+              user: {
+                select: {
+                  id: true,
+                  name: true,
+                  image: true,
+                }
+              }
+            },
+            take: 6,
+            orderBy: {
+              joinedAt: 'asc'
+            }
+          },
           _count: {
             select: {
               memberships: true
@@ -70,27 +88,67 @@ export const getAllLeagues = async () => {
     orderBy: { createdAt: 'desc' },
   });
 
-  // Calculate total season memberships for each league
+  // Calculate total season memberships and flatten memberships for each league
   const leaguesWithMemberships = leagues.map((league: any) => {
     const totalSeasonMemberships = league.seasons?.reduce((sum: number, season: any) => {
       const memberships = season._count?.memberships || 0;
       return sum + memberships;
     }, 0) || 0;
 
+    // Flatten memberships from all seasons into a single array for the frontend
+    // Get up to 6 unique memberships across all seasons
+    const allMemberships: any[] = [];
+    const seenUserIds = new Set<string>();
+    
+    if (league.seasons) {
+      for (const season of league.seasons) {
+        if (season.memberships) {
+          for (const membership of season.memberships) {
+            if (membership.user && !seenUserIds.has(membership.user.id)) {
+              allMemberships.push(membership);
+              seenUserIds.add(membership.user.id);
+              if (allMemberships.length >= 6) break;
+            }
+          }
+        }
+        if (allMemberships.length >= 6) break;
+      }
+    }
+
+    // Extract unique categories from all seasons
+    const categoryMap = new Map<string, any>();
+    if (league.seasons) {
+      for (const season of league.seasons) {
+        if (season.category && season.category.isActive) {
+          // Use category id as key to avoid duplicates
+          if (!categoryMap.has(season.category.id)) {
+            categoryMap.set(season.category.id, {
+              id: season.category.id,
+              name: season.category.name,
+              genderRestriction: season.category.genderRestriction,
+              game_type: season.category.game_type,
+              gender_category: season.category.gender_category
+            });
+          }
+        }
+      }
+    }
+    const categories = Array.from(categoryMap.values());
+
     return {
       ...league,
-      totalSeasonMemberships
+      totalSeasonMemberships,
+      memberships: allMemberships,
+      categories
     };
   });
 
-  // Calculate total members from all seasons in all leagues
+  // Calculate total members across all leagues
   const totalMembers = leaguesWithMemberships.reduce((sum: number, league: any) => {
     return sum + (league.totalSeasonMemberships || 0);
   }, 0);
 
-  const totalCategories = leagues.reduce((sum: number, league: any) => sum + (league.categories?.length || 0), 0);
-
-  return { leagues: leaguesWithMemberships, totalMembers, totalCategories };
+  return { leagues: leaguesWithMemberships, totalMembers };
 };
 
 
@@ -99,21 +157,41 @@ export const getLeagueById = async (id: string) => {
     where: { id },
     include: {
       sponsorships: true,
-      // memberships removed - LeagueMembership model no longer exists
-      categories: true,
       seasons: {
         include: {
+          category: {
+            select: {
+              id: true,
+              name: true,
+              genderRestriction: true,
+              genderCategory: true,
+              gameType: true,
+              matchFormat: true,
+              isActive: true,
+              categoryOrder: true
+            }
+          },
           divisions: true,
           memberships: {
             include: {
-              user: true
+              user: {
+                select: {
+                  id: true,
+                  name: true,
+                  image: true,
+                }
+              }
+            },
+            take: 6,
+            orderBy: {
+              joinedAt: 'asc'
             }
           },
           _count: {
             select: {
               memberships: true
             }
-          }
+          },
         },
       },
       createdBy: {
@@ -125,8 +203,6 @@ export const getLeagueById = async (id: string) => {
         select: {
           seasons: true,
           sponsorships: true,
-          categories: true,
-          // memberships removed
         },
       },
     },
@@ -142,9 +218,55 @@ export const getLeagueById = async (id: string) => {
     return sum + memberships;
   }, 0) || 0;
 
+  // Flatten memberships from all seasons into a single array for the frontend
+  // Get up to 6 unique memberships across all seasons
+  const allMemberships: any[] = [];
+  const seenUserIds = new Set<string>();
+  
+  if (league.seasons) {
+    for (const season of league.seasons) {
+      if (season.memberships) {
+        for (const membership of season.memberships) {
+          if (membership.user && !seenUserIds.has(membership.user.id)) {
+            allMemberships.push(membership);
+            seenUserIds.add(membership.user.id);
+            if (allMemberships.length >= 6) break;
+          }
+        }
+      }
+      if (allMemberships.length >= 6) break;
+    }
+  }
+
+  // Extract unique categories from all seasons
+  const categoryMap = new Map<string, any>();
+  if (league.seasons) {
+    for (const season of league.seasons) {
+      if (season.category && season.category.isActive) {
+        // Use category id as key to avoid duplicates
+        if (!categoryMap.has(season.category.id)) {
+          categoryMap.set(season.category.id, {
+            id: season.category.id,
+            name: season.category.name,
+            genderRestriction: season.category.genderRestriction,
+            game_type: season.category.gameType,
+            gender_category: season.category.genderCategory
+          });
+        }
+      }
+    }
+  }
+  const categories = Array.from(categoryMap.values());
+
   return {
     ...league,
-    totalSeasonMemberships
+    totalSeasonMemberships,
+    memberships: allMemberships,
+    categories,
+    _count: {
+      ...league._count,
+      memberships: totalSeasonMemberships
+    }
   };
 };
 
@@ -188,9 +310,6 @@ export const createLeague = async (data: LeagueData) => {
           contractAmount: s.contractAmount ?? null,
           sponsorRevenue: s.sponsorRevenue ?? null,
           sponsoredName: s.sponsoredName ?? null,
-          // startDate: s.startDate,
-          // endDate: s.endDate ?? null,
-          // isActive: s.isActive ?? true,
           createdById: s.createdById ?? null
         })),
       }
@@ -271,9 +390,7 @@ export const deleteLeague = async (id: string) => {
       _count: {
         select: {
           seasons: true,
-          sponsorships: true, 
-          // memberships removed - LeagueMembership model no longer exists
-          categories: true, 
+          sponsorships: true,     
         }
       }
     }

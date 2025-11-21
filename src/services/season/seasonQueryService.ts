@@ -33,13 +33,13 @@ export async function getAllSeasons(): Promise<any[]> {
       registeredUserCount: true,
       createdAt: true,
       updatedAt: true,
-      categories: {
-        select: { 
-          id: true, 
+      category: {
+        select: {
+          id: true,
           name: true,
           genderRestriction: true,
-          gender_category: true,
-          game_type: true,
+          genderCategory: true,
+          gameType: true,
           matchFormat: true,
           isActive: true,
           categoryOrder: true
@@ -49,7 +49,13 @@ export async function getAllSeasons(): Promise<any[]> {
         select: { id: true, name: true, sportType: true, gameType: true }
       },
       memberships: {
-        include: {
+        select: {
+          id: true,
+          userId: true,
+          seasonId: true,
+          divisionId: true,
+          status: true,
+          joinedAt: true,
           user: {
             select: {
               id: true,
@@ -74,7 +80,7 @@ export async function getAllSeasons(): Promise<any[]> {
 
   return seasons.map(season => ({
     ...season,
-    registeredUserCount: season.memberships.length,
+    registeredUserCount: season.memberships?.length || 0,
   }));
 }
 
@@ -109,13 +115,13 @@ export async function getSeasonById(id: string): Promise<any | null> {
           gameType: true
         }
       },
-      categories: {
+      category: {
         select: {
           id: true,
           name: true,
           genderRestriction: true,
-          gender_category: true,
-          game_type: true,
+          genderCategory: true,
+          gameType: true,
           matchFormat: true,
           isActive: true,
           categoryOrder: true
@@ -153,7 +159,7 @@ export async function getActiveSeason(): Promise<any | null> {
     include: {
       divisions: { select: { id: true, name: true } },
       leagues: { select: { id: true, name: true } },
-      categories: { select: { id: true, name: true } },
+      category: { select: { id: true, name: true } },
     },
   });
 }
@@ -186,7 +192,7 @@ export async function getSeasonsByStatus(
     include: {
       divisions: { select: { id: true, name: true } },
       leagues: { select: { id: true, name: true, sportType: true, gameType: true } },
-      categories: { select: { id: true, name: true } },
+      category: { select: { id: true, name: true } },
     }
   });
 }
@@ -207,7 +213,7 @@ export async function getSeasonsByLeagueId(leagueId: string): Promise<any[]> {
     orderBy: { startDate: 'desc' },
     include: {
       leagues: { select: { id: true, name: true, sportType: true, gameType: true } },
-      categories: { select: { id: true, name: true } },
+      category: { select: { id: true, name: true } },
     }
   });
 }
@@ -228,7 +234,7 @@ export async function getUserSeasons(userId: string): Promise<any[]> {
     orderBy: { startDate: 'desc' },
     include: {
       leagues: { select: { id: true, name: true } },
-      categories: { select: { id: true, name: true } },
+      category: { select: { id: true, name: true } },
       memberships: {
         where: { userId },
         include: {

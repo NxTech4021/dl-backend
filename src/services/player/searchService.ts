@@ -72,7 +72,7 @@ export async function searchPlayers(
 
   // Filter by sport if provided
   const filteredPlayers = sport
-    ? playersWithDetails.filter((p) => p.sports.includes((sport as string).toLowerCase()))
+    ? playersWithDetails.filter((p) => p.sports.includes((sport).toLowerCase()))
     : playersWithDetails;
 
   return filteredPlayers;
@@ -109,16 +109,7 @@ export async function getAvailablePlayersForSeason(
   // Get season with category info to check if it's mixed doubles and get sport type
   const season = await prisma.season.findUnique({
     where: { id: seasonId },
-    select: {
-      id: true,
-      name: true,
-      categories: {
-        select: {
-          id: true,
-          genderRestriction: true,
-          gender_category: true
-        }
-      },
+    include: {
       leagues: {
         select: {
           id: true,
@@ -132,9 +123,22 @@ export async function getAvailablePlayersForSeason(
     throw new Error('Season not found');
   }
 
+  // Get category separately since we need to fetch it by categoryId
+  let category: { genderRestriction?: any; gender_category?: any } | null = null;
+  if ((season as any).categoryId) {
+    const categoryData = await prisma.category.findUnique({
+      where: { id: (season as any).categoryId },
+      select: {
+        genderRestriction: true,
+        gender_category: true
+      }
+    });
+    category = categoryData;
+  }
+
   // Check if season is MIXED doubles
   // Note: Category gender values are enums (uppercase), but normalize for comparison
-  const categoryGender = season.categories[0]?.gender_category || season.categories[0]?.genderRestriction;
+  const categoryGender = category?.gender_category || category?.genderRestriction;
   const categoryGenderUpper = categoryGender?.toUpperCase();
   const isMixedDoubles = categoryGenderUpper === 'MIXED';
   console.log('🔍 Season:', season.name, '| Category:', categoryGender, '| Mixed:', isMixedDoubles);
@@ -276,9 +280,9 @@ export async function getAvailablePlayersForSeason(
   // Add sports, ratings, and friendship flag
   const playersWithDetails = await enrichPlayersWithSkills(playersToReturn);
 
-  // Get season sport type (from league sportType or infer from categories)
+  // Get season sport type (from league sportType or infer from category)
   const seasonSport = season.leagues[0]?.sportType?.toLowerCase() || 
-                      (season.categories[0] ? 'pickleball' : null); // Fallback to pickleball if no league sportType
+                      (category ? 'pickleball' : null); // Fallback to pickleball if no league sportType
 
   // Get questionnaire responses for all players to check completion status for season sport
   const playerIds = playersToReturn.map(p => p.id);

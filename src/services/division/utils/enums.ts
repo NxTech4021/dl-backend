@@ -17,5 +17,5 @@ export function toEnum<T extends DivisionLevel | GameType | GenderType>(
 ): T | undefined {
   if (!value) return undefined;
   const normalized = value.toUpperCase();
-  return enumType[normalized as keyof typeof enumType];
+  return enumType[normalized];
 }

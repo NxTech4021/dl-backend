@@ -1,7 +1,7 @@
 {
-  // Visit https://aka.ms/tsconfig to read more about this file
   "compilerOptions": {
     // File Layout
+
     "rootDir": "./src",
     "outDir": "./dist",
 
@@ -10,6 +10,7 @@
     "module": "ESNext",
     "target": "ESNext",
     "moduleResolution": "bundler",
+    "esModuleInterop": true,
     "types": ["jest", "node"],
     // For nodejs:
     // "lib": ["esnext"],
@@ -25,14 +26,6 @@
     "noUncheckedIndexedAccess": true,
     "exactOptionalPropertyTypes": true,
 
-    // Style Options
-    // "noImplicitReturns": true,
-    // "noImplicitOverride": true,
-    // "noUnusedLocals": true,
-    // "noUnusedParameters": true,
-    // "noFallthroughCasesInSwitch": true,
-    // "noPropertyAccessFromIndexSignature": true,
-
     // Recommended Options
     "strict": true,
     "jsx": "react-jsx",
@@ -45,3 +38,50 @@
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist", "tests", "prisma"]
 }
+
+// {
+//   "compilerOptions": {
+//     /* Base Options: */
+//     "lib": ["es2022"],
+//     "target": "es6",
+//     "module": "es2015",
+
+//     // "paths": {
+//     //   "@/modules/*": ["./src/modules/*"],
+//     //   "@/config/*": ["./src/config/*"],
+//     //   "@/middleware/*": ["./src/middleware/*"],
+//     //   "@/lib/*": ["./src/lib/*"]
+//     // },
+
+//     "esModuleInterop": true,
+//     "skipLibCheck": true,
+//     "allowJs": true,
+//     "resolveJsonModule": true,
+//     "moduleDetection": "force",
+//     "isolatedModules": true,
+//     "verbatimModuleSyntax": false,
+
+//     /* Strictness */
+//     "strict": true,
+//     "noUncheckedIndexedAccess": true,
+//     "noImplicitOverride": true,
+//     "noImplicitAny": true,
+//     "strictNullChecks": true,
+
+//     /* If transpiling with TypeScript: */
+
+//     "moduleResolution": "bundler",
+//     "outDir": "dist",
+//     "rootDir": "src",
+
+//     /* AND if you're building for a library: */
+//     "declaration": true
+//   },
+
+//   "include": ["src/**/*", "env.d.ts"],
+//   "exclude": ["node_modules", "dist", "eslint.config.ts"],
+
+//   "ts-node": {
+//     "require": ["tsconfig-paths/register"]
+//   }
+// }

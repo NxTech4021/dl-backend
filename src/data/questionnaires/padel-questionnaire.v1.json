@@ -20,7 +20,7 @@
         "type": "single_choice",
         "options": [
           { "label": "No experience with racquet sports", "weight": -0.8 },
-          { "label": "Casual player in tennis/squash/badminton", "weight": -0.2 },
+          { "label": "Casual player in other racquet sports", "weight": -0.2 },
           { "label": "Intermediate level in tennis or squash", "weight": 0.4 },
           { "label": "Advanced/competitive player in tennis or squash", "weight": 0.8 },
           { "label": "Professional athlete in racquet sports", "weight": 1.0 }
@@ -40,12 +40,12 @@
       },
       {
         "key": "competitive_level",
-        "question": "What level do you typically play at?",
+        "question": "What is the highest level you usually play at?",
         "type": "single_choice",
         "options": [
-          { "label": "Social/recreational games with friends", "weight": -0.5 },
-          { "label": "Club-level matches", "weight": -0.1 },
-          { "label": "Local club-level social tournaments", "weight": 0.3 },
+          { "label": "Social/recreational games only", "weight": -0.5 },
+          { "label": "Friendly matches", "weight": -0.1 },
+          { "label": "Club-level social tournaments", "weight": 0.3 },
           { "label": "Regional tournaments", "weight": 0.7 },
           { "label": "Professional tournaments", "weight": 1.0 }
         ]
@@ -56,7 +56,7 @@
         "type": "single_choice",
         "options": [
           { "label": "Self-taught/no formal instruction", "weight": -0.7 },
-          { "label": "Some group lessons or clinics", "weight": -0.3 },
+          { "label": "A few group or private lessons", "weight": -0.3 },
           { "label": "Regular group lessons", "weight": 0.2 },
           { "label": "Consistent private coaching sessions", "weight": 0.6 },
           { "label": "Professional/academy training", "weight": 1.0 }

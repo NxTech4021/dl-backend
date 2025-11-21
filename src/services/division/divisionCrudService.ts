@@ -79,7 +79,7 @@ export async function createDivisionWithThread(
         seasonId: data.seasonId,
         leagueId: leagueId,
         name: data.name,
-        description: data.description,
+        description: data.description ?? null,
         pointsThreshold:
           data.threshold !== undefined && data.threshold !== null
             ? Number(data.threshold)

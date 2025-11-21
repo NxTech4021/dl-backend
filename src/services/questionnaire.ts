@@ -58,24 +58,32 @@ class QuestionnaireService {
       let definition: QuestionnaireDefinition;
       try {
         definition = JSON.parse(rawContent) as QuestionnaireDefinition;
+
+        // Validate required fields
+        if (!definition.questions || !Array.isArray(definition.questions)) {
+          throw new Error('Invalid questionnaire format: missing or invalid questions array');
+        }
+        if (!definition.version || typeof definition.version !== 'number') {
+          throw new Error('Invalid questionnaire format: missing or invalid version');
+        }
       } catch (parseError) {
         const error = new QuestionnaireNotFoundError(sport);
         this.logger.error('Failed to parse questionnaire JSON', { sport, filePath }, parseError as Error);
         return Result.failure(error);
       }
-      
+
       const hash = crypto.createHash('sha1').update(rawContent).digest('hex');
       const version = definition.version;
-      
+
       const result: QuestionnaireLoadResult = {
         definition,
         hash,
         version
       };
-      
+
       // Cache the result
       this.cacheQuestionnaire(sport, result);
-      
+
       const duration = Date.now() - startTime;
       this.logger.questionnaireLoaded(sport, version, definition.questions.length);
       this.logger.debug('Questionnaire loaded successfully', { sport, duration, questionCount: definition.questions.length });

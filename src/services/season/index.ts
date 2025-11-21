@@ -70,7 +70,7 @@ export {
   formatMembershipResponse,
   formatWithdrawalRequest,
   formatLeaguesList,
-  formatCategoriesList
+  formatCategory as formatCategoriesList
 } from './utils/formatters';
 
 export {

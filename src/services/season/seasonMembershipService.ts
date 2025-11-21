@@ -48,10 +48,15 @@ export async function registerMembership(
 
   // Execute in transaction to ensure atomicity
   const result = await prisma.$transaction(async (tx) => {
-    // Step 1: Create membership
+    // Step 1: Determine payment and membership status
+    const paymentStatus = season.paymentRequired ? PaymentStatus.PENDING : PaymentStatus.COMPLETED;
+    // If payment is completed, membership should be ACTIVE; otherwise PENDING
+    const membershipStatus = paymentStatus === PaymentStatus.COMPLETED ? "ACTIVE" : "PENDING";
+    
+    // Step 2: Create membership
     const membershipData: Prisma.SeasonMembershipCreateInput = {
-      status: "PENDING",
-      paymentStatus: season.paymentRequired ? PaymentStatus.PENDING : PaymentStatus.COMPLETED,
+      status: membershipStatus,
+      paymentStatus,
       user: {
         connect: { id: userId }
       },
@@ -103,9 +108,16 @@ export async function updatePaymentStatus(
     throw new Error(validation.error || "Membership validation failed");
   }
 
+  // Update both payment status and membership status
+  // If payment is COMPLETED, membership should be ACTIVE
+  const updateData: any = { paymentStatus };
+  if (paymentStatus === PaymentStatus.COMPLETED) {
+    updateData.status = "ACTIVE";
+  }
+
   const membership = await prisma.seasonMembership.update({
     where: { id: membershipId },
-    data: { paymentStatus },
+    data: updateData,
     include: {
       user: true,
       season: true,
@@ -114,6 +126,9 @@ export async function updatePaymentStatus(
   });
 
   console.log(`✅ Payment status updated to ${paymentStatus} for membership ${membershipId}`);
+  if (paymentStatus === PaymentStatus.COMPLETED) {
+    console.log(`✅ Membership status updated to ACTIVE for membership ${membershipId}`);
+  }
 
   return formatMembershipResponse(membership);
 }

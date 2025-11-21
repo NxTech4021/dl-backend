@@ -213,7 +213,7 @@ export async function validatePlayerRatingForDivision(
 
   return {
     isValid: true,
-    playerRating: playerRating ?? undefined,
+    ...(playerRating !== null && playerRating !== undefined && { playerRating }),
     divisionThreshold
   };
 }
@@ -252,7 +252,7 @@ export async function checkSeasonMembershipExists(
     where: {
       userId,
       seasonId,
-      status: { not: 'WITHDRAWN' }
+      status: 'ACTIVE'
     }
   });
 

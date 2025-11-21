@@ -10,14 +10,17 @@ import pairingRouter from "./pairingRoutes";
 import onboardingRouter from "./onboarding";
 import chatRoutes from "./threadRoutes";
 import notificationRouter from "./notificationRoutes";
+import notificationPreferenceRouter from "./notificationPreferenceRoutes";
 import matchRoutes from "./matchRoutes";
 import paymentRoutes from "./paymentRoutes";
-
+import bugRouter from "./bugRoutes";
+import ratingRoutes from "./ratingRoutes";
+import standingsRoutes from "./standingsRoutes";
 
 const router = express.Router();
 
 router.get("/health", (req, res) => {
-  res.json({ status: "OK", message: "Server is running" });
+  res.json({ status: "OK", message: "Server is running..." });
 });
 
 router.use("/admin", adminRouter);
@@ -35,7 +38,9 @@ router.use("/payments", paymentRoutes);
 
 router.use("/match", matchRoutes);
 
-// LeaderBoard
+// Ratings & Standings
+router.use("/ratings", ratingRoutes);
+router.use("/standings", standingsRoutes);
 
 // Chat
 router.use("/chat", chatRoutes);
@@ -44,6 +49,10 @@ router.use("/chat", chatRoutes);
 
 // Notification
 router.use("/notifications", notificationRouter);
+router.use("/notification-preferences", notificationPreferenceRouter);
+
+// Bug Tracking
+router.use("/bug", bugRouter);
 
 // router.post("/api/")
 

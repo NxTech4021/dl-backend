@@ -9,8 +9,13 @@ import {
   fetchAdmins,
   getAdminById,
   updateAdmin,
+  trackLogin,
   updatePassword
 } from "../controllers/admincontrollers";
+import adminMatchRoutes from "./admin/adminMatchRoutes";
+import bracketRoutes from "./admin/bracketRoutes";
+import adminRatingRoutes from "./adminRatingRoutes";
+import adminInactivityRoutes from "./adminInactivityRoutes";
 
 
 const adminRouter = Router();
@@ -21,11 +26,23 @@ adminRouter.get("/session", getAdminSession);
 adminRouter.get("/getadmins", fetchAdmins);
 adminRouter.get("/profile/:id", getAdminById);
 
+adminRouter.put("/activity/tracklogin", trackLogin)
 adminRouter.put("/account/update", updateAdmin)
 adminRouter.post("/superadmin", createSuperadmin);
 adminRouter.post("/register", registerAdmin);
 adminRouter.post("/invite", sendAdminInvite);
 adminRouter.post("/updatepassword", updatePassword);
 
+// Admin Match Management Routes (AS1-AS6)
+adminRouter.use("/", adminMatchRoutes);
+
+// Admin Bracket Routes (AS2)
+adminRouter.use("/", bracketRoutes);
+
+// Admin Rating Routes (Ratings & Standings Module)
+adminRouter.use("/ratings", adminRatingRoutes);
+
+// Admin Inactivity Routes
+adminRouter.use("/inactivity", adminInactivityRoutes);
 
 export default adminRouter;

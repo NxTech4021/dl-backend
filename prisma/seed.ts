@@ -1,9 +1,13 @@
+/// <reference types="node" />
 import {
   Prisma,
   PrismaClient,
   GameType,
   SportType,
   Statuses,
+  User,
+  Season,
+  BugPriority,
 } from "@prisma/client";
 
 const prisma = new PrismaClient();
@@ -152,7 +156,7 @@ async function seedTestUsers() {
     },
   ];
 
-  const createdUsers = [];
+  const createdUsers: User[] = [];
   for (const userData of testUsers) {
     const existingUser = await prisma.user.findUnique({
       where: { email: userData.email },
@@ -296,7 +300,7 @@ async function seedLeagueAndSeason(createdByAdminId?: string) {
 
   // Create seasons for each category
   // Create league-season-category relationship via update
-  const seasons = [];
+  const seasons: Season[] = [];
 
   // Season 1 (Active) - for all categories
   for (const category of categories) {
@@ -364,6 +368,133 @@ async function seedLeagueAndSeason(createdByAdminId?: string) {
   return { league, season: seasons[0], categories, seasons };
 }
 
+async function seedBugTrackingApps(defaultAssigneeAdminId?: string) {
+  // Check if DLA app already exists
+  const existingApp = await prisma.app.findUnique({
+    where: { code: "DLA" },
+    include: { bugSettings: true },
+  });
+
+  if (existingApp) {
+    // Update settings if they exist but sync is disabled
+    if (existingApp.bugSettings && !existingApp.bugSettings.syncEnabled) {
+      await prisma.bugReportSettings.update({
+        where: { appId: existingApp.id },
+        data: {
+          googleSheetId: "11CuuMdtBZDtdAJOVvWzNeb6gW39kuLSil1g7skYqjjg",
+          googleSheetName: "DeuceLeague",
+          syncEnabled: true,
+        },
+      });
+      console.log("   Updated DLA settings with Google Sheets sync enabled");
+    } else {
+      console.log("   Bug tracking apps already exist, skipping seed...");
+    }
+    return existingApp;
+  }
+
+  // Create DeuceLeague Admin app
+  const dlaApp = await prisma.app.create({
+    data: {
+      code: "DLA",
+      name: "deuceleague-admin",
+      displayName: "DeuceLeague Admin",
+      description: "Admin dashboard for managing DeuceLeague",
+      appUrl: "https://admin.deuceleague.com",
+      isActive: true,
+      bugModules: {
+        create: [
+          { name: "Dashboard", code: "DASHBOARD", description: "Main dashboard and analytics", sortOrder: 1 },
+          { name: "Players", code: "PLAYERS", description: "Player management", sortOrder: 2 },
+          { name: "Leagues", code: "LEAGUES", description: "League management", sortOrder: 3 },
+          { name: "Seasons", code: "SEASONS", description: "Season management", sortOrder: 4 },
+          { name: "Divisions", code: "DIVISIONS", description: "Division management", sortOrder: 5 },
+          { name: "Matches", code: "MATCHES", description: "Match scheduling and results", sortOrder: 6 },
+          { name: "Payments", code: "PAYMENTS", description: "Payment processing", sortOrder: 7 },
+          { name: "Chat", code: "CHAT", description: "Chat and messaging", sortOrder: 8 },
+          { name: "Notifications", code: "NOTIFICATIONS", description: "Notification system", sortOrder: 9 },
+          { name: "Settings", code: "SETTINGS", description: "App settings", sortOrder: 10 },
+          { name: "Authentication", code: "AUTH", description: "Login, registration, password", sortOrder: 11 },
+          { name: "Other", code: "OTHER", description: "Other issues", sortOrder: 99 },
+        ],
+      },
+      bugSettings: {
+        create: {
+          enableScreenshots: true,
+          enableAutoCapture: true,
+          enableConsoleCapture: true,
+          enableNetworkCapture: false,
+          maxScreenshots: 5,
+          maxFileSize: 5242880, // 5MB
+          notifyOnNew: true,
+          notifyOnStatusChange: true,
+          defaultPriority: BugPriority.NORMAL,
+          notifyEmails: [], // Add admin emails to notify
+          googleSheetId: "11CuuMdtBZDtdAJOVvWzNeb6gW39kuLSil1g7skYqjjg",
+          googleSheetName: "DeuceLeague",
+          syncEnabled: true,
+          ...(defaultAssigneeAdminId && { defaultAssigneeId: defaultAssigneeAdminId }),
+        },
+      },
+    },
+    include: {
+      bugModules: true,
+      bugSettings: true,
+    },
+  });
+
+  // Create DeuceLeague Mobile app
+  const dlmApp = await prisma.app.create({
+    data: {
+      code: "DLM",
+      name: "deuceleague-mobile",
+      displayName: "DeuceLeague Mobile",
+      description: "Mobile app for players",
+      isActive: true,
+      bugModules: {
+        create: [
+          { name: "Home", code: "HOME", description: "Home screen", sortOrder: 1 },
+          { name: "Profile", code: "PROFILE", description: "User profile", sortOrder: 2 },
+          { name: "Matches", code: "MATCHES", description: "Match viewing and scheduling", sortOrder: 3 },
+          { name: "Pairing", code: "PAIRING", description: "Partner pairing system", sortOrder: 4 },
+          { name: "Leaderboard", code: "LEADERBOARD", description: "Rankings and standings", sortOrder: 5 },
+          { name: "Chat", code: "CHAT", description: "In-app messaging", sortOrder: 6 },
+          { name: "Notifications", code: "NOTIFICATIONS", description: "Push notifications", sortOrder: 7 },
+          { name: "Registration", code: "REGISTRATION", description: "Season registration", sortOrder: 8 },
+          { name: "Authentication", code: "AUTH", description: "Login, signup, password", sortOrder: 9 },
+          { name: "Other", code: "OTHER", description: "Other issues", sortOrder: 99 },
+        ],
+      },
+      bugSettings: {
+        create: {
+          enableScreenshots: true,
+          enableAutoCapture: true,
+          enableConsoleCapture: false,
+          enableNetworkCapture: false,
+          maxScreenshots: 3,
+          maxFileSize: 5242880,
+          notifyOnNew: true,
+          notifyOnStatusChange: true,
+          defaultPriority: BugPriority.NORMAL,
+          notifyEmails: [],
+          googleSheetId: "",
+          googleSheetName: "Bug Reports - Mobile",
+          syncEnabled: false,
+          ...(defaultAssigneeAdminId && { defaultAssigneeId: defaultAssigneeAdminId }),
+        },
+      },
+    },
+    include: {
+      bugModules: true,
+    },
+  });
+
+  console.log(`   Created ${dlaApp.bugModules.length} modules for DLA`);
+  console.log(`   Created ${dlmApp.bugModules.length} modules for DLM`);
+
+  return dlaApp;
+}
+
 async function main() {
   console.log("🌱 Starting database seed...\n");
 
@@ -390,18 +521,27 @@ async function main() {
     console.log("   - Categories: 5 (Men's/Women's Singles, Men's/Women's/Mixed Doubles)");
     console.log("   - Seasons: 6 (5 Active S1 + 1 Upcoming S2)\n");
 
-    // Add all test users to the league as members
-    if (leagueSeason.league) {
+    // Add all test users to the first season as members
+    // Note: LeagueMembership doesn't exist in the schema - users join seasons, not leagues directly
+    if (leagueSeason.season && leagueSeason.seasons) {
+      const firstSeason = leagueSeason.season;
       for (const user of testUsers) {
-        await prisma.leagueMembership.create({
+        await prisma.seasonMembership.create({
           data: {
             userId: user.id,
-            leagueId: leagueSeason.league.id,
+            seasonId: firstSeason.id,
+            status: "ACTIVE",
           },
         });
       }
-      console.log(`✅ Added ${testUsers.length} users as league members\n`);
+      console.log(`✅ Added ${testUsers.length} users to season "${firstSeason.name}"\n`);
     }
+
+    // Seed bug tracking apps and modules
+    await seedBugTrackingApps(admin.adminId);
+    console.log("✅ Bug tracking apps created");
+    console.log("   - DLA (DeuceLeague Admin) with 12 modules");
+    console.log("   - DLM (DeuceLeague Mobile) with 10 modules\n");
 
     console.log("🌟 Database seeded successfully!");
     console.log("\n📝 You can now test the pairing module with these users!");

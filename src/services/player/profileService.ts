@@ -90,8 +90,8 @@ export async function getPlayerProfile(userId: string) {
 
   // Process recent matches
   const processedMatches = recentMatches.map(match => {
-    const currentUserParticipant = match.participants.find(p => p.userId === userId);
-    const opponentParticipant = match.participants.find(p => p.userId !== userId);
+    const currentUserParticipant = match.participants.find((p: { userId: string }) => p.userId === userId);
+    const opponentParticipant = match.participants.find((p: { userId: string }) => p.userId !== userId);
 
     return {
       id: match.id,
@@ -238,23 +238,32 @@ export async function updatePlayerProfile(
     username?: string;
     email?: string;
     location?: string;
-    image?: string;
+    image?: string | null;
     phoneNumber?: string;
     bio?: string;
   }
 ) {
   const { name, username, email, location, image, phoneNumber, bio } = data;
 
-  // Validate required fields
-  if (!name || !username || !email) {
-    throw new Error('Name, username, and email are required');
+  // Validate fields only if they are being updated (not undefined)
+  // This allows partial updates without requiring all fields
+  if (name !== undefined && !name.trim()) {
+    throw new Error('Name cannot be empty');
   }
 
-  // Check if username is already taken by another user
-  if (username) {
+  if (username !== undefined && !username.trim()) {
+    throw new Error('Username cannot be empty');
+  }
+
+  if (email !== undefined && !email.trim()) {
+    throw new Error('Email cannot be empty');
+  }
+
+  // Check if username is already taken by another user (only if being updated)
+  if (username !== undefined) {
     const existingUser = await prisma.user.findFirst({
       where: {
-        username: username,
+        username: username.trim(),
         id: { not: userId }
       }
     });
@@ -264,11 +273,11 @@ export async function updatePlayerProfile(
     }
   }
 
-  // Check if email is already taken by another user
-  if (email) {
+  // Check if email is already taken by another user (only if being updated)
+  if (email !== undefined) {
     const existingEmail = await prisma.user.findFirst({
       where: {
-        email: email,
+        email: email.trim().toLowerCase(),
         id: { not: userId }
       }
     });
@@ -278,19 +287,63 @@ export async function updatePlayerProfile(
     }
   }
 
+  // Build update data object dynamically based on what's provided
+  const updateData: {
+    name?: string;
+    username?: string;
+    email?: string;
+    area?: string;
+    image?: string | null;
+    phoneNumber?: string;
+    bio?: string;
+    updatedAt: Date;
+  } = {
+    updatedAt: new Date()
+  };
+
+  if (name !== undefined) {
+    updateData.name = name.trim();
+  }
+  if (username !== undefined) {
+    updateData.username = username.trim();
+  }
+  if (email !== undefined) {
+    updateData.email = email.trim().toLowerCase();
+  }
+  if (location !== undefined) {
+    updateData.area = location.trim();
+  }
+  if (image !== undefined) {
+    // If setting image to null, delete the old image from cloud storage
+    if (image === null) {
+      const currentUser = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { image: true }
+      });
+
+      if (currentUser?.image) {
+        try {
+          await deleteProfileImage(currentUser.image);
+          console.log('✅ Deleted old profile image from cloud storage:', currentUser.image);
+        } catch (error) {
+          console.error('⚠️ Could not delete old profile image from cloud storage:', error);
+          // Continue with update even if deletion fails
+        }
+      }
+    }
+    updateData.image = image || null;
+  }
+  if (phoneNumber !== undefined) {
+    updateData.phoneNumber = phoneNumber.trim();
+  }
+  if (bio !== undefined) {
+    updateData.bio = bio.trim();
+  }
+
   // Update user profile
   const updatedUser = await prisma.user.update({
     where: { id: userId },
-    data: {
-      name: name.trim(),
-      username: username.trim(),
-      email: email.trim().toLowerCase(),
-      area: location ? location.trim() : undefined,
-      image: image || undefined,
-      phoneNumber: phoneNumber ? phoneNumber.trim() : undefined,
-      bio: bio ? bio.trim() : undefined,
-      updatedAt: new Date()
-    },
+    data: updateData,
     select: {
       id: true,
       name: true,
@@ -392,9 +445,10 @@ export async function changePlayerPassword(
 
     console.log(`🔑 Better-auth result:`, result);
 
-    if (result.error) {
-      console.log(`❌ Better-auth password change failed:`, result.error);
-      throw new Error(result.error.message || 'Failed to change password');
+    // Check if result indicates failure (better-auth may return error differently)
+    if (!result || !result.user) {
+      console.log(`❌ Better-auth password change failed`);
+      throw new Error('Failed to change password');
     }
   } catch (apiError: any) {
     console.log(`❌ Better-auth API error:`, apiError);
@@ -418,6 +472,10 @@ export async function changePlayerPassword(
 
       if (!emailAccount) {
         throw new Error('No email account found');
+      }
+
+      if (!emailAccount.password) {
+        throw new Error('No password found for email account');
       }
 
       // Verify current password

@@ -41,21 +41,55 @@ playerRouter.get('/:id/divisions', getPlayerDivisionHistory);
 playerRouter.get('/:id/matches', getPlayerMatchHistoryAdmin);
 
 // Player profile routes (authenticated user)
-playerRouter.get('/profile/me', verifyAuth, getPlayerProfile);
-playerRouter.put('/profile/me', verifyAuth, updatePlayerProfile);
-playerRouter.put('/profile/password', verifyAuth, changePlayerPassword);
-playerRouter.get('/profile/matches', verifyAuth, getPlayerMatchHistory);
-playerRouter.get('/profile/achievements', verifyAuth, getPlayerAchievements);
-playerRouter.post('/profile/upload-image', verifyAuth, upload.single('image'), uploadProfileImage);
-playerRouter.get('/matches/:matchId', verifyAuth, getMatchDetails);
+playerRouter.get('/profile/me', verifyAuth, getPlayerProfile as any);
+playerRouter.put('/profile/me', verifyAuth, updatePlayerProfile as any);
+playerRouter.put('/profile/password', verifyAuth, changePlayerPassword as any);
+playerRouter.get('/profile/matches', verifyAuth, getPlayerMatchHistory as any);
+playerRouter.get('/profile/achievements', verifyAuth, getPlayerAchievements as any);
+playerRouter.post('/profile/upload-image', verifyAuth, upload.single('image'), uploadProfileImage as any);
+playerRouter.get('/matches/:matchId', verifyAuth, getMatchDetails as any);
+
+// Activity status route
+playerRouter.get('/activity-status/:playerId', verifyAuth, async (req, res) => {
+  try {
+    const { playerId } = req.params;
+    if (!playerId) {
+      return res.status(400).json({ error: 'Player ID is required' });
+    }
+
+    const { getInactivityService } = await import('../services/inactivityService');
+    const { NotificationService } = await import('../services/notificationService');
+
+    const notificationService = new NotificationService();
+    const inactivityService = getInactivityService(notificationService);
+
+    const status = await inactivityService.getPlayerActivityStatus(playerId);
+
+    res.json({
+      success: true,
+      data: {
+        ...status,
+        thresholds: {
+          warning: 21,
+          inactive: 30,
+        },
+      },
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to fetch activity status',
+    });
+  }
+});
 
 // Phase 2: Player Discovery & Social Features
-playerRouter.get('/search', verifyAuth, searchPlayers);
-playerRouter.get('/discover/:seasonId', verifyAuth, getAvailablePlayersForSeason);
-playerRouter.get('/favorites', verifyAuth, getFavorites);
-playerRouter.post('/favorites/:userId', verifyAuth, addFavorite);
-playerRouter.delete('/favorites/:userId', verifyAuth, removeFavorite);
-playerRouter.get('/profile/public/:userId', verifyAuth, getPublicPlayerProfile);
+playerRouter.get('/search', verifyAuth, searchPlayers as any);
+playerRouter.get('/discover/:seasonId', verifyAuth, getAvailablePlayersForSeason as any);
+playerRouter.get('/favorites', verifyAuth, getFavorites as any);
+playerRouter.post('/favorites/:userId', verifyAuth, addFavorite as any);
+playerRouter.delete('/favorites/:userId', verifyAuth, removeFavorite as any);
+playerRouter.get('/profile/public/:userId', verifyAuth, getPublicPlayerProfile as any);
 
 // Withdrawal requests
 playerRouter.get('/withdrawal-requests', verifyAuth, async (req, res) => {
@@ -72,8 +106,8 @@ playerRouter.get('/withdrawal-requests', verifyAuth, async (req, res) => {
         partnership: {
           include: {
             season: { select: { id: true, name: true } },
-            player1: { select: { id: true, name: true } },
-            player2: { select: { id: true, name: true } },
+            captain: { select: { id: true, name: true } },
+            partner: { select: { id: true, name: true } },
           },
         },
       },

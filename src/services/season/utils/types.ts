@@ -28,7 +28,7 @@ export type SeasonWithFullRelations = Prisma.SeasonGetPayload<{
         gameType: true;
       };
     };
-    categories: {
+    category: {
       select: {
         id: true;
         name: true;
@@ -158,7 +158,11 @@ export interface FormattedCategory {
   id: string;
   name: string;
   genderRestriction: string | null;
+  gender_category?: string | null;
+  game_type?: string | null;
   matchFormat: string | null;
+  isActive?: boolean;
+  categoryOrder?: number;
 }
 
 export interface FormattedQuestionnaireResult {
@@ -245,12 +249,13 @@ export interface FormattedSeason {
   createdAt: Date;
   updatedAt: Date;
   leagues: FormattedLeague[];
-  categories: FormattedCategory[];
+  category: FormattedCategory | null; 
   memberships: FormattedMembership[];
   divisions?: any[];
   promoCodes?: any[];
   withdrawalRequests?: any[];
   waitlist?: any;
+  partnerships?: any[];
 }
 
 export interface FormattedWithdrawalRequest {

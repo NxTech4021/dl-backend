@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Router, RequestHandler } from 'express';
 import {
   getSeasons,
   getSeasonById,
@@ -27,8 +27,8 @@ seasonRoutes.put('/:id/status', updateSeasonStatus);
 seasonRoutes.delete('/:id', deleteSeason);
 
 // Withdrawal/Partner Change Request routes (require authentication)
-seasonRoutes.post('/withdrawals', verifyAuth, submitWithdrawalRequest);
-seasonRoutes.put('/withdrawals/:id/process', verifyAuth, processWithdrawalRequest);
+seasonRoutes.post('/withdrawals', verifyAuth, submitWithdrawalRequest as RequestHandler);
+seasonRoutes.put('/withdrawals/:id/process', verifyAuth, processWithdrawalRequest as RequestHandler);
 
 // Register Player to Season
 seasonRoutes.post('/player/register', registerPlayerToSeason);

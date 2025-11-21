@@ -1,72 +1,90 @@
 import { prisma } from "../lib/prisma";
 import { Request, Response } from 'express';
-import { Prisma, PrismaClient } from '@prisma/client';
+import { Prisma, GenderRestriction, GameType, GenderType } from '@prisma/client';
 import { ApiResponse } from '../utils/ApiResponse';
 
-
+interface CreateCategoryBody {
+  seasonId?: string;
+  name?: string;
+  genderRestriction?: string;
+  matchFormat?: string;
+  categoryOrder?: number;
+  game_type?: string;
+}
 
 export const createCategory = async (req: Request, res: Response) => {
   try {
     const { 
-      leagueIds, 
+      seasonId, 
       name, 
       genderRestriction, 
       matchFormat, 
       categoryOrder, 
       game_type, 
-      gender_category 
-    } = req.body;
+    } = req.body as CreateCategoryBody;
 
-    console.log(" payload received", req.body)
+    console.log("Payload received", req.body);
     
-  
-    // Validate leagueIds if provided
-    if (leagueIds && (!Array.isArray(leagueIds) || leagueIds.length === 0)) {
-      return res.status(400).json(
-        new ApiResponse(false, 400, null, "LeagueIds must be an array with at least one league")
-      );
-    }
-
     if (!name) {
       return res.status(400).json(new ApiResponse(false, 400, null, "Category name is required"));
     }
 
-    // Map genderRestriction to gender_category automatically
-    // genderRestriction: MALE, FEMALE, MIXED, OPEN
-    // gender_category: MALE, FEMALE, MIXED
-    let mappedGenderCategory: 'MALE' | 'FEMALE' | 'MIXED' | null = null;
-    if (genderRestriction) {
-      if (genderRestriction === 'MALE') {
-        mappedGenderCategory = 'MALE';
-      } else if (genderRestriction === 'FEMALE') {
-        mappedGenderCategory = 'FEMALE';
-      } else if (genderRestriction === 'MIXED') {
-        mappedGenderCategory = 'MIXED';
-      } else if (genderRestriction === 'OPEN') {
-        // OPEN typically means MIXED for doubles
-        mappedGenderCategory = 'MIXED';
+    // Validate and cast enum types
+    let validatedGenderRestriction: GenderRestriction | undefined;
+    if (genderRestriction && Object.values(GenderRestriction).includes(genderRestriction as GenderRestriction)) {
+      validatedGenderRestriction = genderRestriction as GenderRestriction;
+    }
+
+    let validatedGameType: GameType | null | undefined;
+    if (game_type !== undefined) {
+      if (game_type && Object.values(GameType).includes(game_type as GameType)) {
+        validatedGameType = game_type as GameType;
+      } else {
+        validatedGameType = null;
       }
     }
 
-    const leagueConnections = leagueIds?.length ? {
-      leagues: {
-        connect: leagueIds.map((id: string) => ({ id }))
+    // Map genderRestriction to gender_category automatically
+    let mappedGenderCategory: GenderType | null = null;
+    if (genderRestriction) {
+      if (genderRestriction === 'MALE') {
+        mappedGenderCategory = GenderType.MALE;
+      } else if (genderRestriction === 'FEMALE') {
+        mappedGenderCategory = GenderType.FEMALE;
+      } else if (genderRestriction === 'MIXED') {
+        mappedGenderCategory = GenderType.MIXED;
       }
-    } : {};
+    }
+
+    const categoryData: Prisma.CategoryCreateInput = {
+      name: name ?? null,
+      ...(validatedGenderRestriction !== undefined && { genderRestriction: validatedGenderRestriction }),
+      ...(matchFormat !== undefined && { matchFormat: matchFormat ?? null }),
+      ...(categoryOrder !== undefined && { categoryOrder }),
+      ...(validatedGameType !== undefined && { game_type: validatedGameType }),
+      ...(mappedGenderCategory !== null && { gender_category: mappedGenderCategory }),
+      ...(seasonId && {
+        seasons: {
+          connect: [{ id: seasonId }]
+        }
+      })
+    };
 
     const newCategory = await prisma.category.create({
-      data: {
-        name,
-        genderRestriction,
-        matchFormat,
-        categoryOrder,
-        game_type,          
-        gender_category: mappedGenderCategory,
-        ...leagueConnections
-      },
+      data: categoryData,
       include: {
-        leagues: true,
-        seasons: true
+        seasons: {
+          select: {
+            id: true,
+            name: true,
+            leagues: {
+              select: {
+                id: true,
+                name: true
+              }
+            }
+          }
+        }
       }
     });
 
@@ -82,7 +100,7 @@ export const createCategory = async (req: Request, res: Response) => {
       }
       if (error.code === "P2003") {
         return res.status(400).json(
-          new ApiResponse(false, 400, null, "One or more league IDs are invalid")
+          new ApiResponse(false, 400, null, "Season ID is invalid")
         );
       }
     }
@@ -97,18 +115,14 @@ export const getAllCategories = async (req: Request, res: Response) => {
   try {
     const categories = await prisma.category.findMany({
       include: {
-        leagues: {
+         seasons: {
           select: {
             id: true,
             name: true,
-          }
+            startDate: true,
+            endDate: true,
+          },
         },
-        seasons: {
-          select: {
-            id: true,
-            name: true,
-          }
-        }
       },
       orderBy: { categoryOrder: 'asc' }
     });
@@ -137,12 +151,6 @@ export const getCategoryById = async (req: Request, res: Response) => {
     const category = await prisma.category.findUnique({
       where: { id },
       include: {
-        leagues: {
-          select: {
-            id: true,
-            name: true,
-          }
-        },
         seasons: {
           select: {
             id: true,
@@ -169,105 +177,21 @@ export const getCategoryById = async (req: Request, res: Response) => {
   }
 };
 
-export const getCategoriesByLeague = async (req: Request, res: Response) => {
-  try {
-    const { leagueId } = req.params;
-    
-    if (!leagueId) {
-      return res.status(400).json(
-        new ApiResponse(false, 400, null, "League ID is required")
-      );
-    }
 
-    // Get categories directly linked to the league
-    const directCategories = await prisma.category.findMany({
-      where: {
-        leagues: {
-          some: {
-            id: leagueId
-          }
-        }
-      },
-      include: {
-        leagues: true,
-        seasons: {
-          select: {
-            id: true,
-            name: true,
-          }
-        }
-      },
-      orderBy: { categoryOrder: 'asc' }
-    });
-
-    // Get categories from the league's seasons
-    // This handles the case where categories are linked to seasons but not directly to the league
-    const league = await prisma.league.findUnique({
-      where: { id: leagueId },
-      include: {
-        seasons: {
-          include: {
-            categories: {
-              include: {
-                leagues: true,
-                seasons: {
-                  select: {
-                    id: true,
-                    name: true,
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    });
-
-    // Extract unique categories from seasons
-    const seasonCategories: any[] = [];
-    if (league?.seasons) {
-      const categoryMap = new Map<string, any>();
-      
-      // First, add direct categories to the map
-      directCategories.forEach(cat => {
-        categoryMap.set(cat.id, cat);
-      });
-
-      // Then, add categories from seasons (only if not already added)
-      league.seasons.forEach(season => {
-        if (season.categories) {
-          season.categories.forEach(cat => {
-            if (!categoryMap.has(cat.id)) {
-              categoryMap.set(cat.id, cat);
-            }
-          });
-        }
-      });
-
-      // Convert map to array and sort by categoryOrder
-      seasonCategories.push(...Array.from(categoryMap.values()));
-      seasonCategories.sort((a, b) => (a.categoryOrder || 0) - (b.categoryOrder || 0));
-    }
-
-    // Use season categories if we found any, otherwise use direct categories
-    const categories = seasonCategories.length > 0 ? seasonCategories : directCategories;
-
-    return res.status(200).json(
-      new ApiResponse(true, 200, categories, "Categories fetched successfully")
-    );
-  } catch (error) {
-    console.error("Error fetching categories:", error);
-    return res.status(500).json(
-      new ApiResponse(false, 500, null, "Error fetching categories")
-    );
-  }
-};
-
+interface UpdateCategoryBody {
+  seasonId?: string;
+  name?: string;
+  genderRestriction?: string;
+  matchFormat?: string;
+  categoryOrder?: number;
+  game_type?: string;
+  gender_category?: string;
+}
 
 export const updateCategory = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { leagueIds, ...data } = req.body;
+    const { seasonId, ...data } = req.body as UpdateCategoryBody;
 
     if (!id) {
       return res.status(400).json(
@@ -275,50 +199,77 @@ export const updateCategory = async (req: Request, res: Response) => {
       );
     }
 
-    if (leagueIds && (!Array.isArray(leagueIds) || leagueIds.length === 0)) {
-      return res.status(400).json(
-        new ApiResponse(false, 400, null, "LeagueIds must be an array with at least one league")
-      );
+    // Validate and cast enum types
+    let validatedGenderRestriction: GenderRestriction | undefined;
+    if (data.genderRestriction !== undefined) {
+      if (data.genderRestriction && Object.values(GenderRestriction).includes(data.genderRestriction as GenderRestriction)) {
+        validatedGenderRestriction = data.genderRestriction as GenderRestriction;
+      }
+    }
+
+    let validatedGameType: GameType | null | undefined;
+    if (data.game_type !== undefined) {
+      if (data.game_type && Object.values(GameType).includes(data.game_type as GameType)) {
+        validatedGameType = data.game_type as GameType;
+      } else {
+        validatedGameType = null;
+      }
     }
 
     // Map genderRestriction to gender_category automatically if genderRestriction is being updated
-    let mappedGenderCategory: string | null | undefined = data.gender_category;
-    if (data.genderRestriction) {
-      if (data.genderRestriction === 'MALE') {
-        mappedGenderCategory = 'MALE';
-      } else if (data.genderRestriction === 'FEMALE') {
-        mappedGenderCategory = 'FEMALE';
-      } else if (data.genderRestriction === 'MIXED') {
-        mappedGenderCategory = 'MIXED';
-      } else if (data.genderRestriction === 'OPEN') {
-        // OPEN typically means MIXED for doubles
-        mappedGenderCategory = 'MIXED';
+    let mappedGenderCategory: GenderType | null | undefined = undefined;
+    if (data.gender_category !== undefined) {
+      if (data.gender_category && Object.values(GenderType).includes(data.gender_category as GenderType)) {
+        mappedGenderCategory = data.gender_category as GenderType;
+      } else {
+        mappedGenderCategory = null;
       }
     }
-
-    // Prepare league connections if provided
-    const leagueConnections = leagueIds ? {
-      leagues: {
-        set: leagueIds.map((id: string) => ({ id }))
+    
+    if (data.genderRestriction) {
+      if (data.genderRestriction === 'MALE') {
+        mappedGenderCategory = GenderType.MALE;
+      } else if (data.genderRestriction === 'FEMALE') {
+        mappedGenderCategory = GenderType.FEMALE;
+      } else if (data.genderRestriction === 'MIXED') {
+        mappedGenderCategory = GenderType.MIXED;
+      } else if (data.genderRestriction === 'OPEN') {
+        mappedGenderCategory = GenderType.MIXED;
       }
-    } : {};
+    }
 
     // Remove gender_category from data if we're setting it from genderRestriction
     const { gender_category: _, ...updateData } = data;
 
+    const updateDataWithRelations: Prisma.CategoryUpdateInput = {};
+    
+    if (updateData.name !== undefined) updateDataWithRelations.name = updateData.name ?? null;
+    if (validatedGenderRestriction !== undefined) updateDataWithRelations.genderRestriction = validatedGenderRestriction;
+    if (updateData.matchFormat !== undefined) updateDataWithRelations.matchFormat = updateData.matchFormat ?? null;
+    if (updateData.categoryOrder !== undefined) updateDataWithRelations.categoryOrder = updateData.categoryOrder;
+    if (validatedGameType !== undefined) updateDataWithRelations.gameType = validatedGameType;
+    if (mappedGenderCategory !== undefined) updateDataWithRelations.genderCategory = mappedGenderCategory;
+
+    if (seasonId !== undefined) {
+      if (seasonId) {
+        updateDataWithRelations.seasons = {
+          set: [{ id: seasonId }]
+        };
+      } else {
+        updateDataWithRelations.seasons = {
+          set: []
+        };
+      }
+    }
+
     const updatedCategory = await prisma.category.update({
       where: { id },
-      data: {
-        ...updateData,
-        gender_category: mappedGenderCategory,
-        ...leagueConnections
-      },
+      data: updateDataWithRelations,
       include: {
-        leagues: true,
         seasons: {
           select: {
             id: true,
-            name: true,
+            name: true
           }
         }
       }
@@ -338,7 +289,7 @@ export const updateCategory = async (req: Request, res: Response) => {
       }
       if (error.code === "P2003") {
         return res.status(400).json(
-          new ApiResponse(false, 400, null, "One or more league IDs are invalid")
+          new ApiResponse(false, 400, null, "Season ID is invalid")
         );
       }
     }
@@ -361,6 +312,14 @@ export const deleteCategory = async (req: Request, res: Response) => {
 
     const existingCategory = await prisma.category.findUnique({
       where: { id },
+      include: {
+        seasons: {
+          select: {
+            id: true,
+            name: true
+          }
+        }
+      }
     });
 
     if (!existingCategory) {
@@ -369,27 +328,21 @@ export const deleteCategory = async (req: Request, res: Response) => {
         new ApiResponse(false, 404, null, "Category not found")
       );
     }
-
-    const seasonsUsingCategory = await prisma.season.findMany({
-      where: { 
-        categories: {
-          some: {
-            id: id
-          }
-        }
-      },
-    });
-
-    if (seasonsUsingCategory.length > 0) {
-      return res.status(400).json(
-        new ApiResponse(
-          false,
-          400,
-          null,
-          "Cannot delete category: It is being used in Seasons"
-        )
-      );
+    
+    if (existingCategory.seasons && existingCategory.seasons.length > 0) {
+      const season = existingCategory.seasons[0];
+      if (season) {
+        return res.status(400).json(
+          new ApiResponse(
+            false,
+            400,
+            null,
+            `Cannot delete category: It is linked to season "${season.name}"`
+          )
+        );
+      }
     }
+
     await prisma.category.delete({
       where: { id },
     });
@@ -397,18 +350,24 @@ export const deleteCategory = async (req: Request, res: Response) => {
     return res
       .status(200)
       .json(new ApiResponse(true, 200, null, "Category deleted successfully"));
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("🔥 Error deleting category:", error);
 
-    if (error.code === "P2003") {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2003") {
       console.log("❌ Prisma foreign key constraint error:", error);
       return res.status(400).json(
         new ApiResponse(
           false,
           400,
           null,
-          "Cannot delete category: It is being used in Seasons"
+          "Cannot delete category: It is being used by a season"
         )
+      );
+    }
+    
+    if (error instanceof Prisma.PrismaClientKnownRequestError) {
+      return res.status(500).json(
+        new ApiResponse(false, 500, null, "Database error deleting category")
       );
     }
 

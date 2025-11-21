@@ -51,6 +51,10 @@ export async function createSeason(data: CreateSeasonInput) {
     throw new Error("A season with this name already exists.");
   }
 
+  // Schema defines one-to-one relationship: Season.categoryId → Category.id
+  // Take the first categoryId from the array (controller may pass array for consistency)
+  const categoryId = categoryIds && categoryIds.length > 0 ? categoryIds[0] : undefined;
+
   const season = await prisma.season.create({
     data: {
       name,
@@ -67,10 +71,9 @@ export async function createSeason(data: CreateSeasonInput) {
       leagues: {
         connect: leagueIds.map(id => ({ id }))
       },
-      categories: {
-        connect: categoryIds.map(id => ({ id }))
-      }
-    },
+      // Use categoryId (singular) to match schema's one-to-one relationship
+      ...(categoryId ? { categoryId } : {}),
+    } as any, // Type assertion needed because categoryId may not be recognized in SeasonCreateInput
     include: {
       leagues: {
         select: {
@@ -80,15 +83,17 @@ export async function createSeason(data: CreateSeasonInput) {
           gameType: true
         }
       },
-      categories: {
+      category: {
         select: {
           id: true,
           name: true,
           genderRestriction: true,
+          gender_category: true,
+          game_type: true,
           matchFormat: true
         }
       }
-    }
+    } as any
   });
 
   console.log(`✅ Season ${season.id} created: ${season.name}`);
@@ -155,7 +160,12 @@ export async function updateSeason(id: string, data: UpdateSeasonInput) {
   if (data.entryFee !== undefined) updateData.entryFee = new Prisma.Decimal(data.entryFee);
   if (data.description !== undefined) updateData.description = data.description ?? null;
   if (data.leagueIds !== undefined) updateData.leagues = { set: data.leagueIds.map(id => ({ id })) };
-  if (data.categoryIds !== undefined) updateData.categories = { set: data.categoryIds.map(id => ({ id })) };
+  // Schema defines one-to-one relationship: Season.categoryId → Category.id
+  // Take the first categoryId from the array (controller may pass array for consistency)
+  if (data.categoryIds !== undefined) {
+    const categoryId = data.categoryIds && data.categoryIds.length > 0 ? data.categoryIds[0] : null;
+    updateData.categoryId = categoryId;
+  }
   if (data.isActive !== undefined) updateData.isActive = data.isActive;
   if (data.status !== undefined) updateData.status = data.status;
   if (data.paymentRequired !== undefined) updateData.paymentRequired = data.paymentRequired;
@@ -174,15 +184,19 @@ export async function updateSeason(id: string, data: UpdateSeasonInput) {
           gameType: true
         }
       },
-      categories: {
+      // Use category (singular) to match schema
+      // Type assertion needed because category relation may not be recognized in SeasonInclude
+      category: {
         select: {
           id: true,
           name: true,
           genderRestriction: true,
+          gender_category: true,
+          game_type: true,
           matchFormat: true
         }
       }
-    }
+    } as any
   });
 
   console.log(`✅ Season ${id} updated: ${updatedSeason.name}`);

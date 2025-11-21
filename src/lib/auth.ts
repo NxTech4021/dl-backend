@@ -6,8 +6,11 @@ import { PrismaClient } from "@prisma/client";
 import { createAuthMiddleware, emailOTP, username } from "better-auth/plugins";
 import { expo } from "@better-auth/expo";
 import { sendEmail } from "../config/nodemailer";
-import { getBackendBaseURL, getTrustedOrigins } from "../config/network";
-
+import {
+  getBackendBaseURL,
+  getTrustedOrigins,
+  getAuthBasePath,
+} from "../config/network";
 
 // Debug environment variables
 console.log("🔐 Better Auth Environment Check:");
@@ -24,7 +27,9 @@ console.log(
     process.env.BASE_URL || "Using default: http://192.168.1.3:3001"
   }`
 );
-const authBasePath = process.env.BETTER_AUTH_BASE_PATH || "/api/auth";
+// Get auth base path dynamically based on environment
+// Development: /api/auth/, Production: /auth/ (nginx handles /api prefix)
+const authBasePath = getAuthBasePath();
 console.log(`   BETTER_AUTH_BASE_PATH: ${authBasePath}`);
 const defaultTrustedOrigins = [
   "http://localhost:3030",
@@ -38,29 +43,54 @@ const defaultTrustedOrigins = [
   "exp://192.168.1.5:8081",
   "http://192.168.100.28:8081",
   "exp://192.168.100.28:8081",
+  "http://192.168.100.3:8081",
+  "exp://192.168.100.3:8081",
   "http://192.168.100.53:8081",
   "exp://192.168.100.53:8081",
+  "http://192.168.100.36:8081",
+  "exp://192.168.100.36:8081",
+  "http://192.168.100.224:8081",
+  "exp://192.168.100.224:8081",
   "http://172.20.10.3:8081",
   "exp://172.20.10.3:8081",
+  "http://172.20.10.2:3001",
+  "http://172.20.10.2:82",
+  "http://172.20.10.2:8081",
+  "exp://172.20.10.2:8081",
   "http://10.72.179.58:8081",
   "exp://10.72.179.58:8081",
   "http://10.72.180.20:8081",
   "exp://10.72.180.20:8081",
+  "http://10.72.191.11:8081",
+  "exp://10.72.191.11:8081",
+  "http://192.168.1.4:8081",
+  "exp://192.168.1.4:8081",
+  "http://192.168.0.60:3001",
+  "http://192.168.0.60:82",
+  "http://192.168.0.60:8081",
+  "exp://192.168.0.60:8081",
+  "http://192.168.0.123:8081",
+  "exp://192.168.0.123:8081",
   "http://192.168.0.197:8081",
   "exp://192.168.0.197:8081",
   "exp://192.168.0.109:8081",
   "https://staging.appdevelopers.my",
+  "https://0.0.0.0",
+  "deuceleague://",
 ];
+
 const envTrustedOrigins = [
   ...(process.env.BETTER_AUTH_TRUSTED_ORIGINS || "")
     .split(",")
     .map((origin) => origin.trim())
     .filter(Boolean),
 ];
+
 const corsAllowedOrigins = (process.env.CORS_ALLOWED_ORIGINS || "")
   .split(",")
   .map((origin) => origin.trim())
   .filter(Boolean);
+
 const combinedTrustedOrigins = Array.from(
   new Set([
     ...defaultTrustedOrigins,
@@ -69,7 +99,6 @@ const combinedTrustedOrigins = Array.from(
     ...getTrustedOrigins(),
   ])
 );
-console.log("   Trusted origins:", combinedTrustedOrigins);
 
 // Test database connection
 prisma
@@ -80,21 +109,6 @@ prisma
   .catch((error) => {
     console.error("❌ Database connection failed:", error);
   });
-
-// Add query logging to debug verification issues
-// TODO: Re-enable query logging when Prisma client is configured with log: ['query']
-// prisma.$on("query", (e) => {
-//   if (e.query.includes("verification")) {
-//     console.log("🔍 Verification Query:", e.query);
-//     console.log("🔍 Verification Params:", e.params);
-//     console.log("🔍 Verification Duration:", e.duration + "ms");
-
-//     // Add specific debugging for verification lookups
-//     if (e.query.includes("SELECT") && e.query.includes("verification")) {
-//       console.log("🔍 Looking up verification records for:", e.params[0]);
-//     }
-//   }
-// });
 
 export const auth = betterAuth({
   appName: "DeuceLeague",
@@ -184,6 +198,7 @@ export const auth = betterAuth({
   // Advanced configuration for mobile/Expo compatibility
   advanced: {
     useSecureCookies: false, // Set to false for development/localhost
+    // disableOriginCheck: true, // Need to remove for prod
     crossSubDomainCookies: {
       enabled: false, // Disable for mobile apps
     },
