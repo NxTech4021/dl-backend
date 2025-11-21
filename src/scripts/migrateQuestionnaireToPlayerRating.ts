@@ -122,21 +122,23 @@ async function migrateQuestionnaireToPlayerRating(): Promise<MigrationStats> {
         });
 
         if (!existingSingles) {
+          const singlesData: any = {
+            userId,
+            seasonId,
+            sport: sportType,
+            gameType: GameType.SINGLES,
+            currentRating: singles,
+            ratingDeviation: rd || 350,
+            isProvisional: true,
+            matchesPlayed: 0,
+            peakRating: singles,
+            peakRatingDate: new Date(),
+            lowestRating: singles
+          };
+          if (seasonMembership?.divisionId) singlesData.divisionId = seasonMembership.divisionId;
+
           const singlesRating = await prisma.playerRating.create({
-            data: {
-              userId,
-              seasonId,
-              divisionId: seasonMembership?.divisionId,
-              sport: sportType,
-              gameType: GameType.SINGLES,
-              currentRating: singles,
-              ratingDeviation: rd || 350,
-              isProvisional: true,
-              matchesPlayed: 0,
-              peakRating: singles,
-              peakRatingDate: new Date(),
-              lowestRating: singles
-            }
+            data: singlesData
           });
 
           // Create initial rating history
@@ -172,21 +174,23 @@ async function migrateQuestionnaireToPlayerRating(): Promise<MigrationStats> {
         });
 
         if (!existingDoubles) {
+          const doublesData: any = {
+            userId,
+            seasonId,
+            sport: sportType,
+            gameType: GameType.DOUBLES,
+            currentRating: doubles,
+            ratingDeviation: rd || 350,
+            isProvisional: true,
+            matchesPlayed: 0,
+            peakRating: doubles,
+            peakRatingDate: new Date(),
+            lowestRating: doubles
+          };
+          if (seasonMembership?.divisionId) doublesData.divisionId = seasonMembership.divisionId;
+
           const doublesRating = await prisma.playerRating.create({
-            data: {
-              userId,
-              seasonId,
-              divisionId: seasonMembership?.divisionId,
-              sport: sportType,
-              gameType: GameType.DOUBLES,
-              currentRating: doubles,
-              ratingDeviation: rd || 350,
-              isProvisional: true,
-              matchesPlayed: 0,
-              peakRating: doubles,
-              peakRatingDate: new Date(),
-              lowestRating: doubles
-            }
+            data: doublesData
           });
 
           // Create initial rating history

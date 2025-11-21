@@ -178,7 +178,7 @@ export async function getPlayerRatingHistory(
       match: {
         select: {
           id: true,
-          playedAt: true,
+          matchDate: true,
           participants: {
             where: {
               userId: { not: userId }
@@ -206,7 +206,7 @@ export async function getPlayerRatingHistory(
     reason: entry.reason,
     notes: entry.notes,
     createdAt: entry.createdAt,
-    matchDate: entry.match?.playedAt || null,
+    matchDate: entry.match?.matchDate || null,
     adversary: entry.match?.participants[0]?.user?.name || null
   }));
 }
@@ -231,21 +231,23 @@ export async function createInitialRating(
     });
 
     if (!existingSingles) {
+      const singlesData: any = {
+        userId,
+        seasonId,
+        sport,
+        gameType: GameType.SINGLES,
+        currentRating: singles,
+        ratingDeviation: rd,
+        isProvisional: true,
+        matchesPlayed: 0,
+        peakRating: singles,
+        peakRatingDate: new Date(),
+        lowestRating: singles
+      };
+      if (divisionId) singlesData.divisionId = divisionId;
+
       const singlesRating = await prisma.playerRating.create({
-        data: {
-          userId,
-          seasonId,
-          divisionId,
-          sport,
-          gameType: GameType.SINGLES,
-          currentRating: singles,
-          ratingDeviation: rd,
-          isProvisional: true,
-          matchesPlayed: 0,
-          peakRating: singles,
-          peakRatingDate: new Date(),
-          lowestRating: singles
-        }
+        data: singlesData
       });
 
       await prisma.ratingHistory.create({
@@ -277,21 +279,23 @@ export async function createInitialRating(
     });
 
     if (!existingDoubles) {
+      const doublesData: any = {
+        userId,
+        seasonId,
+        sport,
+        gameType: GameType.DOUBLES,
+        currentRating: doubles,
+        ratingDeviation: rd,
+        isProvisional: true,
+        matchesPlayed: 0,
+        peakRating: doubles,
+        peakRatingDate: new Date(),
+        lowestRating: doubles
+      };
+      if (divisionId) doublesData.divisionId = divisionId;
+
       const doublesRating = await prisma.playerRating.create({
-        data: {
-          userId,
-          seasonId,
-          divisionId,
-          sport,
-          gameType: GameType.DOUBLES,
-          currentRating: doubles,
-          ratingDeviation: rd,
-          isProvisional: true,
-          matchesPlayed: 0,
-          peakRating: doubles,
-          peakRatingDate: new Date(),
-          lowestRating: doubles
-        }
+        data: doublesData
       });
 
       await prisma.ratingHistory.create({
@@ -353,7 +357,11 @@ export async function getPlayerRatingStats(userId: string): Promise<{
     where: { userId },
     include: {
       history: {
-        where: { reason: RatingChangeReason.MATCH_RESULT },
+        where: {
+          reason: {
+            in: [RatingChangeReason.MATCH_WIN, RatingChangeReason.MATCH_LOSS]
+          }
+        },
         orderBy: { createdAt: 'desc' }
       }
     }

@@ -33,9 +33,7 @@ export const calculatePairRating = async (
     const season = await prisma.season.findUnique({
       where: { id: seasonId },
       select: {
-        category: {
-          select: { game_type: true }
-        }
+        categoryId: true
       },
     });
 
@@ -43,7 +41,13 @@ export const calculatePairRating = async (
       throw new Error('Season not found');
     }
 
-    const sport = season.category?.game_type?.toLowerCase() || '';
+    // Get category to find game type
+    const category = season.categoryId ? await prisma.category.findUnique({
+      where: { id: season.categoryId },
+      select: { gameType: true }
+    }) : null;
+
+    const sport = category?.gameType?.toLowerCase() || '';
 
     // Get questionnaire responses for both players for this sport
     const [player1Response, player2Response] = await Promise.all([
@@ -110,9 +114,7 @@ export const sendPairRequest = async (
         startDate: true,
         regiDeadline: true,
         status: true,
-        category: {
-          select: { game_type: true }
-        }
+        categoryId: true
       },
     });
 
@@ -721,7 +723,7 @@ export const dissolvePartnership = async (
             seasonId: partnership.seasonId,
           },
           data: {
-            status: 'WITHDRAWN',
+            status: 'REMOVED',
           },
         });
       }

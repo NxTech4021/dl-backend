@@ -64,7 +64,7 @@ export async function addFavorite(userId: string, targetUserId: string) {
 
   // Check if user exists
   const userToFavorite = await prisma.user.findUnique({
-    where: { id: targetUserId, role: Role.USER, status: 'active' },
+    where: { id: targetUserId, role: Role.USER, status: 'ACTIVE' },
   });
 
   if (!userToFavorite) {

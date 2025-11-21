@@ -124,13 +124,13 @@ export async function getAvailablePlayersForSeason(
   }
 
   // Get category separately since we need to fetch it by categoryId
-  let category: { genderRestriction?: any; gender_category?: any } | null = null;
+  let category: { genderRestriction?: any; genderCategory?: any } | null = null;
   if ((season as any).categoryId) {
     const categoryData = await prisma.category.findUnique({
       where: { id: (season as any).categoryId },
       select: {
         genderRestriction: true,
-        gender_category: true
+        genderCategory: true
       }
     });
     category = categoryData;
@@ -138,7 +138,7 @@ export async function getAvailablePlayersForSeason(
 
   // Check if season is MIXED doubles
   // Note: Category gender values are enums (uppercase), but normalize for comparison
-  const categoryGender = category?.gender_category || category?.genderRestriction;
+  const categoryGender = category?.genderCategory || category?.genderRestriction;
   const categoryGenderUpper = categoryGender?.toUpperCase();
   const isMixedDoubles = categoryGenderUpper === 'MIXED';
   console.log('🔍 Season:', season.name, '| Category:', categoryGender, '| Mixed:', isMixedDoubles);

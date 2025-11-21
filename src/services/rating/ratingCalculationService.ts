@@ -7,8 +7,7 @@ import { prisma } from '../../lib/prisma';
 import {
   MatchStatus,
   GameType,
-  RatingChangeReason,
-  MatchOutcome
+  RatingChangeReason
 } from '@prisma/client';
 import { logger } from '../../utils/logger';
 
@@ -154,13 +153,13 @@ export async function calculateMatchRatings(matchId: string): Promise<MatchRatin
   }
 
   // Determine winner and loser
-  const winnerId = match.outcome === MatchOutcome.TEAM1_WIN
-    ? match.participants.find(p => p.team === 1)?.userId
-    : match.participants.find(p => p.team === 2)?.userId;
+  const winnerId = match.outcome === 'team1'
+    ? match.participants.find(p => p.team === 'team1')?.userId
+    : match.participants.find(p => p.team === 'team2')?.userId;
 
-  const loserId = match.outcome === MatchOutcome.TEAM1_WIN
-    ? match.participants.find(p => p.team === 2)?.userId
-    : match.participants.find(p => p.team === 1)?.userId;
+  const loserId = match.outcome === 'team1'
+    ? match.participants.find(p => p.team === 'team2')?.userId
+    : match.participants.find(p => p.team === 'team1')?.userId;
 
   if (!winnerId || !loserId) {
     logger.error(`Could not determine winner/loser for match ${matchId}`);
@@ -358,23 +357,23 @@ export async function applyMatchRatings(
 ): Promise<void> {
   await prisma.$transaction(async (tx) => {
     // Update winner rating
+    const winnerData: any = {
+      currentRating: updates.winner.newRating,
+      ratingDeviation: updates.winner.newRd,
+      matchesPlayed: updates.winner.matchesPlayed,
+      lastMatchId: matchId,
+      lastUpdatedAt: new Date(),
+      isProvisional: updates.winner.matchesPlayed < 10
+    };
+    // Update peak/lowest only if applicable
+    if (updates.winner.newRating > updates.winner.oldRating) {
+      winnerData.peakRating = updates.winner.newRating;
+      winnerData.peakRatingDate = new Date();
+    }
+
     const winnerUpdate = await tx.playerRating.update({
       where: { id: updates.winner.ratingId },
-      data: {
-        currentRating: updates.winner.newRating,
-        ratingDeviation: updates.winner.newRd,
-        matchesPlayed: updates.winner.matchesPlayed,
-        lastMatchId: matchId,
-        lastUpdatedAt: new Date(),
-        isProvisional: updates.winner.matchesPlayed < 10,
-        // Update peak/lowest
-        peakRating: updates.winner.newRating > (updates.winner.oldRating)
-          ? updates.winner.newRating
-          : undefined,
-        peakRatingDate: updates.winner.newRating > updates.winner.oldRating
-          ? new Date()
-          : undefined
-      }
+      data: winnerData
     });
 
     // Create winner history
@@ -387,25 +386,27 @@ export async function applyMatchRatings(
         delta: updates.winner.delta,
         rdBefore: updates.winner.oldRd,
         rdAfter: updates.winner.newRd,
-        reason: RatingChangeReason.MATCH_RESULT
+        reason: RatingChangeReason.MATCH_WIN
       }
     });
 
     // Update loser rating
+    const loserData: any = {
+      currentRating: updates.loser.newRating,
+      ratingDeviation: updates.loser.newRd,
+      matchesPlayed: updates.loser.matchesPlayed,
+      lastMatchId: matchId,
+      lastUpdatedAt: new Date(),
+      isProvisional: updates.loser.matchesPlayed < 10
+    };
+    // Update lowest only if applicable
+    if (updates.loser.newRating < updates.loser.oldRating) {
+      loserData.lowestRating = updates.loser.newRating;
+    }
+
     await tx.playerRating.update({
       where: { id: updates.loser.ratingId },
-      data: {
-        currentRating: updates.loser.newRating,
-        ratingDeviation: updates.loser.newRd,
-        matchesPlayed: updates.loser.matchesPlayed,
-        lastMatchId: matchId,
-        lastUpdatedAt: new Date(),
-        isProvisional: updates.loser.matchesPlayed < 10,
-        // Update lowest
-        lowestRating: updates.loser.newRating < updates.loser.oldRating
-          ? updates.loser.newRating
-          : undefined
-      }
+      data: loserData
     });
 
     // Create loser history
@@ -418,7 +419,7 @@ export async function applyMatchRatings(
         delta: updates.loser.delta,
         rdBefore: updates.loser.oldRd,
         rdAfter: updates.loser.newRd,
-        reason: RatingChangeReason.MATCH_RESULT
+        reason: RatingChangeReason.MATCH_LOSS
       }
     });
   });

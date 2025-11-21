@@ -212,12 +212,11 @@ export async function setInactivitySettings(
     create: createData
   });
 
-  logger.info(`Updated inactivity settings by admin ${adminId}`, {
-    leagueId,
-    seasonId,
-    inactivityThresholdDays,
-    warningThresholdDays
-  });
+  const logContext: any = { inactivityThresholdDays };
+  if (leagueId) logContext.leagueId = leagueId;
+  if (seasonId) logContext.seasonId = seasonId;
+  if (warningThresholdDays) logContext.warningThresholdDays = warningThresholdDays;
+  logger.info(`Updated inactivity settings by admin ${adminId}`, logContext);
 
   return result;
 }

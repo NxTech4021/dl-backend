@@ -33,16 +33,18 @@ export async function createBracket(req: Request, res: Response) {
       });
     }
 
-    const bracket = await bracketService.createBracket({
+    const createInput: any = {
       seasonId,
       divisionId,
       bracketName,
       bracketType,
       seedingSource,
-      numPlayers,
-      startDate: startDate ? new Date(startDate) : undefined,
-      endDate: endDate ? new Date(endDate) : undefined
-    });
+      numPlayers
+    };
+    if (startDate) createInput.startDate = new Date(startDate);
+    if (endDate) createInput.endDate = new Date(endDate);
+
+    const bracket = await bracketService.createBracket(createInput);
 
     return res.status(201).json({
       success: true,
@@ -162,14 +164,13 @@ export async function updateBracketMatch(req: Request, res: Response) {
       });
     }
 
-    const match = await bracketService.updateBracketMatch({
-      bracketMatchId,
-      adminId,
-      scheduledTime: scheduledTime ? new Date(scheduledTime) : undefined,
-      courtLocation,
-      player1Id,
-      player2Id
-    });
+    const updateInput: any = { bracketMatchId, adminId };
+    if (scheduledTime) updateInput.scheduledTime = new Date(scheduledTime);
+    if (courtLocation) updateInput.courtLocation = courtLocation;
+    if (player1Id) updateInput.player1Id = player1Id;
+    if (player2Id) updateInput.player2Id = player2Id;
+
+    const match = await bracketService.updateBracketMatch(updateInput);
 
     return res.status(200).json({
       success: true,

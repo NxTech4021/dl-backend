@@ -138,8 +138,8 @@ export async function notifyNewBugReport(bugReportId: string): Promise<void> {
     if (!settings?.notifyOnNew) return;
 
     // Send email notifications
-    const notifyEmails = settings.notifyEmails || [];
-    if (notifyEmails.length > 0) {
+    const notifyEmails = (settings.notifyEmails || []) as string[];
+    if (Array.isArray(notifyEmails) && notifyEmails.length > 0) {
       const subject = `[${report.severity}] New Bug: ${report.reportNumber} - ${report.title}`;
       const html = newBugReportTemplate(report);
 
@@ -240,14 +240,16 @@ export async function notifyStatusChange(
 
     // Notify admins for critical status changes
     if (['RESOLVED', 'CLOSED', 'WONT_FIX'].includes(newStatus)) {
-      const notifyEmails = settings.notifyEmails || [];
-      for (const email of notifyEmails) {
-        try {
-          const subject = `Bug ${report.reportNumber} ${newStatus.toLowerCase()}`;
-          const html = statusChangeTemplate(report, oldStatus, newStatus);
-          await sendEmail(email, subject, html);
-        } catch (err) {
-          console.error(`Failed to send email to ${email}:`, err);
+      const notifyEmails = (settings.notifyEmails || []) as string[];
+      if (Array.isArray(notifyEmails)) {
+        for (const email of notifyEmails) {
+          try {
+            const subject = `Bug ${report.reportNumber} ${newStatus.toLowerCase()}`;
+            const html = statusChangeTemplate(report, oldStatus, newStatus);
+            await sendEmail(email, subject, html);
+          } catch (err) {
+            console.error(`Failed to send email to ${email}:`, err);
+          }
         }
       }
     }

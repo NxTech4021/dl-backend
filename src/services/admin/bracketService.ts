@@ -123,7 +123,7 @@ export class BracketService {
           data: {
             bracketId: newBracket.id,
             roundNumber: i + 1,
-            roundName: roundNames[i]
+            roundName: roundNames[i] || `Round ${i + 1}`
           }
         });
       }
@@ -240,6 +240,10 @@ export class BracketService {
 
       // Create matches for each round
       const firstRound = bracket.rounds[0];
+      if (!firstRound) {
+        throw new Error('First round not found in bracket');
+      }
+
       const matchesInFirstRound = targetSize / 2;
 
       // Generate first round matches with seeding
@@ -247,23 +251,29 @@ export class BracketService {
 
       for (let i = 0; i < firstRoundMatches.length; i++) {
         const match = firstRoundMatches[i];
+        if (!match) continue;
+
+        const matchData: any = {
+          bracketId,
+          roundId: firstRound.id,
+          matchNumber: i + 1,
+          status: match.player2Id ? BracketMatchStatus.PENDING : BracketMatchStatus.BYE
+        };
+        if (match.seed1 !== undefined) matchData.seed1 = match.seed1;
+        if (match.seed2 !== undefined) matchData.seed2 = match.seed2;
+        if (match.player1Id) matchData.player1Id = match.player1Id;
+        if (match.player2Id) matchData.player2Id = match.player2Id;
+
         await tx.bracketMatch.create({
-          data: {
-            bracketId,
-            roundId: firstRound.id,
-            matchNumber: i + 1,
-            seed1: match.seed1,
-            seed2: match.seed2,
-            player1Id: match.player1Id,
-            player2Id: match.player2Id,
-            status: match.player2Id ? BracketMatchStatus.PENDING : BracketMatchStatus.BYE
-          }
+          data: matchData
         });
       }
 
       // Create subsequent round matches (empty)
       for (let roundIndex = 1; roundIndex < bracket.rounds.length; roundIndex++) {
         const round = bracket.rounds[roundIndex];
+        if (!round) continue;
+
         const matchesInRound = matchesInFirstRound / Math.pow(2, roundIndex);
 
         for (let i = 0; i < matchesInRound; i++) {
@@ -306,7 +316,6 @@ export class BracketService {
       where: { id: bracketId },
       include: {
         matches: {
-          where: { roundId: { not: undefined } },
           include: { player1: true, player2: true }
         }
       }
@@ -325,7 +334,8 @@ export class BracketService {
     }
 
     // Check all first round matches have at least one player
-    const firstRoundMatches = bracket.matches.filter(m => m.player1Id || m.player2Id);
+    const matches = (bracket as any).matches || [];
+    const firstRoundMatches = matches.filter((m: any) => m.player1Id || m.player2Id);
     if (firstRoundMatches.length === 0) {
       throw new Error('Bracket has no seeded matches');
     }
@@ -343,7 +353,7 @@ export class BracketService {
     // Notify participants
     if (notifyPlayers) {
       const playerIds = new Set<string>();
-      bracket.matches.forEach(m => {
+      matches.forEach((m: any) => {
         if (m.player1Id) playerIds.add(m.player1Id);
         if (m.player2Id) playerIds.add(m.player2Id);
       });
@@ -382,14 +392,15 @@ export class BracketService {
       throw new Error('Cannot change players in a locked bracket');
     }
 
+    const updateData: any = {};
+    if (scheduledTime !== undefined) updateData.scheduledTime = scheduledTime;
+    if (courtLocation !== undefined) updateData.courtLocation = courtLocation;
+    if (player1Id) updateData.player1Id = player1Id;
+    if (player2Id) updateData.player2Id = player2Id;
+
     return prisma.bracketMatch.update({
       where: { id: bracketMatchId },
-      data: {
-        scheduledTime,
-        courtLocation,
-        ...(player1Id && { player1Id }),
-        ...(player2Id && { player2Id })
-      },
+      data: updateData,
       include: {
         player1: { select: { id: true, name: true, username: true } },
         player2: { select: { id: true, name: true, username: true } }
@@ -425,13 +436,15 @@ export class BracketService {
 
     await prisma.$transaction(async (tx) => {
       // Update this match
+      const matchUpdateData: any = {
+        winnerId,
+        status: BracketMatchStatus.COMPLETED
+      };
+      if (matchId) matchUpdateData.matchId = matchId;
+
       await tx.bracketMatch.update({
         where: { id: bracketMatchId },
-        data: {
-          winnerId,
-          matchId,
-          status: BracketMatchStatus.COMPLETED
-        }
+        data: matchUpdateData
       });
 
       // Find and update next round match
@@ -562,12 +575,13 @@ export class BracketService {
       const player1 = seededPlayers.find(p => p.seed === pos1);
       const player2 = seededPlayers.find(p => p.seed === pos2);
 
-      matches.push({
-        seed1: pos1,
-        seed2: pos2,
-        player1Id: player1?.playerId,
-        player2Id: player2?.playerId
-      });
+      const matchEntry: any = {};
+      if (pos1 !== undefined) matchEntry.seed1 = pos1;
+      if (pos2 !== undefined) matchEntry.seed2 = pos2;
+      if (player1?.playerId) matchEntry.player1Id = player1.playerId;
+      if (player2?.playerId) matchEntry.player2Id = player2.playerId;
+
+      matches.push(matchEntry);
     }
 
     return matches;
