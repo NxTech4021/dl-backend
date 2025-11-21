@@ -322,26 +322,16 @@ router.post("/:sport/submit", validateSportParam, async (req, res) => {
       scoringDuration
     );
 
-    const normalizedSingles =
-      scoringResult.singles ??
-      scoringResult.singles_rating ??
-      scoringResult.rating ??
-      null;
-    const normalizedDoubles =
-      scoringResult.doubles ??
-      scoringResult.doubles_rating ??
-      scoringResult.rating ??
-      null;
+    const normalizedSingles = scoringResult.singles ?? null;
+    const normalizedDoubles = scoringResult.doubles ?? null;
 
     const detailPayload = JSON.parse(
       JSON.stringify({
         ...(typeof scoringResult.detail === "object" ? scoringResult.detail : {}),
-        adjustment_detail: scoringResult.adjustment_detail,
-        confidence_breakdown: scoringResult.confidence_breakdown,
-        rating: scoringResult.rating,
-        singles_rating: scoringResult.singles_rating,
-        doubles_rating: scoringResult.doubles_rating,
-        source_detail: scoringResult.sourceDetail,
+        singles: scoringResult.singles,
+        doubles: scoringResult.doubles,
+        rd: scoringResult.rd,
+        confidence: scoringResult.confidence,
       })
     ) as Prisma.InputJsonValue;
 
