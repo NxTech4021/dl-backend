@@ -217,7 +217,7 @@ export class MatchResultService {
           logger.info(`Applied rating updates for match ${matchId}`);
 
           // Send rating change notifications
-          const ratingChanges = ratingUpdates.map(update => ({
+          const ratingChanges = [ratingUpdates.winner, ratingUpdates.loser].map((update: any) => ({
             userId: update.userId,
             oldRating: update.previousSinglesRating ?? update.previousDoublesRating ?? 1500,
             newRating: update.newSinglesRating ?? update.newDoublesRating ?? 1500,
@@ -256,16 +256,18 @@ export class MatchResultService {
 
       await prisma.$transaction(async (tx) => {
         // Create dispute
+        const disputeData: any = {
+          matchId,
+          raisedByUserId: userId,
+          disputeCategory,
+          disputeComment: disputeReason,
+          status: DisputeStatus.OPEN
+        };
+        if (disputerScore) disputeData.disputerScore = JSON.stringify(disputerScore);
+        if (evidenceUrl) disputeData.evidenceUrl = evidenceUrl;
+
         await tx.matchDispute.create({
-          data: {
-            matchId,
-            raisedByUserId: userId,
-            disputeCategory,
-            disputeComment: disputeReason,
-            disputerScore: disputerScore ? JSON.stringify(disputerScore) : null,
-            evidenceUrl,
-            status: DisputeStatus.OPEN
-          }
+          data: disputeData
         });
 
         // Mark match as disputed
@@ -326,16 +328,18 @@ export class MatchResultService {
 
     await prisma.$transaction(async (tx) => {
       // Create walkover record
+      const walkoverData: any = {
+        matchId,
+        walkoverReason: reason,
+        defaultingPlayerId: defaultingUserId,
+        winningPlayerId: winningUserId,
+        reportedBy: reportedById,
+        adminVerified: false
+      };
+      if (reasonDetail) walkoverData.walkoverReasonDetail = reasonDetail;
+
       await tx.matchWalkover.create({
-        data: {
-          matchId,
-          walkoverReason: reason,
-          walkoverReasonDetail: reasonDetail,
-          defaultingPlayerId: defaultingUserId,
-          winningPlayerId: winningUserId,
-          reportedBy: reportedById,
-          adminVerified: false
-        }
+        data: walkoverData
       });
 
       // Update match
@@ -485,11 +489,12 @@ export class MatchResultService {
         .map(p => p.userId);
 
       await this.notificationService.createNotification({
+        type: 'MATCH_RESULT_SUBMITTED',
         title: 'Match Result Submitted',
         message: `${submitter?.name} has submitted the match result. Please confirm or dispute.`,
         category: 'MATCH',
         matchId,
-        recipientIds: otherParticipants
+        userIds: otherParticipants
       });
     } catch (error) {
       logger.error('Error sending result submitted notification', {}, error as Error);
@@ -518,11 +523,12 @@ export class MatchResultService {
       const participantIds = match.participants.map(p => p.userId);
 
       await this.notificationService.createNotification({
+        type: 'MATCH_RESULT_CONFIRMED',
         title: 'Match Result Confirmed',
         message: `${confirmer?.name} has confirmed the match result.`,
         category: 'MATCH',
         matchId,
-        recipientIds: participantIds
+        userIds: participantIds
       });
     } catch (error) {
       logger.error('Error sending result confirmed notification', {}, error as Error);
@@ -565,11 +571,9 @@ export class MatchResultService {
       });
 
       // Notify admins
-      await notifyAdminsDispute(this.notificationService, {
-        disputerName,
-        matchId,
-        reason
-      });
+      const disputeInfo: any = { disputerName, matchId };
+      if (reason) disputeInfo.reason = reason;
+      await notifyAdminsDispute(this.notificationService, disputeInfo);
     } catch (error) {
       logger.error('Error sending dispute created notification', {}, error as Error);
     }
