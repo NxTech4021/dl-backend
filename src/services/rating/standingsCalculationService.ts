@@ -4,7 +4,7 @@
  */
 
 import { prisma } from '../../lib/prisma';
-import { MatchStatus, MatchOutcome } from '@prisma/client';
+import { MatchStatus } from '@prisma/client';
 import { logger } from '../../utils/logger';
 
 // Constants for points calculation
@@ -147,7 +147,7 @@ export async function updatePlayerStanding(
   const points = calculateStandingsPoints(newWins, newSetsWon, newMatchesPlayed);
 
   // Update head-to-head
-  const h2h = (standing.headToHead as Record<string, HeadToHeadRecord>) || {};
+  const h2h = (standing.headToHead as unknown as Record<string, HeadToHeadRecord>) || {};
 
   if (!h2h[matchResult.odversaryId]) {
     h2h[matchResult.odversaryId] = {
@@ -159,13 +159,19 @@ export async function updatePlayerStanding(
     };
   }
 
-  if (matchResult.userWon) {
-    h2h[matchResult.odversaryId].wins += 1;
-  } else {
-    h2h[matchResult.odversaryId].losses += 1;
+  const h2hRecord = h2h[matchResult.odversaryId];
+  if (!h2hRecord) {
+    logger.error('Head-to-head record not found for adversary', { adversaryId: matchResult.odversaryId });
+    return;
   }
-  h2h[matchResult.odversaryId].setsWon += matchResult.userSetsWon;
-  h2h[matchResult.odversaryId].setsLost += matchResult.userSetsLost;
+
+  if (matchResult.userWon) {
+    h2hRecord.wins += 1;
+  } else {
+    h2hRecord.losses += 1;
+  }
+  h2hRecord.setsWon += matchResult.userSetsWon;
+  h2hRecord.setsLost += matchResult.userSetsLost;
 
   // Update standing
   await prisma.divisionStanding.update({
@@ -181,7 +187,7 @@ export async function updatePlayerStanding(
       setPoints: points.setPoints,
       completionBonus: points.completionBonus,
       totalPoints: points.totalPoints,
-      headToHead: h2h
+      headToHead: JSON.parse(JSON.stringify(h2h))
     }
   });
 
@@ -218,8 +224,8 @@ export async function updateMatchStandings(matchId: string): Promise<void> {
   }
 
   // Get participants by team
-  const team1Participants = match.participants.filter(p => p.team === 1);
-  const team2Participants = match.participants.filter(p => p.team === 2);
+  const team1Participants = match.participants.filter(p => p.team === 'team1');
+  const team2Participants = match.participants.filter(p => p.team === 'team2');
 
   if (team1Participants.length === 0 || team2Participants.length === 0) {
     logger.error(`Match ${matchId} has invalid participants`);
@@ -233,21 +239,22 @@ export async function updateMatchStandings(matchId: string): Promise<void> {
   let team2Games = 0;
 
   for (const score of match.scores) {
-    team1Games += score.team1Games;
-    team2Games += score.team2Games;
+    team1Games += score.player1Games;
+    team2Games += score.player2Games;
 
-    if (score.team1Games > score.team2Games) {
+    if (score.player1Games > score.player2Games) {
       team1Sets++;
-    } else if (score.team2Games > score.team1Games) {
+    } else if (score.player2Games > score.player1Games) {
       team2Sets++;
     }
   }
 
-  const team1Won = match.outcome === MatchOutcome.TEAM1_WIN;
+  const team1Won = match.outcome === 'team1';
 
   // Update standings for each participant
   for (const participant of team1Participants) {
-    const adversaryId = team2Participants[0].userId;
+    const adversaryId = team2Participants[0]?.userId;
+    if (!adversaryId) continue;
 
     await updatePlayerStanding(participant.userId, match.divisionId, {
       odlayerId: participant.userId,
@@ -261,7 +268,8 @@ export async function updateMatchStandings(matchId: string): Promise<void> {
   }
 
   for (const participant of team2Participants) {
-    const adversaryId = team1Participants[0].userId;
+    const adversaryId = team1Participants[0]?.userId;
+    if (!adversaryId) continue;
 
     await updatePlayerStanding(participant.userId, match.divisionId, {
       odlayerId: participant.userId,
@@ -445,7 +453,7 @@ export async function recalculateDivisionStandings(divisionId: string): Promise<
       participants: true,
       scores: true
     },
-    orderBy: { playedAt: 'asc' }
+    orderBy: { matchDate: 'asc' }
   });
 
   // Reset all standings
