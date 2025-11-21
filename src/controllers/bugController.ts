@@ -36,8 +36,11 @@ export const getModulesByApp = async (req: Request, res: Response) => {
   const { appId } = req.params;
 
   try {
+    const whereClause: any = { isActive: true };
+    if (appId) whereClause.appId = appId;
+
     const modules = await prisma.bugModule.findMany({
-      where: { appId, isActive: true },
+      where: whereClause,
       orderBy: { sortOrder: "asc" },
       select: {
         id: true,
@@ -564,15 +567,17 @@ export const updateBugReport = async (req: Request, res: Response) => {
 
     // Create status change record
     if (statusChanged || priorityChanged) {
+      const changeData: any = {
+        bugReport: { connect: { id } },
+        newStatus: status || existingReport.status,
+        newPriority: priority || existingReport.priority,
+        changedBy: { connect: { id: adminUserId } }
+      };
+      if (statusChanged) changeData.previousStatus = existingReport.status;
+      if (priorityChanged) changeData.previousPriority = existingReport.priority;
+
       await prisma.bugStatusChange.create({
-        data: {
-          bugReport: { connect: { id } },
-          previousStatus: statusChanged ? existingReport.status : undefined,
-          newStatus: status || existingReport.status,
-          previousPriority: priorityChanged ? existingReport.priority : undefined,
-          newPriority: priority || existingReport.priority,
-          changedBy: { connect: { id: adminUserId } },
-        },
+        data: changeData
       });
     }
 
@@ -831,6 +836,10 @@ export const createModule = async (req: Request, res: Response) => {
 export const getAppSettings = async (req: Request, res: Response) => {
   const { appId } = req.params;
 
+  if (!appId) {
+    return res.status(400).json({ error: 'App ID is required' });
+  }
+
   try {
     let settings = await prisma.bugReportSettings.findUnique({
       where: { appId },
@@ -860,6 +869,11 @@ export const getAppSettings = async (req: Request, res: Response) => {
 // Update app settings
 export const updateAppSettings = async (req: Request, res: Response) => {
   const { appId } = req.params;
+
+  if (!appId) {
+    return res.status(400).json({ error: 'App ID is required' });
+  }
+
   const {
     enableScreenshots,
     enableAutoCapture,
