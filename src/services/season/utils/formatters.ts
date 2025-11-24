@@ -47,8 +47,8 @@ export function formatCategory(category: any): FormattedCategory | null {
     id: category.id,
     name: category.name,
     genderRestriction: category.genderRestriction,
-    gender_category: category.gender_category ?? null,
-    game_type: category.game_type ?? null,
+    gender_category: category.genderCategory ?? null,
+    game_type: category.gameType ?? null,
     matchFormat: category.matchFormat,
     isActive: category.isActive ?? true,
     categoryOrder: category.categoryOrder ?? 0

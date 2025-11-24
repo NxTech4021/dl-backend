@@ -199,8 +199,8 @@ export async function getPlayerSeasonHistory(playerId: string) {
         select: {
           id: true,
           name: true,
-          game_type: true,
-          gender_category: true
+          gameType: true,
+          genderCategory: true
         }
       },
       leagues: {
