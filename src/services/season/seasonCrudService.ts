@@ -88,8 +88,8 @@ export async function createSeason(data: CreateSeasonInput) {
           id: true,
           name: true,
           genderRestriction: true,
-          gender_category: true,
-          game_type: true,
+          genderCategory: true,
+          gameType: true,
           matchFormat: true
         }
       }
@@ -191,8 +191,8 @@ export async function updateSeason(id: string, data: UpdateSeasonInput) {
           id: true,
           name: true,
           genderRestriction: true,
-          gender_category: true,
-          game_type: true,
+          genderCategory: true,
+          gameType: true,
           matchFormat: true
         }
       }
