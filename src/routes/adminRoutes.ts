@@ -16,6 +16,7 @@ import adminMatchRoutes from "./admin/adminMatchRoutes";
 import bracketRoutes from "./admin/bracketRoutes";
 import adminRatingRoutes from "./adminRatingRoutes";
 import adminInactivityRoutes from "./adminInactivityRoutes";
+import adminBest6Routes from "./admin/adminBest6Routes";
 
 
 const adminRouter = Router();
@@ -41,6 +42,9 @@ adminRouter.use("/", bracketRoutes);
 
 // Admin Rating Routes (Ratings & Standings Module)
 adminRouter.use("/ratings", adminRatingRoutes);
+
+// Admin Best 6 & Standings Routes
+adminRouter.use("/", adminBest6Routes);
 
 // Admin Inactivity Routes
 adminRouter.use("/inactivity", adminInactivityRoutes);
