@@ -103,6 +103,10 @@ model User {
   bracketPlayer1        BracketMatch[]    @relation("BracketPlayer1")
   bracketPlayer2        BracketMatch[]    @relation("BracketPlayer2")
 
+  // NEW: Match result relations (Best 6 system)
+  matchResults          MatchResult[]     @relation("PlayerMatchResults")
+  opponentMatchResults  MatchResult[]     @relation("OpponentMatchResults")
+
   @@index([email])
   @@index([lastMatchDate])
   @@index([username])
@@ -619,6 +623,9 @@ model Match {
   // Admin review
   requiresAdminReview     Boolean   @default(false)
 
+  // NEW: Set 3 format toggle
+  set3Format      Set3Format?  // MATCH_TIEBREAK, FULL_SET
+
   // Relations
   division      Division?          @relation(fields: [divisionId], references: [id], onDelete: Cascade)
   league        League?            @relation("LeagueMatches", fields: [leagueId], references: [id], onDelete: SetNull)
@@ -644,6 +651,10 @@ model Match {
   // Rating system relations
   scores        MatchScore[]
   ratingHistory RatingHistory[]
+
+  // NEW: Best 6 system relations
+  matchResults    MatchResult[]
+  pickleballScores PickleballGameScore[]
 
   // Inactivity system relations
   statusChanges PlayerStatusChange[]
@@ -1163,6 +1174,9 @@ model MatchScore {
   player1Tiebreak Int?
   player2Tiebreak Int?
 
+  // NEW: Distinguish tiebreak types
+  tiebreakType    TiebreakType?  // STANDARD_7PT, MATCH_10PT
+
   createdAt       DateTime @default(now())
 
   match           Match    @relation(fields: [matchId], references: [id], onDelete: Cascade)
@@ -1170,6 +1184,78 @@ model MatchScore {
   @@unique([matchId, setNumber])
   @@index([matchId])
   @@map("match_score")
+}
+
+// =============================================
+// MATCH RESULT TRACKING (Best 6 System)
+// =============================================
+
+model MatchResult {
+  id              String    @id @default(cuid())
+  matchId         String
+  playerId        String
+  opponentId      String
+
+  // Sport and match info
+  sportType       SportType
+  gameType        GameType
+  isWin           Boolean
+
+  // Points and metrics (SPEC-COMPLIANT)
+  matchPoints     Int       // 1-5 points per match
+  participationPoints Int   @default(1)
+  setsWonPoints   Int       // 0-2 for sets/games won
+  winBonusPoints  Int       @default(0) // 0 or 2
+
+  // Margin for tiebreaking
+  margin          Int       // Games/points differential
+
+  // Match details
+  setsWon         Int
+  setsLost        Int
+  gamesWon        Int       // Tennis/Padel: game count, Pickleball: point count
+  gamesLost       Int
+
+  // Timestamps
+  datePlayed      DateTime
+  createdAt       DateTime  @default(now())
+
+  // CRITICAL: Best 6 System Fields
+  countsForStandings Boolean  @default(false)
+  resultSequence     Int?     // 1-6 if counted, null otherwise
+
+  // Relations
+  match           Match     @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  player          User      @relation("PlayerMatchResults", fields: [playerId], references: [id], onDelete: Cascade)
+  opponent        User      @relation("OpponentMatchResults", fields: [opponentId], references: [id], onDelete: Cascade)
+
+  @@unique([matchId, playerId])
+  @@index([playerId, datePlayed])
+  @@index([playerId, countsForStandings])
+  @@index([playerId, resultSequence])
+  @@index([matchId])
+  @@map("match_result")
+}
+
+// =============================================
+// PICKLEBALL SCORING
+// =============================================
+
+model PickleballGameScore {
+  id              String   @id @default(cuid())
+  matchId         String
+  gameNumber      Int      // 1, 2, or 3
+
+  player1Points   Int
+  player2Points   Int
+
+  createdAt       DateTime @default(now())
+
+  match           Match    @relation(fields: [matchId], references: [id], onDelete: Cascade)
+
+  @@unique([matchId, gameNumber])
+  @@index([matchId])
+  @@map("pickleball_game_score")
 }
 
 model DivisionStanding {
@@ -1188,25 +1274,37 @@ model DivisionStanding {
   matchesPlayed       Int      @default(0)
   matchesScheduled    Int      @default(9)
 
-  // Points calculation
-  winPoints           Int      @default(0)
-  setPoints           Int      @default(0)
+  // NEW: Spec-compliant points (from Best 6 only)
+  totalPoints         Int      @default(0)  // Max 30
+
+  // NEW: Best 6 tracking
+  countedWins         Int      @default(0)  // Wins in Best 6
+  countedLosses       Int      @default(0)  // Losses in Best 6
+
+  // Match record breakdown (all matches)
   setsWon             Int      @default(0)
   setsLost            Int      @default(0)
+  gamesWon            Int      @default(0)  // Games for Tennis/Padel, Points for Pickleball
+  gamesLost           Int      @default(0)
 
-  // Completion bonus
-  completionBonus     Int      @default(0)
+  // NEW: Best 6 specific metrics (for tiebreakers)
+  best6SetsWon        Int      @default(0)
+  best6SetsTotal      Int      @default(0)
+  best6GamesWon       Int      @default(0)
+  best6GamesTotal     Int      @default(0)
 
-  // Total
-  totalPoints         Int      @default(0)
-
-  // Tie-breaker data
-  setDifferential     Int      @default(0)
+  // Tie-breaker data (H2H uses ALL matches)
   headToHead          Json?
 
   // Tracking
   lastCalculatedAt    DateTime @default(now())
   isLocked            Boolean  @default(false)
+
+  // DEPRECATED (keep for migration, remove later)
+  winPoints           Int      @default(0)
+  setPoints           Int      @default(0)
+  completionBonus     Int      @default(0)
+  setDifferential     Int      @default(0)
 
   // Relations
   division            Division    @relation(fields: [divisionId], references: [id], onDelete: Cascade)
@@ -2388,4 +2486,22 @@ enum BracketMatchStatus {
 
 // =============================================
 // END FINALS BRACKET SYSTEM ENUMS
+// =============================================
+
+// =============================================
+// BEST 6 SCORING SYSTEM ENUMS
+// =============================================
+
+enum TiebreakType {
+  STANDARD_7PT    // Standard 7-point tiebreak (Sets 1 & 2)
+  MATCH_10PT      // Match tiebreak (Set 3 default, or Set 3 at 6-6)
+}
+
+enum Set3Format {
+  MATCH_TIEBREAK  // Default: 10-point match tiebreak
+  FULL_SET        // Optional: Full standard set (6-6 → match tiebreak)
+}
+
+// =============================================
+// END BEST 6 SCORING SYSTEM ENUMS
 // =============================================
