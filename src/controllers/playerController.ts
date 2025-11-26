@@ -466,7 +466,7 @@ export const searchPlayers = async (req: AuthenticatedRequest, res: Response) =>
 export const getAvailablePlayersForSeason = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { seasonId } = req.params;
-    const { q: searchQuery } = req.query; // Get search query from query params
+    const { q: searchQuery } = req.query;
     const currentUserId = req.user?.id;
 
     if (!seasonId) {
