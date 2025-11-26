@@ -5,8 +5,6 @@ import {
   GameType,
   SportType,
   Statuses,
-  User,
-  Season,
   BugPriority,
 } from "@prisma/client";
 

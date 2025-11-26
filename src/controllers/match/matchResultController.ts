@@ -25,16 +25,21 @@ export const submitResult = async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Match ID is required' });
     }
 
-    const { setScores, comment, evidence } = req.body;
+    const { setScores, gameScores, comment, evidence } = req.body;
 
-    if (!setScores || !Array.isArray(setScores) || setScores.length === 0) {
-      return res.status(400).json({ error: 'setScores array is required' });
+    // Validate that at least one score type is provided
+    if ((!setScores || !Array.isArray(setScores) || setScores.length === 0) &&
+        (!gameScores || !Array.isArray(gameScores) || gameScores.length === 0)) {
+      return res.status(400).json({
+        error: 'Either setScores (Tennis/Padel) or gameScores (Pickleball) array is required'
+      });
     }
 
     const match = await matchResultService.submitResult({
       matchId: id,
       submittedById: userId,
       setScores,
+      gameScores,
       comment,
       evidence
     });

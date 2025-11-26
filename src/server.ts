@@ -8,6 +8,7 @@ import { getInactivityService } from "./services/inactivityService";
 import { NotificationService } from "./services/notificationService";
 import { INACTIVITY_CONFIG } from "./config/inactivity.config";
 import { getMatchReminderService } from "./services/notification/matchReminderService";
+import { initializeNotificationJobs } from "./jobs/notificationJobs";
 
 dotenv.config();
 
@@ -70,7 +71,11 @@ cron.schedule("0 * * * *", async () => {
   }
 });
 
+// Initialize all notification jobs
+initializeNotificationJobs();
+
 console.log("⏰ Cron jobs scheduled:");
 console.log("   - Daily expiration check at midnight");
 console.log(`   - Inactivity check at ${INACTIVITY_CONFIG.CRON_SCHEDULE}`);
 console.log("   - Match reminder check every hour");
+console.log("   - All notification jobs (reminders, league updates, etc.)");
