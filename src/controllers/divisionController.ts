@@ -338,9 +338,7 @@ export const createDivision = async (req: Request, res: Response) => {
         divisionId: result.division.id,
       });
     }
-
-
-    // 7️⃣ Respond to the frontend
+    
     return res.status(201).json({
       success: true,
       data: {
@@ -351,6 +349,7 @@ export const createDivision = async (req: Request, res: Response) => {
           isGroup: result.thread.isGroup,
           divisionId: result.thread.divisionId,
           members: result.thread.members,
+          sportType: result.division.league?.sportType,
         },
         notificationsSent: recipientUserIds.length,
       },
@@ -819,7 +818,8 @@ export const assignPlayerToDivision = async (req: Request, res: Response) => {
         assignment: result.assignment,
         groupChat: {
           threadId: result.divisionThread.id,
-          threadName: result.divisionThread.name
+          threadName: result.divisionThread.name,
+          sportType: division.league?.sportType
         }
       }
     });

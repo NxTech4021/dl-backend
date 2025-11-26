@@ -104,7 +104,14 @@ export async function createDivisionWithThread(
         sponsoredDivisionName: data.sponsorName ?? null,
       },
       include: {
-        season: true,
+        season: { select: { id: true, name: true } },
+        league: { 
+          select: { 
+            id: true, 
+            name: true, 
+            sportType: true
+          } 
+        },
       },
     });
 
@@ -140,10 +147,6 @@ export async function createDivisionWithThread(
   return result;
 }
 
-/**
- * Get all divisions
- * @returns Array of formatted divisions
- */
 export async function getAllDivisions() {
   const divisions = await prisma.division.findMany({
     include: { season: true },
@@ -153,11 +156,6 @@ export async function getAllDivisions() {
   return divisions.map(formatDivision);
 }
 
-/**
- * Get division by ID
- * @param divisionId - Division ID
- * @returns Formatted division or null
- */
 export async function getDivisionById(divisionId: string) {
   const division = await prisma.division.findUnique({
     where: { id: divisionId },
@@ -171,12 +169,6 @@ export async function getDivisionById(divisionId: string) {
   return formatDivision(division);
 }
 
-/**
- * Update division
- * @param divisionId - Division ID
- * @param updates - Update data
- * @returns Updated formatted division
- */
 export async function updateDivision(
   divisionId: string,
   updates: UpdateDivisionData
