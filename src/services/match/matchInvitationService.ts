@@ -58,11 +58,16 @@ export interface MatchFilters {
   seasonId?: string;
   status?: MatchStatus;
   matchType?: MatchType;
+  format?: MatchFormat;      // STANDARD or ONE_SET
+  venue?: string;            // Filter by specific venue
+  location?: string;         // Filter by general location
   userId?: string;           // Matches where user is participant
   excludeUserId?: string;    // Matches where user is NOT participant
   fromDate?: Date;
   toDate?: Date;
   hasOpenSlots?: boolean;    // For joinable matches
+  friendsOnly?: boolean;     // Show matches created by friends only
+  favoritesOnly?: boolean;   // Show matches created by favorites only
 }
 
 export class MatchInvitationService {
@@ -330,6 +335,9 @@ export class MatchInvitationService {
     if (filters.seasonId) where.seasonId = filters.seasonId;
     if (filters.status) where.status = filters.status;
     if (filters.matchType) where.matchType = filters.matchType;
+    if (filters.format) where.format = filters.format;
+    if (filters.venue) where.venue = filters.venue;
+    if (filters.location) where.location = { contains: filters.location, mode: 'insensitive' };
 
     if (filters.userId) {
       where.participants = {
@@ -357,6 +365,50 @@ export class MatchInvitationService {
           invitationStatus: InvitationStatus.PENDING
         }
       };
+    }
+
+    // Friends/Favorites filtering - requires userId to be set
+    if ((filters.friendsOnly || filters.favoritesOnly) && filters.userId) {
+      const creatorIds: string[] = [];
+
+      if (filters.friendsOnly) {
+        // Get accepted friendships (both directions)
+        const friendships = await prisma.friendship.findMany({
+          where: {
+            OR: [
+              { requesterId: filters.userId, status: 'ACCEPTED' },
+              { recipientId: filters.userId, status: 'ACCEPTED' }
+            ]
+          },
+          select: { requesterId: true, recipientId: true }
+        });
+
+        const friendIds = friendships.map(f =>
+          f.requesterId === filters.userId ? f.recipientId : f.requesterId
+        );
+        creatorIds.push(...friendIds);
+      }
+
+      if (filters.favoritesOnly) {
+        // Get users that the current user has favorited
+        const favorites = await prisma.favorite.findMany({
+          where: { userId: filters.userId },
+          select: { favoritedId: true }
+        });
+
+        const favoriteIds = favorites.map(f => f.favoritedId);
+        creatorIds.push(...favoriteIds);
+      }
+
+      // Remove duplicates if both filters are active
+      const uniqueCreatorIds = Array.from(new Set(creatorIds));
+
+      if (uniqueCreatorIds.length > 0) {
+        where.createdById = { in: uniqueCreatorIds };
+      } else {
+        // If no friends/favorites found, return empty results
+        where.createdById = 'no-matches';
+      }
     }
 
     const [matches, total] = await Promise.all([
@@ -396,38 +448,107 @@ export class MatchInvitationService {
   }
 
   /**
-   * Get available matches to join in a division
+   * Get available matches to join in a division with optional filters
    */
-  async getAvailableMatches(userId: string, divisionId: string) {
-    return prisma.match.findMany({
-      where: {
-        divisionId,
-        status: MatchStatus.SCHEDULED,
-        // Match has open slots (pending invitations or needs opponent)
-        OR: [
-          {
-            // Matches created but no opponent yet
-            participants: {
-              none: {
-                role: ParticipantRole.OPPONENT
-              }
-            }
-          },
-          {
-            // Matches with pending invitations (opponent hasn't accepted)
-            participants: {
-              some: {
-                role: ParticipantRole.OPPONENT,
-                invitationStatus: InvitationStatus.PENDING
-              }
+  async getAvailableMatches(
+    userId: string,
+    divisionId: string,
+    additionalFilters?: Partial<Pick<MatchFilters, 'format' | 'venue' | 'location' | 'fromDate' | 'toDate' | 'friendsOnly' | 'favoritesOnly'>>
+  ) {
+    const where: any = {
+      divisionId,
+      status: MatchStatus.SCHEDULED,
+      // Match has open slots (pending invitations or needs opponent)
+      OR: [
+        {
+          // Matches created but no opponent yet
+          participants: {
+            none: {
+              role: ParticipantRole.OPPONENT
             }
           }
-        ],
-        // User is not already a participant
-        participants: {
-          none: { userId }
+        },
+        {
+          // Matches with pending invitations (opponent hasn't accepted)
+          participants: {
+            some: {
+              role: ParticipantRole.OPPONENT,
+              invitationStatus: InvitationStatus.PENDING
+            }
+          }
         }
-      },
+      ],
+      // User is not already a participant
+      participants: {
+        none: { userId }
+      }
+    };
+
+    // Apply additional filters if provided
+    if (additionalFilters) {
+      if (additionalFilters.format) where.format = additionalFilters.format;
+      if (additionalFilters.venue) where.venue = additionalFilters.venue;
+      if (additionalFilters.location) {
+        where.location = { contains: additionalFilters.location, mode: 'insensitive' };
+      }
+
+      // Date range filtering on scheduledTime or proposedTimes
+      if (additionalFilters.fromDate || additionalFilters.toDate) {
+        where.OR = [
+          ...(where.OR || []),
+          {
+            scheduledTime: {
+              ...(additionalFilters.fromDate && { gte: additionalFilters.fromDate }),
+              ...(additionalFilters.toDate && { lte: additionalFilters.toDate })
+            }
+          }
+        ];
+      }
+
+      // Friends/Favorites filtering
+      if (additionalFilters.friendsOnly || additionalFilters.favoritesOnly) {
+        const creatorIds: string[] = [];
+
+        if (additionalFilters.friendsOnly) {
+          const friendships = await prisma.friendship.findMany({
+            where: {
+              OR: [
+                { requesterId: userId, status: 'ACCEPTED' },
+                { recipientId: userId, status: 'ACCEPTED' }
+              ]
+            },
+            select: { requesterId: true, recipientId: true }
+          });
+
+          const friendIds = friendships.map(f =>
+            f.requesterId === userId ? f.recipientId : f.requesterId
+          );
+          creatorIds.push(...friendIds);
+        }
+
+        if (additionalFilters.favoritesOnly) {
+          const favorites = await prisma.favorite.findMany({
+            where: { userId },
+            select: { favoritedId: true }
+          });
+
+          const favoriteIds = favorites.map(f => f.favoritedId);
+          creatorIds.push(...favoriteIds);
+        }
+
+        const uniqueCreatorIds = [...new Set(creatorIds)];
+
+        if (uniqueCreatorIds.length > 0) {
+          where.createdById = { in: uniqueCreatorIds };
+        } else {
+          // If no friends/favorites found, return empty results
+          where.createdById = 'no-matches';
+        }
+      }
+    }
+
+    return prisma.match.findMany({
+      where,
       include: {
         participants: {
           include: {
@@ -441,9 +562,15 @@ export class MatchInvitationService {
         },
         createdBy: {
           select: { id: true, name: true, username: true, image: true }
+        },
+        division: {
+          select: { id: true, name: true }
         }
       },
-      orderBy: { createdAt: 'desc' }
+      orderBy: [
+        { scheduledTime: 'asc' },
+        { createdAt: 'desc' }
+      ]
     });
   }
 
@@ -590,6 +717,9 @@ export class MatchInvitationService {
       // Check if match is ready
       await this.checkMatchReadyToSchedule(tx, matchId);
     });
+
+    // Send notification to match creator and other participants
+    await this.sendMatchJoinedNotification(matchId, userId);
 
     logger.info(`User ${userId} joined match ${matchId}`);
 
@@ -860,6 +990,51 @@ export class MatchInvitationService {
       });
     } catch (error) {
       logger.error('Error sending time confirmed notification', {}, error as Error);
+    }
+  }
+
+  /**
+   * Send notification when someone joins a match
+   */
+  private async sendMatchJoinedNotification(matchId: string, joinedUserId: string) {
+    try {
+      const match = await prisma.match.findUnique({
+        where: { id: matchId },
+        include: {
+          createdBy: { select: { id: true, name: true } },
+          participants: {
+            select: { userId: true },
+            where: { userId: { not: joinedUserId } }
+          },
+          division: { select: { name: true } }
+        }
+      });
+
+      if (!match) return;
+
+      const joiner = await prisma.user.findUnique({
+        where: { id: joinedUserId },
+        select: { name: true }
+      });
+
+      // Notify match creator and other participants
+      const notifyUserIds = match.participants.map(p => p.userId);
+      if (match.createdById && !notifyUserIds.includes(match.createdById)) {
+        notifyUserIds.push(match.createdById);
+      }
+
+      if (notifyUserIds.length > 0) {
+        await this.notificationService.createNotification({
+          type: 'FRIENDLY_MATCH_PLAYER_JOINED',
+          title: 'Player Joined Match',
+          message: `${joiner?.name} has joined your match${match.division ? ` in ${match.division.name}` : ''}`,
+          category: 'MATCH',
+          matchId,
+          userIds: notifyUserIds
+        });
+      }
+    } catch (error) {
+      logger.error('Error sending match joined notification', {}, error as Error);
     }
   }
 }

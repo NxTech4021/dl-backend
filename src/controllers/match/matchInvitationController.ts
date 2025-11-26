@@ -78,22 +78,32 @@ export const getMatches = async (req: Request, res: Response) => {
       seasonId,
       status,
       matchType,
+      format,
+      venue,
+      location,
       userId,
       excludeUserId,
       fromDate,
       toDate,
       hasOpenSlots,
+      friendsOnly,
+      favoritesOnly,
       page = '1',
       limit = '20'
     } = req.query;
 
     const filters: any = {
-      hasOpenSlots: hasOpenSlots === 'true'
+      hasOpenSlots: hasOpenSlots === 'true',
+      friendsOnly: friendsOnly === 'true',
+      favoritesOnly: favoritesOnly === 'true'
     };
     if (divisionId) filters.divisionId = divisionId as string;
     if (seasonId) filters.seasonId = seasonId as string;
     if (status) filters.status = status as MatchStatus;
     if (matchType) filters.matchType = matchType as MatchType;
+    if (format) filters.format = format as MatchFormat;
+    if (venue) filters.venue = venue as string;
+    if (location) filters.location = location as string;
     if (userId) filters.userId = userId as string;
     if (excludeUserId) filters.excludeUserId = excludeUserId as string;
     if (fromDate) filters.fromDate = new Date(fromDate as string);
@@ -138,6 +148,7 @@ export const getMatchById = async (req: Request, res: Response) => {
 /**
  * Get available matches to join in a division
  * GET /api/matches/available/:divisionId
+ * Supports optional query filters: format, venue, location, fromDate, toDate, friendsOnly, favoritesOnly
  */
 export const getAvailableMatches = async (req: Request, res: Response) => {
   try {
@@ -151,7 +162,26 @@ export const getAvailableMatches = async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'divisionId is required' });
     }
 
-    const matches = await matchInvitationService.getAvailableMatches(userId, divisionId);
+    const {
+      format,
+      venue,
+      location,
+      fromDate,
+      toDate,
+      friendsOnly,
+      favoritesOnly
+    } = req.query;
+
+    const filters: any = {};
+    if (format) filters.format = format as MatchFormat;
+    if (venue) filters.venue = venue as string;
+    if (location) filters.location = location as string;
+    if (fromDate) filters.fromDate = new Date(fromDate as string);
+    if (toDate) filters.toDate = new Date(toDate as string);
+    if (friendsOnly === 'true') filters.friendsOnly = true;
+    if (favoritesOnly === 'true') filters.favoritesOnly = true;
+
+    const matches = await matchInvitationService.getAvailableMatches(userId, divisionId, filters);
     res.json(matches);
   } catch (error) {
     console.error('Get Available Matches Error:', error);
