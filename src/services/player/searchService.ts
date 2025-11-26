@@ -4,7 +4,7 @@
  */
 
 import { prisma } from '../../lib/prisma';
-import { Role } from "@prisma/client";
+import { Role, UserStatus } from "@prisma/client";
 import { enrichPlayersWithSkills } from './utils/playerTransformer';
 import { buildSearchWhereClause } from './utils/queryHelpers';
 
@@ -64,7 +64,7 @@ export async function searchPlayers(
       lastLogin: true,
       status: true,
     },
-    take: 20, // Limit results
+    take: 20,
   });
 
   // Enrich players with sports and ratings
@@ -211,7 +211,7 @@ export async function getAvailablePlayersForSeason(
         { id: { not: currentUserId } },
         { id: { notIn: activelyPairedPlayerIds } },
         { role: Role.USER },
-        { status: 'active' },
+        { status: UserStatus.ACTIVE },
         ...Object.keys(genderFilter).length > 0 ? [genderFilter] : [],
       ]
     },
@@ -247,10 +247,10 @@ export async function getAvailablePlayersForSeason(
       where: {
         AND: [
           { id: { not: currentUserId } },
-          { id: { notIn: [...activelyPairedPlayerIds, ...friendIds] } }, // Exclude friends and paired players
+          { id: { notIn: [...activelyPairedPlayerIds, ...friendIds] } },
           { role: Role.USER },
-          { status: 'active' },
-          { OR: searchFilter }, // Search by name or username
+          { status: UserStatus.ACTIVE },
+          { OR: searchFilter },
           ...Object.keys(genderFilter).length > 0 ? [genderFilter] : [],
         ]
       },
