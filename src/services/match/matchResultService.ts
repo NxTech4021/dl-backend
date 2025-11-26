@@ -18,12 +18,17 @@ import { calculateMatchRatings, applyMatchRatings } from '../rating/ratingCalcul
 import { updateMatchStandings } from '../rating/standingsCalculationService';
 import { notifyAdminsDispute } from '../notification/adminNotificationService';
 import { notifyBatchRatingChanges } from '../notification/playerNotificationService';
+import { ScoreValidationService } from './validation/scoreValidationService';
+import { MatchResultCreationService } from './calculation/matchResultCreationService';
+import { Best6EventHandler } from './best6/best6EventHandler';
+import { StandingsV2Service } from '../rating/standingsV2Service';
 
 // Types
 export interface SubmitResultInput {
   matchId: string;
   submittedById: string;
-  setScores: SetScore[];
+  setScores?: SetScore[];        // For Tennis/Padel
+  gameScores?: PickleballScore[]; // For Pickleball
   comment?: string;
   evidence?: string;   // URL to photo evidence
 }
@@ -34,6 +39,12 @@ export interface SetScore {
   team2Games: number;
   team1Tiebreak?: number;
   team2Tiebreak?: number;
+}
+
+export interface PickleballScore {
+  gameNumber: number;  // 1, 2, or 3
+  team1Points: number;
+  team2Points: number;
 }
 
 export interface ConfirmResultInput {
@@ -65,14 +76,15 @@ export class MatchResultService {
    * Submit match result
    */
   async submitResult(input: SubmitResultInput) {
-    const { matchId, submittedById, setScores, comment, evidence } = input;
+    const { matchId, submittedById, setScores, gameScores, comment, evidence } = input;
 
     // Get match with participants
     const match = await prisma.match.findUnique({
       where: { id: matchId },
       include: {
         participants: true,
-        scores: true
+        scores: true,
+        pickleballScores: true
       }
     });
 
@@ -98,51 +110,108 @@ export class MatchResultService {
       throw new Error('Cannot submit result for a cancelled or void match');
     }
 
-    // Validate set scores
-    this.validateSetScores(setScores);
+    // Validate and calculate scores based on sport
+    let team1Score: number, team2Score: number, winner: string;
 
-    // Calculate final scores
-    const { team1Score, team2Score, winner } = this.calculateFinalScore(setScores);
+    if (match.sport === 'PICKLEBALL') {
+      // Pickleball validation and calculation
+      if (!gameScores || !Array.isArray(gameScores) || gameScores.length === 0) {
+        throw new Error('gameScores array is required for Pickleball matches');
+      }
+      this.validatePickleballScores(gameScores);
+      const pickleballResult = this.calculatePickleballFinalScore(gameScores);
+      team1Score = pickleballResult.team1Score;
+      team2Score = pickleballResult.team2Score;
+      winner = pickleballResult.winner;
+    } else {
+      // Tennis/Padel validation and calculation
+      if (!setScores || !Array.isArray(setScores) || setScores.length === 0) {
+        throw new Error('setScores array is required for Tennis/Padel matches');
+      }
+      this.validateSetScores(setScores, match.sport, match.set3Format || undefined);
+      const tennisResult = this.calculateFinalScore(setScores);
+      team1Score = tennisResult.team1Score;
+      team2Score = tennisResult.team2Score;
+      winner = tennisResult.winner;
+    }
 
     await prisma.$transaction(async (tx) => {
-      // Delete existing scores if any
-      await tx.matchScore.deleteMany({
-        where: { matchId }
-      });
+      if (match.sport === 'PICKLEBALL') {
+        // Delete existing Pickleball scores if any
+        await tx.pickleballGameScore.deleteMany({
+          where: { matchId }
+        });
 
-      // Create new scores
-      for (const score of setScores) {
-        const scoreData: any = {
-          matchId,
-          setNumber: score.setNumber,
-          player1Games: score.team1Games,
-          player2Games: score.team2Games,
-          hasTiebreak: !!(score.team1Tiebreak || score.team2Tiebreak)
+        // Create new Pickleball scores
+        for (const score of gameScores!) {
+          await tx.pickleballGameScore.create({
+            data: {
+              matchId,
+              gameNumber: score.gameNumber,
+              player1Points: score.team1Points,
+              player2Points: score.team2Points
+            }
+          });
+        }
+
+        // Update match
+        const matchUpdateData: any = {
+          status: MatchStatus.COMPLETED,
+          team1Score,
+          team2Score,
+          setScores: JSON.stringify(gameScores),
+          outcome: winner,
+          resultSubmittedById: submittedById,
+          resultSubmittedAt: new Date(),
+          requiresAdminReview: false
         };
-        if (score.team1Tiebreak !== undefined) scoreData.player1Tiebreak = score.team1Tiebreak;
-        if (score.team2Tiebreak !== undefined) scoreData.player2Tiebreak = score.team2Tiebreak;
+        if (comment) matchUpdateData.resultComment = comment;
+        if (evidence) matchUpdateData.resultEvidence = evidence;
 
-        await tx.matchScore.create({ data: scoreData });
+        await tx.match.update({
+          where: { id: matchId },
+          data: matchUpdateData
+        });
+      } else {
+        // Delete existing Tennis/Padel scores if any
+        await tx.matchScore.deleteMany({
+          where: { matchId }
+        });
+
+        // Create new Tennis/Padel scores
+        for (const score of setScores!) {
+          const scoreData: any = {
+            matchId,
+            setNumber: score.setNumber,
+            player1Games: score.team1Games,
+            player2Games: score.team2Games,
+            hasTiebreak: !!(score.team1Tiebreak || score.team2Tiebreak)
+          };
+          if (score.team1Tiebreak !== undefined) scoreData.player1Tiebreak = score.team1Tiebreak;
+          if (score.team2Tiebreak !== undefined) scoreData.player2Tiebreak = score.team2Tiebreak;
+
+          await tx.matchScore.create({ data: scoreData });
+        }
+
+        // Update match
+        const matchUpdateData: any = {
+          status: MatchStatus.COMPLETED,
+          team1Score,
+          team2Score,
+          setScores: JSON.stringify(setScores),
+          outcome: winner,
+          resultSubmittedById: submittedById,
+          resultSubmittedAt: new Date(),
+          requiresAdminReview: false
+        };
+        if (comment) matchUpdateData.resultComment = comment;
+        if (evidence) matchUpdateData.resultEvidence = evidence;
+
+        await tx.match.update({
+          where: { id: matchId },
+          data: matchUpdateData
+        });
       }
-
-      // Update match
-      const matchUpdateData: any = {
-        status: MatchStatus.COMPLETED,
-        team1Score,
-        team2Score,
-        setScores: JSON.stringify(setScores),
-        outcome: winner,
-        resultSubmittedById: submittedById,
-        resultSubmittedAt: new Date(),
-        requiresAdminReview: false
-      };
-      if (comment) matchUpdateData.resultComment = comment;
-      if (evidence) matchUpdateData.resultEvidence = evidence;
-
-      await tx.match.update({
-        where: { id: matchId },
-        data: matchUpdateData
-      });
     });
 
     // Trigger post-match processing (reactivation, etc.)
@@ -209,7 +278,61 @@ export class MatchResultService {
         }
       });
 
-      // Update ratings after confirmation
+      // NEW: Best 6 System Integration with improved error handling
+      const best6Results = {
+        matchResultsCreated: false,
+        best6Recalculated: false,
+        standingsRecalculated: false
+      };
+
+      try {
+        // Step 1: Create MatchResult records (CRITICAL - must succeed)
+        const matchResultService = new MatchResultCreationService();
+        await matchResultService.createMatchResults(matchId);
+        best6Results.matchResultsCreated = true;
+        logger.info(`Created MatchResult records for match ${matchId}`);
+
+        // Step 2: Recalculate Best 6 (Important - try but don't block)
+        try {
+          const best6Handler = new Best6EventHandler();
+          await best6Handler.onMatchCompleted(matchId);
+          best6Results.best6Recalculated = true;
+          logger.info(`Recalculated Best 6 for match ${matchId}`);
+        } catch (error) {
+          logger.error(`Failed to recalculate Best 6 for match ${matchId}:`, {}, error as Error);
+          // Continue - can be fixed with admin recalculation
+        }
+
+        // Step 3: Recalculate standings (Important - try but don't block)
+        try {
+          if (match.divisionId && match.seasonId) {
+            const standingsV2 = new StandingsV2Service();
+            await standingsV2.recalculateDivisionStandings(match.divisionId, match.seasonId);
+            best6Results.standingsRecalculated = true;
+            logger.info(`Recalculated standings for division ${match.divisionId}`);
+          }
+        } catch (error) {
+          logger.error(`Failed to recalculate standings:`, {}, error as Error);
+          // Continue - can be fixed with admin recalculation
+        }
+
+      } catch (error) {
+        // Critical error in MatchResult creation
+        logger.error(`CRITICAL: Failed to create MatchResult records for match ${matchId}`,
+          best6Results, error as Error);
+
+        // This is a critical failure - match results won't count for standings
+        // Mark match for admin review
+        await prisma.match.update({
+          where: { id: matchId },
+          data: { requiresAdminReview: true }
+        });
+
+        // Still allow match confirmation but log the issue
+        logger.warn(`Match ${matchId} confirmed but marked for admin review due to Best 6 processing failure`);
+      }
+
+      // Update ratings after confirmation (keep existing for now)
       try {
         const ratingUpdates = await calculateMatchRatings(matchId);
         if (ratingUpdates) {
@@ -230,12 +353,12 @@ export class MatchResultService {
         // Don't throw - ratings failure shouldn't block confirmation
       }
 
-      // Update standings after confirmation
+      // OLD standings update (keep for backward compatibility)
       try {
         await updateMatchStandings(matchId);
-        logger.info(`Updated standings for match ${matchId}`);
+        logger.info(`Updated old standings for match ${matchId}`);
       } catch (error) {
-        logger.error(`Failed to update standings for match ${matchId}:`, {}, error as Error);
+        logger.error(`Failed to update old standings for match ${matchId}:`, {}, error as Error);
         // Don't throw - standings failure shouldn't block confirmation
       }
 
@@ -402,34 +525,91 @@ export class MatchResultService {
   }
 
   /**
-   * Validate set scores
+   * Validate set scores using new validation service
    */
-  private validateSetScores(setScores: SetScore[]) {
-    if (!setScores || setScores.length === 0) {
-      throw new Error('At least one set score is required');
+  private validateSetScores(
+    setScores: SetScore[],
+    sport: string = 'TENNIS',
+    set3Format?: string
+  ) {
+    const validator = new ScoreValidationService();
+
+    const validationInput: any = {
+      sport: sport as any,
+      setScores: setScores.map(s => ({
+        setNumber: s.setNumber,
+        team1Games: s.team1Games,
+        team2Games: s.team2Games,
+        ...(s.team1Tiebreak !== undefined && { team1Tiebreak: s.team1Tiebreak }),
+        ...(s.team2Tiebreak !== undefined && { team2Tiebreak: s.team2Tiebreak })
+      }))
+    };
+
+    if (set3Format) {
+      validationInput.set3Format = set3Format as 'MATCH_TIEBREAK' | 'FULL_SET';
     }
 
-    for (const score of setScores) {
-      if (score.team1Games < 0 || score.team2Games < 0) {
-        throw new Error('Game scores cannot be negative');
-      }
+    const result = validator.validate(validationInput);
 
-      // Validate tennis/padel scoring rules
-      const maxGames = Math.max(score.team1Games, score.team2Games);
-      const minGames = Math.min(score.team1Games, score.team2Games);
+    if (!result.valid) {
+      throw new Error(`Invalid scores: ${result.errors.join(', ')}`);
+    }
 
-      // Standard set: need at least 6 games and 2 game lead, or tiebreak at 6-6
-      if (maxGames < 6) {
-        throw new Error(`Set ${score.setNumber}: Winner must have at least 6 games`);
-      }
+    // Log warnings if any
+    if (result.warnings.length > 0) {
+      logger.warn('Score validation warnings', { warnings: result.warnings });
+    }
+  }
 
-      // Tiebreak validation
-      if (score.team1Games === 6 && score.team2Games === 6) {
-        if (!score.team1Tiebreak && !score.team2Tiebreak) {
-          throw new Error(`Set ${score.setNumber}: Tiebreak scores required for 6-6 sets`);
-        }
+  /**
+   * Validate Pickleball scores using validation service
+   */
+  private validatePickleballScores(gameScores: PickleballScore[]) {
+    const validator = new ScoreValidationService();
+
+    const result = validator.validate({
+      sport: 'PICKLEBALL',
+      pickleballScores: gameScores.map(g => ({
+        gameNumber: g.gameNumber,
+        team1Points: g.team1Points,
+        team2Points: g.team2Points
+      }))
+    });
+
+    if (!result.valid) {
+      throw new Error(`Invalid Pickleball scores: ${result.errors.join(', ')}`);
+    }
+
+    // Log warnings if any
+    if (result.warnings.length > 0) {
+      logger.warn('Pickleball score validation warnings', { warnings: result.warnings });
+    }
+  }
+
+  /**
+   * Calculate final score from Pickleball game scores
+   */
+  private calculatePickleballFinalScore(gameScores: PickleballScore[]): {
+    team1Score: number;
+    team2Score: number;
+    winner: string;
+  } {
+    let team1Games = 0;
+    let team2Games = 0;
+
+    for (const game of gameScores) {
+      if (game.team1Points > game.team2Points) {
+        team1Games++;
+      } else {
+        team2Games++;
       }
     }
+
+    return {
+      team1Score: team1Games,
+      team2Score: team2Games,
+      winner: team1Games > team2Games ? 'team1' : 'team2'
+    };
   }
 
   /**
