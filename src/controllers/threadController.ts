@@ -86,7 +86,13 @@ export const createThread = async (req: Request, res: Response) => {
         division: {
           select: {
             id: true,
-            name: true
+            name: true,
+            league: {
+              select: {
+                id: true,
+                sportType: true
+              }
+            }
           }
         }
       },
@@ -107,7 +113,10 @@ export const createThread = async (req: Request, res: Response) => {
 
     return res.status(201).json({
       success: true,
-      data: thread,
+      data: {
+        ...thread,
+        sportType: thread.division?.league?.sportType || null
+      },
       message: "Thread created successfully",
     });
   } catch (error) {
@@ -165,7 +174,13 @@ export const getThreads = async (req: Request, res: Response) => {
         division: {
           select: {
             id: true,
-            name: true
+            name: true,
+            league: {
+              select: {
+                id: true,
+                sportType: true
+              }
+            }
           }
         },
         _count: {
@@ -180,7 +195,8 @@ export const getThreads = async (req: Request, res: Response) => {
       const userThread = thread.members.find(m => m.userId === userId);
       return {
         ...thread,
-        unreadCount: userThread?.unreadCount || 0
+        unreadCount: userThread?.unreadCount || 0,
+        sportType: thread.division?.league?.sportType || null
       };
     });
 
