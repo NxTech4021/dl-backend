@@ -148,7 +148,7 @@ export const getMatchById = async (req: Request, res: Response) => {
 /**
  * Get available matches to join in a division
  * GET /api/matches/available/:divisionId
- * Supports optional query filters: format, venue, location, fromDate, toDate, friendsOnly, favoritesOnly
+ * Supports optional query filters: format, venue, location, fromDate, toDate, friendsOnly, favoritesOnly, page, limit
  */
 export const getAvailableMatches = async (req: Request, res: Response) => {
   try {
@@ -169,7 +169,9 @@ export const getAvailableMatches = async (req: Request, res: Response) => {
       fromDate,
       toDate,
       friendsOnly,
-      favoritesOnly
+      favoritesOnly,
+      page = '1',
+      limit = '20'
     } = req.query;
 
     const filters: any = {};
@@ -181,8 +183,14 @@ export const getAvailableMatches = async (req: Request, res: Response) => {
     if (friendsOnly === 'true') filters.friendsOnly = true;
     if (favoritesOnly === 'true') filters.favoritesOnly = true;
 
-    const matches = await matchInvitationService.getAvailableMatches(userId, divisionId, filters);
-    res.json(matches);
+    const result = await matchInvitationService.getAvailableMatches(
+      userId,
+      divisionId,
+      filters,
+      parseInt(page as string),
+      parseInt(limit as string)
+    );
+    res.json(result);
   } catch (error) {
     console.error('Get Available Matches Error:', error);
     res.status(500).json({ error: 'Failed to retrieve available matches' });

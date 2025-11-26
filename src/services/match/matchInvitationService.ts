@@ -336,7 +336,7 @@ export class MatchInvitationService {
     if (filters.status) where.status = filters.status;
     if (filters.matchType) where.matchType = filters.matchType;
     if (filters.format) where.format = filters.format;
-    if (filters.venue) where.venue = filters.venue;
+    if (filters.venue) where.venue = { contains: filters.venue, mode: 'insensitive' };
     if (filters.location) where.location = { contains: filters.location, mode: 'insensitive' };
 
     if (filters.userId) {
@@ -448,12 +448,14 @@ export class MatchInvitationService {
   }
 
   /**
-   * Get available matches to join in a division with optional filters
+   * Get available matches to join in a division with optional filters and pagination
    */
   async getAvailableMatches(
     userId: string,
     divisionId: string,
-    additionalFilters?: Partial<Pick<MatchFilters, 'format' | 'venue' | 'location' | 'fromDate' | 'toDate' | 'friendsOnly' | 'favoritesOnly'>>
+    additionalFilters?: Partial<Pick<MatchFilters, 'format' | 'venue' | 'location' | 'fromDate' | 'toDate' | 'friendsOnly' | 'favoritesOnly'>>,
+    page = 1,
+    limit = 20
   ) {
     const where: any = {
       divisionId,
@@ -492,17 +494,15 @@ export class MatchInvitationService {
         where.location = { contains: additionalFilters.location, mode: 'insensitive' };
       }
 
-      // Date range filtering on scheduledTime or proposedTimes
+      // Date range filtering on scheduledTime
       if (additionalFilters.fromDate || additionalFilters.toDate) {
-        where.OR = [
-          ...(where.OR || []),
-          {
-            scheduledTime: {
-              ...(additionalFilters.fromDate && { gte: additionalFilters.fromDate }),
-              ...(additionalFilters.toDate && { lte: additionalFilters.toDate })
-            }
+        where.AND = where.AND || [];
+        where.AND.push({
+          scheduledTime: {
+            ...(additionalFilters.fromDate && { gte: additionalFilters.fromDate }),
+            ...(additionalFilters.toDate && { lte: additionalFilters.toDate })
           }
-        ];
+        });
       }
 
       // Friends/Favorites filtering
@@ -547,31 +547,44 @@ export class MatchInvitationService {
       }
     }
 
-    return prisma.match.findMany({
-      where,
-      include: {
-        participants: {
-          include: {
-            user: {
-              select: { id: true, name: true, username: true, image: true }
+    const [matches, total] = await Promise.all([
+      prisma.match.findMany({
+        where,
+        include: {
+          participants: {
+            include: {
+              user: {
+                select: { id: true, name: true, username: true, image: true }
+              }
             }
+          },
+          timeSlots: {
+            orderBy: { proposedTime: 'asc' }
+          },
+          createdBy: {
+            select: { id: true, name: true, username: true, image: true }
+          },
+          division: {
+            select: { id: true, name: true }
           }
         },
-        timeSlots: {
-          orderBy: { proposedTime: 'asc' }
-        },
-        createdBy: {
-          select: { id: true, name: true, username: true, image: true }
-        },
-        division: {
-          select: { id: true, name: true }
-        }
-      },
-      orderBy: [
-        { scheduledTime: 'asc' },
-        { createdAt: 'desc' }
-      ]
-    });
+        orderBy: [
+          { scheduledTime: 'asc' },
+          { createdAt: 'desc' }
+        ],
+        skip: (page - 1) * limit,
+        take: limit
+      }),
+      prisma.match.count({ where })
+    ]);
+
+    return {
+      matches,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit)
+    };
   }
 
   /**
