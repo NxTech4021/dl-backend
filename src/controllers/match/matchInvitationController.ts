@@ -726,3 +726,48 @@ export const confirmTimeSlot = async (req: Request, res: Response) => {
     res.status(400).json({ error: message });
   }
 };
+
+/**
+ * Get invitation by ID
+ * GET /api/matches/invitations/:id
+ */
+export const getInvitationById = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+
+    const { id } = req.params;
+    if (!id) {
+      return res.status(400).json({ error: 'Invitation ID is required' });
+    }
+
+    const invitation = await matchInvitationService.getInvitationById(id, userId);
+    res.json(invitation);
+  } catch (error) {
+    console.error('Get Invitation Error:', error);
+    const message = error instanceof Error ? error.message : 'Failed to get invitation';
+    const status = error instanceof Error && error.message.includes('not authorized') ? 403 : 404;
+    res.status(status).json({ error: message });
+  }
+};
+
+/**
+ * Get pending invitations for current user
+ * GET /api/matches/invitations/pending
+ */
+export const getPendingInvitations = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+
+    const invitations = await matchInvitationService.getPendingInvitations(userId);
+    res.json(invitations);
+  } catch (error) {
+    console.error('Get Pending Invitations Error:', error);
+    res.status(500).json({ error: 'Failed to get pending invitations' });
+  }
+};
