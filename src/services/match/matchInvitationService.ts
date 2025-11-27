@@ -597,7 +597,16 @@ export class MatchInvitationService {
 
     const invitation = await prisma.matchInvitation.findUnique({
       where: { id: invitationId },
-      include: { match: { include: { participants: true } } }
+      include: {
+        match: {
+          include: {
+            participants: true,
+            timeSlots: {
+              where: { status: TimeSlotStatus.CONFIRMED }
+            }
+          }
+        }
+      }
     });
 
     if (!invitation) {
@@ -614,6 +623,21 @@ export class MatchInvitationService {
 
     if (invitation.expiresAt < new Date()) {
       throw new Error('This invitation has expired');
+    }
+
+    // Check for time conflicts if accepting
+    if (accept) {
+      const matchTime = invitation.match.scheduledTime || invitation.match.timeSlots[0]?.proposedTime;
+
+      if (matchTime) {
+        const conflictCheck = await this.checkTimeConflict(userId, matchTime, invitation.matchId);
+
+        if (conflictCheck.hasConflict) {
+          throw new Error(
+            `You have a scheduling conflict. You already have a match scheduled in ${conflictCheck.conflictingMatch?.division} around this time.`
+          );
+        }
+      }
     }
 
     const newStatus = accept ? InvitationStatus.ACCEPTED : InvitationStatus.DECLINED;
@@ -654,7 +678,19 @@ export class MatchInvitationService {
 
     logger.info(`Invitation ${invitationId} ${accept ? 'accepted' : 'declined'} by user ${userId}`);
 
-    return this.getMatchById(invitation.matchId);
+    // Get match details with partner status
+    const match = await this.getMatchById(invitation.matchId);
+
+    // Add partner confirmation status for doubles
+    let partnerStatus = null;
+    if (match.matchType === MatchType.DOUBLES) {
+      partnerStatus = this.getPartnerConfirmationStatus(match);
+    }
+
+    return {
+      ...match,
+      partnerStatus
+    };
   }
 
   /**
@@ -1506,6 +1542,219 @@ export class MatchInvitationService {
       logger.error('Error getting match join requests', { matchId }, error as Error);
       throw error;
     }
+  }
+
+  /**
+   * Check if user has time conflict with proposed match time
+   */
+  async checkTimeConflict(userId: string, proposedTime: Date, excludeMatchId?: string) {
+    try {
+      // Look for accepted matches with confirmed time slots within ±3 hours window
+      const timeWindow = 3 * 60 * 60 * 1000; // 3 hours in milliseconds
+      const startWindow = new Date(proposedTime.getTime() - timeWindow);
+      const endWindow = new Date(proposedTime.getTime() + timeWindow);
+
+      const conflictingMatches = await prisma.match.findMany({
+        where: {
+          id: excludeMatchId ? { not: excludeMatchId } : undefined,
+          participants: {
+            some: {
+              userId,
+              invitationStatus: InvitationStatus.ACCEPTED
+            }
+          },
+          status: {
+            in: [MatchStatus.SCHEDULED, MatchStatus.ONGOING]
+          },
+          OR: [
+            {
+              scheduledTime: {
+                gte: startWindow,
+                lte: endWindow
+              }
+            },
+            {
+              timeSlots: {
+                some: {
+                  status: TimeSlotStatus.CONFIRMED,
+                  proposedTime: {
+                    gte: startWindow,
+                    lte: endWindow
+                  }
+                }
+              }
+            }
+          ]
+        },
+        include: {
+          division: { select: { name: true } },
+          timeSlots: {
+            where: { status: TimeSlotStatus.CONFIRMED },
+            select: { proposedTime: true }
+          }
+        }
+      });
+
+      if (conflictingMatches.length > 0) {
+        const conflict = conflictingMatches[0];
+        const conflictTime = conflict.scheduledTime || conflict.timeSlots[0]?.proposedTime;
+
+        return {
+          hasConflict: true,
+          conflictingMatch: {
+            id: conflict.id,
+            division: conflict.division?.name,
+            scheduledTime: conflictTime
+          }
+        };
+      }
+
+      return { hasConflict: false };
+    } catch (error) {
+      logger.error('Error checking time conflict', { userId }, error as Error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get invitation by ID with full details
+   */
+  async getInvitationById(invitationId: string, userId?: string) {
+    try {
+      const invitation = await prisma.matchInvitation.findUnique({
+        where: { id: invitationId },
+        include: {
+          match: {
+            include: {
+              division: { select: { id: true, name: true } },
+              participants: {
+                include: {
+                  user: {
+                    select: { id: true, name: true, username: true, image: true }
+                  }
+                }
+              },
+              timeSlots: {
+                orderBy: { voteCount: 'desc' }
+              },
+              createdBy: {
+                select: { id: true, name: true, username: true }
+              }
+            }
+          },
+          inviter: {
+            select: { id: true, name: true, username: true, image: true }
+          },
+          invitee: {
+            select: { id: true, name: true, username: true, image: true }
+          }
+        }
+      });
+
+      if (!invitation) {
+        throw new Error('Invitation not found');
+      }
+
+      // Verify authorization if userId provided
+      if (userId && invitation.inviteeId !== userId && invitation.inviterId !== userId) {
+        throw new Error('You are not authorized to view this invitation');
+      }
+
+      // Add partner confirmation status for doubles
+      let partnerStatus = null;
+      if (invitation.match.matchType === MatchType.DOUBLES) {
+        partnerStatus = this.getPartnerConfirmationStatus(invitation.match);
+      }
+
+      return {
+        ...invitation,
+        partnerStatus
+      };
+    } catch (error) {
+      logger.error('Error getting invitation by ID', { invitationId }, error as Error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get pending invitations for user
+   */
+  async getPendingInvitations(userId: string) {
+    try {
+      const invitations = await prisma.matchInvitation.findMany({
+        where: {
+          inviteeId: userId,
+          status: InvitationStatus.PENDING,
+          expiresAt: { gte: new Date() }
+        },
+        include: {
+          match: {
+            include: {
+              division: { select: { id: true, name: true } },
+              participants: {
+                include: {
+                  user: {
+                    select: { id: true, name: true, username: true, image: true }
+                  }
+                }
+              },
+              timeSlots: {
+                orderBy: { voteCount: 'desc' },
+                take: 3
+              }
+            }
+          },
+          inviter: {
+            select: { id: true, name: true, username: true, image: true }
+          }
+        },
+        orderBy: { sentAt: 'desc' }
+      });
+
+      // Add partner status for doubles matches
+      const invitationsWithStatus = invitations.map(inv => {
+        let partnerStatus = null;
+        if (inv.match.matchType === MatchType.DOUBLES) {
+          partnerStatus = this.getPartnerConfirmationStatus(inv.match);
+        }
+        return {
+          ...inv,
+          partnerStatus
+        };
+      });
+
+      return invitationsWithStatus;
+    } catch (error) {
+      logger.error('Error getting pending invitations', { userId }, error as Error);
+      throw error;
+    }
+  }
+
+  /**
+   * Helper: Get partner confirmation status for doubles match
+   */
+  private getPartnerConfirmationStatus(match: any) {
+    const participants = match.participants || [];
+
+    const team1Participants = participants.filter((p: any) => p.team === 'team1');
+    const team2Participants = participants.filter((p: any) => p.team === 'team2');
+
+    return {
+      team1: team1Participants.map((p: any) => ({
+        userId: p.userId,
+        name: p.user?.name,
+        role: p.role,
+        confirmed: p.invitationStatus === InvitationStatus.ACCEPTED,
+        status: p.invitationStatus
+      })),
+      team2: team2Participants.map((p: any) => ({
+        userId: p.userId,
+        name: p.user?.name,
+        role: p.role,
+        confirmed: p.invitationStatus === InvitationStatus.ACCEPTED,
+        status: p.invitationStatus
+      }))
+    };
   }
 }
 
