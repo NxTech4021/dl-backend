@@ -16,7 +16,8 @@ import {
   submitResult,
   confirmResult,
   submitWalkover,
-  getMatchResult
+  getMatchResult,
+  getDisputeById
 } from "../controllers/match/matchResultController";
 import {
   cancelMatch,
@@ -62,6 +63,9 @@ matchRoutes.get('/:id/result', getMatchResult);
 matchRoutes.post('/:id/result', submitResult);
 matchRoutes.post('/:id/confirm', confirmResult);
 matchRoutes.post('/:id/walkover', submitWalkover);
+
+// Disputes
+matchRoutes.get('/disputes/:id', getDisputeById);
 
 // Cancel/Reschedule
 matchRoutes.get('/:id/cancel-impact', getCancellationRuleImpact);
