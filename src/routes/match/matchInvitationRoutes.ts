@@ -18,7 +18,9 @@ import {
   editMatch,
   postMatchToChat,
   requestToJoinMatch,
-  respondToJoinRequest
+  respondToJoinRequest,
+  getInvitationById,
+  getPendingInvitations
 } from '../../controllers/match/matchInvitationController';
 
 const router = Router();
@@ -45,6 +47,8 @@ router.post('/timeslots/:id/vote', voteForTimeSlot);
 router.post('/timeslots/:id/confirm', confirmTimeSlot);
 
 // Invitations
+router.get('/invitations/pending', getPendingInvitations);
+router.get('/invitations/:id', getInvitationById);
 router.post('/invitations/:id/respond', respondToInvitation);
 
 export default router;
