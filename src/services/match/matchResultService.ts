@@ -413,6 +413,36 @@ export class MatchResultService {
   }
 
   /**
+   * Generate sport-specific walkover scores
+   */
+  private getWalkoverScores(sport: string) {
+    if (sport === 'PICKLEBALL') {
+      // Pickleball: 15-0, 15-0, 15-0 (best of 3 games)
+      return {
+        walkoverScore: {
+          games: [
+            { gameNumber: 1, winner: 15, loser: 0 },
+            { gameNumber: 2, winner: 15, loser: 0 },
+            { gameNumber: 3, winner: 15, loser: 0 }
+          ]
+        },
+        setsWon: 3
+      };
+    } else {
+      // Tennis/Padel: 6-0, 6-0
+      return {
+        walkoverScore: {
+          sets: [
+            { setNumber: 1, winner: 6, loser: 0 },
+            { setNumber: 2, winner: 6, loser: 0 }
+          ]
+        },
+        setsWon: 2
+      };
+    }
+  }
+
+  /**
    * Submit walkover
    */
   async submitWalkover(input: SubmitWalkoverInput) {
@@ -449,6 +479,9 @@ export class MatchResultService {
     const reporterParticipant = match.participants.find(p => p.userId === reportedById);
     const winningUserId = reportedById; // Reporter wins the walkover
 
+    // Get sport-specific walkover scores
+    const walkoverScores = this.getWalkoverScores(match.sport);
+
     await prisma.$transaction(async (tx) => {
       // Create walkover record
       const walkoverData: any = {
@@ -465,7 +498,7 @@ export class MatchResultService {
         data: walkoverData
       });
 
-      // Update match
+      // Update match with sport-specific walkover scores
       await tx.match.update({
         where: { id: matchId },
         data: {
@@ -474,10 +507,9 @@ export class MatchResultService {
           walkoverReason: reason,
           walkoverRecordedById: reportedById,
           outcome: `Walkover - ${reason}`,
-          // Standard walkover score (e.g., 6-0, 6-0)
-          walkoverScore: { sets: [[6, 0], [6, 0]] },
-          team1Score: reporterParticipant?.team === 'team1' ? 2 : 0,
-          team2Score: reporterParticipant?.team === 'team1' ? 0 : 2
+          walkoverScore: walkoverScores.walkoverScore,
+          team1Score: reporterParticipant?.team === 'team1' ? walkoverScores.setsWon : 0,
+          team2Score: reporterParticipant?.team === 'team1' ? 0 : walkoverScores.setsWon
         }
       });
     });
