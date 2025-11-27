@@ -153,3 +153,53 @@ export const getRecentResults = async (req: Request, res: Response) => {
     res.status(500).json({ error: 'Failed to retrieve recent results' });
   }
 };
+
+/**
+ * Get matches pending confirmation
+ * GET /api/matches/pending-confirmation
+ */
+export const getPendingConfirmationMatches = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+
+    const { limit = '20' } = req.query;
+
+    const matches = await matchHistoryService.getPendingConfirmationMatches(
+      userId,
+      parseInt(limit as string)
+    );
+
+    res.json(matches);
+  } catch (error) {
+    console.error('Get Pending Confirmation Matches Error:', error);
+    res.status(500).json({ error: 'Failed to retrieve pending confirmation matches' });
+  }
+};
+
+/**
+ * Get disputed matches
+ * GET /api/matches/disputed
+ */
+export const getDisputedMatches = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+
+    const { limit = '20' } = req.query;
+
+    const matches = await matchHistoryService.getDisputedMatches(
+      userId,
+      parseInt(limit as string)
+    );
+
+    res.json(matches);
+  } catch (error) {
+    console.error('Get Disputed Matches Error:', error);
+    res.status(500).json({ error: 'Failed to retrieve disputed matches' });
+  }
+};
