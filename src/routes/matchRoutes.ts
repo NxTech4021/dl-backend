@@ -20,7 +20,10 @@ import {
 } from "../controllers/match/matchResultController";
 import {
   cancelMatch,
-  requestReschedule
+  requestReschedule,
+  getCancellationRuleImpact,
+  recordWalkover,
+  continueMatch
 } from "../controllers/match/matchScheduleController";
 import {
   getMatchHistory,
@@ -61,8 +64,11 @@ matchRoutes.post('/:id/confirm', confirmResult);
 matchRoutes.post('/:id/walkover', submitWalkover);
 
 // Cancel/Reschedule
+matchRoutes.get('/:id/cancel-impact', getCancellationRuleImpact);
 matchRoutes.post('/:id/cancel', cancelMatch);
 matchRoutes.post('/:id/reschedule', requestReschedule);
+matchRoutes.post('/:id/walkover', recordWalkover);
+matchRoutes.post('/:id/continue', continueMatch);
 
 // History and Statistics
 matchRoutes.get('/history', getMatchHistory);
