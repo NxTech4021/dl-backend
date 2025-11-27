@@ -14,7 +14,11 @@ import {
   respondToInvitation,
   proposeTimeSlot,
   voteForTimeSlot,
-  confirmTimeSlot
+  confirmTimeSlot,
+  editMatch,
+  postMatchToChat,
+  requestToJoinMatch,
+  respondToJoinRequest
 } from '../../controllers/match/matchInvitationController';
 
 const router = Router();
@@ -25,9 +29,15 @@ router.get('/', getMatches);
 router.get('/my', getMyMatches);
 router.get('/available/:divisionId', getAvailableMatches);
 router.get('/:id', getMatchById);
+router.put('/:id/edit', editMatch);
 
 // Join match
 router.post('/:id/join', joinMatch);
+
+// Division chat match posting
+router.post('/:id/post-to-chat', postMatchToChat);
+router.post('/:id/join-request', requestToJoinMatch);
+router.post('/join-requests/:requestId/respond', respondToJoinRequest);
 
 // Time slots
 router.post('/:id/timeslots', proposeTimeSlot);
