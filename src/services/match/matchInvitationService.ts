@@ -11,7 +11,9 @@ import {
   InvitationStatus,
   ParticipantRole,
   TimeSlotStatus,
-  CancellationReason
+  CancellationReason,
+  MembershipStatus,
+  JoinRequestStatus
 } from '@prisma/client';
 import { logger } from '../../utils/logger';
 import { NotificationService } from '../notificationService';
@@ -1007,6 +1009,356 @@ export class MatchInvitationService {
   }
 
   /**
+   * Check and expire old match invitations
+   * Moves matches with expired invitations to DRAFT status
+   */
+  async checkExpiredInvitations() {
+    try {
+      const now = new Date();
+
+      // Find all pending invitations that have expired
+      const expiredInvitations = await prisma.matchInvitation.findMany({
+        where: {
+          status: InvitationStatus.PENDING,
+          expiresAt: { lt: now }
+        },
+        include: {
+          match: {
+            include: {
+              participants: true,
+              invitations: true
+            }
+          }
+        }
+      });
+
+      const matchesAffected = new Set<string>();
+      let invitationsExpired = 0;
+
+      // Update all expired invitations
+      for (const invitation of expiredInvitations) {
+        await prisma.matchInvitation.update({
+          where: { id: invitation.id },
+          data: {
+            status: InvitationStatus.EXPIRED,
+            respondedAt: now
+          }
+        });
+
+        // Update corresponding participant
+        await prisma.matchParticipant.updateMany({
+          where: {
+            matchId: invitation.matchId,
+            userId: invitation.inviteeId
+          },
+          data: {
+            invitationStatus: InvitationStatus.EXPIRED
+          }
+        });
+
+        matchesAffected.add(invitation.matchId);
+        invitationsExpired++;
+      }
+
+      // For each affected match, check if it should move to DRAFT
+      let matchesMovedToDraft = 0;
+      for (const matchId of matchesAffected) {
+        const match = await prisma.match.findUnique({
+          where: { id: matchId },
+          include: {
+            participants: true,
+            invitations: true,
+            createdBy: { select: { id: true, name: true } }
+          }
+        });
+
+        if (!match || match.status !== MatchStatus.SCHEDULED) continue;
+
+        // Check if all invitations are either expired or declined
+        const allInvitationsResolved = match.invitations.every(
+          inv => inv.status === InvitationStatus.EXPIRED ||
+                 inv.status === InvitationStatus.DECLINED ||
+                 inv.status === InvitationStatus.CANCELLED
+        );
+
+        // Check if any invitations were expired or declined
+        const hasExpiredOrDeclined = match.invitations.some(
+          inv => inv.status === InvitationStatus.EXPIRED ||
+                 inv.status === InvitationStatus.DECLINED
+        );
+
+        if (hasExpiredOrDeclined && allInvitationsResolved) {
+          // Move match to DRAFT status
+          await prisma.match.update({
+            where: { id: matchId },
+            data: { status: MatchStatus.DRAFT }
+          });
+
+          // Notify creator
+          if (match.createdById) {
+            await this.notificationService.createNotification({
+              type: 'MATCH_INVITATION_EXPIRED',
+              title: 'Match Invitation Expired',
+              message: 'Your match invitation has expired. You can edit and resend it from your drafts.',
+              category: 'MATCH',
+              matchId,
+              userIds: [match.createdById]
+            });
+          }
+
+          matchesMovedToDraft++;
+        }
+      }
+
+      logger.info(`Expired invitations check complete: ${invitationsExpired} invitations expired, ${matchesMovedToDraft} matches moved to DRAFT`);
+
+      return {
+        invitationsExpired,
+        matchesMovedToDraft,
+        matchesAffected: matchesAffected.size
+      };
+    } catch (error) {
+      logger.error('Error checking expired invitations', {}, error as Error);
+      throw error;
+    }
+  }
+
+  /**
+   * Handle matches where all invitations have been declined
+   * Moves them to DRAFT status for editing
+   */
+  async handleFullyDeclinedMatches() {
+    try {
+      // Find matches where ALL invitations are declined
+      const matches = await prisma.match.findMany({
+        where: {
+          status: MatchStatus.SCHEDULED
+        },
+        include: {
+          invitations: true,
+          createdBy: { select: { id: true, name: true } }
+        }
+      });
+
+      let matchesMovedToDraft = 0;
+
+      for (const match of matches) {
+        // Skip if no invitations
+        if (match.invitations.length === 0) continue;
+
+        // Check if ALL invitations are declined
+        const allDeclined = match.invitations.every(
+          inv => inv.status === InvitationStatus.DECLINED
+        );
+
+        if (allDeclined) {
+          // Move to DRAFT
+          await prisma.match.update({
+            where: { id: match.id },
+            data: { status: MatchStatus.DRAFT }
+          });
+
+          // Notify creator
+          if (match.createdById) {
+            await this.notificationService.createNotification({
+              type: 'MATCH_ALL_DECLINED',
+              title: 'Match Invitations Declined',
+              message: 'All players have declined your match invitation. You can edit and resend it from your drafts.',
+              category: 'MATCH',
+              matchId: match.id,
+              userIds: [match.createdById]
+            });
+          }
+
+          matchesMovedToDraft++;
+        }
+      }
+
+      logger.info(`Fully declined matches check complete: ${matchesMovedToDraft} matches moved to DRAFT`);
+
+      return { matchesMovedToDraft };
+    } catch (error) {
+      logger.error('Error handling fully declined matches', {}, error as Error);
+      throw error;
+    }
+  }
+
+  /**
+   * Edit a match (only allowed for DRAFT status matches)
+   */
+  async editMatch(matchId: string, userId: string, updates: Partial<CreateMatchInput>) {
+    const match = await prisma.match.findUnique({
+      where: { id: matchId },
+      include: {
+        participants: true,
+        invitations: true,
+        timeSlots: true
+      }
+    });
+
+    if (!match) {
+      throw new Error('Match not found');
+    }
+
+    if (match.createdById !== userId) {
+      throw new Error('Only the match creator can edit this match');
+    }
+
+    if (match.status !== MatchStatus.DRAFT) {
+      throw new Error('Only matches in DRAFT status can be edited');
+    }
+
+    const {
+      matchType,
+      format,
+      opponentId,
+      partnerId,
+      opponentPartnerId,
+      proposedTimes,
+      location,
+      venue,
+      notes,
+      message,
+      expiresInHours = 48
+    } = updates;
+
+    // Calculate new expiration time
+    const expiresAt = new Date();
+    expiresAt.setHours(expiresAt.getHours() + expiresInHours);
+
+    await prisma.$transaction(async (tx) => {
+      // Update match basic info
+      const updateData: any = {};
+      if (matchType) updateData.matchType = matchType;
+      if (format) updateData.format = format;
+      if (location !== undefined) updateData.location = location;
+      if (venue !== undefined) updateData.venue = venue;
+      if (notes !== undefined) updateData.notes = notes;
+      updateData.status = MatchStatus.SCHEDULED; // Move back to SCHEDULED
+
+      await tx.match.update({
+        where: { id: matchId },
+        data: updateData
+      });
+
+      // Delete old participants (except creator)
+      await tx.matchParticipant.deleteMany({
+        where: {
+          matchId,
+          userId: { not: userId }
+        }
+      });
+
+      // Delete old invitations
+      await tx.matchInvitation.deleteMany({
+        where: { matchId }
+      });
+
+      // Delete old time slots
+      await tx.matchTimeSlot.deleteMany({
+        where: { matchId }
+      });
+
+      // Add new participants and invitations (similar to createMatch logic)
+
+      // For doubles, add partner
+      if (matchType === MatchType.DOUBLES && partnerId) {
+        await tx.matchParticipant.create({
+          data: {
+            matchId,
+            userId: partnerId,
+            role: ParticipantRole.PARTNER,
+            invitationStatus: InvitationStatus.PENDING,
+            team: 'team1'
+          }
+        });
+
+        await tx.matchInvitation.create({
+          data: {
+            matchId,
+            inviterId: userId,
+            inviteeId: partnerId,
+            status: InvitationStatus.PENDING,
+            message: message || 'You have been invited to join a doubles match as partner',
+            expiresAt
+          }
+        });
+      }
+
+      // Add opponent
+      if (opponentId) {
+        await tx.matchParticipant.create({
+          data: {
+            matchId,
+            userId: opponentId,
+            role: ParticipantRole.OPPONENT,
+            invitationStatus: InvitationStatus.PENDING,
+            team: matchType === MatchType.DOUBLES ? 'team2' : null
+          }
+        });
+
+        await tx.matchInvitation.create({
+          data: {
+            matchId,
+            inviterId: userId,
+            inviteeId: opponentId,
+            status: InvitationStatus.PENDING,
+            message: message || 'You have been challenged to a match',
+            expiresAt
+          }
+        });
+
+        // For doubles, add opponent's partner
+        if (matchType === MatchType.DOUBLES && opponentPartnerId) {
+          await tx.matchParticipant.create({
+            data: {
+              matchId,
+              userId: opponentPartnerId,
+              role: ParticipantRole.PARTNER,
+              invitationStatus: InvitationStatus.PENDING,
+              team: 'team2'
+            }
+          });
+
+          await tx.matchInvitation.create({
+            data: {
+              matchId,
+              inviterId: userId,
+              inviteeId: opponentPartnerId,
+              status: InvitationStatus.PENDING,
+              message: message || 'You have been invited to join a doubles match',
+              expiresAt
+            }
+          });
+        }
+      }
+
+      // Create new time slots
+      if (proposedTimes && proposedTimes.length > 0) {
+        for (const time of proposedTimes) {
+          const timeSlotData: any = {
+            matchId,
+            proposedById: userId,
+            proposedTime: time,
+            status: TimeSlotStatus.PROPOSED,
+            votes: [userId],
+            voteCount: 1
+          };
+          if (location) timeSlotData.location = location;
+          await tx.matchTimeSlot.create({ data: timeSlotData });
+        }
+      }
+    });
+
+    // Send new invitations
+    await this.sendMatchInvitationNotifications(matchId);
+
+    logger.info(`Match ${matchId} edited and resent by user ${userId}`);
+
+    return this.getMatchById(matchId);
+  }
+
+  /**
    * Send notification when someone joins a match
    */
   private async sendMatchJoinedNotification(matchId: string, joinedUserId: string) {
@@ -1048,6 +1400,111 @@ export class MatchInvitationService {
       }
     } catch (error) {
       logger.error('Error sending match joined notification', {}, error as Error);
+    }
+  }
+
+  /**
+   * Get players in a division who have not played with the current user
+   * Used for "Create Match" feature to filter eligible opponents
+   */
+  async getPlayersNotPlayedWith(userId: string, divisionId: string) {
+    try {
+      // 1. Get all users in the division
+      const divisionAssignments = await prisma.divisionAssignment.findMany({
+        where: {
+          divisionId,
+          status: MembershipStatus.ACTIVE
+        },
+        include: {
+          user: {
+            select: {
+              id: true,
+              name: true,
+              username: true,
+              image: true
+            }
+          }
+        }
+      });
+
+      // 2. Get all matches where current user participated in this division
+      const userMatches = await prisma.match.findMany({
+        where: {
+          divisionId,
+          status: {
+            in: [MatchStatus.COMPLETED, MatchStatus.ONGOING, MatchStatus.SCHEDULED]
+          },
+          participants: {
+            some: { userId }
+          }
+        },
+        include: {
+          participants: true
+        }
+      });
+
+      // 3. Extract opponent IDs
+      const opponentIds = new Set<string>();
+      userMatches.forEach(match => {
+        match.participants.forEach(participant => {
+          if (participant.userId !== userId) {
+            opponentIds.add(participant.userId);
+          }
+        });
+      });
+
+      // 4. Filter out current user and players already played with
+      const eligiblePlayers = divisionAssignments
+        .filter(assignment =>
+          assignment.userId !== userId &&
+          !opponentIds.has(assignment.userId)
+        )
+        .map(assignment => assignment.user);
+
+      logger.info(`Found ${eligiblePlayers.length} eligible players for user ${userId} in division ${divisionId}`);
+
+      return {
+        eligiblePlayers,
+        totalInDivision: divisionAssignments.length - 1, // Exclude current user
+        alreadyPlayedWith: opponentIds.size
+      };
+    } catch (error) {
+      logger.error('Error getting players not played with', { userId, divisionId }, error as Error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get all join requests for a match
+   */
+  async getMatchJoinRequests(matchId: string, status?: JoinRequestStatus) {
+    try {
+      const where: any = { matchId };
+      if (status) where.status = status;
+
+      return await prisma.matchJoinRequest.findMany({
+        where,
+        include: {
+          requester: {
+            select: {
+              id: true,
+              name: true,
+              username: true,
+              image: true
+            }
+          },
+          responder: {
+            select: {
+              id: true,
+              name: true
+            }
+          }
+        },
+        orderBy: { requestedAt: 'desc' }
+      });
+    } catch (error) {
+      logger.error('Error getting match join requests', { matchId }, error as Error);
+      throw error;
     }
   }
 }
