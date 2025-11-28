@@ -824,6 +824,157 @@ export class MatchResultService {
       logger.error('Error sending walkover notification', {}, error as Error);
     }
   }
+
+  /**
+   * Auto-approve results submitted more than 24 hours ago
+   * Called by cron job
+   */
+  async autoApproveResults() {
+    try {
+      const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+      // Find matches with submitted results that haven't been confirmed/disputed after 24 hours
+      const matches = await prisma.match.findMany({
+        where: {
+          status: MatchStatus.COMPLETED,
+          resultSubmittedAt: { lte: twentyFourHoursAgo },
+          resultConfirmedAt: null,
+          isDisputed: false,
+          isAutoApproved: false
+        },
+        include: {
+          participants: true,
+          division: true,
+          season: true
+        }
+      });
+
+      let autoApprovedCount = 0;
+
+      for (const match of matches) {
+        try {
+          // Auto-approve the match
+          await prisma.match.update({
+            where: { id: match.id },
+            data: {
+              isAutoApproved: true,
+              resultConfirmedAt: new Date()
+            }
+          });
+
+          // Process ratings and standings (same as manual confirmation)
+          try {
+            // Best 6 system integration
+            const matchResultService = new MatchResultCreationService();
+            await matchResultService.createMatchResults(match.id);
+            logger.info(`Auto-approved: Created MatchResult records for match ${match.id}`);
+
+            const best6Handler = new Best6EventHandler();
+            await best6Handler.onMatchCompleted(match.id);
+            logger.info(`Auto-approved: Recalculated Best 6 for match ${match.id}`);
+
+            if (match.divisionId && match.seasonId) {
+              const standingsV2 = new StandingsV2Service();
+              await standingsV2.recalculateDivisionStandings(match.divisionId, match.seasonId);
+              logger.info(`Auto-approved: Recalculated standings for division ${match.divisionId}`);
+            }
+          } catch (error) {
+            logger.error(`Failed to process Best 6 for auto-approved match ${match.id}:`, {}, error as Error);
+            await prisma.match.update({
+              where: { id: match.id },
+              data: { requiresAdminReview: true }
+            });
+          }
+
+          // Update ratings
+          try {
+            const ratingUpdates = await calculateMatchRatings(match.id);
+            if (ratingUpdates) {
+              await applyMatchRatings(match.id, ratingUpdates);
+              logger.info(`Auto-approved: Applied rating updates for match ${match.id}`);
+            }
+          } catch (error) {
+            logger.error(`Failed to update ratings for auto-approved match ${match.id}:`, {}, error as Error);
+          }
+
+          // Update old standings
+          try {
+            await updateMatchStandings(match.id);
+            logger.info(`Auto-approved: Updated old standings for match ${match.id}`);
+          } catch (error) {
+            logger.error(`Failed to update old standings for auto-approved match ${match.id}:`, {}, error as Error);
+          }
+
+          // Notify all participants
+          const participantIds = match.participants.map(p => p.userId);
+          await this.notificationService.createNotification({
+            type: 'MATCH_RESULT_AUTO_APPROVED',
+            title: 'Match Result Auto-Approved',
+            message: 'The match result has been automatically approved after 24 hours.',
+            category: 'MATCH',
+            matchId: match.id,
+            userIds: participantIds
+          });
+
+          autoApprovedCount++;
+          logger.info(`Auto-approved match ${match.id} after 24 hours`);
+        } catch (error) {
+          logger.error(`Failed to auto-approve match ${match.id}:`, {}, error as Error);
+        }
+      }
+
+      return {
+        matchesChecked: matches.length,
+        autoApprovedCount
+      };
+    } catch (error) {
+      logger.error('Error in autoApproveResults:', {}, error as Error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get dispute by ID with full details
+   */
+  async getDisputeById(disputeId: string) {
+    const dispute = await prisma.matchDispute.findUnique({
+      where: { id: disputeId },
+      include: {
+        match: {
+          include: {
+            participants: {
+              include: {
+                user: {
+                  select: { id: true, name: true, username: true, image: true }
+                }
+              }
+            },
+            division: { select: { id: true, name: true } },
+            resultSubmittedBy: {
+              select: { id: true, name: true, username: true }
+            }
+          }
+        },
+        raisedByUser: {
+          select: { id: true, name: true, username: true, image: true }
+        },
+        comments: {
+          include: {
+            user: {
+              select: { id: true, name: true, username: true }
+            }
+          },
+          orderBy: { createdAt: 'asc' }
+        }
+      }
+    });
+
+    if (!dispute) {
+      throw new Error('Dispute not found');
+    }
+
+    return dispute;
+  }
 }
 
 // Export singleton instance
