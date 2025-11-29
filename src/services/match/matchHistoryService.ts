@@ -394,10 +394,10 @@ export class MatchHistoryService {
   }
 
   /**
-   * Get recent results for user
+   * Get recent results for user with rating changes
    */
   async getRecentResults(userId: string, limit = 5) {
-    return prisma.match.findMany({
+    const matches = await prisma.match.findMany({
       where: {
         participants: {
           some: { userId }
@@ -405,7 +405,14 @@ export class MatchHistoryService {
         status: MatchStatus.COMPLETED
       },
       include: {
-        division: true,
+        division: {
+          include: {
+            playerRatings: {
+              where: { userId },
+              take: 1
+            }
+          }
+        },
         participants: {
           include: {
             user: {
@@ -416,6 +423,108 @@ export class MatchHistoryService {
         scores: { orderBy: { setNumber: 'asc' } }
       },
       orderBy: { matchDate: 'desc' },
+      take: limit
+    });
+
+    // Fetch rating changes for each match
+    const matchesWithRatingChanges = await Promise.all(
+      matches.map(async (match) => {
+        // Get rating change for this specific match and user
+        const ratingChange = await prisma.ratingHistory.findFirst({
+          where: {
+            matchId: match.id,
+            playerRating: {
+              userId,
+              divisionId: match.divisionId
+            }
+          },
+          select: {
+            id: true,
+            ratingBefore: true,
+            ratingAfter: true,
+            delta: true,
+            rdBefore: true,
+            rdAfter: true
+          }
+        });
+
+        return {
+          ...match,
+          ratingChange: ratingChange || null
+        };
+      })
+    );
+
+    return matchesWithRatingChanges;
+  }
+
+  /**
+   * Get matches pending confirmation for user
+   * These are completed matches where result is submitted but not confirmed/disputed
+   */
+  async getPendingConfirmationMatches(userId: string, limit = 20) {
+    return prisma.match.findMany({
+      where: {
+        participants: {
+          some: { userId }
+        },
+        status: MatchStatus.COMPLETED,
+        resultSubmittedAt: { not: null },
+        resultConfirmedAt: null,
+        isDisputed: false,
+        isAutoApproved: false
+      },
+      include: {
+        division: true,
+        participants: {
+          include: {
+            user: {
+              select: { id: true, name: true, username: true, image: true }
+            }
+          }
+        },
+        scores: { orderBy: { setNumber: 'asc' } },
+        resultSubmittedBy: {
+          select: { id: true, name: true, username: true }
+        }
+      },
+      orderBy: { resultSubmittedAt: 'desc' },
+      take: limit
+    });
+  }
+
+  /**
+   * Get disputed matches for user
+   */
+  async getDisputedMatches(userId: string, limit = 20) {
+    return prisma.match.findMany({
+      where: {
+        participants: {
+          some: { userId }
+        },
+        isDisputed: true
+      },
+      include: {
+        division: true,
+        participants: {
+          include: {
+            user: {
+              select: { id: true, name: true, username: true, image: true }
+            }
+          }
+        },
+        scores: { orderBy: { setNumber: 'asc' } },
+        disputes: {
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+          include: {
+            disputedBy: {
+              select: { id: true, name: true, username: true }
+            }
+          }
+        }
+      },
+      orderBy: { updatedAt: 'desc' },
       take: limit
     });
   }

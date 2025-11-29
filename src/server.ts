@@ -9,6 +9,8 @@ import { NotificationService } from "./services/notificationService";
 import { INACTIVITY_CONFIG } from "./config/inactivity.config";
 import { getMatchReminderService } from "./services/notification/matchReminderService";
 import { initializeNotificationJobs } from "./jobs/notificationJobs";
+import { getMatchInvitationService } from "./services/match/matchInvitationService";
+import { getMatchResultService } from "./services/match/matchResultService";
 
 dotenv.config();
 
@@ -71,6 +73,49 @@ cron.schedule("0 * * * *", async () => {
   }
 });
 
+// Run match invitation expiration check every hour
+cron.schedule("0 * * * *", async () => {
+  console.log(
+    "🕒 Running scheduled task: Checking for expired match invitations..."
+  );
+  try {
+    const matchInvitationService = getMatchInvitationService();
+
+    // Check expired invitations
+    const expirationResults =
+      await matchInvitationService.checkExpiredInvitations();
+    console.log(
+      `✅ Expired invitations: ${expirationResults.invitationsExpired} invitations expired, ${expirationResults.matchesMovedToDraft} matches moved to DRAFT`
+    );
+
+    // Check fully declined matches
+    const declinedResults =
+      await matchInvitationService.handleFullyDeclinedMatches();
+    console.log(
+      `✅ Fully declined matches: ${declinedResults.matchesMovedToDraft} matches moved to DRAFT`
+    );
+  } catch (error) {
+    console.error("❌ Error during match invitation expiration check:", error);
+  }
+});
+
+// Run auto-approval check for match results every hour
+cron.schedule("0 * * * *", async () => {
+  console.log(
+    "🕒 Running scheduled task: Auto-approving unconfirmed match results..."
+  );
+  try {
+    const notificationService = new NotificationService();
+    const matchResultService = getMatchResultService(notificationService);
+    const results = await matchResultService.autoApproveResults();
+    console.log(
+      `✅ Auto-approval check complete: ${results.matchesChecked} matches checked, ${results.autoApprovedCount} auto-approved`
+    );
+  } catch (error) {
+    console.error("❌ Error during auto-approval check:", error);
+  }
+});
+
 // Initialize all notification jobs
 initializeNotificationJobs();
 
@@ -78,4 +123,6 @@ console.log("⏰ Cron jobs scheduled:");
 console.log("   - Daily expiration check at midnight");
 console.log(`   - Inactivity check at ${INACTIVITY_CONFIG.CRON_SCHEDULE}`);
 console.log("   - Match reminder check every hour");
+console.log("   - Match invitation expiration check every hour");
+console.log("   - Match result auto-approval check every hour");
 console.log("   - All notification jobs (reminders, league updates, etc.)");
