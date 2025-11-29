@@ -215,10 +215,10 @@ export const getThreads = async (req: Request, res: Response) => {
 // Send a message in a thread
 export const sendMessage = async (req: Request, res: Response) => {
   const { threadId } = req.params;
-  const { senderId, content, repliesToId } = req.body;
+  const { senderId, content, repliesToId, messageType, matchId, matchData } = req.body;
 
   console.log(
-    `💬 Sending message - Thread: ${threadId}, Sender: ${senderId}`
+    `💬 Sending message - Thread: ${threadId}, Sender: ${senderId}, Type: ${messageType || 'TEXT'}`
   );
 
   if (!senderId || !content) {
@@ -270,14 +270,24 @@ export const sendMessage = async (req: Request, res: Response) => {
 
     // Create message and update unread counts in a transaction
     const result = await prisma.$transaction(async (tx) => {
+      // Prepare message data
+      const messageData: any = {
+        threadId,
+        senderId,
+        content,
+        repliesToId: repliesToId || null,
+      };
+
+      // Add match-specific fields
+      if (messageType === 'MATCH') {
+        messageData.messageType = messageType;
+        if (matchId) messageData.matchId = matchId;
+        if (matchData) messageData.matchData = matchData;
+      }
+
       // Create the message
       const message = await tx.message.create({
-        data: {
-          threadId,
-          senderId,
-          content,
-          repliesToId: repliesToId || null,
-        },
+        data: messageData,
         include: {
           sender: {
             select: {
@@ -301,9 +311,9 @@ export const sendMessage = async (req: Request, res: Response) => {
               },
             },
           },
-          // readBy: true,
+          match: matchId ? true : undefined,
         },    
-      });
+      }) as any;
 
       // Update thread's last activity
       await tx.thread.update({
@@ -466,6 +476,15 @@ export const getMessages = async (req: Request, res: Response) => {
     console.log(
       `✅ Retrieved ${sortedMessages.length} messages from thread ${threadId}`
     );
+    
+    // Log match messages for debugging
+    const matchMessages = sortedMessages.filter((m: any) => m.messageType === 'MATCH');
+    if (matchMessages.length > 0) {
+      console.log(`🎾 Found ${matchMessages.length} match messages`);
+      matchMessages.forEach((m: any) => {
+        console.log(`  - Message ${m.id}: Type=${m.messageType}, MatchId=${m.matchId}, HasMatchData=${!!m.matchData}`);
+      });
+    }
 
     return res.json({
       success: true,

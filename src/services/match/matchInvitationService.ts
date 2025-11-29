@@ -31,9 +31,11 @@ export interface CreateMatchInput {
   location?: string;
   venue?: string;
   notes?: string;
+  courtBooked?: boolean;       // Whether court has been booked
   message?: string;            // Message to send with invitation
   expiresInHours?: number;     // How long until invitation expires (default 48)
 }
+
 
 export interface ProposeTimeSlotInput {
   matchId: string;
@@ -95,6 +97,7 @@ export class MatchInvitationService {
       location,
       venue,
       notes,
+      courtBooked,
       message,
       expiresInHours = 48
     } = input;
@@ -147,6 +150,7 @@ export class MatchInvitationService {
       if (location) matchData.location = location;
       if (venue) matchData.venue = venue;
       if (notes) matchData.notes = notes;
+      if (courtBooked !== undefined) matchData.courtBooked = courtBooked;
       if (proposedTimes) matchData.proposedTimes = proposedTimes.map(t => t.toISOString());
 
       const newMatch = await tx.match.create({ data: matchData });
