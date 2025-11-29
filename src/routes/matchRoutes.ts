@@ -16,18 +16,24 @@ import {
   submitResult,
   confirmResult,
   submitWalkover,
-  getMatchResult
+  getMatchResult,
+  getDisputeById
 } from "../controllers/match/matchResultController";
 import {
   cancelMatch,
-  requestReschedule
+  requestReschedule,
+  getCancellationRuleImpact,
+  recordWalkover,
+  continueMatch
 } from "../controllers/match/matchScheduleController";
 import {
   getMatchHistory,
   getMatchStats,
   getHeadToHead,
   getUpcomingMatches,
-  getRecentResults
+  getRecentResults,
+  getPendingConfirmationMatches,
+  getDisputedMatches
 } from "../controllers/match/matchHistoryController";
 
 const matchRoutes = Router();
@@ -60,15 +66,23 @@ matchRoutes.post('/:id/result', submitResult);
 matchRoutes.post('/:id/confirm', confirmResult);
 matchRoutes.post('/:id/walkover', submitWalkover);
 
+// Disputes
+matchRoutes.get('/disputes/:id', getDisputeById);
+
 // Cancel/Reschedule
+matchRoutes.get('/:id/cancel-impact', getCancellationRuleImpact);
 matchRoutes.post('/:id/cancel', cancelMatch);
 matchRoutes.post('/:id/reschedule', requestReschedule);
+matchRoutes.post('/:id/walkover', recordWalkover);
+matchRoutes.post('/:id/continue', continueMatch);
 
 // History and Statistics
 matchRoutes.get('/history', getMatchHistory);
 matchRoutes.get('/stats', getMatchStats);
 matchRoutes.get('/upcoming', getUpcomingMatches);
 matchRoutes.get('/recent', getRecentResults);
+matchRoutes.get('/pending-confirmation', getPendingConfirmationMatches);
+matchRoutes.get('/disputed', getDisputedMatches);
 matchRoutes.get('/head-to-head/:opponentId', getHeadToHead);
 
 export default matchRoutes;

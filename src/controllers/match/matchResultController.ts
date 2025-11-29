@@ -160,3 +160,28 @@ export const getMatchResult = async (req: Request, res: Response) => {
     res.status(500).json({ error: 'Failed to retrieve match result' });
   }
 };
+
+/**
+ * Get dispute details by ID
+ * GET /api/matches/disputes/:id
+ */
+export const getDisputeById = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+
+    const { id } = req.params;
+    if (!id) {
+      return res.status(400).json({ error: 'Dispute ID is required' });
+    }
+
+    const dispute = await matchResultService.getDisputeById(id);
+    res.json(dispute);
+  } catch (error) {
+    console.error('Get Dispute Error:', error);
+    const message = error instanceof Error ? error.message : 'Failed to get dispute';
+    res.status(404).json({ error: message });
+  }
+};
