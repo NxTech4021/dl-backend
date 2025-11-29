@@ -35,6 +35,7 @@ export const createMatch = async (req: Request, res: Response) => {
       location,
       venue,
       notes,
+      courtBooked,
       message,
       expiresInHours
     } = req.body;
@@ -59,10 +60,12 @@ export const createMatch = async (req: Request, res: Response) => {
       location,
       venue,
       notes,
+      courtBooked,
       message,
       expiresInHours
     });
 
+    
     res.status(201).json(match);
   } catch (error) {
     console.error('Create Match Error:', error);
