@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { verifyAuth } from "../middlewares/auth.middleware";
 import { updateMatch, deleteMatch } from "../controllers/matchController";
 import {
   createMatch,
@@ -37,6 +38,9 @@ import {
 } from "../controllers/match/matchHistoryController";
 
 const matchRoutes = Router();
+
+// Apply authentication middleware to all routes
+matchRoutes.use(verifyAuth);
 
 // Match CRUD (using new invitation service)
 matchRoutes.post("/create", createMatch);
