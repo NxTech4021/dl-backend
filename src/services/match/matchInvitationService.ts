@@ -130,6 +130,23 @@ export class MatchInvitationService {
       throw new Error('Partner is required for doubles matches');
     }
 
+    // Check for scheduling conflicts for creator and partner
+    if (proposedTimes && proposedTimes.length > 0) {
+      const firstProposedTime = proposedTimes[0];
+      if (firstProposedTime) {
+        const conflictCheck = await this.checkSchedulingConflicts(
+          createdById, 
+          partnerId, 
+          firstProposedTime,
+          divisionId
+        );
+        
+        if (conflictCheck.hasConflict) {
+          throw new Error(conflictCheck.message || 'Scheduling conflict detected');
+        }
+      }
+    }
+
     // Calculate expiration time
     const expiresAt = new Date();
     expiresAt.setHours(expiresAt.getHours() + expiresInHours);
@@ -167,29 +184,31 @@ export class MatchInvitationService {
         }
       });
 
-      // Add creator's partner for doubles
+      // Add creator's partner for doubles (automatically accepted)
       if (matchType === MatchType.DOUBLES && partnerId) {
         await tx.matchParticipant.create({
           data: {
             matchId: newMatch.id,
             userId: partnerId,
             role: ParticipantRole.PARTNER,
-            invitationStatus: InvitationStatus.PENDING,
+            invitationStatus: InvitationStatus.ACCEPTED, // Auto-accept partner
+            acceptedAt: new Date(),
             team: 'team1'
           }
         });
 
-        // Create invitation for partner
-        await tx.matchInvitation.create({
-          data: {
-            matchId: newMatch.id,
-            inviterId: createdById,
-            inviteeId: partnerId,
-            status: InvitationStatus.PENDING,
-            message: message || 'You have been invited to join a doubles match as partner',
-            expiresAt
-          }
-        });
+        // COMMENTED OUT: Auto-accept partner instead of sending invitation
+        // // Create invitation for partner
+        // await tx.matchInvitation.create({
+        //   data: {
+        //     matchId: newMatch.id,
+        //     inviterId: createdById,
+        //     inviteeId: partnerId,
+        //     status: InvitationStatus.PENDING,
+        //     message: message || 'You have been invited to join a doubles match as partner',
+        //     expiresAt
+        //   }
+        // });
       }
 
       // Handle direct challenge to opponent
@@ -1759,6 +1778,73 @@ export class MatchInvitationService {
         status: p.invitationStatus
       }))
     };
+  }
+
+  /**
+   * Check for scheduling conflicts for users at a specific time
+   */
+  private async checkSchedulingConflicts(
+    creatorId: string,
+    partnerId: string | undefined,
+    matchTime: Date,
+    currentDivisionId: string
+  ): Promise<{ hasConflict: boolean; message?: string; conflictingUsers?: string[] }> {
+    try {
+      // Define time window (2 hours before and after)
+      const timeWindow = 2 * 60 * 60 * 1000; // 2 hours in milliseconds
+      const startTime = new Date(matchTime.getTime() - timeWindow);
+      const endTime = new Date(matchTime.getTime() + timeWindow);
+
+      const usersToCheck = [creatorId];
+      if (partnerId) {
+        usersToCheck.push(partnerId);
+      }
+
+      // Check for existing matches in the time window
+      for (const userId of usersToCheck) {
+        const conflictingMatches = await prisma.match.findMany({
+          where: {
+            participants: {
+              some: {
+                userId: userId,
+                invitationStatus: InvitationStatus.ACCEPTED
+              }
+            },
+            status: {
+              in: [MatchStatus.SCHEDULED, MatchStatus.ONGOING]
+            },
+            scheduledTime: {
+              gte: startTime,
+              lte: endTime
+            }
+          },
+          select: {
+            id: true,
+            scheduledTime: true
+          },
+          take: 1
+        });
+
+        if (conflictingMatches.length > 0) {
+          const user = await prisma.user.findUnique({
+            where: { id: userId },
+            select: { name: true }
+          });
+          
+          return {
+            hasConflict: true,
+            message: `${user?.name || 'User'} already has a match scheduled around this time`,
+            conflictingUsers: [userId]
+          };
+        }
+      }
+
+      return { hasConflict: false };
+    } catch (error) {
+      logger.error('Error checking scheduling conflicts', { creatorId, partnerId, matchTime }, error as Error);
+      // Don't block match creation on conflict check error
+      return { hasConflict: false };
+    }
   }
 }
 

@@ -477,18 +477,56 @@ export const getMessages = async (req: Request, res: Response) => {
       `✅ Retrieved ${sortedMessages.length} messages from thread ${threadId}`
     );
     
+    // Enrich match messages with current participants
+    const enrichedMessages = await Promise.all(
+      sortedMessages.map(async (msg: any) => {
+        if (msg.messageType === 'MATCH' && msg.matchId) {
+          try {
+            // Fetch current match data to get latest participants
+            const match = await prisma.match.findUnique({
+              where: { id: msg.matchId },
+              include: {
+                participants: {
+                  select: {
+                    userId: true,
+                    role: true,
+                    team: true,
+                    invitationStatus: true,
+                  }
+                }
+              }
+            });
+
+            if (match && match.participants) {
+              // Update matchData with current participants
+              const matchData = msg.matchData as any || {};
+              msg.matchData = {
+                ...matchData,
+                participants: match.participants,
+              };
+              console.log(`  ✅ Enriched match ${msg.matchId} with ${match.participants.length} participants`);
+            }
+          } catch (err) {
+            console.warn(`  ⚠️ Could not enrich match data for message ${msg.id}:`, err);
+          }
+        }
+        return msg;
+      })
+    );
+    
     // Log match messages for debugging
-    const matchMessages = sortedMessages.filter((m: any) => m.messageType === 'MATCH');
+    const matchMessages = enrichedMessages.filter((m: any) => m.messageType === 'MATCH');
     if (matchMessages.length > 0) {
       console.log(`🎾 Found ${matchMessages.length} match messages`);
       matchMessages.forEach((m: any) => {
-        console.log(`  - Message ${m.id}: Type=${m.messageType}, MatchId=${m.matchId}, HasMatchData=${!!m.matchData}`);
+        const participantCount = m.matchData?.participants?.length || 0;
+        console.log(`  - Message ${m.id}: Type=${m.messageType}, MatchId=${m.matchId}, Participants=${participantCount}`);
       });
     }
 
     return res.json({
       success: true,
-      data: sortedMessages,
+      data: enrichedMessages,
       pagination: {
         page: Number(page),
         limit: Number(limit),
