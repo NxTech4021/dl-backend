@@ -2,10 +2,10 @@
  * Common Query Builders for Player Services
  */
 
-import { Role } from "@prisma/client";
+import { Role, UserStatus } from "@prisma/client";
 
 /**
- * Build search where clause for player search
+ * Build where clause for player search queries
  */
 export function buildSearchWhereClause(
   query?: string,
@@ -14,21 +14,20 @@ export function buildSearchWhereClause(
 ) {
   const whereClause: any = {
     role: Role.USER,
-    status: 'active',
+    status: UserStatus.ACTIVE, // ✅ Fixed - use enum instead of 'active'
   };
 
-  // Exclude current user if specified
+  // Exclude specific user if provided
   if (excludeUserId) {
     whereClause.id = { not: excludeUserId };
   }
 
-  // Add search filter if query provided (minimum 2 characters)
-  if (query && typeof query === 'string' && query.trim().length >= 2) {
-    const searchTerm = query.trim();
+  // Add search query if provided
+  if (query && query.trim().length > 0) {
     whereClause.OR = [
-      { name: { contains: searchTerm, mode: 'insensitive' } },
-      { username: { contains: searchTerm, mode: 'insensitive' } },
-      { displayUsername: { contains: searchTerm, mode: 'insensitive' } },
+      { name: { contains: query, mode: "insensitive" } },
+      { username: { contains: query, mode: "insensitive" } },
+      { displayUsername: { contains: query, mode: "insensitive" } },
     ];
   }
 
