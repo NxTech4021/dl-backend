@@ -757,6 +757,20 @@ export class MatchInvitationService {
 
     // For doubles with partnerId, check partner is not already in the match
     if (partnerId && match.matchType === MatchType.DOUBLES) {
+      // Verify the user is the captain of the partnership
+      const partnership = await prisma.partnership.findFirst({
+        where: {
+          divisionId: match.divisionId!,
+          captainId: userId,
+          partnerId: partnerId,
+          status: 'ACTIVE'
+        }
+      });
+
+      if (!partnership) {
+        throw new Error('Only the team captain can join matches for the partnership');
+      }
+
       const existingPartner = match.participants.find(p => p.userId === partnerId);
       if (existingPartner) {
         throw new Error('Your partner is already in this match');
