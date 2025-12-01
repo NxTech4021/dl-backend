@@ -15,7 +15,8 @@
     "db:seed": "ts-node prisma/seed.ts",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
-    "lint:check": "eslint . --max-warnings 0"
+    "lint:check": "eslint . --max-warnings 0",
+    "seed-bug-tracking": "ts-node prisma/bug-tracking.ts"
   },
   "keywords": [],
   "author": "",
