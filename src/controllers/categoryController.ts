@@ -10,6 +10,8 @@ interface CreateCategoryBody {
   matchFormat?: string;
   categoryOrder?: number;
   game_type?: string;
+  gender_category?: string;
+  isActive?: boolean;
 }
 
 export const createCategory = async (req: Request, res: Response) => {
@@ -21,6 +23,8 @@ export const createCategory = async (req: Request, res: Response) => {
       matchFormat, 
       categoryOrder, 
       game_type, 
+      gender_category,
+      isActive,
     } = req.body as CreateCategoryBody;
 
     console.log("Payload received", req.body);
@@ -44,9 +48,16 @@ export const createCategory = async (req: Request, res: Response) => {
       }
     }
 
-    // Map genderRestriction to gender_category automatically
-    let mappedGenderCategory: GenderType | null = null;
-    if (genderRestriction) {
+    // Map gender_category from request or from genderRestriction
+    let mappedGenderCategory: GenderType | null | undefined = undefined;
+    if (gender_category !== undefined) {
+      if (gender_category && Object.values(GenderType).includes(gender_category as GenderType)) {
+        mappedGenderCategory = gender_category as GenderType;
+      } else {
+        mappedGenderCategory = null;
+      }
+    } else if (genderRestriction) {
+      // Fall back to mapping from genderRestriction if gender_category not provided
       if (genderRestriction === 'MALE') {
         mappedGenderCategory = GenderType.MALE;
       } else if (genderRestriction === 'FEMALE') {
@@ -61,8 +72,9 @@ export const createCategory = async (req: Request, res: Response) => {
       ...(validatedGenderRestriction !== undefined && { genderRestriction: validatedGenderRestriction }),
       ...(matchFormat !== undefined && { matchFormat: matchFormat ?? null }),
       ...(categoryOrder !== undefined && { categoryOrder }),
-      ...(validatedGameType !== undefined && { game_type: validatedGameType }),
-      ...(mappedGenderCategory !== null && { gender_category: mappedGenderCategory }),
+      ...(validatedGameType !== undefined && { gameType: validatedGameType }),
+      ...(mappedGenderCategory !== undefined && { genderCategory: mappedGenderCategory }),
+      ...(isActive !== undefined && { isActive }),
       ...(seasonId && {
         seasons: {
           connect: [{ id: seasonId }]
