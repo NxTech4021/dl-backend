@@ -706,7 +706,7 @@ export class MatchInvitationService {
 
     // Add partner confirmation status for doubles
     let partnerStatus = null;
-    if (match.matchType === MatchType.DOUBLES) {
+    if (match?.matchType === MatchType.DOUBLES) {
       partnerStatus = this.getPartnerConfirmationStatus(match);
     }
 
@@ -719,7 +719,7 @@ export class MatchInvitationService {
   /**
    * Join an available match
    */
-  async joinMatch(matchId: string, userId: string, asPartner = false) {
+  async joinMatch(matchId: string, userId: string, asPartner = false, partnerId?: string) {
     const match = await prisma.match.findUnique({
       where: { id: matchId },
       include: {
@@ -755,6 +755,27 @@ export class MatchInvitationService {
       throw new Error('You are already a participant in this match');
     }
 
+    // For doubles with partnerId, check partner is not already in the match
+    if (partnerId && match.matchType === MatchType.DOUBLES) {
+      const existingPartner = match.participants.find(p => p.userId === partnerId);
+      if (existingPartner) {
+        throw new Error('Your partner is already in this match');
+      }
+
+      // Check partner membership
+      const partnerMembership = await prisma.seasonMembership.findFirst({
+        where: {
+          userId: partnerId,
+          divisionId: match.divisionId!,
+          status: 'ACTIVE'
+        }
+      });
+
+      if (!partnerMembership) {
+        throw new Error('Your partner must be an active member of this division');
+      }
+    }
+
     // Determine role and team
     let role: ParticipantRole = ParticipantRole.OPPONENT;
     let team: string | null = null;
@@ -773,10 +794,18 @@ export class MatchInvitationService {
       } else {
         throw new Error('This match is already full');
       }
+
+      // If joining with a partner, check if team has space for both
+      if (partnerId) {
+        const targetTeamCount = team === 'team1' ? team1Count : team2Count;
+        if (targetTeamCount > 0) {
+          throw new Error('Not enough space on the team for both you and your partner');
+        }
+      }
     }
 
     await prisma.$transaction(async (tx) => {
-      // Add as participant
+      // Add user as participant
       await tx.matchParticipant.create({
         data: {
           matchId,
@@ -788,14 +817,35 @@ export class MatchInvitationService {
         }
       });
 
+      // Add partner as participant for doubles matches
+      if (partnerId && match.matchType === MatchType.DOUBLES && team) {
+        await tx.matchParticipant.create({
+          data: {
+            matchId,
+            userId: partnerId,
+            role: ParticipantRole.PARTNER,
+            team,
+            invitationStatus: InvitationStatus.ACCEPTED,
+            acceptedAt: new Date()
+          }
+        });
+
+        logger.info(`Partner ${partnerId} added to match ${matchId} on ${team}`);
+      }
+
       // Check if match is ready
       await this.checkMatchReadyToSchedule(tx, matchId);
     });
 
     // Send notification to match creator and other participants
     await this.sendMatchJoinedNotification(matchId, userId);
+    
+    // Send notification for partner if they were added
+    if (partnerId && match.matchType === MatchType.DOUBLES) {
+      await this.sendMatchJoinedNotification(matchId, partnerId);
+    }
 
-    logger.info(`User ${userId} joined match ${matchId}`);
+    logger.info(`User ${userId} joined match ${matchId}${partnerId ? ` with partner ${partnerId}` : ''}`);
 
     return this.getMatchById(matchId);
   }
