@@ -249,9 +249,9 @@ export const joinMatch = async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Match ID is required' });
     }
 
-    const { asPartner = false } = req.body;
+    const { asPartner = false, partnerId } = req.body;
 
-    const match = await matchInvitationService.joinMatch(id, userId, asPartner);
+    const match = await matchInvitationService.joinMatch(id, userId, asPartner, partnerId);
     res.json(match);
   } catch (error) {
     console.error('Join Match Error:', error);
