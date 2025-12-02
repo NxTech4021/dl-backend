@@ -793,12 +793,47 @@ export class AdminMatchService {
   }
 
   /**
-   * Message match participants
+   * Message match participants with multi-channel delivery
+   * Respects user notification preferences for each delivery channel
    */
-  async messageParticipants(matchId: string, adminId: string, message: string) {
+  async messageParticipants(
+    matchId: string,
+    adminId: string,
+    data: {
+      subject: string;
+      message: string;
+      sendEmail: boolean;
+      sendPush: boolean;
+    }
+  ) {
+    const { subject, message, sendEmail, sendPush } = data;
+
     const match = await prisma.match.findUnique({
       where: { id: matchId },
-      include: { participants: { select: { userId: true } } }
+      include: {
+        participants: {
+          select: {
+            userId: true,
+            user: {
+              select: {
+                id: true,
+                email: true,
+                name: true,
+                pushTokens: {
+                  where: { isActive: true },
+                  select: { token: true, platform: true }
+                },
+                notificationPreferences: {
+                  select: {
+                    pushEnabled: true,
+                    emailEnabled: true
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
     });
 
     if (!match) {
@@ -806,19 +841,110 @@ export class AdminMatchService {
     }
 
     const recipientIds = match.participants.map(p => p.userId);
+    const deliveryResults = {
+      inApp: 0,
+      email: 0,
+      emailSkipped: 0,
+      push: 0,
+      pushSkipped: 0
+    };
 
+    // Always create in-app notification
     await this.notificationService.createNotification({
       type: 'ADMIN_MESSAGE',
-      title: 'Message from Admin',
+      title: subject,
       message,
       category: 'ADMIN',
       matchId,
       userIds: recipientIds
     });
+    deliveryResults.inApp = recipientIds.length;
 
-    logger.info(`Admin ${adminId} messaged participants of match ${matchId}`);
+    // Send email if requested and user has email notifications enabled
+    if (sendEmail) {
+      for (const participant of match.participants) {
+        // Check user's email notification preference (default to enabled if no preference set)
+        const emailEnabled = participant.user?.notificationPreferences?.emailEnabled ?? true;
 
-    return { sent: recipientIds.length, recipients: recipientIds };
+        if (!emailEnabled) {
+          logger.debug(`Skipping email for user ${participant.userId}: email notifications disabled`);
+          deliveryResults.emailSkipped++;
+          continue;
+        }
+
+        if (participant.user?.email) {
+          try {
+            await this.notificationService.sendEmail({
+              to: participant.user.email,
+              subject,
+              body: message,
+              recipientName: participant.user.name || undefined
+            });
+            deliveryResults.email++;
+          } catch (error) {
+            logger.error(`Failed to send email to ${participant.user.email}:`, error);
+          }
+        }
+      }
+    }
+
+    // Send push notification if requested and user has push notifications enabled
+    if (sendPush) {
+      for (const participant of match.participants) {
+        // Check user's push notification preference (default to enabled if no preference set)
+        const pushEnabled = participant.user?.notificationPreferences?.pushEnabled ?? true;
+
+        if (!pushEnabled) {
+          logger.debug(`Skipping push for user ${participant.userId}: push notifications disabled`);
+          deliveryResults.pushSkipped++;
+          continue;
+        }
+
+        const pushTokens = participant.user?.pushTokens || [];
+        for (const tokenRecord of pushTokens) {
+          try {
+            await this.notificationService.sendPushNotification({
+              token: tokenRecord.token,
+              title: subject,
+              body: message,
+              data: { matchId, type: 'ADMIN_MESSAGE' }
+            });
+            deliveryResults.push++;
+          } catch (error) {
+            logger.error(`Failed to send push to token ${tokenRecord.token}:`, error);
+          }
+        }
+      }
+    }
+
+    // Create audit log entry
+    await prisma.adminMessageLog.create({
+      data: {
+        adminId,
+        matchId,
+        subject,
+        message,
+        recipientIds,
+        sendEmail,
+        sendPush,
+        inAppCount: deliveryResults.inApp,
+        emailCount: deliveryResults.email,
+        emailSkipped: deliveryResults.emailSkipped,
+        pushCount: deliveryResults.push,
+        pushSkipped: deliveryResults.pushSkipped,
+      }
+    });
+
+    logger.info(`Admin ${adminId} messaged participants of match ${matchId}`, {
+      recipients: recipientIds.length,
+      deliveryResults
+    });
+
+    return {
+      sent: recipientIds.length,
+      recipients: recipientIds,
+      deliveryResults
+    };
   }
 
   /**
