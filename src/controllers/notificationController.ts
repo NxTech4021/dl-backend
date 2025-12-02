@@ -2,6 +2,13 @@ import { Request, Response } from 'express';
 import { NotificationCategory } from '@prisma/client';
 import { NotificationType, NOTIFICATION_TYPES } from '../types/notificationTypes';
 import { notificationService } from '../services/notificationService';
+import { prisma } from '../lib/prisma';
+import { Expo } from 'expo-server-sdk';
+
+// Validate Expo push token format
+function isValidExpoPushToken(token: string): boolean {
+  return Expo.isExpoPushToken(token);
+}
 
 
 // Get user notifications
@@ -274,6 +281,144 @@ export const sendTestNotification = async (req: Request, res: Response) => {
     res.status(500).json({
       success: false,
       error: 'Failed to send test notification',
+    });
+  }
+};
+
+// Register push notification token
+export const registerPushToken = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const { token, platform, deviceId } = req.body;
+
+    if (!token) {
+      return res.status(400).json({ error: 'Push token is required' });
+    }
+
+    if (!platform || !['ios', 'android', 'web'].includes(platform)) {
+      return res.status(400).json({
+        error: 'Valid platform is required (ios, android, or web)'
+      });
+    }
+
+    // Validate Expo push token format before storing
+    if (!isValidExpoPushToken(token)) {
+      return res.status(400).json({
+        error: 'Invalid push token format. Expected Expo push token format (ExponentPushToken[...] or ExpoPushToken[...])'
+      });
+    }
+
+    // Upsert push token - update if exists, create if not
+    const pushToken = await prisma.userPushToken.upsert({
+      where: { token },
+      update: {
+        userId, // Transfer token to current user if different
+        platform,
+        deviceId: deviceId || null,
+        isActive: true,
+        failureCount: 0,
+        lastUsedAt: new Date(),
+      },
+      create: {
+        userId,
+        token,
+        platform,
+        deviceId: deviceId || null,
+        isActive: true,
+      },
+    });
+
+    res.json({
+      success: true,
+      message: 'Push token registered successfully',
+      data: {
+        id: pushToken.id,
+        platform: pushToken.platform,
+        isActive: pushToken.isActive,
+      },
+    });
+  } catch (error) {
+    console.error('Error registering push token:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to register push token',
+    });
+  }
+};
+
+// Unregister push notification token
+export const unregisterPushToken = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const { token } = req.body;
+
+    if (!token) {
+      return res.status(400).json({ error: 'Push token is required' });
+    }
+
+    // Deactivate the token instead of deleting (for audit trail)
+    await prisma.userPushToken.updateMany({
+      where: {
+        token,
+        userId, // Only allow user to deactivate their own tokens
+      },
+      data: {
+        isActive: false,
+      },
+    });
+
+    res.json({
+      success: true,
+      message: 'Push token unregistered successfully',
+    });
+  } catch (error) {
+    console.error('Error unregistering push token:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to unregister push token',
+    });
+  }
+};
+
+// Get user's registered push tokens
+export const getUserPushTokens = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const tokens = await prisma.userPushToken.findMany({
+      where: {
+        userId,
+        isActive: true,
+      },
+      select: {
+        id: true,
+        platform: true,
+        deviceId: true,
+        lastUsedAt: true,
+        createdAt: true,
+      },
+    });
+
+    res.json({
+      success: true,
+      data: tokens,
+    });
+  } catch (error) {
+    console.error('Error getting push tokens:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to get push tokens',
     });
   }
 };
