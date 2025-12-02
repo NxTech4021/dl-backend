@@ -183,7 +183,7 @@ export class AdminMatchService {
     if (filters.seasonId) where.seasonId = filters.seasonId;
     if (filters.divisionId) where.divisionId = filters.divisionId;
 
-    const [total, byStatus, disputed, lateCancellations] = await Promise.all([
+    const [total, byStatus, disputed, lateCancellations, walkovers, pendingConfirmation] = await Promise.all([
       prisma.match.count({ where }),
       prisma.match.groupBy({
         by: ['status'],
@@ -191,19 +191,44 @@ export class AdminMatchService {
         _count: true
       }),
       prisma.match.count({ where: { ...where, isDisputed: true } }),
-      prisma.match.count({ where: { ...where, isLateCancellation: true } })
+      prisma.match.count({ where: { ...where, isLateCancellation: true } }),
+      prisma.match.count({ where: { ...where, isWalkover: true } }),
+      // Pending confirmation: result submitted but not yet confirmed
+      prisma.match.count({
+        where: {
+          ...where,
+          resultSubmittedAt: { not: null },
+          resultConfirmedAt: null,
+          status: MatchStatus.SCHEDULED
+        }
+      })
     ]);
 
-    const statusCounts: Record<string, number> = {};
+    // Build status counts with all statuses defaulting to 0
+    const statusCounts: Record<string, number> = {
+      DRAFT: 0,
+      SCHEDULED: 0,
+      ONGOING: 0,
+      COMPLETED: 0,
+      UNFINISHED: 0,
+      CANCELLED: 0,
+      VOID: 0
+    };
     byStatus.forEach(s => {
       statusCounts[s.status] = s._count;
     });
 
+    // Count matches requiring admin review (disputed or late cancellation)
+    const requiresAdminReview = disputed + lateCancellations;
+
     return {
-      total,
+      totalMatches: total,
       byStatus: statusCounts,
       disputed,
-      lateCancellations
+      pendingConfirmation,
+      lateCancellations,
+      walkovers,
+      requiresAdminReview
     };
   }
 
@@ -542,6 +567,44 @@ export class AdminMatchService {
       });
     });
 
+    // Trigger rating and standings recalculation for completed matches
+    if (match.status === MatchStatus.COMPLETED && match.divisionId && match.seasonId) {
+      try {
+        // Reverse old ratings and recalculate with new result
+        const { reverseMatchRatings, calculateMatchRatings, applyMatchRatings } =
+          await import('../rating/ratingCalculationService');
+
+        // First reverse the old ratings
+        await reverseMatchRatings(matchId);
+
+        // Then calculate and apply new ratings
+        const newRatings = await calculateMatchRatings(matchId);
+        if (newRatings) {
+          await applyMatchRatings(matchId, newRatings);
+        }
+
+        // Recalculate standings for division
+        const { recalculateDivisionStandings } = await import('../rating/standingsCalculationService');
+        await recalculateDivisionStandings(match.divisionId);
+
+        // Recalculate Best 6 for affected players
+        const { Best6AlgorithmService } = await import('../match/best6/best6AlgorithmService');
+        const best6Service = new Best6AlgorithmService();
+        for (const participant of match.participants) {
+          await best6Service.applyBest6ToDatabase(
+            participant.userId,
+            match.divisionId,
+            match.seasonId
+          );
+        }
+
+        logger.info(`Rating and standings recalculated after match ${matchId} result edit`);
+      } catch (error) {
+        logger.error('Error during recalculation after result edit', { matchId }, error as Error);
+        // Don't throw - the edit was successful, recalculation is secondary
+      }
+    }
+
     // Notify participants
     await this.sendResultEditedNotification(matchId);
 
@@ -874,15 +937,18 @@ export class AdminMatchService {
 
         if (participant.user?.email) {
           try {
-            await this.notificationService.sendEmail({
+            const emailInput: { to: string; subject: string; body: string; recipientName?: string } = {
               to: participant.user.email,
               subject,
               body: message,
-              recipientName: participant.user.name || undefined
-            });
+            };
+            if (participant.user.name) {
+              emailInput.recipientName = participant.user.name;
+            }
+            await this.notificationService.sendEmail(emailInput);
             deliveryResults.email++;
           } catch (error) {
-            logger.error(`Failed to send email to ${participant.user.email}:`, error);
+            logger.error(`Failed to send email to ${participant.user.email}:`, {}, error as Error);
           }
         }
       }
@@ -911,7 +977,7 @@ export class AdminMatchService {
             });
             deliveryResults.push++;
           } catch (error) {
-            logger.error(`Failed to send push to token ${tokenRecord.token}:`, error);
+            logger.error(`Failed to send push to token ${tokenRecord.token}:`, {}, error as Error);
           }
         }
       }
