@@ -11,6 +11,27 @@ import {
 } from '../types/notificationTypes';
 import { AppError } from '../utils/errors';
 import { logger } from '../utils/logger';
+import { sendEmail as sendEmailViaResend } from '../config/nodemailer';
+import { Expo, ExpoPushMessage } from 'expo-server-sdk';
+
+// Initialize Expo SDK for push notifications
+const expo = new Expo();
+
+// Email sending input type
+interface SendEmailInput {
+  to: string;
+  subject: string;
+  body: string;
+  recipientName?: string;
+}
+
+// Push notification input type
+interface SendPushInput {
+  token: string;
+  title: string;
+  body: string;
+  data?: Record<string, string>;
+}
 
 export class NotificationService {
   private io: SocketIOServer | null = null;
@@ -411,6 +432,122 @@ export class NotificationService {
       logger.error('Error deleting old notifications', { daysOld }, error as Error);
       throw new AppError('Failed to delete old notifications', 500);
     }
+  }
+
+  /**
+   * Send email notification using Resend
+   */
+  async sendEmail(input: SendEmailInput): Promise<void> {
+    const { to, subject, body, recipientName } = input;
+
+    try {
+      // Create HTML email template
+      const html = this.createEmailTemplate(subject, body, recipientName);
+
+      await sendEmailViaResend(to, subject, html);
+
+      logger.info('Email sent successfully', { to, subject });
+    } catch (error) {
+      logger.error('Failed to send email', { to, subject }, error as Error);
+      throw new AppError('Failed to send email', 500);
+    }
+  }
+
+  /**
+   * Send push notification via Expo
+   */
+  async sendPushNotification(input: SendPushInput): Promise<void> {
+    const { token, title, body, data } = input;
+
+    // Validate token format
+    if (!Expo.isExpoPushToken(token)) {
+      logger.warn('Invalid Expo push token', { token });
+      // Mark token as inactive if invalid
+      await this.deactivatePushToken(token);
+      return;
+    }
+
+    try {
+      const message: ExpoPushMessage = {
+        to: token,
+        sound: 'default',
+        title,
+        body,
+        data: data || {},
+      };
+
+      const chunks = expo.chunkPushNotifications([message]);
+
+      for (const chunk of chunks) {
+        const ticketChunk = await expo.sendPushNotificationsAsync(chunk);
+
+        // Handle tickets and potential errors
+        for (const ticket of ticketChunk) {
+          if (ticket.status === 'error') {
+            logger.error('Push notification error', {
+              token,
+              error: ticket.message,
+              details: ticket.details
+            });
+
+            // If device not registered, deactivate token
+            if (ticket.details?.error === 'DeviceNotRegistered') {
+              await this.deactivatePushToken(token);
+            }
+          } else {
+            logger.info('Push notification sent', { token, ticketId: ticket.id });
+          }
+        }
+      }
+    } catch (error) {
+      logger.error('Failed to send push notification', { token }, error as Error);
+      throw new AppError('Failed to send push notification', 500);
+    }
+  }
+
+  /**
+   * Deactivate a push token that is no longer valid
+   */
+  private async deactivatePushToken(token: string): Promise<void> {
+    try {
+      await prisma.userPushToken.updateMany({
+        where: { token },
+        data: {
+          isActive: false,
+          failureCount: { increment: 1 }
+        }
+      });
+      logger.info('Push token deactivated', { token });
+    } catch (error) {
+      logger.error('Failed to deactivate push token', { token }, error as Error);
+    }
+  }
+
+  /**
+   * Create HTML email template
+   */
+  private createEmailTemplate(subject: string, body: string, recipientName?: string): string {
+    const greeting = recipientName ? `Hello ${recipientName},` : 'Hello,';
+    const logoUrl = process.env.EMAIL_LOGO_URL || 'https://deuceleague.com/logo.png';
+    const companyName = process.env.COMPANY_NAME || 'Deuce League';
+    const primaryColor = process.env.EMAIL_PRIMARY_COLOR || '#1a73e8';
+
+    return `
+      <div style="font-family: Arial, sans-serif; color: #333; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #eaeaea; border-radius: 10px;">
+        <div style="text-align: center; margin-bottom: 20px;">
+          <img src="${logoUrl}" alt="${companyName} Logo" style="height: 60px;" />
+        </div>
+        <h2 style="color: ${primaryColor};">${subject}</h2>
+        <p>${greeting}</p>
+        <div style="margin: 20px 0; line-height: 1.6;">
+          ${body.replace(/\n/g, '<br/>')}
+        </div>
+        <hr style="margin: 30px 0; border: none; border-top: 1px solid #eaeaea;" />
+        <p style="font-size: 12px; color: #888; text-align: center;">
+          &copy; ${new Date().getFullYear()} ${companyName}. All rights reserved.
+        </p>
+      </div>
+    `;
   }
 
   private emitNotifications(userIds: string[], notification: NotificationResult): void {

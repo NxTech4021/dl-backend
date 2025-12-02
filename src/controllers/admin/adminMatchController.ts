@@ -411,7 +411,7 @@ export const getPlayerPenalties = async (req: Request, res: Response) => {
 
 /**
  * Message match participants (AS6)
- * POST /api/admin/matches/:id/message
+ * POST /api/admin/matches/:id/message-participants
  */
 export const messageParticipants = async (req: Request, res: Response) => {
   try {
@@ -426,17 +426,31 @@ export const messageParticipants = async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Match ID is required' });
     }
 
-    const { message } = req.body;
+    const { subject, message, sendEmail = false, sendPush = false } = req.body;
 
     if (!message) {
       return res.status(400).json({ error: 'message is required' });
     }
 
-    const result = await adminMatchService.messageParticipants(id, adminId, message);
-    res.json(result);
+    // Validate at least one delivery method when explicitly set
+    if (sendEmail === false && sendPush === false) {
+      // Default to in-app notification only - this is fine
+    }
+
+    const result = await adminMatchService.messageParticipants(id, adminId, {
+      subject: subject || 'Message from Admin',
+      message,
+      sendEmail,
+      sendPush,
+    });
+
+    res.json({
+      success: true,
+      data: result,
+    });
   } catch (error) {
     console.error('Message Participants Error:', error);
-    const message = error instanceof Error ? error.message : 'Failed to send message';
-    res.status(400).json({ error: message });
+    const errorMessage = error instanceof Error ? error.message : 'Failed to send message';
+    res.status(400).json({ error: errorMessage });
   }
 };

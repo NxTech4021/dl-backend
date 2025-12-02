@@ -489,6 +489,74 @@ export function scheduleProfileReminders(): void {
 }
 
 /**
+ * Cleanup stale and failed push tokens
+ * Runs daily at 3:00 AM
+ * - Deactivates tokens with high failure count (>= 5)
+ * - Removes tokens not used for 90+ days
+ */
+export function schedulePushTokenCleanup(): void {
+  cron.schedule('0 3 * * *', async () => {
+    try {
+      logger.info('Running push token cleanup job');
+
+      const FAILURE_THRESHOLD = 5;
+      const STALE_DAYS = 90;
+
+      const staleDate = new Date();
+      staleDate.setDate(staleDate.getDate() - STALE_DAYS);
+
+      // Deactivate tokens with high failure count
+      const failedTokensResult = await prisma.userPushToken.updateMany({
+        where: {
+          isActive: true,
+          failureCount: {
+            gte: FAILURE_THRESHOLD,
+          },
+        },
+        data: {
+          isActive: false,
+        },
+      });
+
+      // Deactivate stale tokens (not used in 90+ days)
+      const staleTokensResult = await prisma.userPushToken.updateMany({
+        where: {
+          isActive: true,
+          OR: [
+            { lastUsedAt: { lt: staleDate } },
+            { lastUsedAt: null, createdAt: { lt: staleDate } },
+          ],
+        },
+        data: {
+          isActive: false,
+        },
+      });
+
+      // Delete very old inactive tokens (180+ days) for cleanup
+      const deleteDate = new Date();
+      deleteDate.setDate(deleteDate.getDate() - 180);
+
+      const deletedTokensResult = await prisma.userPushToken.deleteMany({
+        where: {
+          isActive: false,
+          updatedAt: { lt: deleteDate },
+        },
+      });
+
+      logger.info('Push token cleanup complete', {
+        deactivatedFailed: failedTokensResult.count,
+        deactivatedStale: staleTokensResult.count,
+        deletedOld: deletedTokensResult.count,
+      });
+    } catch (error) {
+      logger.error('Failed to cleanup push tokens', {}, error as Error);
+    }
+  });
+
+  logger.info('Push token cleanup job scheduled');
+}
+
+/**
  * Initialize all notification jobs
  */
 export function initializeNotificationJobs(): void {
@@ -505,6 +573,7 @@ export function initializeNotificationJobs(): void {
   scheduleWeeklyRankingUpdates();
   scheduleMonthlyDMRRecaps();
   scheduleProfileReminders();
+  schedulePushTokenCleanup();
 
   logger.info('✅ All notification jobs initialized successfully');
 }
