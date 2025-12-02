@@ -7,6 +7,7 @@ import { notificationService } from '../notificationService';
 import { notificationTemplates } from '../../helpers/notification';
 import { prisma } from '../../lib/prisma';
 import { logger } from '../../utils/logger';
+import { MatchStatus } from '@prisma/client';
 
 /**
  * Send match scheduled notification to both players
@@ -20,11 +21,9 @@ export async function sendMatchScheduledNotification(
     const match = await prisma.match.findUnique({
       where: { id: matchId },
       select: {
-        scheduledAt: true,
-        courtId: true,
-        court: {
-          select: { name: true },
-        },
+        scheduledStartTime: true,
+        venue: true,
+        location: true,
       },
     });
 
@@ -33,9 +32,9 @@ export async function sendMatchScheduledNotification(
       return;
     }
 
-    const date = match.scheduledAt?.toLocaleDateString() || 'TBD';
-    const time = match.scheduledAt?.toLocaleTimeString() || 'TBD';
-    const venue = match.court?.name || 'TBD';
+    const date = match.scheduledStartTime?.toLocaleDateString() || 'TBD';
+    const time = match.scheduledStartTime?.toLocaleTimeString() || 'TBD';
+    const venue = match.venue || match.location || 'TBD';
 
     // Get player names
     const [player1, player2] = await Promise.all([
@@ -79,45 +78,47 @@ export async function sendMatchReminder24h(matchId: string): Promise<void> {
     const match = await prisma.match.findUnique({
       where: { id: matchId },
       select: {
-        scheduledAt: true,
-        court: { select: { name: true } },
-        player1Registration: {
-          select: { playerId: true, player: { select: { name: true } } },
-        },
-        player2Registration: {
-          select: { playerId: true, player: { select: { name: true } } },
-        },
+        scheduledStartTime: true,
+        venue: true,
+        location: true,
+        participants: {
+          include: {
+            user: {
+              select: { id: true, name: true }
+            }
+          }
+        }
       },
     });
 
-    if (!match) return;
+    if (!match || match.participants.length < 2) return;
 
-    const time = match.scheduledAt?.toLocaleTimeString() || 'TBD';
-    const venue = match.court?.name || 'TBD';
+    const time = match.scheduledStartTime?.toLocaleTimeString() || 'TBD';
+    const venue = match.venue || match.location || 'TBD';
 
-    const player1Id = match.player1Registration.playerId;
-    const player2Id = match.player2Registration.playerId;
-    const player1Name = match.player1Registration.player.name;
-    const player2Name = match.player2Registration.player.name;
+    const player1 = match.participants[0];
+    const player2 = match.participants[1];
+
+    if (!player1 || !player2) return;
 
     await Promise.all([
       notificationService.createNotification({
         type: 'MATCH_REMINDER',
         category: 'MATCH',
         title: 'Match Tomorrow',
-        message: `You are playing ${player2Name} tomorrow at ${time} at ${venue}`,
-        userIds: player1Id,
+        message: `You are playing ${player2.user?.name || 'Opponent'} tomorrow at ${time} at ${venue}`,
+        userIds: player1.userId,
         matchId,
-        metadata: { opponentName: player2Name, time, venue },
+        metadata: { opponentName: player2.user?.name || 'Opponent', time, venue },
       }),
       notificationService.createNotification({
         type: 'MATCH_REMINDER',
         category: 'MATCH',
         title: 'Match Tomorrow',
-        message: `You are playing ${player1Name} tomorrow at ${time} at ${venue}`,
-        userIds: player2Id,
+        message: `You are playing ${player1.user?.name || 'Opponent'} tomorrow at ${time} at ${venue}`,
+        userIds: player2.userId,
         matchId,
-        metadata: { opponentName: player1Name, time, venue },
+        metadata: { opponentName: player1.user?.name || 'Opponent', time, venue },
       }),
     ]);
 
@@ -135,42 +136,44 @@ export async function sendMatchReminder2h(matchId: string): Promise<void> {
     const match = await prisma.match.findUnique({
       where: { id: matchId },
       select: {
-        court: { select: { name: true } },
-        player1Registration: {
-          select: { playerId: true, player: { select: { name: true } } },
-        },
-        player2Registration: {
-          select: { playerId: true, player: { select: { name: true } } },
-        },
+        venue: true,
+        location: true,
+        participants: {
+          include: {
+            user: {
+              select: { id: true, name: true }
+            }
+          }
+        }
       },
     });
 
-    if (!match) return;
+    if (!match || match.participants.length < 2) return;
 
-    const venue = match.court?.name || 'TBD';
-    const player1Id = match.player1Registration.playerId;
-    const player2Id = match.player2Registration.playerId;
-    const player1Name = match.player1Registration.player.name;
-    const player2Name = match.player2Registration.player.name;
+    const venue = match.venue || match.location || 'TBD';
+    const player1 = match.participants[0];
+    const player2 = match.participants[1];
+
+    if (!player1 || !player2) return;
 
     await Promise.all([
       notificationService.createNotification({
         type: 'MATCH_REMINDER',
         category: 'MATCH',
         title: 'Match Starting Soon',
-        message: `Get ready! You are playing ${player2Name} in 2 hours at ${venue}`,
-        userIds: player1Id,
+        message: `Get ready! You are playing ${player2.user?.name || 'Opponent'} in 2 hours at ${venue}`,
+        userIds: player1.userId,
         matchId,
-        metadata: { opponentName: player2Name, venue },
+        metadata: { opponentName: player2.user?.name || 'Opponent', venue },
       }),
       notificationService.createNotification({
         type: 'MATCH_REMINDER',
         category: 'MATCH',
         title: 'Match Starting Soon',
-        message: `Get ready! You are playing ${player1Name} in 2 hours at ${venue}`,
-        userIds: player2Id,
+        message: `Get ready! You are playing ${player1.user?.name || 'Opponent'} in 2 hours at ${venue}`,
+        userIds: player2.userId,
         matchId,
-        metadata: { opponentName: player1Name, venue },
+        metadata: { opponentName: player1.user?.name || 'Opponent', venue },
       }),
     ]);
 
@@ -188,33 +191,34 @@ export async function sendScoreSubmissionReminder(matchId: string): Promise<void
     const match = await prisma.match.findUnique({
       where: { id: matchId },
       select: {
-        player1Registration: {
-          select: { playerId: true, player: { select: { name: true } } },
-        },
-        player2Registration: {
-          select: { playerId: true, player: { select: { name: true } } },
-        },
+        participants: {
+          include: {
+            user: {
+              select: { id: true, name: true }
+            }
+          }
+        }
       },
     });
 
-    if (!match) return;
+    if (!match || match.participants.length < 2) return;
 
-    const player1Id = match.player1Registration.playerId;
-    const player2Id = match.player2Registration.playerId;
-    const player1Name = match.player1Registration.player.name;
-    const player2Name = match.player2Registration.player.name;
+    const player1 = match.participants[0];
+    const player2 = match.participants[1];
+
+    if (!player1 || !player2) return;
 
     const reminderNotif = notificationTemplates.match.scoreSubmissionReminder;
 
     await Promise.all([
       notificationService.createNotification({
-        ...reminderNotif(player2Name || ''),
-        userIds: player1Id,
+        ...reminderNotif(player2.user?.name || 'Opponent'),
+        userIds: player1.userId,
         matchId,
       }),
       notificationService.createNotification({
-        ...reminderNotif(player1Name || ''),
-        userIds: player2Id,
+        ...reminderNotif(player1.user?.name || 'Opponent'),
+        userIds: player2.userId,
         matchId,
       }),
     ]);
@@ -301,11 +305,11 @@ export async function sendMatchCancelledNotification(
       prisma.user.findUnique({ where: { id: cancelledById }, select: { name: true } }),
       prisma.match.findUnique({
         where: { id: matchId },
-        select: { scheduledAt: true },
+        select: { scheduledStartTime: true },
       }),
     ]);
 
-    const date = match?.scheduledAt?.toLocaleDateString() || 'TBD';
+    const date = match?.scheduledStartTime?.toLocaleDateString() || 'TBD';
 
     await notificationService.createNotification({
       type: 'MATCH_CANCELLED',
@@ -331,17 +335,17 @@ export async function sendMatchRescheduleRequest(
   requesterId: string,
   opponentId: string,
   newDate: Date,
-  newCourtId?: string
+  newVenue?: string
 ): Promise<void> {
   try {
-    const [requester, court] = await Promise.all([
-      prisma.user.findUnique({ where: { id: requesterId }, select: { name: true } }),
-      newCourtId ? prisma.court.findUnique({ where: { id: newCourtId }, select: { name: true } }) : null,
-    ]);
+    const requester = await prisma.user.findUnique({
+      where: { id: requesterId },
+      select: { name: true }
+    });
 
     const date = newDate.toLocaleDateString();
     const time = newDate.toLocaleTimeString();
-    const venue = court?.name || 'TBD';
+    const venue = newVenue || 'TBD';
 
     const rescheduleNotif = notificationTemplates.match.matchRescheduleRequest(
       requester?.name || 'Opponent',
@@ -370,27 +374,39 @@ export async function checkAndSendWinningStreakNotification(
   matchId: string
 ): Promise<void> {
   try {
-    // Get recent matches for this player
+    // Get recent completed matches for this player
     const recentMatches = await prisma.match.findMany({
       where: {
-        OR: [
-          { player1Registration: { playerId: userId } },
-          { player2Registration: { playerId: userId } },
-        ],
-        status: 'COMPLETED',
+        participants: {
+          some: { userId }
+        },
+        status: MatchStatus.COMPLETED,
       },
-      orderBy: { completedAt: 'desc' },
+      orderBy: { updatedAt: 'desc' },
       take: 10,
       select: {
         id: true,
-        winnerId: true,
+        team1Score: true,
+        team2Score: true,
+        participants: {
+          where: { userId },
+          select: { team: true }
+        }
       },
     });
 
     // Count consecutive wins from most recent
     let streakCount = 0;
     for (const match of recentMatches) {
-      if (match.winnerId === userId) {
+      const userParticipant = match.participants[0];
+      if (!userParticipant) continue;
+
+      const isTeam1 = userParticipant.team === 'team1';
+      const won = isTeam1
+        ? (match.team1Score ?? 0) > (match.team2Score ?? 0)
+        : (match.team2Score ?? 0) > (match.team1Score ?? 0);
+
+      if (won) {
         streakCount++;
       } else {
         break;
