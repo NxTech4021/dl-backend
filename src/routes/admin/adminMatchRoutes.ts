@@ -1,6 +1,6 @@
 /**
  * Admin Match Routes
- * Routes for admin match management (AS1-AS6)
+ * Routes for admin match management (AS1-AS7)
  */
 
 import { Router } from 'express';
@@ -17,7 +17,10 @@ import {
   reviewCancellation,
   applyPenalty,
   getPlayerPenalties,
-  messageParticipants
+  messageParticipants,
+  editMatchParticipants,
+  validateMatchParticipants,
+  getAvailablePlayers
 } from '../../controllers/admin/adminMatchController';
 
 const router = Router();
@@ -30,6 +33,11 @@ router.post('/matches/:id/message', messageParticipants);
 // AS4: Edit Match Results
 router.put('/matches/:id/result', editMatchResult);
 router.post('/matches/:id/void', voidMatch);
+
+// AS7: Edit Match Participants
+router.put('/matches/:id/participants', editMatchParticipants);
+router.post('/matches/:id/participants/validate', validateMatchParticipants);
+router.get('/divisions/:divisionId/available-players', getAvailablePlayers);
 
 // AS5: Dispute Resolution
 router.get('/disputes', getDisputes);
