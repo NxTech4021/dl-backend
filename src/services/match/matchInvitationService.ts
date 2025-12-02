@@ -31,9 +31,11 @@ export interface CreateMatchInput {
   location?: string;
   venue?: string;
   notes?: string;
+  courtBooked?: boolean;       // Whether court has been booked
   message?: string;            // Message to send with invitation
   expiresInHours?: number;     // How long until invitation expires (default 48)
 }
+
 
 export interface ProposeTimeSlotInput {
   matchId: string;
@@ -95,6 +97,7 @@ export class MatchInvitationService {
       location,
       venue,
       notes,
+      courtBooked,
       message,
       expiresInHours = 48
     } = input;
@@ -127,6 +130,23 @@ export class MatchInvitationService {
       throw new Error('Partner is required for doubles matches');
     }
 
+    // Check for scheduling conflicts for creator and partner
+    if (proposedTimes && proposedTimes.length > 0) {
+      const firstProposedTime = proposedTimes[0];
+      if (firstProposedTime) {
+        const conflictCheck = await this.checkSchedulingConflicts(
+          createdById, 
+          partnerId, 
+          firstProposedTime,
+          divisionId
+        );
+        
+        if (conflictCheck.hasConflict) {
+          throw new Error(conflictCheck.message || 'Scheduling conflict detected');
+        }
+      }
+    }
+
     // Calculate expiration time
     const expiresAt = new Date();
     expiresAt.setHours(expiresAt.getHours() + expiresInHours);
@@ -147,6 +167,7 @@ export class MatchInvitationService {
       if (location) matchData.location = location;
       if (venue) matchData.venue = venue;
       if (notes) matchData.notes = notes;
+      if (courtBooked !== undefined) matchData.courtBooked = courtBooked;
       if (proposedTimes) matchData.proposedTimes = proposedTimes.map(t => t.toISOString());
 
       const newMatch = await tx.match.create({ data: matchData });
@@ -163,29 +184,31 @@ export class MatchInvitationService {
         }
       });
 
-      // Add creator's partner for doubles
+      // Add creator's partner for doubles (automatically accepted)
       if (matchType === MatchType.DOUBLES && partnerId) {
         await tx.matchParticipant.create({
           data: {
             matchId: newMatch.id,
             userId: partnerId,
             role: ParticipantRole.PARTNER,
-            invitationStatus: InvitationStatus.PENDING,
+            invitationStatus: InvitationStatus.ACCEPTED, // Auto-accept partner
+            acceptedAt: new Date(),
             team: 'team1'
           }
         });
 
-        // Create invitation for partner
-        await tx.matchInvitation.create({
-          data: {
-            matchId: newMatch.id,
-            inviterId: createdById,
-            inviteeId: partnerId,
-            status: InvitationStatus.PENDING,
-            message: message || 'You have been invited to join a doubles match as partner',
-            expiresAt
-          }
-        });
+        // COMMENTED OUT: Auto-accept partner instead of sending invitation
+        // // Create invitation for partner
+        // await tx.matchInvitation.create({
+        //   data: {
+        //     matchId: newMatch.id,
+        //     inviterId: createdById,
+        //     inviteeId: partnerId,
+        //     status: InvitationStatus.PENDING,
+        //     message: message || 'You have been invited to join a doubles match as partner',
+        //     expiresAt
+        //   }
+        // });
       }
 
       // Handle direct challenge to opponent
@@ -683,7 +706,7 @@ export class MatchInvitationService {
 
     // Add partner confirmation status for doubles
     let partnerStatus = null;
-    if (match.matchType === MatchType.DOUBLES) {
+    if (match?.matchType === MatchType.DOUBLES) {
       partnerStatus = this.getPartnerConfirmationStatus(match);
     }
 
@@ -696,7 +719,7 @@ export class MatchInvitationService {
   /**
    * Join an available match
    */
-  async joinMatch(matchId: string, userId: string, asPartner = false) {
+  async joinMatch(matchId: string, userId: string, asPartner = false, partnerId?: string) {
     const match = await prisma.match.findUnique({
       where: { id: matchId },
       include: {
@@ -732,6 +755,41 @@ export class MatchInvitationService {
       throw new Error('You are already a participant in this match');
     }
 
+    // For doubles with partnerId, check partner is not already in the match
+    if (partnerId && match.matchType === MatchType.DOUBLES) {
+      // Verify the user is the captain of the partnership
+      const partnership = await prisma.partnership.findFirst({
+        where: {
+          divisionId: match.divisionId!,
+          captainId: userId,
+          partnerId: partnerId,
+          status: 'ACTIVE'
+        }
+      });
+
+      if (!partnership) {
+        throw new Error('Only the team captain can join matches for the partnership');
+      }
+
+      const existingPartner = match.participants.find(p => p.userId === partnerId);
+      if (existingPartner) {
+        throw new Error('Your partner is already in this match');
+      }
+
+      // Check partner membership
+      const partnerMembership = await prisma.seasonMembership.findFirst({
+        where: {
+          userId: partnerId,
+          divisionId: match.divisionId!,
+          status: 'ACTIVE'
+        }
+      });
+
+      if (!partnerMembership) {
+        throw new Error('Your partner must be an active member of this division');
+      }
+    }
+
     // Determine role and team
     let role: ParticipantRole = ParticipantRole.OPPONENT;
     let team: string | null = null;
@@ -750,10 +808,18 @@ export class MatchInvitationService {
       } else {
         throw new Error('This match is already full');
       }
+
+      // If joining with a partner, check if team has space for both
+      if (partnerId) {
+        const targetTeamCount = team === 'team1' ? team1Count : team2Count;
+        if (targetTeamCount > 0) {
+          throw new Error('Not enough space on the team for both you and your partner');
+        }
+      }
     }
 
     await prisma.$transaction(async (tx) => {
-      // Add as participant
+      // Add user as participant
       await tx.matchParticipant.create({
         data: {
           matchId,
@@ -765,14 +831,35 @@ export class MatchInvitationService {
         }
       });
 
+      // Add partner as participant for doubles matches
+      if (partnerId && match.matchType === MatchType.DOUBLES && team) {
+        await tx.matchParticipant.create({
+          data: {
+            matchId,
+            userId: partnerId,
+            role: ParticipantRole.PARTNER,
+            team,
+            invitationStatus: InvitationStatus.ACCEPTED,
+            acceptedAt: new Date()
+          }
+        });
+
+        logger.info(`Partner ${partnerId} added to match ${matchId} on ${team}`);
+      }
+
       // Check if match is ready
       await this.checkMatchReadyToSchedule(tx, matchId);
     });
 
     // Send notification to match creator and other participants
     await this.sendMatchJoinedNotification(matchId, userId);
+    
+    // Send notification for partner if they were added
+    if (partnerId && match.matchType === MatchType.DOUBLES) {
+      await this.sendMatchJoinedNotification(matchId, partnerId);
+    }
 
-    logger.info(`User ${userId} joined match ${matchId}`);
+    logger.info(`User ${userId} joined match ${matchId}${partnerId ? ` with partner ${partnerId}` : ''}`);
 
     return this.getMatchById(matchId);
   }
@@ -1755,6 +1842,73 @@ export class MatchInvitationService {
         status: p.invitationStatus
       }))
     };
+  }
+
+  /**
+   * Check for scheduling conflicts for users at a specific time
+   */
+  private async checkSchedulingConflicts(
+    creatorId: string,
+    partnerId: string | undefined,
+    matchTime: Date,
+    currentDivisionId: string
+  ): Promise<{ hasConflict: boolean; message?: string; conflictingUsers?: string[] }> {
+    try {
+      // Define time window (2 hours before and after)
+      const timeWindow = 2 * 60 * 60 * 1000; // 2 hours in milliseconds
+      const startTime = new Date(matchTime.getTime() - timeWindow);
+      const endTime = new Date(matchTime.getTime() + timeWindow);
+
+      const usersToCheck = [creatorId];
+      if (partnerId) {
+        usersToCheck.push(partnerId);
+      }
+
+      // Check for existing matches in the time window
+      for (const userId of usersToCheck) {
+        const conflictingMatches = await prisma.match.findMany({
+          where: {
+            participants: {
+              some: {
+                userId: userId,
+                invitationStatus: InvitationStatus.ACCEPTED
+              }
+            },
+            status: {
+              in: [MatchStatus.SCHEDULED, MatchStatus.ONGOING]
+            },
+            scheduledTime: {
+              gte: startTime,
+              lte: endTime
+            }
+          },
+          select: {
+            id: true,
+            scheduledTime: true
+          },
+          take: 1
+        });
+
+        if (conflictingMatches.length > 0) {
+          const user = await prisma.user.findUnique({
+            where: { id: userId },
+            select: { name: true }
+          });
+          
+          return {
+            hasConflict: true,
+            message: `${user?.name || 'User'} already has a match scheduled around this time`,
+            conflictingUsers: [userId]
+          };
+        }
+      }
+
+      return { hasConflict: false };
+    } catch (error) {
+      logger.error('Error checking scheduling conflicts', { creatorId, partnerId, matchTime }, error as Error);
+      // Don't block match creation on conflict check error
+      return { hasConflict: false };
+    }
   }
 }
 

@@ -35,6 +35,7 @@ export const createMatch = async (req: Request, res: Response) => {
       location,
       venue,
       notes,
+      courtBooked,
       message,
       expiresInHours
     } = req.body;
@@ -59,10 +60,12 @@ export const createMatch = async (req: Request, res: Response) => {
       location,
       venue,
       notes,
+      courtBooked,
       message,
       expiresInHours
     });
 
+    
     res.status(201).json(match);
   } catch (error) {
     console.error('Create Match Error:', error);
@@ -246,9 +249,9 @@ export const joinMatch = async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Match ID is required' });
     }
 
-    const { asPartner = false } = req.body;
+    const { asPartner = false, partnerId } = req.body;
 
-    const match = await matchInvitationService.joinMatch(id, userId, asPartner);
+    const match = await matchInvitationService.joinMatch(id, userId, asPartner, partnerId);
     res.json(match);
   } catch (error) {
     console.error('Join Match Error:', error);

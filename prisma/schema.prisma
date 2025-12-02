@@ -570,6 +570,7 @@ model Match {
   venue         String?    // Specific venue name
   notes         String?
   duration      Int?
+  courtBooked   Boolean?
 
   // Match format
   format        MatchFormat @default(STANDARD)
@@ -643,7 +644,6 @@ model Match {
   invitations   MatchInvitation[]
   timeSlots     MatchTimeSlot[]
   joinRequests  MatchJoinRequest[]
-  messages      Message[]
   stats         MatchStats?
   notifications Notification[]
 
@@ -670,6 +670,9 @@ model Match {
 
   // Bracket relation
   bracketMatch    BracketMatch?
+  
+  // Chat messages relation
+  messages        Message[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -743,7 +746,6 @@ model MatchInvitation {
   matchId         String
   inviterId       String
   inviteeId       String
-
   // Invitation details
   status          InvitationStatus @default(PENDING)
   message         String?
@@ -2517,7 +2519,7 @@ enum JoinRequestStatus {
 
 enum MessageType {
   TEXT          // Regular text message
-  MATCH_POST    // Match posted to division chat
+  MATCH         // Match Events posted to division chat
   SYSTEM        // System messages (user joined, etc.)
   JOIN_REQUEST  // Join request notification
 }

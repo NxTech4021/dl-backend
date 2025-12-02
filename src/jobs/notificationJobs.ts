@@ -25,6 +25,7 @@ import {
 import {
   checkAndSendProfileReminders,
 } from '../services/notification/onboardingNotificationService';
+import { notificationService } from '../services/notificationService';
 
 /**
  * Check and send match reminders 24 hours before
@@ -76,17 +77,54 @@ export function scheduleMatch2hReminders(): void {
 
       const matches = await prisma.match.findMany({
         where: {
-          scheduledAt: {
+          scheduledStartTime: {
             gte: in2Hours,
             lte: in2Hours15Min,
           },
           status: 'SCHEDULED',
         },
-        select: { id: true },
+        select: {
+          id: true,
+          scheduledStartTime: true,
+          participants: {
+            include: {
+              user: {
+                select: {
+                  id: true,
+                  name: true,
+                  email: true
+                }
+              }
+            }
+          },
+          division: {
+            select: {
+              name: true
+            }
+          },
+          season: {
+            select: {
+              name: true
+            }
+          }
+        },
       });
 
+      console.log(`✅ Match reminder check complete: ${matches.length} matches checked, ${matches.length} reminders sent`);
+
+      // Send notifications for each match
       for (const match of matches) {
-        await sendMatchReminder2h(match.id);
+        const playerIds = match.participants.map(p => p.userId);
+        
+        await notificationService.createNotification({
+          userIds: playerIds,
+          type: 'MATCH_REMINDER',
+          category: 'MATCH',
+          title: 'Match Starting Soon',
+          message: `Your match in ${match.division?.name || 'division'} starts in 2 hours`,
+          matchId: match.id,
+          seasonId: match.seasonId || undefined
+        });
       }
 
       logger.info('2h match reminders sent', { count: matches.length });
