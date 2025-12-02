@@ -63,6 +63,7 @@ model User {
   notifications           Notification[]
   userNotifications       UserNotification[]
   notificationPreferences NotificationPreference?
+  pushTokens              UserPushToken[]
 
   // Admin-focused match management relations
   raisedDisputes     MatchDispute[]   @relation("RaisedDisputes")
@@ -2107,6 +2108,26 @@ model NotificationPreference {
   updatedAt DateTime @updatedAt
 
   @@map("notification_preference")
+}
+
+model UserPushToken {
+  id           String    @id @default(cuid())
+  userId       String
+  token        String    @unique
+  platform     String    // "ios", "android", "web"
+  deviceId     String?   // Optional device identifier for multi-device support
+  isActive     Boolean   @default(true)
+  failureCount Int       @default(0) // Track consecutive failures for cleanup
+  lastUsedAt   DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([platform])
+  @@index([isActive])
+  @@map("user_push_token")
 }
 
 enum NotificationCategory {
