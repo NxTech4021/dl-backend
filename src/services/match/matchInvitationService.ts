@@ -1532,8 +1532,8 @@ export class MatchInvitationService {
    */
   async getPlayersNotPlayedWith(userId: string, divisionId: string) {
     try {
-      // 1. Get all users in the division
-      const divisionAssignments = await prisma.divisionAssignment.findMany({
+      // 1. Get all users in the division (via SeasonMembership which has status field)
+      const divisionMembers = await prisma.seasonMembership.findMany({
         where: {
           divisionId,
           status: MembershipStatus.ACTIVE
@@ -1577,18 +1577,18 @@ export class MatchInvitationService {
       });
 
       // 4. Filter out current user and players already played with
-      const eligiblePlayers = divisionAssignments
-        .filter(assignment =>
-          assignment.userId !== userId &&
-          !opponentIds.has(assignment.userId)
+      const eligiblePlayers = divisionMembers
+        .filter(member =>
+          member.userId !== userId &&
+          !opponentIds.has(member.userId)
         )
-        .map(assignment => assignment.user);
+        .map(member => member.user);
 
       logger.info(`Found ${eligiblePlayers.length} eligible players for user ${userId} in division ${divisionId}`);
 
       return {
         eligiblePlayers,
-        totalInDivision: divisionAssignments.length - 1, // Exclude current user
+        totalInDivision: divisionMembers.length - 1, // Exclude current user
         alreadyPlayedWith: opponentIds.size
       };
     } catch (error) {
@@ -1641,38 +1641,44 @@ export class MatchInvitationService {
       const startWindow = new Date(proposedTime.getTime() - timeWindow);
       const endWindow = new Date(proposedTime.getTime() + timeWindow);
 
-      const conflictingMatches = await prisma.match.findMany({
-        where: {
-          id: excludeMatchId ? { not: excludeMatchId } : undefined,
-          participants: {
-            some: {
-              userId,
-              invitationStatus: InvitationStatus.ACCEPTED
+      // Build where clause dynamically to avoid undefined values
+      const whereClause: any = {
+        participants: {
+          some: {
+            userId,
+            invitationStatus: InvitationStatus.ACCEPTED
+          }
+        },
+        status: {
+          in: [MatchStatus.SCHEDULED, MatchStatus.ONGOING]
+        },
+        OR: [
+          {
+            scheduledTime: {
+              gte: startWindow,
+              lte: endWindow
             }
           },
-          status: {
-            in: [MatchStatus.SCHEDULED, MatchStatus.ONGOING]
-          },
-          OR: [
-            {
-              scheduledTime: {
-                gte: startWindow,
-                lte: endWindow
-              }
-            },
-            {
-              timeSlots: {
-                some: {
-                  status: TimeSlotStatus.CONFIRMED,
-                  proposedTime: {
-                    gte: startWindow,
-                    lte: endWindow
-                  }
+          {
+            timeSlots: {
+              some: {
+                status: TimeSlotStatus.CONFIRMED,
+                proposedTime: {
+                  gte: startWindow,
+                  lte: endWindow
                 }
               }
             }
-          ]
-        },
+          }
+        ]
+      };
+
+      if (excludeMatchId) {
+        whereClause.id = { not: excludeMatchId };
+      }
+
+      const conflictingMatches = await prisma.match.findMany({
+        where: whereClause,
         include: {
           division: { select: { name: true } },
           timeSlots: {
@@ -1684,16 +1690,18 @@ export class MatchInvitationService {
 
       if (conflictingMatches.length > 0) {
         const conflict = conflictingMatches[0];
-        const conflictTime = conflict.scheduledTime || conflict.timeSlots[0]?.proposedTime;
+        if (conflict) {
+          const conflictTime = conflict.scheduledTime || conflict.timeSlots?.[0]?.proposedTime;
 
-        return {
-          hasConflict: true,
-          conflictingMatch: {
-            id: conflict.id,
-            division: conflict.division?.name,
-            scheduledTime: conflictTime
-          }
-        };
+          return {
+            hasConflict: true,
+            conflictingMatch: {
+              id: conflict.id,
+              division: conflict.division?.name,
+              scheduledTime: conflictTime
+            }
+          };
+        }
       }
 
       return { hasConflict: false };
