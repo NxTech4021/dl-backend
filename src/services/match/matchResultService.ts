@@ -960,7 +960,7 @@ export class MatchResultService {
         },
         comments: {
           include: {
-            user: {
+            sender: {
               select: { id: true, name: true, username: true }
             }
           },
