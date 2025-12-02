@@ -112,7 +112,7 @@ const apiPrefix = getApiPrefix();
 console.log(`📡 API routes mounted at: ${apiPrefix || "(root)"}`);
 // Only use prefix if it's not empty (development), otherwise mount at root (production)
 if (apiPrefix) {
-  app.use(router); //temporary
+  app.use(apiPrefix, router);
 } else {
   app.use(router);
 }
