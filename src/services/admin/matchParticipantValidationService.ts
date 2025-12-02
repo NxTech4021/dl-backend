@@ -112,15 +112,16 @@ export async function validateDivisionMembership(
     select: { status: true }
   });
 
-  const result: { isMember: boolean; membershipStatus?: string } = {
-    isMember: !!membership,
-  };
-
-  if (membership?.status) {
-    result.membershipStatus = membership.status;
+  if (membership) {
+    return {
+      isMember: true,
+      membershipStatus: membership.status,
+    };
   }
 
-  return result;
+  return {
+    isMember: false,
+  };
 }
 
 /**
