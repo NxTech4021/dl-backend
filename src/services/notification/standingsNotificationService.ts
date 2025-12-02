@@ -7,6 +7,7 @@ import { notificationService } from '../notificationService';
 import { notificationTemplates } from '../../helpers/notification';
 import { prisma } from '../../lib/prisma';
 import { logger } from '../../utils/logger';
+import { MatchStatus, SportType } from '@prisma/client';
 
 /**
  * Check standings changes and send appropriate notifications
@@ -17,7 +18,7 @@ export async function checkAndSendStandingsNotifications(
   seasonId: string
 ): Promise<void> {
   try {
-    const [season, division, leaderboard] = await Promise.all([
+    const [season, division, standings] = await Promise.all([
       prisma.season.findUnique({
         where: { id: seasonId },
         select: { name: true },
@@ -26,29 +27,26 @@ export async function checkAndSendStandingsNotifications(
         where: { id: divisionId },
         select: { name: true },
       }),
-      prisma.leaderboard.findMany({
+      prisma.divisionStanding.findMany({
         where: { divisionId },
         orderBy: { totalPoints: 'desc' },
         select: {
           id: true,
+          userId: true,
           totalPoints: true,
-          registration: {
-            select: {
-              playerId: true,
-              player: { select: { name: true } },
-            },
-          },
+          user: { select: { name: true } },
         },
       }),
     ]);
 
-    if (!season || !division || leaderboard.length === 0) return;
+    if (!season || !division || standings.length === 0) return;
 
     // Check for each player's position
-    for (let i = 0; i < leaderboard.length; i++) {
+    for (let i = 0; i < standings.length; i++) {
       const position = i + 1;
-      const entry = leaderboard[i];
-      const playerId = entry.registration.playerId;
+      const entry = standings[i];
+      if (!entry) continue;
+      const playerId = entry.userId;
 
       // Get previous position (would need to be stored/tracked)
       // For now, we'll check specific thresholds
@@ -62,7 +60,7 @@ export async function checkAndSendStandingsNotifications(
 
         await notificationService.createNotification({
           ...leaderNotif,
-          userIds: playerId,
+          userIds: playerId || '',
           seasonId,
           divisionId,
         });
@@ -78,7 +76,7 @@ export async function checkAndSendStandingsNotifications(
 
         await notificationService.createNotification({
           ...top3Notif,
-          userIds: playerId,
+          userIds: playerId || '',
           seasonId,
           divisionId,
         });
@@ -93,7 +91,7 @@ export async function checkAndSendStandingsNotifications(
 
         await notificationService.createNotification({
           ...top10Notif,
-          userIds: playerId,
+          userIds: playerId || '',
           seasonId,
           divisionId,
         });
@@ -151,15 +149,15 @@ async function checkPersonalBestRating(
     // Get all rating history for this sport
     const ratingHistory = await prisma.playerRating.findMany({
       where: {
-        playerId: userId,
-        sportType: sport as any,
+        userId: userId,
+        sport: sport as SportType,
       },
-      orderBy: { rating: 'desc' },
+      orderBy: { currentRating: 'desc' },
       take: 1,
     });
 
     // If this is the highest rating ever, send personal best notification
-    if (ratingHistory.length > 0 && ratingHistory[0].rating === currentRating) {
+    if (ratingHistory.length > 0 && ratingHistory[0] && ratingHistory[0].currentRating === currentRating) {
       const personalBestNotif = notificationTemplates.rating.personalBestRating(
         sport,
         currentRating
@@ -221,18 +219,16 @@ export async function sendWeeklyRankingUpdates(
   weekNumber: number
 ): Promise<void> {
   try {
-    const [season, leaderboard] = await Promise.all([
+    const [season, standings] = await Promise.all([
       prisma.season.findUnique({
         where: { id: seasonId },
         select: { name: true },
       }),
-      prisma.leaderboard.findMany({
+      prisma.divisionStanding.findMany({
         where: { divisionId },
         orderBy: { totalPoints: 'desc' },
         select: {
-          registration: {
-            select: { playerId: true },
-          },
+          userId: true,
         },
       }),
     ]);
@@ -240,9 +236,11 @@ export async function sendWeeklyRankingUpdates(
     if (!season) return;
 
     // Send to each player with their position
-    for (let i = 0; i < leaderboard.length; i++) {
+    for (let i = 0; i < standings.length; i++) {
       const position = i + 1;
-      const playerId = leaderboard[i].registration.playerId;
+      const standing = standings[i];
+      if (!standing) continue;
+      const playerId = standing.userId;
 
       const weeklyNotif = notificationTemplates.rating.weeklyRankingUpdate(
         position,
@@ -252,13 +250,13 @@ export async function sendWeeklyRankingUpdates(
 
       await notificationService.createNotification({
         ...weeklyNotif,
-        userIds: playerId,
+        userIds: playerId || '',
         seasonId,
         divisionId,
       });
     }
 
-    logger.info('Weekly ranking updates sent', { seasonId, divisionId, weekNumber, playerCount: leaderboard.length });
+    logger.info('Weekly ranking updates sent', { seasonId, divisionId, weekNumber, playerCount: standings.length });
   } catch (error) {
     logger.error('Failed to send weekly ranking updates', { seasonId, divisionId }, error as Error);
   }
@@ -314,10 +312,10 @@ export async function sendMonthlyDMRRecap(userId: string): Promise<void> {
   try {
     // Get player ratings for all sports
     const ratings = await prisma.playerRating.findMany({
-      where: { playerId: userId },
+      where: { userId: userId },
       select: {
-        sportType: true,
-        rating: true,
+        sport: true,
+        currentRating: true,
       },
     });
 
@@ -330,12 +328,11 @@ export async function sendMonthlyDMRRecap(userId: string): Promise<void> {
 
     const matches = await prisma.match.findMany({
       where: {
-        OR: [
-          { player1Registration: { playerId: userId } },
-          { player2Registration: { playerId: userId } },
-        ],
-        status: 'COMPLETED',
-        completedAt: {
+        participants: {
+          some: { userId: userId },
+        },
+        status: MatchStatus.COMPLETED,
+        updatedAt: {
           gte: firstDayOfMonth,
         },
       },
@@ -346,7 +343,7 @@ export async function sendMonthlyDMRRecap(userId: string): Promise<void> {
 
     for (const rating of ratings) {
       const sportMatches = matches.length; // Would need to filter by sport in real implementation
-      summary += `${rating.sportType}: ${rating.rating} DMR, ${sportMatches} matches\n`;
+      summary += `${rating.sport}: ${rating.currentRating} DMR, ${sportMatches} matches\n`;
     }
 
     summary += 'Keep playing to improve your ratings next month!';
