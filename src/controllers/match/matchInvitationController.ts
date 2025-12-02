@@ -429,6 +429,10 @@ export const postMatchToChat = async (req: Request, res: Response) => {
 
     const { id: matchId } = req.params;
 
+    if (!matchId) {
+      return res.status(400).json({ error: 'Match ID is required' });
+    }
+
     // 1. Get match details
     const match = await matchInvitationService.getMatchById(matchId);
     if (!match) {
@@ -463,8 +467,8 @@ export const postMatchToChat = async (req: Request, res: Response) => {
       data: {
         threadId: thread.id,
         senderId: userId,
-        messageType: MessageType.MATCH_POST,
-        matchId,
+        messageType: MessageType.MATCH,
+        matchId: matchId || null,
         matchData,
         content: `🎾 New ${match.matchType.toLowerCase()} match available! Tap to join.`
       },
@@ -495,8 +499,8 @@ export const postMatchToChat = async (req: Request, res: Response) => {
       });
     }
 
-    // 6. Notify division members
-    const divisionMembers = await prisma.divisionAssignment.findMany({
+    // 6. Notify division members (via SeasonMembership which has status field)
+    const divisionMembers = await prisma.seasonMembership.findMany({
       where: {
         divisionId: match.divisionId!,
         status: MembershipStatus.ACTIVE,
@@ -513,7 +517,7 @@ export const postMatchToChat = async (req: Request, res: Response) => {
         message: `${match.createdBy?.name} posted a ${match.matchType.toLowerCase()} match in your division`,
         userIds: divisionMembers.map(m => m.userId),
         matchId,
-        divisionId: match.divisionId,
+        divisionId: match.divisionId || undefined,
         threadId: thread.id
       });
     }
@@ -539,14 +543,18 @@ export const requestToJoinMatch = async (req: Request, res: Response) => {
     const { id: matchId } = req.params;
     const { message } = req.body;
 
+    if (!matchId) {
+      return res.status(400).json({ error: 'Match ID is required' });
+    }
+
     // 1. Get match
     const match = await matchInvitationService.getMatchById(matchId);
     if (!match) {
       return res.status(404).json({ error: 'Match not found' });
     }
 
-    // 2. Verify user is in same division
-    const divisionMember = await prisma.divisionAssignment.findFirst({
+    // 2. Verify user is in same division (via SeasonMembership which has status field)
+    const divisionMember = await prisma.seasonMembership.findFirst({
       where: {
         divisionId: match.divisionId!,
         userId,
@@ -620,6 +628,10 @@ export const respondToJoinRequest = async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'approve (boolean) is required' });
     }
 
+    if (!requestId) {
+      return res.status(400).json({ error: 'requestId is required' });
+    }
+
     // 1. Get join request
     const joinRequest = await prisma.matchJoinRequest.findUnique({
       where: { id: requestId },
@@ -656,7 +668,7 @@ export const respondToJoinRequest = async (req: Request, res: Response) => {
         status: approve ? JoinRequestStatus.APPROVED : JoinRequestStatus.DENIED,
         respondedAt: new Date(),
         respondedBy: userId,
-        declineReason: approve ? undefined : declineReason
+        declineReason: approve ? null : declineReason
       }
     });
 
