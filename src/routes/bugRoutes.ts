@@ -8,6 +8,7 @@ import {
   getBugReportById,
   addComment,
   uploadScreenshot,
+  initDLAApp,
   // Admin endpoints
   getAllBugReports,
   getAdminBugReportById,
@@ -50,6 +51,9 @@ bugRouter.post("/screenshots", verifyAuth, uploadScreenshot);
 
 // Get all apps (for app selector)
 bugRouter.get("/apps", verifyAuth, getApps);
+
+// Initialize DLA app (auto-creates if not exists) - for DLAdmin widget
+bugRouter.get("/init/dla", verifyAuth, initDLAApp);
 
 // =============================================
 // ADMIN ENDPOINTS
