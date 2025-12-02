@@ -163,6 +163,9 @@ model Admin {
 
   // Bracket system relations
   bracketsPublished         Bracket[]             @relation("BracketPublisher")
+
+  // Message audit log
+  messageLogs               AdminMessageLog[]
 }
 
 model AdminInviteToken {
@@ -673,6 +676,9 @@ model Match {
   
   // Chat messages relation
   messages        Message[]
+
+  // Admin message audit logs
+  adminMessageLogs AdminMessageLog[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -2130,6 +2136,38 @@ model UserPushToken {
   @@index([platform])
   @@index([isActive])
   @@map("user_push_token")
+}
+
+// Audit log for admin messages to participants
+model AdminMessageLog {
+  id           String   @id @default(cuid())
+  adminId      String
+  matchId      String?
+  seasonId     String?
+  subject      String
+  message      String   @db.Text
+  recipientIds String[] // Array of user IDs who received the message
+
+  // Delivery options
+  sendEmail    Boolean  @default(false)
+  sendPush     Boolean  @default(false)
+
+  // Delivery results
+  inAppCount   Int      @default(0)
+  emailCount   Int      @default(0)
+  emailSkipped Int      @default(0)
+  pushCount    Int      @default(0)
+  pushSkipped  Int      @default(0)
+
+  createdAt    DateTime @default(now())
+
+  admin Admin  @relation(fields: [adminId], references: [id])
+  match Match? @relation(fields: [matchId], references: [id])
+
+  @@index([adminId])
+  @@index([matchId])
+  @@index([createdAt])
+  @@map("admin_message_log")
 }
 
 enum NotificationCategory {
