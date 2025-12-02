@@ -5,9 +5,13 @@ import {
   markAllNotificationsAsRead,
   getUnreadCount,
   sendTestNotification,
-  deleteNotification
+  deleteNotification,
+  registerPushToken,
+  unregisterPushToken,
+  getUserPushTokens,
 } from '../controllers/notificationController';
 import { verifyAuth } from '../middlewares/auth.middleware';
+import { pushTokenLimiter } from '../middlewares/rateLimiter';
 
 const notificationRouter = Router();
 
@@ -22,8 +26,12 @@ notificationRouter.put('/mark-all-read', verifyAuth, markAllNotificationsAsRead)
 
 notificationRouter.delete('/:id', verifyAuth, deleteNotification);
 
+// Push token management routes (with rate limiting)
+notificationRouter.post('/push-token', verifyAuth, pushTokenLimiter, registerPushToken);
+notificationRouter.delete('/push-token', verifyAuth, unregisterPushToken);
+notificationRouter.get('/push-tokens', verifyAuth, getUserPushTokens);
 
-// routes for testing 
+// routes for testing
 notificationRouter.post('/test', sendTestNotification);
 
 export default notificationRouter;
