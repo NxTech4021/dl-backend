@@ -286,33 +286,38 @@ export const sendMessage = async (req: Request, res: Response) => {
       }
 
       // Create the message
-      const message = await tx.message.create({
-        data: messageData,
-        include: {
-          sender: {
-            select: {
-              id: true,
-              name: true,
-              username: true,
-              image: true,
-              email: true,
-              phoneNumber: true,
-            },
+      const includeOptions: any = {
+        sender: {
+          select: {
+            id: true,
+            name: true,
+            username: true,
+            image: true,
+            email: true,
+            phoneNumber: true,
           },
-          repliesTo: {
-            include: {
-              sender: {
-                select: {
-                  id: true,
-                  name: true,
-                  username: true,
-                  image: true,
-                },
+        },
+        repliesTo: {
+          include: {
+            sender: {
+              select: {
+                id: true,
+                name: true,
+                username: true,
+                image: true,
               },
             },
           },
-          match: matchId ? true : undefined,
-        },    
+        },
+      };
+
+      if (matchId) {
+        includeOptions.match = true;
+      }
+
+      const message = await tx.message.create({
+        data: messageData,
+        include: includeOptions,
       }) as any;
 
       // Update thread's last activity
