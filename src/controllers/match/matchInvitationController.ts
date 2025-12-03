@@ -9,6 +9,12 @@ import { MatchType, MatchFormat, MatchStatus, MembershipStatus, ParticipantRole,
 import { prisma } from '../../lib/prisma';
 import { NotificationService } from '../../services/notificationService';
 import { NOTIFICATION_TYPES } from '../../types/notificationTypes';
+import dayjs from 'dayjs';
+import utc from 'dayjs/plugin/utc';
+import timezone from 'dayjs/plugin/timezone';
+
+dayjs.extend(utc);
+dayjs.extend(timezone);
 
 const matchInvitationService = getMatchInvitationService();
 const notificationService = new NotificationService();
@@ -35,6 +41,7 @@ export const createMatch = async (req: Request, res: Response) => {
       location,
       venue,
       notes,
+      duration,
       courtBooked,
       message,
       expiresInHours
@@ -48,6 +55,19 @@ export const createMatch = async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Valid matchType (SINGLES/DOUBLES) is required' });
     }
 
+    // Parse dates as Malaysia Time
+    const parsedTimes = proposedTimes?.map((t: string) => {
+      // Parse the datetime string as Malaysia Time
+      const malaysiaDayjs = dayjs.tz(t, 'Asia/Kuala_Lumpur');
+      console.log('📅 Parsing time:', {
+        input: t,
+        malaysiaTime: malaysiaDayjs.format('YYYY-MM-DD HH:mm:ss Z'),
+        utcTime: malaysiaDayjs.utc().format('YYYY-MM-DD HH:mm:ss Z'),
+        dateObject: malaysiaDayjs.toDate()
+      });
+      return malaysiaDayjs.toDate();
+    });
+
     const match = await matchInvitationService.createMatch({
       createdById: userId,
       divisionId,
@@ -56,10 +76,11 @@ export const createMatch = async (req: Request, res: Response) => {
       opponentId,
       partnerId,
       opponentPartnerId,
-      proposedTimes: proposedTimes?.map((t: string) => new Date(t)),
+      proposedTimes: parsedTimes,
       location,
       venue,
       notes,
+      duration,
       courtBooked,
       message,
       expiresInHours

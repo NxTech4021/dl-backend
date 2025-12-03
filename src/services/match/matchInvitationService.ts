@@ -31,6 +31,7 @@ export interface CreateMatchInput {
   location?: string;
   venue?: string;
   notes?: string;
+  duration?: number;           // Match duration in hours
   courtBooked?: boolean;       // Whether court has been booked
   message?: string;            // Message to send with invitation
   expiresInHours?: number;     // How long until invitation expires (default 48)
@@ -97,6 +98,7 @@ export class MatchInvitationService {
       location,
       venue,
       notes,
+      duration,
       courtBooked,
       message,
       expiresInHours = 48
@@ -167,8 +169,32 @@ export class MatchInvitationService {
       if (location) matchData.location = location;
       if (venue) matchData.venue = venue;
       if (notes) matchData.notes = notes;
+      if (duration !== undefined) matchData.duration = duration;
       if (courtBooked !== undefined) matchData.courtBooked = courtBooked;
-      if (proposedTimes) matchData.proposedTimes = proposedTimes.map(t => t.toISOString());
+      
+      // Set scheduledStartTime from the first proposed time
+      if (proposedTimes && proposedTimes.length > 0) {
+        // Store the date as-is (already in UTC from frontend)
+        matchData.scheduledStartTime = proposedTimes[0];
+        matchData.scheduledTime = proposedTimes[0]; // For backward compatibility
+        matchData.proposedTimes = proposedTimes.map(t => t.toISOString());
+        
+        // Log for verification (displays in Malaysia time)
+        const malaysiaTime = new Date(proposedTimes[0]).toLocaleString('en-MY', { 
+          timeZone: 'Asia/Kuala_Lumpur',
+          year: 'numeric',
+          month: '2-digit', 
+          day: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: false
+        });
+        console.log('✅ Match time stored:', {
+          utc: proposedTimes[0].toISOString(),
+          malaysiaTime: malaysiaTime,
+          note: 'UTC time is stored, displays as Malaysia Time'
+        });
+      }
 
       const newMatch = await tx.match.create({ data: matchData });
 
