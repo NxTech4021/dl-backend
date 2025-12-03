@@ -1,8 +1,16 @@
 import { prisma } from "../lib/prisma";
 import { Request, Response } from "express";
-import { BugStatus, BugPriority, BugSeverity, BugReportType } from "@prisma/client";
+import {
+  BugStatus,
+  BugPriority,
+  BugSeverity,
+  BugReportType,
+} from "@prisma/client";
 import { syncBugReportToSheet } from "../services/bug/googleSheetsSync";
-import { notifyNewBugReport, notifyStatusChange } from "../services/bug/bugNotificationService";
+import {
+  notifyNewBugReport,
+  notifyStatusChange,
+} from "../services/bug/bugNotificationService";
 
 // =============================================
 // UTILITY FUNCTIONS
@@ -52,7 +60,8 @@ export const getModulesByApp = async (req: Request, res: Response) => {
     res.json(modules);
   } catch (err: unknown) {
     console.error("Get Modules Error:", err);
-    const errorMessage = err instanceof Error ? err.message : "Failed to retrieve modules.";
+    const errorMessage =
+      err instanceof Error ? err.message : "Failed to retrieve modules.";
     res.status(500).json({ error: errorMessage });
   }
 };
@@ -93,7 +102,11 @@ export const createBugReport = async (req: Request, res: Response) => {
 
   // Require either moduleId or module name
   if (!appId || (!moduleId && !moduleName) || !title || !description) {
-    return res.status(400).json({ error: "appId, module/moduleId, title, and description are required." });
+    return res
+      .status(400)
+      .json({
+        error: "appId, module/moduleId, title, and description are required.",
+      });
   }
 
   try {
@@ -104,8 +117,11 @@ export const createBugReport = async (req: Request, res: Response) => {
     // Find or create module
     let bugModule;
     if (moduleId) {
-      bugModule = await prisma.bugModule.findUnique({ where: { id: moduleId } });
-      if (!bugModule) return res.status(404).json({ error: "Module not found." });
+      bugModule = await prisma.bugModule.findUnique({
+        where: { id: moduleId },
+      });
+      if (!bugModule)
+        return res.status(404).json({ error: "Module not found." });
     } else {
       // Find by name or create new
       bugModule = await prisma.bugModule.findFirst({
@@ -114,7 +130,10 @@ export const createBugReport = async (req: Request, res: Response) => {
 
       if (!bugModule) {
         // Create new module with the provided name
-        const moduleCode = moduleName.toUpperCase().replace(/[^A-Z0-9]/g, "_").substring(0, 20);
+        const moduleCode = moduleName
+          .toUpperCase()
+          .replace(/[^A-Z0-9]/g, "_")
+          .substring(0, 20);
         bugModule = await prisma.bugModule.create({
           data: {
             name: moduleName,
@@ -131,7 +150,9 @@ export const createBugReport = async (req: Request, res: Response) => {
     const reportNumber = await generateReportNumber(appId);
 
     // Get app settings for default assignee
-    const settings = await prisma.bugReportSettings.findUnique({ where: { appId } });
+    const settings = await prisma.bugReportSettings.findUnique({
+      where: { appId },
+    });
 
     const bugReport = await prisma.bugReport.create({
       data: {
@@ -171,7 +192,9 @@ export const createBugReport = async (req: Request, res: Response) => {
         app: { select: { code: true, displayName: true } },
         module: { select: { name: true, code: true } },
         reporter: { select: { id: true, name: true, email: true } },
-        assignedTo: { select: { id: true, user: { select: { name: true, email: true } } } },
+        assignedTo: {
+          select: { id: true, user: { select: { name: true, email: true } } },
+        },
       },
     });
 
@@ -192,7 +215,8 @@ export const createBugReport = async (req: Request, res: Response) => {
     res.status(201).json(bugReport);
   } catch (err: unknown) {
     console.error("Create Bug Report Error:", err);
-    const errorMessage = err instanceof Error ? err.message : "Failed to create bug report.";
+    const errorMessage =
+      err instanceof Error ? err.message : "Failed to create bug report.";
     res.status(500).json({ error: errorMessage });
   }
 };
@@ -218,7 +242,8 @@ export const getMyBugReports = async (req: Request, res: Response) => {
     res.json(reports);
   } catch (err: unknown) {
     console.error("Get My Bug Reports Error:", err);
-    const errorMessage = err instanceof Error ? err.message : "Failed to retrieve bug reports.";
+    const errorMessage =
+      err instanceof Error ? err.message : "Failed to retrieve bug reports.";
     res.status(500).json({ error: errorMessage });
   }
 };
@@ -236,8 +261,12 @@ export const getBugReportById = async (req: Request, res: Response) => {
       include: {
         app: { select: { code: true, displayName: true } },
         module: { select: { name: true, code: true } },
-        reporter: { select: { id: true, name: true, email: true, image: true } },
-        assignedTo: { select: { id: true, user: { select: { name: true, email: true } } } },
+        reporter: {
+          select: { id: true, name: true, email: true, image: true },
+        },
+        assignedTo: {
+          select: { id: true, user: { select: { name: true, email: true } } },
+        },
         resolvedBy: { select: { user: { select: { name: true } } } },
         screenshots: true,
         comments: {
@@ -257,7 +286,8 @@ export const getBugReportById = async (req: Request, res: Response) => {
       },
     });
 
-    if (!report) return res.status(404).json({ error: "Bug report not found." });
+    if (!report)
+      return res.status(404).json({ error: "Bug report not found." });
 
     // Check access: reporter can view, or if public
     if (report.reporterId !== userId && !report.isPublic) {
@@ -273,7 +303,8 @@ export const getBugReportById = async (req: Request, res: Response) => {
     res.json(report);
   } catch (err: unknown) {
     console.error("Get Bug Report Error:", err);
-    const errorMessage = err instanceof Error ? err.message : "Failed to retrieve bug report.";
+    const errorMessage =
+      err instanceof Error ? err.message : "Failed to retrieve bug report.";
     res.status(500).json({ error: errorMessage });
   }
 };
@@ -289,17 +320,22 @@ export const addComment = async (req: Request, res: Response) => {
   }
 
   if (!id || !content) {
-    return res.status(400).json({ error: "Bug report ID and content are required." });
+    return res
+      .status(400)
+      .json({ error: "Bug report ID and content are required." });
   }
 
   try {
     const report = await prisma.bugReport.findUnique({ where: { id } });
-    if (!report) return res.status(404).json({ error: "Bug report not found." });
+    if (!report)
+      return res.status(404).json({ error: "Bug report not found." });
 
     // Check if user can comment (reporter or admin)
     if (report.reporterId !== authorId) {
       // Check if admin
-      const admin = await prisma.admin.findUnique({ where: { userId: authorId } });
+      const admin = await prisma.admin.findUnique({
+        where: { userId: authorId },
+      });
       if (!admin) {
         return res.status(403).json({ error: "Access denied." });
       }
@@ -321,30 +357,52 @@ export const addComment = async (req: Request, res: Response) => {
     res.status(201).json(comment);
   } catch (err: unknown) {
     console.error("Add Comment Error:", err);
-    const errorMessage = err instanceof Error ? err.message : "Failed to add comment.";
+    const errorMessage =
+      err instanceof Error ? err.message : "Failed to add comment.";
     res.status(500).json({ error: errorMessage });
   }
 };
 
 // Upload screenshot
 export const uploadScreenshot = async (req: Request, res: Response) => {
-  const { bugReportId, fileName, fileSize, mimeType, imageUrl, thumbnailUrl, width, height, caption } = req.body;
+  const {
+    bugReportId,
+    fileName,
+    fileSize,
+    mimeType,
+    imageUrl,
+    thumbnailUrl,
+    width,
+    height,
+    caption,
+  } = req.body;
 
   if (!bugReportId || !fileName || !imageUrl) {
-    return res.status(400).json({ error: "bugReportId, fileName, and imageUrl are required." });
+    return res
+      .status(400)
+      .json({ error: "bugReportId, fileName, and imageUrl are required." });
   }
 
   try {
-    const report = await prisma.bugReport.findUnique({ where: { id: bugReportId } });
-    if (!report) return res.status(404).json({ error: "Bug report not found." });
+    const report = await prisma.bugReport.findUnique({
+      where: { id: bugReportId },
+    });
+    if (!report)
+      return res.status(404).json({ error: "Bug report not found." });
 
     // Check max screenshots from settings
-    const settings = await prisma.bugReportSettings.findUnique({ where: { appId: report.appId } });
+    const settings = await prisma.bugReportSettings.findUnique({
+      where: { appId: report.appId },
+    });
     const maxScreenshots = settings?.maxScreenshots || 5;
 
-    const currentCount = await prisma.bugScreenshot.count({ where: { bugReportId } });
+    const currentCount = await prisma.bugScreenshot.count({
+      where: { bugReportId },
+    });
     if (currentCount >= maxScreenshots) {
-      return res.status(400).json({ error: `Maximum ${maxScreenshots} screenshots allowed.` });
+      return res
+        .status(400)
+        .json({ error: `Maximum ${maxScreenshots} screenshots allowed.` });
     }
 
     const screenshot = await prisma.bugScreenshot.create({
@@ -364,7 +422,8 @@ export const uploadScreenshot = async (req: Request, res: Response) => {
     res.status(201).json(screenshot);
   } catch (err: unknown) {
     console.error("Upload Screenshot Error:", err);
-    const errorMessage = err instanceof Error ? err.message : "Failed to upload screenshot.";
+    const errorMessage =
+      err instanceof Error ? err.message : "Failed to upload screenshot.";
     res.status(500).json({ error: errorMessage });
   }
 };
@@ -420,7 +479,9 @@ export const getAllBugReports = async (req: Request, res: Response) => {
           app: { select: { code: true, displayName: true } },
           module: { select: { name: true } },
           reporter: { select: { id: true, name: true, email: true } },
-          assignedTo: { select: { id: true, user: { select: { name: true } } } },
+          assignedTo: {
+            select: { id: true, user: { select: { name: true } } },
+          },
           _count: { select: { comments: true, screenshots: true } },
         },
       }),
@@ -438,7 +499,8 @@ export const getAllBugReports = async (req: Request, res: Response) => {
     });
   } catch (err: unknown) {
     console.error("Get All Bug Reports Error:", err);
-    const errorMessage = err instanceof Error ? err.message : "Failed to retrieve bug reports.";
+    const errorMessage =
+      err instanceof Error ? err.message : "Failed to retrieve bug reports.";
     res.status(500).json({ error: errorMessage });
   }
 };
@@ -455,8 +517,12 @@ export const getAdminBugReportById = async (req: Request, res: Response) => {
       include: {
         app: { select: { code: true, displayName: true } },
         module: { select: { name: true, code: true } },
-        reporter: { select: { id: true, name: true, email: true, image: true } },
-        assignedTo: { select: { id: true, user: { select: { name: true, email: true } } } },
+        reporter: {
+          select: { id: true, name: true, email: true, image: true },
+        },
+        assignedTo: {
+          select: { id: true, user: { select: { name: true, email: true } } },
+        },
         resolvedBy: { select: { user: { select: { name: true } } } },
         duplicateOf: { select: { id: true, reportNumber: true, title: true } },
         screenshots: true,
@@ -480,7 +546,8 @@ export const getAdminBugReportById = async (req: Request, res: Response) => {
       },
     });
 
-    if (!report) return res.status(404).json({ error: "Bug report not found." });
+    if (!report)
+      return res.status(404).json({ error: "Bug report not found." });
 
     // Increment view count
     await prisma.bugReport.update({
@@ -491,7 +558,8 @@ export const getAdminBugReportById = async (req: Request, res: Response) => {
     res.json(report);
   } catch (err: unknown) {
     console.error("Get Admin Bug Report Error:", err);
-    const errorMessage = err instanceof Error ? err.message : "Failed to retrieve bug report.";
+    const errorMessage =
+      err instanceof Error ? err.message : "Failed to retrieve bug report.";
     res.status(500).json({ error: errorMessage });
   }
 };
@@ -514,7 +582,8 @@ export const updateBugReport = async (req: Request, res: Response) => {
 
   try {
     const existingReport = await prisma.bugReport.findUnique({ where: { id } });
-    if (!existingReport) return res.status(404).json({ error: "Bug report not found." });
+    if (!existingReport)
+      return res.status(404).json({ error: "Bug report not found." });
 
     const updateData: any = {};
     let statusChanged = false;
@@ -526,14 +595,18 @@ export const updateBugReport = async (req: Request, res: Response) => {
 
       // If resolved, set resolved fields
       if (status === BugStatus.RESOLVED || status === BugStatus.CLOSED) {
-        const admin = await prisma.admin.findUnique({ where: { userId: adminUserId } });
+        const admin = await prisma.admin.findUnique({
+          where: { userId: adminUserId },
+        });
         if (admin) {
           updateData.resolvedById = admin.id;
           updateData.resolvedAt = new Date();
           // Calculate time to resolve
           const created = new Date(existingReport.createdAt);
           const resolved = new Date();
-          updateData.timeToResolve = Math.floor((resolved.getTime() - created.getTime()) / 60000);
+          updateData.timeToResolve = Math.floor(
+            (resolved.getTime() - created.getTime()) / 60000
+          );
         }
       }
     }
@@ -549,9 +622,11 @@ export const updateBugReport = async (req: Request, res: Response) => {
         : { disconnect: true };
     }
 
-    if (resolutionNotes !== undefined) updateData.resolutionNotes = resolutionNotes;
+    if (resolutionNotes !== undefined)
+      updateData.resolutionNotes = resolutionNotes;
     if (rootCause !== undefined) updateData.rootCause = rootCause;
-    if (externalTicketUrl !== undefined) updateData.externalTicketUrl = externalTicketUrl;
+    if (externalTicketUrl !== undefined)
+      updateData.externalTicketUrl = externalTicketUrl;
     if (isPublic !== undefined) updateData.isPublic = isPublic;
 
     const report = await prisma.bugReport.update({
@@ -571,26 +646,30 @@ export const updateBugReport = async (req: Request, res: Response) => {
         bugReport: { connect: { id } },
         newStatus: status || existingReport.status,
         newPriority: priority || existingReport.priority,
-        changedBy: { connect: { id: adminUserId } }
+        changedBy: { connect: { id: adminUserId } },
       };
       if (statusChanged) changeData.previousStatus = existingReport.status;
-      if (priorityChanged) changeData.previousPriority = existingReport.priority;
+      if (priorityChanged)
+        changeData.previousPriority = existingReport.priority;
 
       await prisma.bugStatusChange.create({
-        data: changeData
+        data: changeData,
       });
     }
 
     // Send notifications and sync (async, don't wait)
     if (statusChanged) {
-      notifyStatusChange(id, existingReport.status, status).catch(console.error);
+      notifyStatusChange(id, existingReport.status, status).catch(
+        console.error
+      );
     }
     syncBugReportToSheet(id).catch(console.error);
 
     res.json(report);
   } catch (err: unknown) {
     console.error("Update Bug Report Error:", err);
-    const errorMessage = err instanceof Error ? err.message : "Failed to update bug report.";
+    const errorMessage =
+      err instanceof Error ? err.message : "Failed to update bug report.";
     res.status(500).json({ error: errorMessage });
   }
 };
@@ -602,12 +681,15 @@ export const addAdminComment = async (req: Request, res: Response) => {
   const authorId = (req as any).user?.id;
 
   if (!id || !content) {
-    return res.status(400).json({ error: "Bug report ID and content are required." });
+    return res
+      .status(400)
+      .json({ error: "Bug report ID and content are required." });
   }
 
   try {
     const report = await prisma.bugReport.findUnique({ where: { id } });
-    if (!report) return res.status(404).json({ error: "Bug report not found." });
+    if (!report)
+      return res.status(404).json({ error: "Bug report not found." });
 
     const comment = await prisma.bugComment.create({
       data: {
@@ -625,7 +707,8 @@ export const addAdminComment = async (req: Request, res: Response) => {
     res.status(201).json(comment);
   } catch (err: unknown) {
     console.error("Add Admin Comment Error:", err);
-    const errorMessage = err instanceof Error ? err.message : "Failed to add comment.";
+    const errorMessage =
+      err instanceof Error ? err.message : "Failed to add comment.";
     res.status(500).json({ error: errorMessage });
   }
 };
@@ -637,7 +720,9 @@ export const markAsDuplicate = async (req: Request, res: Response) => {
   const adminUserId = (req as any).user?.id;
 
   if (!id || !duplicateOfId) {
-    return res.status(400).json({ error: "Bug report ID and duplicateOfId are required." });
+    return res
+      .status(400)
+      .json({ error: "Bug report ID and duplicateOfId are required." });
   }
 
   try {
@@ -646,8 +731,10 @@ export const markAsDuplicate = async (req: Request, res: Response) => {
       prisma.bugReport.findUnique({ where: { id: duplicateOfId } }),
     ]);
 
-    if (!report) return res.status(404).json({ error: "Bug report not found." });
-    if (!duplicateOf) return res.status(404).json({ error: "Duplicate target not found." });
+    if (!report)
+      return res.status(404).json({ error: "Bug report not found." });
+    if (!duplicateOf)
+      return res.status(404).json({ error: "Duplicate target not found." });
 
     const updatedReport = await prisma.bugReport.update({
       where: { id },
@@ -671,7 +758,8 @@ export const markAsDuplicate = async (req: Request, res: Response) => {
     res.json(updatedReport);
   } catch (err: unknown) {
     console.error("Mark as Duplicate Error:", err);
-    const errorMessage = err instanceof Error ? err.message : "Failed to mark as duplicate.";
+    const errorMessage =
+      err instanceof Error ? err.message : "Failed to mark as duplicate.";
     res.status(500).json({ error: errorMessage });
   }
 };
@@ -684,13 +772,15 @@ export const deleteBugReport = async (req: Request, res: Response) => {
 
   try {
     const report = await prisma.bugReport.findUnique({ where: { id } });
-    if (!report) return res.status(404).json({ error: "Bug report not found." });
+    if (!report)
+      return res.status(404).json({ error: "Bug report not found." });
 
     await prisma.bugReport.delete({ where: { id } });
     res.json({ message: "Bug report deleted successfully." });
   } catch (err: unknown) {
     console.error("Delete Bug Report Error:", err);
-    const errorMessage = err instanceof Error ? err.message : "Failed to delete bug report.";
+    const errorMessage =
+      err instanceof Error ? err.message : "Failed to delete bug report.";
     res.status(500).json({ error: errorMessage });
   }
 };
@@ -740,15 +830,25 @@ export const getBugStats = async (req: Request, res: Response) => {
 
     res.json({
       total,
-      byStatus: byStatus.reduce((acc, item) => ({ ...acc, [item.status]: item._count }), {}),
-      bySeverity: bySeverity.reduce((acc, item) => ({ ...acc, [item.severity]: item._count }), {}),
-      byPriority: byPriority.reduce((acc, item) => ({ ...acc, [item.priority]: item._count }), {}),
+      byStatus: byStatus.reduce(
+        (acc, item) => ({ ...acc, [item.status]: item._count }),
+        {}
+      ),
+      bySeverity: bySeverity.reduce(
+        (acc, item) => ({ ...acc, [item.severity]: item._count }),
+        {}
+      ),
+      byPriority: byPriority.reduce(
+        (acc, item) => ({ ...acc, [item.priority]: item._count }),
+        {}
+      ),
       recentlyCreated,
       avgResolutionTimeMinutes: avgResolutionTime._avg.timeToResolve || 0,
     });
   } catch (err: unknown) {
     console.error("Get Bug Stats Error:", err);
-    const errorMessage = err instanceof Error ? err.message : "Failed to retrieve statistics.";
+    const errorMessage =
+      err instanceof Error ? err.message : "Failed to retrieve statistics.";
     res.status(500).json({ error: errorMessage });
   }
 };
@@ -770,7 +870,8 @@ export const getApps = async (req: Request, res: Response) => {
     res.json(apps);
   } catch (err: unknown) {
     console.error("Get Apps Error:", err);
-    const errorMessage = err instanceof Error ? err.message : "Failed to retrieve apps.";
+    const errorMessage =
+      err instanceof Error ? err.message : "Failed to retrieve apps.";
     res.status(500).json({ error: errorMessage });
   }
 };
@@ -780,7 +881,9 @@ export const createApp = async (req: Request, res: Response) => {
   const { code, name, displayName, description, appUrl, logoUrl } = req.body;
 
   if (!code || !name || !displayName) {
-    return res.status(400).json({ error: "code, name, and displayName are required." });
+    return res
+      .status(400)
+      .json({ error: "code, name, and displayName are required." });
   }
 
   try {
@@ -797,7 +900,8 @@ export const createApp = async (req: Request, res: Response) => {
     res.status(201).json(app);
   } catch (err: unknown) {
     console.error("Create App Error:", err);
-    const errorMessage = err instanceof Error ? err.message : "Failed to create app.";
+    const errorMessage =
+      err instanceof Error ? err.message : "Failed to create app.";
     res.status(500).json({ error: errorMessage });
   }
 };
@@ -808,7 +912,9 @@ export const createModule = async (req: Request, res: Response) => {
   const { name, code, description, sortOrder } = req.body;
 
   if (!appId || !name || !code) {
-    return res.status(400).json({ error: "appId, name, and code are required." });
+    return res
+      .status(400)
+      .json({ error: "appId, name, and code are required." });
   }
 
   try {
@@ -827,7 +933,8 @@ export const createModule = async (req: Request, res: Response) => {
     res.status(201).json(module);
   } catch (err: unknown) {
     console.error("Create Module Error:", err);
-    const errorMessage = err instanceof Error ? err.message : "Failed to create module.";
+    const errorMessage =
+      err instanceof Error ? err.message : "Failed to create module.";
     res.status(500).json({ error: errorMessage });
   }
 };
@@ -837,14 +944,16 @@ export const getAppSettings = async (req: Request, res: Response) => {
   const { appId } = req.params;
 
   if (!appId) {
-    return res.status(400).json({ error: 'App ID is required' });
+    return res.status(400).json({ error: "App ID is required" });
   }
 
   try {
     let settings = await prisma.bugReportSettings.findUnique({
       where: { appId },
       include: {
-        defaultAssignee: { select: { user: { select: { name: true, email: true } } } },
+        defaultAssignee: {
+          select: { user: { select: { name: true, email: true } } },
+        },
       },
     });
 
@@ -853,7 +962,9 @@ export const getAppSettings = async (req: Request, res: Response) => {
       settings = await prisma.bugReportSettings.create({
         data: { appId },
         include: {
-          defaultAssignee: { select: { user: { select: { name: true, email: true } } } },
+          defaultAssignee: {
+            select: { user: { select: { name: true, email: true } } },
+          },
         },
       });
     }
@@ -861,7 +972,8 @@ export const getAppSettings = async (req: Request, res: Response) => {
     res.json(settings);
   } catch (err: unknown) {
     console.error("Get App Settings Error:", err);
-    const errorMessage = err instanceof Error ? err.message : "Failed to retrieve settings.";
+    const errorMessage =
+      err instanceof Error ? err.message : "Failed to retrieve settings.";
     res.status(500).json({ error: errorMessage });
   }
 };
@@ -871,7 +983,7 @@ export const updateAppSettings = async (req: Request, res: Response) => {
   const { appId } = req.params;
 
   if (!appId) {
-    return res.status(400).json({ error: 'App ID is required' });
+    return res.status(400).json({ error: "App ID is required" });
   }
 
   const {
@@ -934,14 +1046,17 @@ export const updateAppSettings = async (req: Request, res: Response) => {
         defaultPriority,
       },
       include: {
-        defaultAssignee: { select: { user: { select: { name: true, email: true } } } },
+        defaultAssignee: {
+          select: { user: { select: { name: true, email: true } } },
+        },
       },
     });
 
     res.json(settings);
   } catch (err: unknown) {
     console.error("Update App Settings Error:", err);
-    const errorMessage = err instanceof Error ? err.message : "Failed to update settings.";
+    const errorMessage =
+      err instanceof Error ? err.message : "Failed to update settings.";
     res.status(500).json({ error: errorMessage });
   }
 };

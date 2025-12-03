@@ -10,14 +10,13 @@ import {
   getAdminById,
   updateAdmin,
   trackLogin,
-  updatePassword
+  updatePassword,
 } from "../controllers/admincontrollers";
 import adminMatchRoutes from "./admin/adminMatchRoutes";
 import bracketRoutes from "./admin/bracketRoutes";
 import adminRatingRoutes from "./adminRatingRoutes";
 import adminInactivityRoutes from "./adminInactivityRoutes";
 import adminBest6Routes from "./admin/adminBest6Routes";
-
 
 const adminRouter = Router();
 // TO DO
@@ -27,8 +26,8 @@ adminRouter.get("/session", getAdminSession);
 adminRouter.get("/getadmins", fetchAdmins);
 adminRouter.get("/profile/:id", getAdminById);
 
-adminRouter.put("/activity/tracklogin", trackLogin)
-adminRouter.put("/account/update", updateAdmin)
+adminRouter.put("/activity/tracklogin", trackLogin);
+adminRouter.put("/account/update", updateAdmin);
 adminRouter.post("/superadmin", createSuperadmin);
 adminRouter.post("/register", registerAdmin);
 adminRouter.post("/invite", sendAdminInvite);
