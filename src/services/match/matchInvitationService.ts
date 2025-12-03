@@ -184,29 +184,39 @@ export class MatchInvitationService {
         }
       });
 
-      // Add creator's partner for doubles (automatically accepted)
+      // Add creator's partner for doubles (send invitation, not auto-accept)
       if (matchType === MatchType.DOUBLES && partnerId) {
         await tx.matchParticipant.create({
           data: {
             matchId: newMatch.id,
             userId: partnerId,
             role: ParticipantRole.PARTNER,
-            invitationStatus: InvitationStatus.ACCEPTED, // Auto-accept partner
-            acceptedAt: new Date(),
+            invitationStatus: InvitationStatus.PENDING, // Changed from ACCEPTED to PENDING
             team: 'team1'
           }
         });
 
-        // COMMENTED OUT: Auto-accept partner instead of sending invitation
-        // // Create invitation for partner
-        // await tx.matchInvitation.create({
+        // Create invitation for partner
+        await tx.matchInvitation.create({
+          data: {
+            matchId: newMatch.id,
+            inviterId: createdById,
+            inviteeId: partnerId,
+            status: InvitationStatus.PENDING,
+            message: message || 'Your partner has created a match and invited you to join',
+            expiresAt
+          }
+        });
+
+        // Send notification to partner
+        // await NotificationService.sendNotification({
+        //   userId: partnerId,
+        //   type: 'MATCH_INVITATION',
+        //   title: 'Match Invitation',
+        //   message: `Your partner has invited you to join a ${matchType.toLowerCase()} match`,
         //   data: {
         //     matchId: newMatch.id,
-        //     inviterId: createdById,
-        //     inviteeId: partnerId,
-        //     status: InvitationStatus.PENDING,
-        //     message: message || 'You have been invited to join a doubles match as partner',
-        //     expiresAt
+        //     inviterId: createdById
         //   }
         // });
       }
@@ -440,7 +450,12 @@ export class MatchInvitationService {
       prisma.match.findMany({
         where,
         include: {
-          division: true,
+          division: {
+            include: {
+              league: true,
+              season: true
+            }
+          },
           participants: {
             include: {
               user: {
@@ -757,18 +772,42 @@ export class MatchInvitationService {
 
     // For doubles with partnerId, check partner is not already in the match
     if (partnerId && match.matchType === MatchType.DOUBLES) {
-      // Verify the user is the captain of the partnership
+      // Verify both players are assigned to the same division
+      const userDivisionAssignment = await prisma.divisionAssignment.findUnique({
+        where: {
+          divisionId_userId: {
+            divisionId: match.divisionId!,
+            userId: userId
+          }
+        }
+      });
+
+      const partnerDivisionAssignment = await prisma.divisionAssignment.findUnique({
+        where: {
+          divisionId_userId: {
+            divisionId: match.divisionId!,
+            userId: partnerId
+          }
+        }
+      });
+
+      if (!userDivisionAssignment || !partnerDivisionAssignment) {
+        throw new Error('Both you and your partner must be assigned to this division');
+      }
+
+      // Verify the user is in an active partnership with the provided partnerId
       const partnership = await prisma.partnership.findFirst({
         where: {
-          divisionId: match.divisionId!,
-          captainId: userId,
-          partnerId: partnerId,
+          OR: [
+            { captainId: userId, partnerId: partnerId },
+            { captainId: partnerId, partnerId: userId }
+          ],
           status: 'ACTIVE'
         }
       });
 
       if (!partnership) {
-        throw new Error('Only the team captain can join matches for the partnership');
+        throw new Error('You must be in an active partnership with this player');
       }
 
       const existingPartner = match.participants.find(p => p.userId === partnerId);
@@ -831,20 +870,35 @@ export class MatchInvitationService {
         }
       });
 
-      // Add partner as participant for doubles matches
+      // For doubles matches, add partner with PENDING status and create invitation
       if (partnerId && match.matchType === MatchType.DOUBLES && team) {
+        // Add partner as PENDING participant
         await tx.matchParticipant.create({
           data: {
             matchId,
             userId: partnerId,
             role: ParticipantRole.PARTNER,
             team,
-            invitationStatus: InvitationStatus.ACCEPTED,
-            acceptedAt: new Date()
+            invitationStatus: InvitationStatus.PENDING
           }
         });
 
-        logger.info(`Partner ${partnerId} added to match ${matchId} on ${team}`);
+        // Create invitation for partner
+        const expiresAt = new Date();
+        expiresAt.setHours(expiresAt.getHours() + 72);
+
+        await tx.matchInvitation.create({
+          data: {
+            matchId,
+            inviterId: userId,
+            inviteeId: partnerId,
+            status: InvitationStatus.PENDING,
+            expiresAt,
+            message: 'Your partner has joined this match and invited you to join as well.'
+          }
+        });
+
+        logger.info(`Partner ${partnerId} invited to match ${matchId} on ${team}`);
       }
 
       // Check if match is ready
@@ -854,9 +908,16 @@ export class MatchInvitationService {
     // Send notification to match creator and other participants
     await this.sendMatchJoinedNotification(matchId, userId);
     
-    // Send notification for partner if they were added
+    // Send invitation notification for partner if they were invited
     if (partnerId && match.matchType === MatchType.DOUBLES) {
-      await this.sendMatchJoinedNotification(matchId, partnerId);
+      await this.notificationService.createNotification({
+        userIds: [partnerId],
+        type: 'MATCH_INVITATION',
+        category: 'MATCH',
+        title: 'Match Invitation from Partner',
+        message: 'Your partner has joined a match and invited you to join.',
+        matchId
+      });
     }
 
     logger.info(`User ${userId} joined match ${matchId}${partnerId ? ` with partner ${partnerId}` : ''}`);
