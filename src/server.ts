@@ -2,6 +2,9 @@
 import { httpServer } from "./app";
 import dotenv from "dotenv";
 import cron from "node-cron";
+import dayjs from "dayjs";
+import utc from "dayjs/plugin/utc.js";
+import timezone from "dayjs/plugin/timezone.js";
 import { expireOldSeasonInvitations } from "./services/seasonInvitationService";
 import { expireOldRequests } from "./services/pairingService";
 import { getInactivityService } from "./services/inactivityService";
@@ -14,6 +17,11 @@ import { getMatchResultService } from "./services/match/matchResultService";
 
 dotenv.config();
 
+// Configure timezone for Malaysia (UTC+8)
+dayjs.extend(utc);
+dayjs.extend(timezone);
+dayjs.tz.setDefault('Asia/Kuala_Lumpur');
+
 const PORT = process.env.PORT || 3001;
 
 httpServer.listen(PORT, "0.0.0.0", () => {
@@ -23,6 +31,8 @@ httpServer.listen(PORT, "0.0.0.0", () => {
   console.log(
     `Database URL configured: ${process.env.DATABASE_URL ? "Yes" : "No"}`
   );
+  console.log(`⏰ Timezone set to: Asia/Kuala_Lumpur (Malaysia Time, UTC+8)`);
+  console.log(`🕐 Current server time: ${dayjs().tz('Asia/Kuala_Lumpur').format('YYYY-MM-DD HH:mm:ss')}`);
 });
 
 // ==========================================
