@@ -630,6 +630,17 @@ model Match {
   // Admin review
   requiresAdminReview     Boolean   @default(false)
 
+  // Friendly match moderation (for admin visibility)
+  isHiddenFromPublic      Boolean   @default(false)
+  hiddenAt                DateTime?
+  hiddenByAdminId         String?
+  hiddenReason            String?
+  isReportedForAbuse      Boolean   @default(false)
+  reportedAt              DateTime?
+  reportedByAdminId       String?
+  reportReason            String?
+  reportCategory          MatchReportCategory?
+
   // NEW: Set 3 format toggle
   set3Format      Set3Format?  // MATCH_TIEBREAK, FULL_SET
 
@@ -696,6 +707,8 @@ model Match {
   @@index([createdById])
   @@index([format])
   @@index([requiresAdminReview])
+  @@index([isHiddenFromPublic])
+  @@index([isReportedForAbuse])
 }
 
 model MatchParticipant {
@@ -2317,6 +2330,15 @@ enum MatchStatus {
   VOID
 }
 
+enum MatchReportCategory {
+  FAKE_MATCH           // Match appears to be fabricated
+  RATING_MANIPULATION  // Match used to manipulate ratings
+  INAPPROPRIATE_CONTENT
+  HARASSMENT
+  SPAM
+  OTHER
+}
+
 enum DisputeCategory {
   WRONG_SCORE
   NO_SHOW
@@ -2388,6 +2410,11 @@ enum MatchAdminActionType {
   APPROVE_LATE_CANCELLATION
   DENY_LATE_CANCELLATION
   EDIT_SCHEDULE
+  // Friendly match moderation
+  HIDE_MATCH
+  UNHIDE_MATCH
+  REPORT_ABUSE
+  CLEAR_REPORT
 }
 
 // =============================================

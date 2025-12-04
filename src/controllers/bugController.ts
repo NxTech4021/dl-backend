@@ -876,6 +876,30 @@ export const getApps = async (req: Request, res: Response) => {
   }
 };
 
+// Initialize DLA app (auto-creates if not exists) - simplified for DLAdmin
+export const initDLAApp = async (req: Request, res: Response) => {
+  try {
+    // Use upsert to handle race conditions (multiple requests on first use)
+    const app = await prisma.app.upsert({
+      where: { code: "DLA" },
+      update: {}, // No updates needed, just ensure it exists
+      create: {
+        code: "DLA",
+        name: "DeuceLeague Admin",
+        displayName: "Deuce League Admin Panel",
+        description: "Bug reports from DLAdmin dashboard",
+        isActive: true,
+      },
+    });
+
+    res.json({ appId: app.id, code: app.code, displayName: app.displayName });
+  } catch (err: unknown) {
+    console.error("Init DLA App Error:", err);
+    const errorMessage = err instanceof Error ? err.message : "Failed to initialize app.";
+    res.status(500).json({ error: errorMessage });
+  }
+};
+
 // Create app
 export const createApp = async (req: Request, res: Response) => {
   const { code, name, displayName, description, appUrl, logoUrl } = req.body;

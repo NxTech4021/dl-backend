@@ -7,6 +7,7 @@ import { notificationService } from '../notificationService';
 import { notificationTemplates } from '../../helpers/notification';
 import { prisma } from '../../lib/prisma';
 import { logger } from '../../utils/logger';
+import { MatchStatus, SeasonStatus } from '@prisma/client';
 
 /**
  * Send welcome notification to new user
@@ -37,7 +38,7 @@ export async function checkAndSendProfileReminders(userId: string): Promise<void
         name: true,
         image: true,
         phoneNumber: true,
-        PlayerRating: {
+        playerRatings: {
           select: { id: true },
         },
       },
@@ -49,7 +50,7 @@ export async function checkAndSendProfileReminders(userId: string): Promise<void
     }
 
     // Check if questionnaire not completed (no PlayerRating exists)
-    if (!user.PlayerRating || user.PlayerRating.length === 0) {
+    if (!user.playerRatings || user.playerRatings.length === 0) {
       const profileIncompleteNotif = notificationTemplates.account.profileIncompleteReminder();
 
       await notificationService.createNotification({
@@ -102,11 +103,10 @@ export async function sendFirstMatchCompletedNotification(userId: string): Promi
     // Check if this is actually the first match
     const matchCount = await prisma.match.count({
       where: {
-        OR: [
-          { player1Registration: { playerId: userId } },
-          { player2Registration: { playerId: userId } },
-        ],
-        status: 'COMPLETED',
+        participants: {
+          some: { userId: userId },
+        },
+        status: MatchStatus.COMPLETED,
       },
     });
 
@@ -133,11 +133,10 @@ export async function checkMatchesMilestone(userId: string): Promise<void> {
   try {
     const matchCount = await prisma.match.count({
       where: {
-        OR: [
-          { player1Registration: { playerId: userId } },
-          { player2Registration: { playerId: userId } },
-        ],
-        status: 'COMPLETED',
+        participants: {
+          some: { userId: userId },
+        },
+        status: MatchStatus.COMPLETED,
       },
     });
 
@@ -168,11 +167,11 @@ export async function sendFirstLeagueCompletedNotification(
 ): Promise<void> {
   try {
     // Check if this is the first completed league
-    const completedSeasons = await prisma.registration.count({
+    const completedSeasons = await prisma.seasonMembership.count({
       where: {
-        playerId: userId,
+        userId: userId,
         season: {
-          status: 'COMPLETED',
+          status: SeasonStatus.FINISHED,
         },
       },
     });
@@ -199,11 +198,11 @@ export async function sendFirstLeagueCompletedNotification(
  */
 export async function checkLeaguesMilestone(userId: string): Promise<void> {
   try {
-    const completedSeasons = await prisma.registration.count({
+    const completedSeasons = await prisma.seasonMembership.count({
       where: {
-        playerId: userId,
+        userId: userId,
         season: {
-          status: 'COMPLETED',
+          status: SeasonStatus.FINISHED,
         },
       },
     });

@@ -40,7 +40,7 @@ export function scheduleMatch24hReminders(): void {
 
       const matches = await prisma.match.findMany({
         where: {
-          scheduledTime: {
+          scheduledStartTime: {
             gte: in24Hours,
             lte: in25Hours,
           },
@@ -85,6 +85,7 @@ export function scheduleMatch2hReminders(): void {
         },
         select: {
           id: true,
+          seasonId: true,
           scheduledStartTime: true,
           participants: {
             include: {
@@ -154,7 +155,7 @@ export function scheduleScoreSubmissionReminders(): void {
 
       const matches = await prisma.match.findMany({
         where: {
-          scheduledTime: {
+          scheduledStartTime: {
             gte: twentyMinutesAgo,
             lte: fifteenMinutesAgo,
           },

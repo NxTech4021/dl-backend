@@ -515,10 +515,10 @@ export class MatchHistoryService {
         },
         scores: { orderBy: { setNumber: 'asc' } },
         disputes: {
-          orderBy: { createdAt: 'desc' },
+          orderBy: { submittedAt: 'desc' },
           take: 1,
           include: {
-            disputedBy: {
+            raisedByUser: {
               select: { id: true, name: true, username: true }
             }
           }
