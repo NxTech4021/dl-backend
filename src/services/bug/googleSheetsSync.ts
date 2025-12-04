@@ -36,7 +36,6 @@ interface BugReportRow {
   reportType: string;
   reporter: string;
   reporterEmail: string;
-  assignedTo: string;
   stepsToReproduce: string;
   expectedBehavior: string;
   actualBehavior: string;
@@ -101,7 +100,6 @@ export async function syncBugReportToSheet(bugReportId: string): Promise<boolean
         app: true,
         module: true,
         reporter: true,
-        assignedTo: { include: { user: true } },
         screenshots: { select: { imageUrl: true } },
       },
     });
@@ -155,9 +153,8 @@ export async function syncBugReportToSheet(bugReportId: string): Promise<boolean
       severity: report.severity,
       priority: report.priority,
       reportType: report.reportType,
-      reporter: report.reporter?.name || report.anonymousName || "Anonymous",
+      reporter: report.reporter?.name || report.anonymousName || "User",
       reporterEmail: report.reporter?.email || report.anonymousEmail || "",
-      assignedTo: report.assignedTo?.user?.name || "",
       stepsToReproduce: report.stepsToReproduce || "",
       expectedBehavior: report.expectedBehavior || "",
       actualBehavior: report.actualBehavior || "",
@@ -174,18 +171,18 @@ export async function syncBugReportToSheet(bugReportId: string): Promise<boolean
 
     // Check if row exists (by reportNumber)
     if (bugReport.sheetRowId) {
-      // Update existing row (A to V = 22 columns)
+      // Update existing row (A to U = 21 columns)
       await sheets.spreadsheets.values.update({
         spreadsheetId: sheetId,
-        range: `${sheetName}!A${bugReport.sheetRowId}:V${bugReport.sheetRowId}`,
+        range: `${sheetName}!A${bugReport.sheetRowId}:U${bugReport.sheetRowId}`,
         valueInputOption: "USER_ENTERED",
         requestBody: { values },
       });
     } else {
-      // Append new row (A to V = 22 columns)
+      // Append new row (A to U = 21 columns)
       const response = await sheets.spreadsheets.values.append({
         spreadsheetId: sheetId,
-        range: `${sheetName}!A:V`,
+        range: `${sheetName}!A:U`,
         valueInputOption: "USER_ENTERED",
         insertDataOption: "INSERT_ROWS",
         requestBody: { values },
@@ -242,11 +239,11 @@ export async function initializeSheet(appId: string): Promise<boolean> {
     // Check if sheet has headers
     const response = await sheets.spreadsheets.values.get({
       spreadsheetId: sheetId,
-      range: `${sheetName}!A1:V1`,
+      range: `${sheetName}!A1:U1`,
     });
 
     if (!response.data.values || response.data.values.length === 0) {
-      // Add headers (22 columns total)
+      // Add headers (21 columns total)
       const headers = [
         "Report #",
         "Title",
@@ -258,7 +255,6 @@ export async function initializeSheet(appId: string): Promise<boolean> {
         "Type",
         "Reporter",
         "Reporter Email",
-        "Assigned To",
         "Steps to Reproduce",
         "Expected Behavior",
         "Actual Behavior",
@@ -273,7 +269,7 @@ export async function initializeSheet(appId: string): Promise<boolean> {
 
       await sheets.spreadsheets.values.update({
         spreadsheetId: sheetId,
-        range: `${sheetName}!A1:V1`,
+        range: `${sheetName}!A1:U1`,
         valueInputOption: "USER_ENTERED",
         requestBody: { values: [headers] },
       });
