@@ -34,7 +34,8 @@ model User {
   sessions          Session[]
   seasonMemberships SeasonMembership[]
   matchParticipants MatchParticipant[]
-  processedRequests WithdrawalRequest[] @relation("ProcessedByAdmin")
+  processedRequests    WithdrawalRequest[] @relation("ProcessedByAdmin")
+  withdrawalRequests   WithdrawalRequest[] @relation("WithdrawalRequester")
 
   divisionAssignments DivisionAssignment[] @relation("DivisionAssignments")
 
@@ -439,6 +440,7 @@ model WithdrawalRequest {
   processedByAdminId String?
   partnershipId      String? // For partner change requests
 
+  user             User           @relation("WithdrawalRequester", fields: [userId], references: [id])
   processedByAdmin User?          @relation("ProcessedByAdmin", fields: [processedByAdminId], references: [id])
   seasonId         String
   season           Season         @relation(fields: [seasonId], references: [id])
