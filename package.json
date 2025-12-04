@@ -12,11 +12,11 @@
     "start": "node server.js",
     "db:migrate": "npx prisma migrate dev",
     "db:generate": "npx prisma generate",
-    "db:seed": "ts-node prisma/seed.ts",
+    "db:seed": "npx tsx prisma/seed.ts",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "lint:check": "eslint . --max-warnings 0",
-    "seed-bug-tracking": "ts-node prisma/bug-tracking.ts"
+    "seed-bug-tracking": "npx tsx prisma/bug-tracking.ts"
   },
   "keywords": [],
   "author": "",
