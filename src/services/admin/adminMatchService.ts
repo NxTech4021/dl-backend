@@ -13,7 +13,8 @@ import {
   PenaltyType,
   PenaltySeverity,
   PenaltyStatus,
-  CancellationReason
+  CancellationReason,
+  MatchReportCategory
 } from '@prisma/client';
 import { logger } from '../../utils/logger';
 import { NotificationService } from '../notificationService';
@@ -29,6 +30,9 @@ export interface AdminMatchFilters {
   search?: string;
   isDisputed?: boolean;
   hasLateCancellation?: boolean;
+  matchContext?: 'league' | 'friendly' | 'all';
+  showHidden?: boolean;
+  showReported?: boolean;
   page?: number;
   limit?: number;
 }
@@ -101,6 +105,9 @@ export class AdminMatchService {
       search,
       isDisputed,
       hasLateCancellation,
+      matchContext,
+      showHidden,
+      showReported,
       page = 1,
       limit = 20
     } = filters;
@@ -114,6 +121,35 @@ export class AdminMatchService {
     if (isDisputed !== undefined) where.isDisputed = isDisputed;
     if (hasLateCancellation) where.isLateCancellation = true;
 
+    // Match context filter: league vs friendly matches
+    if (matchContext === 'league') {
+      // League matches have at least one of: divisionId, leagueId, or seasonId
+      where.OR = [
+        { divisionId: { not: null } },
+        { leagueId: { not: null } },
+        { seasonId: { not: null } }
+      ];
+    } else if (matchContext === 'friendly') {
+      // Friendly matches have none of these IDs
+      where.AND = [
+        { divisionId: null },
+        { leagueId: null },
+        { seasonId: null }
+      ];
+    }
+    // 'all' or undefined = no filter applied
+
+    // Hidden/Reported filters
+    if (showHidden === true) {
+      where.isHiddenFromPublic = true;
+    } else if (showHidden === false) {
+      where.isHiddenFromPublic = false;
+    }
+
+    if (showReported === true) {
+      where.isReportedForAbuse = true;
+    }
+
     if (startDate || endDate) {
       where.matchDate = {};
       if (startDate) where.matchDate.gte = startDate;
@@ -121,10 +157,19 @@ export class AdminMatchService {
     }
 
     if (search) {
-      where.OR = [
+      // Preserve existing OR conditions if matchContext added them
+      const searchCondition = [
         { participants: { some: { user: { name: { contains: search, mode: 'insensitive' } } } } },
         { participants: { some: { user: { username: { contains: search, mode: 'insensitive' } } } } }
       ];
+
+      if (where.OR && matchContext === 'league') {
+        // Wrap in AND to preserve both conditions
+        where.AND = where.AND || [];
+        where.AND.push({ OR: searchCondition });
+      } else {
+        where.OR = searchCondition;
+      }
     }
 
     const [matches, total] = await Promise.all([
@@ -151,6 +196,7 @@ export class AdminMatchService {
           }
         },
         orderBy: [
+          { isReportedForAbuse: 'desc' },
           { isDisputed: 'desc' },
           { isLateCancellation: 'desc' },
           { matchDate: 'desc' }
@@ -1080,6 +1126,223 @@ export class AdminMatchService {
     } catch (error) {
       logger.error('Error sending result edited notification', {}, error as Error);
     }
+  }
+
+  // =============================================
+  // FRIENDLY MATCH MODERATION METHODS
+  // =============================================
+
+  /**
+   * Hide a match from public view (friendly match moderation)
+   */
+  async hideMatch(matchId: string, adminId: string, reason: string) {
+    const match = await prisma.match.findUnique({
+      where: { id: matchId },
+      select: { id: true, isHiddenFromPublic: true }
+    });
+
+    if (!match) {
+      throw new Error('Match not found');
+    }
+
+    if (match.isHiddenFromPublic) {
+      throw new Error('Match is already hidden');
+    }
+
+    const updatedMatch = await prisma.match.update({
+      where: { id: matchId },
+      data: {
+        isHiddenFromPublic: true,
+        hiddenAt: new Date(),
+        hiddenByAdminId: adminId,
+        hiddenReason: reason
+      },
+      include: {
+        participants: {
+          include: {
+            user: { select: { id: true, name: true, username: true } }
+          }
+        }
+      }
+    });
+
+    // Log admin action
+    await prisma.matchAdminAction.create({
+      data: {
+        matchId,
+        adminId,
+        actionType: MatchAdminActionType.HIDE_MATCH,
+        oldValue: { isHiddenFromPublic: false },
+        newValue: { isHiddenFromPublic: true, hiddenReason: reason },
+        reason: `Match hidden: ${reason}`
+      }
+    });
+
+    logger.info(`Match ${matchId} hidden by admin ${adminId}: ${reason}`);
+
+    return updatedMatch;
+  }
+
+  /**
+   * Unhide a match (restore visibility)
+   */
+  async unhideMatch(matchId: string, adminId: string) {
+    const match = await prisma.match.findUnique({
+      where: { id: matchId },
+      select: { id: true, isHiddenFromPublic: true, hiddenReason: true }
+    });
+
+    if (!match) {
+      throw new Error('Match not found');
+    }
+
+    if (!match.isHiddenFromPublic) {
+      throw new Error('Match is not hidden');
+    }
+
+    const updatedMatch = await prisma.match.update({
+      where: { id: matchId },
+      data: {
+        isHiddenFromPublic: false,
+        hiddenAt: null,
+        hiddenByAdminId: null,
+        hiddenReason: null
+      },
+      include: {
+        participants: {
+          include: {
+            user: { select: { id: true, name: true, username: true } }
+          }
+        }
+      }
+    });
+
+    // Log admin action
+    await prisma.matchAdminAction.create({
+      data: {
+        matchId,
+        adminId,
+        actionType: MatchAdminActionType.UNHIDE_MATCH,
+        oldValue: { isHiddenFromPublic: true, hiddenReason: match.hiddenReason },
+        newValue: { isHiddenFromPublic: false },
+        reason: 'Match visibility restored'
+      }
+    });
+
+    logger.info(`Match ${matchId} unhidden by admin ${adminId}`);
+
+    return updatedMatch;
+  }
+
+  /**
+   * Report a match for abuse
+   */
+  async reportMatchAbuse(
+    matchId: string,
+    adminId: string,
+    reason: string,
+    category: MatchReportCategory
+  ) {
+    const match = await prisma.match.findUnique({
+      where: { id: matchId },
+      select: { id: true, isReportedForAbuse: true }
+    });
+
+    if (!match) {
+      throw new Error('Match not found');
+    }
+
+    if (match.isReportedForAbuse) {
+      throw new Error('Match is already reported');
+    }
+
+    const updatedMatch = await prisma.match.update({
+      where: { id: matchId },
+      data: {
+        isReportedForAbuse: true,
+        reportedAt: new Date(),
+        reportedByAdminId: adminId,
+        reportReason: reason,
+        reportCategory: category,
+        requiresAdminReview: true
+      },
+      include: {
+        participants: {
+          include: {
+            user: { select: { id: true, name: true, username: true } }
+          }
+        }
+      }
+    });
+
+    // Log admin action
+    await prisma.matchAdminAction.create({
+      data: {
+        matchId,
+        adminId,
+        actionType: MatchAdminActionType.REPORT_ABUSE,
+        oldValue: { isReportedForAbuse: false },
+        newValue: { isReportedForAbuse: true, reportCategory: category, reportReason: reason },
+        reason: `Match reported for abuse (${category}): ${reason}`
+      }
+    });
+
+    logger.info(`Match ${matchId} reported for abuse by admin ${adminId}: ${category} - ${reason}`);
+
+    return updatedMatch;
+  }
+
+  /**
+   * Clear abuse report from a match
+   */
+  async clearMatchReport(matchId: string, adminId: string) {
+    const match = await prisma.match.findUnique({
+      where: { id: matchId },
+      select: { id: true, isReportedForAbuse: true, reportCategory: true, reportReason: true }
+    });
+
+    if (!match) {
+      throw new Error('Match not found');
+    }
+
+    if (!match.isReportedForAbuse) {
+      throw new Error('Match has no active report');
+    }
+
+    const updatedMatch = await prisma.match.update({
+      where: { id: matchId },
+      data: {
+        isReportedForAbuse: false,
+        reportedAt: null,
+        reportedByAdminId: null,
+        reportReason: null,
+        reportCategory: null,
+        requiresAdminReview: false
+      },
+      include: {
+        participants: {
+          include: {
+            user: { select: { id: true, name: true, username: true } }
+          }
+        }
+      }
+    });
+
+    // Log admin action
+    await prisma.matchAdminAction.create({
+      data: {
+        matchId,
+        adminId,
+        actionType: MatchAdminActionType.CLEAR_REPORT,
+        oldValue: { isReportedForAbuse: true, reportCategory: match.reportCategory, reportReason: match.reportReason },
+        newValue: { isReportedForAbuse: false },
+        reason: 'Abuse report cleared after review'
+      }
+    });
+
+    logger.info(`Match ${matchId} abuse report cleared by admin ${adminId}`);
+
+    return updatedMatch;
   }
 }
 
