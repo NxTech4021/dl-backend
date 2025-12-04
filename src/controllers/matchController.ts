@@ -2,6 +2,8 @@ import { prisma } from "../lib/prisma";
 import { Request, Response } from "express";
 import { Prisma, MatchType } from "@prisma/client";
 
+type MatchFeeType = 'FREE' | 'SPLIT' | 'FIXED';
+
 interface CreateMatchBody {
   divisionId?: string;
   sport?: string;
@@ -13,6 +15,9 @@ interface CreateMatchBody {
   location?: string;
   notes?: string;
   duration?: number;
+  courtBooked?: boolean;
+  fee?: MatchFeeType;
+  feeAmount?: number;
 }
 
 interface UpdateMatchBody {
@@ -26,10 +31,13 @@ interface UpdateMatchBody {
   location?: string;
   notes?: string;
   duration?: number;
+  courtBooked?: boolean;
+  fee?: MatchFeeType;
+  feeAmount?: number;
 }
 
 export const createMatch = async (req: Request, res: Response) => {
-  const { divisionId, sport, matchType, playerScore, opponentScore, outcome, matchDate, location, notes, duration } = req.body as CreateMatchBody;
+  const { divisionId, sport, matchType, playerScore, opponentScore, outcome, matchDate, location, notes, duration, courtBooked, fee, feeAmount } = req.body as CreateMatchBody;
 
   if (!divisionId || !sport || !matchType) {
     return res.status(400).json({ error: "divisionId, sport, and matchType are required." });
@@ -50,6 +58,9 @@ export const createMatch = async (req: Request, res: Response) => {
       ...(location !== undefined && { location: location ?? null }),
       ...(notes !== undefined && { notes: notes ?? null }),
       ...(duration !== undefined && { duration: duration ?? null }),
+      ...(courtBooked !== undefined && { courtBooked: courtBooked ?? null }),
+      ...(fee !== undefined && { fee: fee ?? null }),
+      ...(feeAmount !== undefined && { feeAmount: feeAmount ?? null }),
     };
 
     const match = await prisma.match.create({
@@ -98,7 +109,7 @@ export const getMatchById = async (req: Request, res: Response) => {
 
 export const updateMatch = async (req: Request, res: Response) => {
   const { id } = req.params;
-  const { divisionId, sport, matchType, playerScore, opponentScore, outcome, matchDate, location, notes, duration } = req.body as UpdateMatchBody;
+  const { divisionId, sport, matchType, playerScore, opponentScore, outcome, matchDate, location, notes, duration, courtBooked, fee, feeAmount } = req.body as UpdateMatchBody;
 
   if (!id) return res.status(400).json({ error: "Match ID is required." });
 
@@ -120,6 +131,9 @@ export const updateMatch = async (req: Request, res: Response) => {
     if (location !== undefined) updateData.location = location ?? null;
     if (notes !== undefined) updateData.notes = notes ?? null;
     if (duration !== undefined) updateData.duration = duration ?? null;
+    if (courtBooked !== undefined) updateData.courtBooked = courtBooked ?? null;
+    if (fee !== undefined) (updateData as any).fee = fee ?? null;
+    if (feeAmount !== undefined) (updateData as any).feeAmount = feeAmount ?? null;
 
     const match = await prisma.match.update({
       where: { id },

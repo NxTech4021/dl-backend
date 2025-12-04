@@ -15,6 +15,9 @@ import {
   MembershipStatus,
   JoinRequestStatus
 } from '@prisma/client';
+
+// Type alias until Prisma client is regenerated after migration
+type MatchFeeType = 'FREE' | 'SPLIT' | 'FIXED';
 import { logger } from '../../utils/logger';
 import { NotificationService } from '../notificationService';
 
@@ -33,6 +36,8 @@ export interface CreateMatchInput {
   notes?: string;
   duration?: number;           // Match duration in hours
   courtBooked?: boolean;       // Whether court has been booked
+  fee?: MatchFeeType;          // Fee type: FREE, SPLIT, or FIXED
+  feeAmount?: number;          // Fee amount (for SPLIT or FIXED)
   message?: string;            // Message to send with invitation
   expiresInHours?: number;     // How long until invitation expires (default 48)
 }
@@ -100,6 +105,8 @@ export class MatchInvitationService {
       notes,
       duration,
       courtBooked,
+      fee,
+      feeAmount,
       message,
       expiresInHours = 48
     } = input;
@@ -171,6 +178,8 @@ export class MatchInvitationService {
       if (notes) matchData.notes = notes;
       if (duration !== undefined) matchData.duration = duration;
       if (courtBooked !== undefined) matchData.courtBooked = courtBooked;
+      if (fee !== undefined) matchData.fee = fee;
+      if (feeAmount !== undefined) matchData.feeAmount = feeAmount;
       
       // Set scheduledStartTime from the first proposed time
       if (proposedTimes && proposedTimes.length > 0) {
@@ -1431,6 +1440,10 @@ export class MatchInvitationService {
       location,
       venue,
       notes,
+      duration,
+      courtBooked,
+      fee,
+      feeAmount,
       message,
       expiresInHours = 48
     } = updates;
@@ -1447,6 +1460,10 @@ export class MatchInvitationService {
       if (location !== undefined) updateData.location = location;
       if (venue !== undefined) updateData.venue = venue;
       if (notes !== undefined) updateData.notes = notes;
+      if (duration !== undefined) updateData.duration = duration;
+      if (courtBooked !== undefined) updateData.courtBooked = courtBooked;
+      if (fee !== undefined) updateData.fee = fee;
+      if (feeAmount !== undefined) updateData.feeAmount = feeAmount;
       updateData.status = MatchStatus.SCHEDULED; // Move back to SCHEDULED
 
       await tx.match.update({

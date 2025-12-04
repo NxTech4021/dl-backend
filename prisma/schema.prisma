@@ -577,6 +577,10 @@ model Match {
   duration      Int?
   courtBooked   Boolean?
 
+  // Fee fields
+  fee           MatchFeeType? @default(FREE)
+  feeAmount     Decimal?      @db.Decimal(10, 2)
+
   // Match format
   format        MatchFormat @default(STANDARD)
   isOneSet      Boolean     @default(false)
@@ -2592,6 +2596,12 @@ enum MessageType {
   MATCH         // Match Events posted to division chat
   SYSTEM        // System messages (user joined, etc.)
   JOIN_REQUEST  // Join request notification
+}
+
+enum MatchFeeType {
+  FREE          // No fee required
+  SPLIT         // Cost is split among participants
+  FIXED         // Fixed fee per participant
 }
 
 // =============================================

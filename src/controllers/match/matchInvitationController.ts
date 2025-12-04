@@ -43,6 +43,8 @@ export const createMatch = async (req: Request, res: Response) => {
       notes,
       duration,
       courtBooked,
+      fee,
+      feeAmount,
       message,
       expiresInHours
     } = req.body;
@@ -82,6 +84,8 @@ export const createMatch = async (req: Request, res: Response) => {
       notes,
       duration,
       courtBooked,
+      fee,
+      feeAmount,
       message,
       expiresInHours
     });
@@ -411,6 +415,10 @@ export const editMatch = async (req: Request, res: Response) => {
       location,
       venue,
       notes,
+      duration,
+      courtBooked,
+      fee,
+      feeAmount,
       message,
       expiresInHours
     } = req.body;
@@ -425,6 +433,10 @@ export const editMatch = async (req: Request, res: Response) => {
       location,
       venue,
       notes,
+      duration,
+      courtBooked,
+      fee,
+      feeAmount,
       message,
       expiresInHours
     });
