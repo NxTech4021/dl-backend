@@ -109,13 +109,9 @@ app.use(socketMiddleware(io));
 // Mount API routes with configurable prefix
 // Development: /api, Production: "" (nginx handles /api prefix)
 const apiPrefix = getApiPrefix();
-// console.log(`📡 API routes mounted at: ${apiPrefix || "(root)"}`);
-// Only use prefix if it's not empty (development), otherwise mount at root (production)
-if (apiPrefix) {
-  app.use(router);
-} else {
-  app.use(router);
-}
+console.log(`📡 API routes mounted at: ${apiPrefix || "(root)"}`);
+// Mount router with the API prefix
+app.use(apiPrefix, router);
 
 // Health check endpoint
 app.get("/health", (req, res) => {
