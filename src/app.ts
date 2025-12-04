@@ -111,7 +111,7 @@ app.use(socketMiddleware(io));
 const apiPrefix = getApiPrefix();
 console.log(`📡 API routes mounted at: ${apiPrefix || "(root)"}`);
 // Mount router with the API prefix
-app.use(router);
+app.use(apiPrefix, router);
 
 // Health check endpoint
 app.get("/health", (req, res) => {
