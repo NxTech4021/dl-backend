@@ -15,7 +15,8 @@ import {
   DisputeResolutionAction,
   PenaltyType,
   PenaltySeverity,
-  ParticipantRole
+  ParticipantRole,
+  MatchReportCategory
 } from '@prisma/client';
 
 const adminMatchService = getAdminMatchService();
@@ -37,6 +38,9 @@ export const getAdminMatches = async (req: Request, res: Response) => {
       search,
       isDisputed,
       hasLateCancellation,
+      matchContext, // 'league' | 'friendly' | 'all'
+      showHidden,
+      showReported,
       page = '1',
       limit = '20'
     } = req.query;
@@ -55,6 +59,9 @@ export const getAdminMatches = async (req: Request, res: Response) => {
     if (search) filters.search = search as string;
     if (isDisputed !== undefined) filters.isDisputed = isDisputed === 'true';
     if (hasLateCancellation !== undefined) filters.hasLateCancellation = hasLateCancellation === 'true';
+    if (matchContext) filters.matchContext = matchContext as 'league' | 'friendly' | 'all';
+    if (showHidden !== undefined) filters.showHidden = showHidden === 'true';
+    if (showReported !== undefined) filters.showReported = showReported === 'true';
 
     const result = await adminMatchService.getAdminMatches(filters);
 
@@ -564,5 +571,134 @@ export const getAvailablePlayers = async (req: Request, res: Response) => {
   } catch (error) {
     console.error('Get Available Players Error:', error);
     res.status(500).json({ error: 'Failed to retrieve available players' });
+  }
+};
+
+/**
+ * Hide a match from public view (friendly match moderation)
+ * POST /api/admin/matches/:id/hide
+ */
+export const hideMatch = async (req: Request, res: Response) => {
+  try {
+    const authReq = req as AuthenticatedRequest;
+    const adminId = authReq.user?.adminId;
+    if (!adminId) {
+      return res.status(401).json({ error: 'Admin authentication required' });
+    }
+
+    const { id } = req.params;
+    if (!id) {
+      return res.status(400).json({ error: 'Match ID is required' });
+    }
+
+    const { reason } = req.body;
+
+    if (!reason) {
+      return res.status(400).json({ error: 'reason is required' });
+    }
+
+    const match = await adminMatchService.hideMatch(id, adminId, reason);
+    res.json(match);
+  } catch (error) {
+    console.error('Hide Match Error:', error);
+    const message = error instanceof Error ? error.message : 'Failed to hide match';
+    res.status(400).json({ error: message });
+  }
+};
+
+/**
+ * Unhide a match (restore visibility)
+ * POST /api/admin/matches/:id/unhide
+ */
+export const unhideMatch = async (req: Request, res: Response) => {
+  try {
+    const authReq = req as AuthenticatedRequest;
+    const adminId = authReq.user?.adminId;
+    if (!adminId) {
+      return res.status(401).json({ error: 'Admin authentication required' });
+    }
+
+    const { id } = req.params;
+    if (!id) {
+      return res.status(400).json({ error: 'Match ID is required' });
+    }
+
+    const match = await adminMatchService.unhideMatch(id, adminId);
+    res.json(match);
+  } catch (error) {
+    console.error('Unhide Match Error:', error);
+    const message = error instanceof Error ? error.message : 'Failed to unhide match';
+    res.status(400).json({ error: message });
+  }
+};
+
+/**
+ * Report a match for abuse
+ * POST /api/admin/matches/:id/report
+ */
+export const reportMatchAbuse = async (req: Request, res: Response) => {
+  try {
+    const authReq = req as AuthenticatedRequest;
+    const adminId = authReq.user?.adminId;
+    if (!adminId) {
+      return res.status(401).json({ error: 'Admin authentication required' });
+    }
+
+    const { id } = req.params;
+    if (!id) {
+      return res.status(400).json({ error: 'Match ID is required' });
+    }
+
+    const { reason, category } = req.body;
+
+    if (!reason) {
+      return res.status(400).json({ error: 'reason is required' });
+    }
+
+    if (!category) {
+      return res.status(400).json({ error: 'category is required' });
+    }
+
+    const validCategories = [
+      'FAKE_MATCH', 'RATING_MANIPULATION', 'INAPPROPRIATE_CONTENT',
+      'HARASSMENT', 'SPAM', 'OTHER'
+    ];
+
+    if (!validCategories.includes(category)) {
+      return res.status(400).json({ error: 'Invalid report category' });
+    }
+
+    const match = await adminMatchService.reportMatchAbuse(id, adminId, reason, category as MatchReportCategory);
+    res.json(match);
+  } catch (error) {
+    console.error('Report Match Abuse Error:', error);
+    const message = error instanceof Error ? error.message : 'Failed to report match';
+    res.status(400).json({ error: message });
+  }
+};
+
+/**
+ * Clear abuse report from a match
+ * POST /api/admin/matches/:id/clear-report
+ */
+export const clearMatchReport = async (req: Request, res: Response) => {
+  try {
+    const authReq = req as AuthenticatedRequest;
+    const adminId = authReq.user?.adminId;
+    if (!adminId) {
+      return res.status(401).json({ error: 'Admin authentication required' });
+    }
+
+    const { id } = req.params;
+    if (!id) {
+      return res.status(400).json({ error: 'Match ID is required' });
+    }
+
+    const match = await adminMatchService.clearMatchReport(id, adminId);
+    res.json(match);
+  } catch (error) {
+    console.error('Clear Match Report Error:', error);
+    const message = error instanceof Error ? error.message : 'Failed to clear report';
+    res.status(400).json({ error: message });
   }
 };
