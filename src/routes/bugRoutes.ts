@@ -1,5 +1,6 @@
 import { Router } from "express";
-import { verifyAuth } from "../middlewares/auth.middleware";
+import { verifyAuth, optionalAuth } from "../middlewares/auth.middleware";
+import { upload } from "../services/player/utils/multerConfig";
 import {
   // Public endpoints (Widget)
   getModulesByApp,
@@ -8,6 +9,8 @@ import {
   getBugReportById,
   addComment,
   uploadScreenshot,
+  uploadScreenshotFile,
+  syncBugReport,
   initDLAApp,
   // Admin endpoints
   getAllBugReports,
@@ -36,8 +39,9 @@ const bugRouter = Router();
 // Public: allows bug reporting before login
 bugRouter.get("/init/dla", initDLAApp);
 
-// Create new bug report - Public: allows reporting login issues
-bugRouter.post("/reports", createBugReport);
+// Create new bug report - Uses optional auth to capture logged-in user if available
+// eslint-disable-next-line @typescript-eslint/no-unsafe-argument
+bugRouter.post("/reports", optionalAuth, createBugReport);
 
 // Get modules for a specific app (for dropdown) - Public
 bugRouter.get("/apps/:appId/modules", getModulesByApp);
@@ -57,6 +61,14 @@ bugRouter.post("/reports/:id/comments", verifyAuth, addComment);
 
 // Upload screenshot (expects pre-uploaded URL from cloud storage)
 bugRouter.post("/screenshots", verifyAuth, uploadScreenshot);
+
+// Upload screenshot file (handles actual file upload) - Public for anonymous reports
+// eslint-disable-next-line @typescript-eslint/no-unsafe-argument
+bugRouter.post("/screenshots/upload", upload.single("screenshot"), uploadScreenshotFile);
+
+// Sync bug report to Google Sheets - Public (called after screenshots uploaded)
+// eslint-disable-next-line @typescript-eslint/no-unsafe-argument
+bugRouter.post("/reports/:id/sync", syncBugReport);
 
 // Get all apps (for app selector)
 bugRouter.get("/apps", verifyAuth, getApps);
