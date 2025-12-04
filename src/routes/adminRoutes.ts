@@ -17,6 +17,7 @@ import bracketRoutes from "./admin/bracketRoutes";
 import adminRatingRoutes from "./adminRatingRoutes";
 import adminInactivityRoutes from "./adminInactivityRoutes";
 import adminBest6Routes from "./admin/adminBest6Routes";
+import adminDashboardRoutes from "./adminDashboardRoutes";
 
 const adminRouter = Router();
 // TO DO
@@ -47,5 +48,8 @@ adminRouter.use("/", adminBest6Routes);
 
 // Admin Inactivity Routes
 adminRouter.use("/inactivity", adminInactivityRoutes);
+
+// Admin Dashboard Routes
+adminRouter.use("/dashboard", adminDashboardRoutes);
 
 export default adminRouter;
