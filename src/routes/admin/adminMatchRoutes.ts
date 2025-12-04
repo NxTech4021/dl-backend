@@ -20,7 +20,11 @@ import {
   messageParticipants,
   editMatchParticipants,
   validateMatchParticipants,
-  getAvailablePlayers
+  getAvailablePlayers,
+  hideMatch,
+  unhideMatch,
+  reportMatchAbuse,
+  clearMatchReport
 } from '../../controllers/admin/adminMatchController';
 
 const router = Router();
@@ -52,5 +56,11 @@ router.post('/cancellations/:id/review', reviewCancellation);
 // AS3: Penalties
 router.post('/penalties/apply', applyPenalty);
 router.get('/penalties/player/:userId', getPlayerPenalties);
+
+// Friendly Match Moderation
+router.post('/matches/:id/hide', hideMatch);
+router.post('/matches/:id/unhide', unhideMatch);
+router.post('/matches/:id/report', reportMatchAbuse);
+router.post('/matches/:id/clear-report', clearMatchReport);
 
 export default router;
