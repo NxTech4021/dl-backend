@@ -100,6 +100,72 @@ export const verifyAuth: RequestHandler = async (req, res, next) => {
   }
 };
 
+// Optional auth middleware - populates req.user if logged in, but allows anonymous access
+export const optionalAuth: RequestHandler = async (req, res, next) => {
+  try {
+    let user;
+
+    // --- Web support ---
+    const session = await auth.api.getSession({ headers: req.headers });
+    if (session?.user?.id) {
+      user = await prisma.user.findUnique({
+        where: { id: session.user.id },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          username: true,
+          role: true,
+          admin: { select: { id: true, status: true } },
+        },
+      });
+    }
+
+    // --- Mobile support ---
+    if (!user) {
+      const mobileUserId =
+        (req.headers["x-user-id"] as string) || (req.query.userId as string);
+      if (mobileUserId) {
+        user = await prisma.user.findUnique({
+          where: { id: mobileUserId },
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            username: true,
+            role: true,
+            admin: { select: { id: true, status: true } },
+          },
+        });
+      }
+    }
+
+    // If user found, populate req.user (otherwise leave undefined for anonymous)
+    if (user) {
+      let adminId: string | undefined;
+      if (user.admin?.status === "ACTIVE") {
+        adminId = user.admin.id;
+      }
+
+      req.user = {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        username: user.username || undefined,
+        role: user.role,
+        adminId,
+      };
+    }
+
+    // Always continue - anonymous access allowed
+    next();
+  } catch (error) {
+    // Log error but continue - don't block anonymous access
+    console.warn("Optional auth check failed:", error);
+    next();
+  }
+};
+
 // Middleware to require admin role (ADMIN or SUPERADMIN)
 export const requireAdmin: RequestHandler = async (
   req: Request,
