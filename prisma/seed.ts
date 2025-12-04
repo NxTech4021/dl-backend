@@ -142,45 +142,129 @@ async function seedTestUsers(): Promise<User[]> {
   const { hashPassword } = await import("better-auth/crypto");
   const hashedPassword = await hashPassword("Test@123");
 
-  const testUsers = [
-    // Active users with complete profiles
-    { name: "Alice Johnson", email: "alice@test.com", username: "alice_j", bio: "Love playing doubles! Looking for partners.", area: "Kuala Lumpur", gender: "FEMALE", status: UserStatus.ACTIVE, completedOnboarding: true },
-    { name: "Bob Smith", email: "bob@test.com", username: "bob_smith", bio: "Intermediate player, play for fun.", area: "Kuala Lumpur", gender: "MALE", status: UserStatus.ACTIVE, completedOnboarding: true },
-    { name: "Charlie Brown", email: "charlie@test.com", username: "charlie_b", bio: "Advanced player, competitive mindset.", area: "Petaling Jaya", gender: "MALE", status: UserStatus.ACTIVE, completedOnboarding: true },
-    { name: "Diana Prince", email: "diana@test.com", username: "diana_prince", bio: "Beginner looking to improve!", area: "Subang Jaya", gender: "FEMALE", status: UserStatus.ACTIVE, completedOnboarding: true },
-    { name: "Ethan Hunt", email: "ethan@test.com", username: "ethan_h", bio: "Experienced doubles player.", area: "Kuala Lumpur", gender: "MALE", status: UserStatus.ACTIVE, completedOnboarding: true },
-    { name: "Frank Miller", email: "frank@test.com", username: "frank_m", bio: "Weekend warrior, love the game!", area: "Subang Jaya", gender: "MALE", status: UserStatus.ACTIVE, completedOnboarding: true },
-    { name: "Grace Lee", email: "grace@test.com", username: "grace_l", bio: "Competitive player, looking for tournaments.", area: "Petaling Jaya", gender: "FEMALE", status: UserStatus.ACTIVE, completedOnboarding: true },
-    { name: "Henry Chen", email: "henry@test.com", username: "henry_c", bio: "Doubles specialist, team player.", area: "Kuala Lumpur", gender: "MALE", status: UserStatus.ACTIVE, completedOnboarding: true },
-    { name: "Iris Wong", email: "iris@test.com", username: "iris_w", bio: "Intermediate player, improving steadily.", area: "Subang Jaya", gender: "FEMALE", status: UserStatus.ACTIVE, completedOnboarding: true },
-    { name: "Jack Robinson", email: "jack@test.com", username: "jack_r", bio: "Advanced singles and doubles player.", area: "Petaling Jaya", gender: "MALE", status: UserStatus.ACTIVE, completedOnboarding: true },
-
-    // More active users for doubles matches
-    { name: "Karen Smith", email: "karen@test.com", username: "karen_s", bio: "Tennis enthusiast.", area: "Kuala Lumpur", gender: "FEMALE", status: UserStatus.ACTIVE, completedOnboarding: true },
-    { name: "Leo Martinez", email: "leo@test.com", username: "leo_m", bio: "Padel lover.", area: "Petaling Jaya", gender: "MALE", status: UserStatus.ACTIVE, completedOnboarding: true },
-    { name: "Mia Johnson", email: "mia@test.com", username: "mia_j", bio: "New to the game but learning fast!", area: "Subang Jaya", gender: "FEMALE", status: UserStatus.ACTIVE, completedOnboarding: true },
-    { name: "Nathan Brown", email: "nathan@test.com", username: "nathan_b", bio: "Competitive spirit!", area: "Kuala Lumpur", gender: "MALE", status: UserStatus.ACTIVE, completedOnboarding: true },
-    { name: "Olivia Davis", email: "olivia@test.com", username: "olivia_d", bio: "Weekend player.", area: "Petaling Jaya", gender: "FEMALE", status: UserStatus.ACTIVE, completedOnboarding: true },
-    { name: "Peter Wilson", email: "peter@test.com", username: "peter_w", bio: "Love the competition!", area: "Subang Jaya", gender: "MALE", status: UserStatus.ACTIVE, completedOnboarding: true },
-    { name: "Quinn Taylor", email: "quinn@test.com", username: "quinn_t", bio: "All-around player.", area: "Kuala Lumpur", gender: "FEMALE", status: UserStatus.ACTIVE, completedOnboarding: true },
-    { name: "Ryan Anderson", email: "ryan@test.com", username: "ryan_a", bio: "Doubles fanatic.", area: "Petaling Jaya", gender: "MALE", status: UserStatus.ACTIVE, completedOnboarding: true },
-    { name: "Sarah Thomas", email: "sarah@test.com", username: "sarah_t", bio: "Playing for fun!", area: "Subang Jaya", gender: "FEMALE", status: UserStatus.ACTIVE, completedOnboarding: true },
-    { name: "Tom Jackson", email: "tom@test.com", username: "tom_j", bio: "Former tennis player.", area: "Kuala Lumpur", gender: "MALE", status: UserStatus.ACTIVE, completedOnboarding: true },
-
-    // Inactive users
-    { name: "Inactive User 1", email: "inactive1@test.com", username: "inactive1", bio: "Haven't played in a while.", area: "Kuala Lumpur", gender: "MALE", status: UserStatus.INACTIVE, completedOnboarding: true },
-    { name: "Inactive User 2", email: "inactive2@test.com", username: "inactive2", bio: "Taking a break.", area: "Petaling Jaya", gender: "FEMALE", status: UserStatus.INACTIVE, completedOnboarding: true },
-    { name: "Inactive User 3", email: "inactive3@test.com", username: "inactive3", bio: "Will be back soon.", area: "Subang Jaya", gender: "MALE", status: UserStatus.INACTIVE, completedOnboarding: true },
-
-    // Suspended users
-    { name: "Suspended User 1", email: "suspended1@test.com", username: "suspended1", bio: "Account suspended.", area: "Kuala Lumpur", gender: "MALE", status: UserStatus.SUSPENDED, completedOnboarding: true },
-    { name: "Suspended User 2", email: "suspended2@test.com", username: "suspended2", bio: "Under review.", area: "Petaling Jaya", gender: "FEMALE", status: UserStatus.SUSPENDED, completedOnboarding: true },
-
-    // Incomplete onboarding users
-    { name: "New User 1", email: "newuser1@test.com", username: "newuser1", bio: null, area: null, gender: null, status: UserStatus.ACTIVE, completedOnboarding: false },
-    { name: "New User 2", email: "newuser2@test.com", username: "newuser2", bio: null, area: null, gender: null, status: UserStatus.ACTIVE, completedOnboarding: false },
-    { name: "New User 3", email: "newuser3@test.com", username: "newuser3", bio: null, area: null, gender: null, status: UserStatus.ACTIVE, completedOnboarding: false },
+  // Malaysian names for more realistic data
+  const malaysianFirstNames = {
+    male: ["Ahmad", "Mohammad", "Muhammad", "Azman", "Hafiz", "Faizal", "Rizal", "Khairul", "Shahrul", "Amirul", "Hakim", "Irfan", "Nazri", "Syafiq", "Zulkifli", "Danial", "Farhan", "Hafizul", "Iskandar", "Jazlan", "Kumar", "Lim", "Tan", "Wong", "Lee", "Chen", "Ng", "Ong", "Raj", "Siva"],
+    female: ["Nurul", "Siti", "Nur", "Aisyah", "Fatimah", "Aminah", "Farah", "Sarah", "Hana", "Nadia", "Zahra", "Iman", "Alya", "Syafiqah", "Amalina", "Balqis", "Camelia", "Dania", "Elina", "Fatin", "May", "Mei", "Ling", "Jia", "Hui", "Priya", "Kavitha", "Lakshmi", "Deepa", "Anitha"],
+  };
+  const malaysianLastNames = ["Abdullah", "Rahman", "Ibrahim", "Hassan", "Ismail", "Omar", "Ahmad", "Ali", "Yusof", "Aziz", "Hamid", "Karim", "Rashid", "Malik", "Tan", "Lim", "Wong", "Lee", "Chen", "Ng", "Kumar", "Rajan", "Pillai", "Nair", "Menon"];
+  const areas = ["Kuala Lumpur", "Petaling Jaya", "Subang Jaya", "Shah Alam", "Bangsar", "Mont Kiara", "Damansara", "Ampang", "Cheras", "Puchong", "Cyberjaya", "Putrajaya"];
+  const bios = [
+    "Love playing doubles! Looking for partners.",
+    "Intermediate player, play for fun.",
+    "Advanced player, competitive mindset.",
+    "Beginner looking to improve!",
+    "Experienced doubles player.",
+    "Weekend warrior, love the game!",
+    "Competitive player, looking for tournaments.",
+    "Doubles specialist, team player.",
+    "Improving steadily every week.",
+    "Advanced singles and doubles player.",
+    "Tennis enthusiast turned pickleball fanatic.",
+    "Padel lover from Spain.",
+    "New to the game but learning fast!",
+    "Competitive spirit runs in my veins!",
+    "Weekend player, weekday warrior.",
+    "Love the thrill of competition!",
+    "All-around player, any game works.",
+    "Doubles is life!",
+    "Playing for fun and fitness!",
+    "Former tennis pro, new to pickleball.",
+    "Here for the community and the game.",
+    "Looking to improve my ratings!",
+    "Serious about the sport, friendly on court.",
+    "Ready for any challenge!",
+    "Making friends through sports.",
   ];
+
+  const testUsers: Array<{
+    name: string;
+    email: string;
+    username: string;
+    bio: string | null;
+    area: string | null;
+    gender: string | null;
+    status: UserStatus;
+    completedOnboarding: boolean;
+    createdAt?: Date;
+  }> = [];
+
+  // Generate 50 active users with complete profiles
+  for (let i = 0; i < 50; i++) {
+    const isMale = i % 2 === 0;
+    const firstName = randomElement(isMale ? malaysianFirstNames.male : malaysianFirstNames.female);
+    const lastName = randomElement(malaysianLastNames);
+    const name = `${firstName} ${lastName}`;
+    const username = `${firstName.toLowerCase()}_${lastName.toLowerCase().slice(0, 3)}${i}`;
+    const email = `${username}@test.com`;
+
+    // Vary creation dates for user growth chart
+    const daysAgo = randomInt(0, 180); // Users created over last 6 months
+    const createdAt = new Date(Date.now() - daysAgo * 24 * 60 * 60 * 1000);
+
+    testUsers.push({
+      name,
+      email,
+      username,
+      bio: randomElement(bios),
+      area: randomElement(areas),
+      gender: isMale ? "MALE" : "FEMALE",
+      status: UserStatus.ACTIVE,
+      completedOnboarding: true,
+      createdAt,
+    });
+  }
+
+  // Add 10 inactive users
+  for (let i = 0; i < 10; i++) {
+    const isMale = i % 2 === 0;
+    const firstName = randomElement(isMale ? malaysianFirstNames.male : malaysianFirstNames.female);
+    const lastName = randomElement(malaysianLastNames);
+    testUsers.push({
+      name: `${firstName} ${lastName}`,
+      email: `inactive${i + 1}@test.com`,
+      username: `inactive_${i + 1}`,
+      bio: randomElement(["Haven't played in a while.", "Taking a break.", "Will be back soon.", "On hiatus."]),
+      area: randomElement(areas),
+      gender: isMale ? "MALE" : "FEMALE",
+      status: UserStatus.INACTIVE,
+      completedOnboarding: true,
+      createdAt: new Date(Date.now() - randomInt(90, 180) * 24 * 60 * 60 * 1000),
+    });
+  }
+
+  // Add 5 suspended users
+  for (let i = 0; i < 5; i++) {
+    const isMale = i % 2 === 0;
+    const firstName = randomElement(isMale ? malaysianFirstNames.male : malaysianFirstNames.female);
+    const lastName = randomElement(malaysianLastNames);
+    testUsers.push({
+      name: `${firstName} ${lastName}`,
+      email: `suspended${i + 1}@test.com`,
+      username: `suspended_${i + 1}`,
+      bio: "Account suspended.",
+      area: randomElement(areas),
+      gender: isMale ? "MALE" : "FEMALE",
+      status: UserStatus.SUSPENDED,
+      completedOnboarding: true,
+      createdAt: new Date(Date.now() - randomInt(30, 120) * 24 * 60 * 60 * 1000),
+    });
+  }
+
+  // Add 10 users with incomplete onboarding (new signups)
+  for (let i = 0; i < 10; i++) {
+    testUsers.push({
+      name: `New User ${i + 1}`,
+      email: `newuser${i + 1}@test.com`,
+      username: `newuser${i + 1}`,
+      bio: null,
+      area: null,
+      gender: null,
+      status: UserStatus.ACTIVE,
+      completedOnboarding: false,
+      createdAt: new Date(Date.now() - randomInt(0, 14) * 24 * 60 * 60 * 1000), // Recent signups
+    });
+  }
 
   const createdUsers: User[] = [];
 
@@ -194,6 +278,11 @@ async function seedTestUsers(): Promise<User[]> {
       continue;
     }
 
+    // Generate a random birth date between 1970 and 2000
+    const birthYear = 1970 + randomInt(0, 30);
+    const birthMonth = randomInt(0, 11);
+    const birthDay = randomInt(1, 28);
+
     const user = await prisma.user.create({
       data: {
         name: userData.name,
@@ -206,9 +295,10 @@ async function seedTestUsers(): Promise<User[]> {
         completedOnboarding: userData.completedOnboarding,
         role: Role.USER,
         emailVerified: true,
-        dateOfBirth: new Date("1995-01-01"),
+        dateOfBirth: new Date(birthYear, birthMonth, birthDay),
         lastLogin: userData.completedOnboarding ? new Date() : null,
         lastActivityCheck: userData.status === UserStatus.ACTIVE ? new Date() : null,
+        createdAt: userData.createdAt || new Date(),
       },
     });
 
@@ -396,38 +486,38 @@ async function seedLeaguesAndSeasons(adminId: string, categories: any[], sponsor
             leagues: { connect: { id: league.id } },
           },
         });
+      }
 
-        // Create divisions for active and finished seasons
-        if (status === SeasonStatus.ACTIVE || status === SeasonStatus.FINISHED) {
-          const divisionLevels = [DivisionLevel.BEGINNER, DivisionLevel.INTERMEDIATE, DivisionLevel.ADVANCED];
+      // Create divisions for active and finished seasons (always check, regardless of season creation)
+      if (status === SeasonStatus.ACTIVE || status === SeasonStatus.FINISHED) {
+        const divisionLevels = [DivisionLevel.BEGINNER, DivisionLevel.INTERMEDIATE, DivisionLevel.ADVANCED];
 
-          for (let d = 0; d < 3; d++) {
-            const divisionName = `Division ${String.fromCharCode(65 + d)}`;
-            let division = await prisma.division.findFirst({
-              where: { seasonId: season.id, name: divisionName },
+        for (let d = 0; d < 3; d++) {
+          const divisionName = `Division ${String.fromCharCode(65 + d)}`;
+          let division = await prisma.division.findFirst({
+            where: { seasonId: season.id, name: divisionName },
+          });
+
+          if (!division) {
+            division = await prisma.division.create({
+              data: {
+                name: divisionName,
+                description: `${divisionLevels[d]} level division`,
+                level: divisionLevels[d],
+                gameType: leagueData.gameType,
+                genderCategory: categories[i % categories.length]?.genderCategory || GenderType.MIXED,
+                maxSinglesPlayers: leagueData.gameType === GameType.SINGLES ? 16 : null,
+                maxDoublesTeams: leagueData.gameType === GameType.DOUBLES ? 8 : null,
+                seasonId: season.id,
+                leagueId: league.id,
+                createdByAdminId: adminId,
+                isActiveDivision: status === SeasonStatus.ACTIVE,
+                divisionSponsorId: sponsorships[d % sponsorships.length]?.id,
+                prizePoolTotal: new Prisma.Decimal(1000 + d * 500),
+              },
             });
-
-            if (!division) {
-              division = await prisma.division.create({
-                data: {
-                  name: divisionName,
-                  description: `${divisionLevels[d]} level division`,
-                  level: divisionLevels[d],
-                  gameType: leagueData.gameType,
-                  genderCategory: categories[i % categories.length]?.genderCategory || GenderType.MIXED,
-                  maxSinglesPlayers: leagueData.gameType === GameType.SINGLES ? 16 : null,
-                  maxDoublesTeams: leagueData.gameType === GameType.DOUBLES ? 8 : null,
-                  seasonId: season.id,
-                  leagueId: league.id,
-                  createdByAdminId: adminId,
-                  isActiveDivision: status === SeasonStatus.ACTIVE,
-                  divisionSponsorId: sponsorships[d % sponsorships.length]?.id,
-                  prizePoolTotal: new Prisma.Decimal(1000 + d * 500),
-                },
-              });
-            }
-            createdDivisions.push(division);
           }
+          createdDivisions.push(division);
         }
       }
       createdSeasons.push(season);
@@ -511,34 +601,34 @@ async function seedMatches(users: User[], divisions: Division[], seasons: Season
 
   const createdMatches: Match[] = [];
 
-  // Match configurations for different scenarios
+  // Match configurations for different scenarios - significantly increased counts for better chart data
   const matchConfigs = [
-    // COMPLETED matches - various outcomes
-    { status: MatchStatus.COMPLETED, isWalkover: false, isDisputed: false, isLateCancellation: false, count: 10 },
-    { status: MatchStatus.COMPLETED, isWalkover: true, isDisputed: false, isLateCancellation: false, count: 3, walkoverReason: WalkoverReason.NO_SHOW },
-    { status: MatchStatus.COMPLETED, isWalkover: true, isDisputed: false, isLateCancellation: false, count: 2, walkoverReason: WalkoverReason.LATE_CANCELLATION },
-    { status: MatchStatus.COMPLETED, isWalkover: true, isDisputed: false, isLateCancellation: false, count: 1, walkoverReason: WalkoverReason.INJURY },
-    { status: MatchStatus.COMPLETED, isDisputed: true, isWalkover: false, isLateCancellation: false, count: 3 },
+    // COMPLETED matches - various outcomes (80 total completed matches spread across 12 weeks)
+    { status: MatchStatus.COMPLETED, isWalkover: false, isDisputed: false, isLateCancellation: false, count: 60 },
+    { status: MatchStatus.COMPLETED, isWalkover: true, isDisputed: false, isLateCancellation: false, count: 8, walkoverReason: WalkoverReason.NO_SHOW },
+    { status: MatchStatus.COMPLETED, isWalkover: true, isDisputed: false, isLateCancellation: false, count: 4, walkoverReason: WalkoverReason.LATE_CANCELLATION },
+    { status: MatchStatus.COMPLETED, isWalkover: true, isDisputed: false, isLateCancellation: false, count: 2, walkoverReason: WalkoverReason.INJURY },
+    { status: MatchStatus.COMPLETED, isDisputed: true, isWalkover: false, isLateCancellation: false, count: 6 },
 
     // SCHEDULED matches - future matches
-    { status: MatchStatus.SCHEDULED, isWalkover: false, isDisputed: false, isLateCancellation: false, count: 8 },
+    { status: MatchStatus.SCHEDULED, isWalkover: false, isDisputed: false, isLateCancellation: false, count: 20 },
 
     // ONGOING matches - currently playing
-    { status: MatchStatus.ONGOING, isWalkover: false, isDisputed: false, isLateCancellation: false, count: 3 },
+    { status: MatchStatus.ONGOING, isWalkover: false, isDisputed: false, isLateCancellation: false, count: 5 },
 
     // DRAFT matches - incomplete setup
-    { status: MatchStatus.DRAFT, isWalkover: false, isDisputed: false, isLateCancellation: false, count: 4 },
+    { status: MatchStatus.DRAFT, isWalkover: false, isDisputed: false, isLateCancellation: false, count: 8 },
 
     // CANCELLED matches - various reasons
-    { status: MatchStatus.CANCELLED, isWalkover: false, isDisputed: false, isLateCancellation: false, count: 3, cancellationReason: CancellationReason.WEATHER },
-    { status: MatchStatus.CANCELLED, isWalkover: false, isDisputed: false, isLateCancellation: true, count: 2, cancellationReason: CancellationReason.PERSONAL_EMERGENCY },
-    { status: MatchStatus.CANCELLED, isWalkover: false, isDisputed: false, isLateCancellation: true, count: 2, cancellationReason: CancellationReason.ILLNESS },
+    { status: MatchStatus.CANCELLED, isWalkover: false, isDisputed: false, isLateCancellation: false, count: 6, cancellationReason: CancellationReason.WEATHER },
+    { status: MatchStatus.CANCELLED, isWalkover: false, isDisputed: false, isLateCancellation: true, count: 4, cancellationReason: CancellationReason.PERSONAL_EMERGENCY },
+    { status: MatchStatus.CANCELLED, isWalkover: false, isDisputed: false, isLateCancellation: true, count: 4, cancellationReason: CancellationReason.ILLNESS },
 
     // VOID matches - admin voided
-    { status: MatchStatus.VOID, isWalkover: false, isDisputed: false, isLateCancellation: false, count: 2 },
+    { status: MatchStatus.VOID, isWalkover: false, isDisputed: false, isLateCancellation: false, count: 3 },
 
     // UNFINISHED matches - started but not completed
-    { status: MatchStatus.UNFINISHED, isWalkover: false, isDisputed: false, isLateCancellation: false, count: 2 },
+    { status: MatchStatus.UNFINISHED, isWalkover: false, isDisputed: false, isLateCancellation: false, count: 4 },
   ];
 
   let matchIndex = 0;
@@ -557,10 +647,11 @@ async function seedMatches(users: User[], divisions: Division[], seasons: Season
       const player1 = activeUsers[player1Index]!;
       const player2 = activeUsers[player2Index]!;
 
-      // Determine match date based on status
+      // Determine match date based on status - spread over 12 weeks (84 days) for better chart data
       let matchDate: Date;
       if (config.status === MatchStatus.COMPLETED || config.status === MatchStatus.VOID || config.status === MatchStatus.UNFINISHED) {
-        matchDate = randomDate(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000), new Date());
+        // Spread completed matches evenly across the last 12 weeks
+        matchDate = randomDate(new Date(Date.now() - 84 * 24 * 60 * 60 * 1000), new Date());
       } else if (config.status === MatchStatus.ONGOING) {
         matchDate = new Date();
       } else if (config.status === MatchStatus.SCHEDULED) {
@@ -1457,6 +1548,214 @@ async function seedPromoCodes(seasons: Season[]) {
 }
 
 // =============================================
+// SEED INACTIVITY SETTINGS
+// =============================================
+
+async function seedInactivitySettings(leagues: any[], seasons: Season[], admins: SeededAdmin[]) {
+  const adminId = admins[0]!.adminId;
+
+  // Create global default settings
+  const existingGlobal = await prisma.inactivitySettings.findFirst({
+    where: { leagueId: null, seasonId: null },
+  });
+
+  if (!existingGlobal) {
+    await prisma.inactivitySettings.create({
+      data: {
+        leagueId: null,
+        seasonId: null,
+        inactivityThresholdDays: 14,
+        warningThresholdDays: 10,
+        autoMarkInactive: true,
+        excludeFromPairing: false,
+        sendReminderEmail: true,
+        reminderDaysBefore: 3,
+        updatedByAdminId: adminId,
+      },
+    });
+  }
+
+  // Create league-specific settings
+  for (const league of leagues.slice(0, 2)) {
+    const existing = await prisma.inactivitySettings.findFirst({
+      where: { leagueId: league.id, seasonId: null },
+    });
+
+    if (!existing) {
+      await prisma.inactivitySettings.create({
+        data: {
+          leagueId: league.id,
+          seasonId: null,
+          inactivityThresholdDays: 10, // Stricter for leagues
+          warningThresholdDays: 7,
+          autoMarkInactive: true,
+          excludeFromPairing: true,
+          sendReminderEmail: true,
+          reminderDaysBefore: 2,
+          updatedByAdminId: adminId,
+        },
+      });
+    }
+  }
+
+  // Create season-specific settings
+  const activeSeasons = seasons.filter(s => s.status === SeasonStatus.ACTIVE);
+  for (const season of activeSeasons.slice(0, 2)) {
+    const existing = await prisma.inactivitySettings.findFirst({
+      where: { seasonId: season.id },
+    });
+
+    if (!existing) {
+      await prisma.inactivitySettings.create({
+        data: {
+          leagueId: null,
+          seasonId: season.id,
+          inactivityThresholdDays: 7, // Very strict for active seasons
+          warningThresholdDays: 5,
+          autoMarkInactive: true,
+          excludeFromPairing: true,
+          sendReminderEmail: true,
+          reminderDaysBefore: 1,
+          updatedByAdminId: adminId,
+        },
+      });
+    }
+  }
+}
+
+// =============================================
+// SEED SEASON INVITATIONS
+// =============================================
+
+async function seedSeasonInvitations(users: User[], seasons: Season[]) {
+  const activeUsers = users.filter(u => u.status === UserStatus.ACTIVE && u.completedOnboarding);
+  const activeSeasons = seasons.filter(s => s.status === SeasonStatus.ACTIVE || s.status === SeasonStatus.UPCOMING);
+
+  if (activeUsers.length < 2) {
+    console.log("   ⚠️ Not enough active users to create invitations");
+    return [];
+  }
+
+  const invitationStatuses: SeasonInvitationStatus[] = [
+    SeasonInvitationStatus.PENDING,
+    SeasonInvitationStatus.ACCEPTED,
+    SeasonInvitationStatus.DENIED,
+    SeasonInvitationStatus.EXPIRED,
+  ];
+
+  const createdInvitations = [];
+
+  for (const season of activeSeasons) {
+    // Create 10-15 invitations per season
+    const inviteCount = Math.min(randomInt(10, 15), Math.floor(activeUsers.length / 2));
+
+    for (let i = 0; i < inviteCount; i++) {
+      // Pick a sender and recipient (different users)
+      const senderIndex = (i * 2) % activeUsers.length;
+      const recipientIndex = (i * 2 + 1) % activeUsers.length;
+      const sender = activeUsers[senderIndex]!;
+      const recipient = activeUsers[recipientIndex]!;
+      const status = invitationStatuses[i % invitationStatuses.length]!;
+
+      const existing = await prisma.seasonInvitation.findFirst({
+        where: { senderId: sender.id, recipientId: recipient.id, seasonId: season.id },
+      });
+
+      if (!existing) {
+        const invitation = await prisma.seasonInvitation.create({
+          data: {
+            senderId: sender.id,
+            recipientId: recipient.id,
+            seasonId: season.id,
+            status: status,
+            message: randomElement([
+              "We'd love to have you join this season!",
+              "Based on your skill level, this division would be perfect for you.",
+              "Join us for an exciting season of competitive play!",
+              "You've been recommended for this league!",
+              null,
+            ]),
+            expiresAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
+            respondedAt: status !== SeasonInvitationStatus.PENDING ? new Date() : null,
+          },
+        });
+        createdInvitations.push(invitation);
+      }
+    }
+  }
+
+  return createdInvitations;
+}
+
+// =============================================
+// SEED FRIENDLY MATCHES (Non-league matches)
+// =============================================
+
+async function seedFriendlyMatches(users: User[], leagues: any[]) {
+  const activeUsers = users.filter(u => u.status === UserStatus.ACTIVE && u.completedOnboarding);
+  const createdMatches: Match[] = [];
+
+  // Create 30 friendly matches spread across sports
+  for (let i = 0; i < 30; i++) {
+    const player1Index = (i * 2) % activeUsers.length;
+    const player2Index = (i * 2 + 1) % activeUsers.length;
+    const player1 = activeUsers[player1Index]!;
+    const player2 = activeUsers[player2Index]!;
+
+    const league = leagues[i % leagues.length];
+    const isCompleted = i < 20; // 20 completed, 10 scheduled
+    const matchDate = isCompleted
+      ? randomDate(new Date(Date.now() - 60 * 24 * 60 * 60 * 1000), new Date())
+      : randomDate(new Date(), new Date(Date.now() + 30 * 24 * 60 * 60 * 1000));
+
+    const match = await prisma.match.create({
+      data: {
+        divisionId: null, // No division = friendly match
+        leagueId: league?.id || null,
+        seasonId: null,
+        sport: randomElement(["TENNIS", "PICKLEBALL", "PADEL"]),
+        matchType: randomElement([MatchType.SINGLES, MatchType.DOUBLES]),
+        format: MatchFormat.STANDARD,
+        status: isCompleted ? MatchStatus.COMPLETED : MatchStatus.SCHEDULED,
+        matchDate: matchDate,
+        scheduledStartTime: matchDate,
+        location: randomElement(["Community Courts", "Private Club", "Public Park", "Sports Center"]),
+        venue: `Court ${randomInt(1, 6)}`,
+        playerScore: isCompleted ? randomInt(0, 2) : null,
+        opponentScore: isCompleted ? randomInt(0, 2) : null,
+        createdById: player1.id,
+        createdAt: randomDate(new Date(Date.now() - 84 * 24 * 60 * 60 * 1000), matchDate),
+      },
+    });
+
+    // Add participants
+    await prisma.matchParticipant.createMany({
+      data: [
+        {
+          matchId: match.id,
+          userId: player1.id,
+          role: ParticipantRole.CREATOR,
+          invitationStatus: InvitationStatus.ACCEPTED,
+          acceptedAt: new Date(),
+        },
+        {
+          matchId: match.id,
+          userId: player2.id,
+          role: ParticipantRole.OPPONENT,
+          invitationStatus: InvitationStatus.ACCEPTED,
+          acceptedAt: new Date(),
+        },
+      ],
+      skipDuplicates: true,
+    });
+
+    createdMatches.push(match);
+  }
+
+  return createdMatches;
+}
+
+// =============================================
 // SEED BUG TRACKING APPS
 // =============================================
 
@@ -1585,10 +1884,10 @@ async function main() {
     console.log("👥 Seeding test users...");
     const users = await seedTestUsers();
     console.log(`   ✅ Created ${users.length} test users (password: Test@123)`);
-    console.log("   - 20 active users with complete profiles");
-    console.log("   - 3 inactive users");
-    console.log("   - 2 suspended users");
-    console.log("   - 3 users with incomplete onboarding\n");
+    console.log("   - 50 active users with complete profiles");
+    console.log("   - 10 inactive users");
+    console.log("   - 5 suspended users");
+    console.log("   - 10 users with incomplete onboarding\n");
 
     // 3. Seed categories
     console.log("📋 Seeding categories...");
@@ -1677,7 +1976,22 @@ async function main() {
     await seedPromoCodes(seasons);
     console.log("   ✅ Created promo codes\n");
 
-    // 19. Seed bug tracking apps
+    // 19. Seed inactivity settings
+    console.log("⏰ Seeding inactivity settings...");
+    await seedInactivitySettings(leagues, seasons, admins);
+    console.log("   ✅ Created inactivity settings (global, league-specific, season-specific)\n");
+
+    // 20. Seed season invitations
+    console.log("📧 Seeding season invitations...");
+    const invitations = await seedSeasonInvitations(users, seasons);
+    console.log(`   ✅ Created ${invitations.length} season invitations\n`);
+
+    // 21. Seed friendly matches (non-league)
+    console.log("🏓 Seeding friendly matches...");
+    const friendlyMatches = await seedFriendlyMatches(users, leagues);
+    console.log(`   ✅ Created ${friendlyMatches.length} friendly matches\n`);
+
+    // 22. Seed bug tracking apps
     console.log("🐛 Seeding bug tracking apps...");
     await seedBugTrackingApps(admins[0]!.adminId);
     console.log("   ✅ Created bug tracking apps and modules\n");
@@ -1687,17 +2001,20 @@ async function main() {
     console.log("═══════════════════════════════════════════════════════");
     console.log("\n📝 SUMMARY:");
     console.log("   • Admins: 5 (various statuses)");
-    console.log("   • Users: 28 (active, inactive, suspended, incomplete)");
-    console.log("   • Leagues: 5 (different sports)");
-    console.log("   • Seasons: 20 (all statuses)");
-    console.log("   • Divisions: Multiple per active season");
-    console.log("   • Matches: 45+ (all 7 status variations + flags)");
-    console.log("   • Disputes, Walkovers, Penalties");
+    console.log("   • Users: 75 (50 active, 10 inactive, 5 suspended, 10 incomplete)");
+    console.log("   • Leagues: 5 (Tennis, Pickleball, Padel)");
+    console.log("   • Seasons: 20 (ACTIVE, UPCOMING, FINISHED, CANCELLED)");
+    console.log("   • Divisions: Multiple per active season (BEGINNER, INTERMEDIATE, ADVANCED)");
+    console.log("   • League Matches: 130+ (all 7 status variations + flags)");
+    console.log("   • Friendly Matches: 30 (non-league matches)");
+    console.log("   • Disputes, Walkovers, Penalties: Various statuses");
+    console.log("   • Season Invitations: Multiple per season");
+    console.log("   • Inactivity Settings: Global, league, and season-specific");
     console.log("   • Chat threads and messages");
-    console.log("   • Notifications");
+    console.log("   • Notifications: 50+ across categories");
     console.log("   • Ratings and standings");
-    console.log("   • Achievements");
-    console.log("   • And more...\n");
+    console.log("   • Achievements: 12 types with user awards");
+    console.log("   • Promo codes, Sponsorships, Bug tracking\n");
 
   } catch (error) {
     console.error("❌ Error seeding database:", error);
