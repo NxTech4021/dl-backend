@@ -92,13 +92,13 @@ export const createBugReport = async (req: Request, res: Response) => {
     sessionId,
     consoleErrors,
     networkRequests,
+    // Anonymous reporter info (when not logged in)
+    anonymousEmail,
+    anonymousName,
   } = req.body;
 
-  // Get reporter from auth
-  const reporterId = (req as any).user?.id;
-  if (!reporterId) {
-    return res.status(401).json({ error: "Authentication required." });
-  }
+  // Get reporter from auth (optional - allows anonymous reports)
+  const reporterId = (req as any).user?.id || null;
 
   // Require either moduleId or module name
   if (!appId || (!moduleId && !moduleName) || !title || !description) {
@@ -180,7 +180,15 @@ export const createBugReport = async (req: Request, res: Response) => {
         // Relations
         app: { connect: { id: appId } },
         module: { connect: { id: bugModule.id } },
-        reporter: { connect: { id: reporterId } },
+        // Connect reporter if authenticated, otherwise store anonymous info
+        ...(reporterId && {
+          reporter: { connect: { id: reporterId } },
+        }),
+        // Anonymous reporter info (when not logged in)
+        ...(!reporterId && {
+          anonymousEmail: anonymousEmail || null,
+          anonymousName: anonymousName || "Anonymous",
+        }),
         // Default assignee from settings
         ...(settings?.defaultAssigneeId && {
           assignedTo: { connect: { id: settings.defaultAssigneeId } },
@@ -198,15 +206,26 @@ export const createBugReport = async (req: Request, res: Response) => {
       },
     });
 
-    // Create initial status change record
-    await prisma.bugStatusChange.create({
-      data: {
-        bugReport: { connect: { id: bugReport.id } },
-        newStatus: BugStatus.NEW,
-        changedBy: { connect: { id: reporterId } },
-        notes: "Bug report created",
-      },
-    });
+    // Create initial status change record (only if we have a reporterId)
+    if (reporterId) {
+      await prisma.bugStatusChange.create({
+        data: {
+          bugReport: { connect: { id: bugReport.id } },
+          newStatus: BugStatus.NEW,
+          changedBy: { connect: { id: reporterId } },
+          notes: "Bug report created",
+        },
+      });
+    } else {
+      // For anonymous reports, create status change without changedBy
+      await prisma.bugStatusChange.create({
+        data: {
+          bugReport: { connect: { id: bugReport.id } },
+          newStatus: BugStatus.NEW,
+          notes: "Bug report created (anonymous)",
+        },
+      });
+    }
 
     // Send notifications and sync to Google Sheets (async, don't wait)
     notifyNewBugReport(bugReport.id).catch(console.error);

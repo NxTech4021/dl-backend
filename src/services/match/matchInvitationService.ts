@@ -174,26 +174,29 @@ export class MatchInvitationService {
       
       // Set scheduledStartTime from the first proposed time
       if (proposedTimes && proposedTimes.length > 0) {
-        // Store the date as-is (already in UTC from frontend)
-        matchData.scheduledStartTime = proposedTimes[0];
-        matchData.scheduledTime = proposedTimes[0]; // For backward compatibility
-        matchData.proposedTimes = proposedTimes.map(t => t.toISOString());
-        
-        // Log for verification (displays in Malaysia time)
-        const malaysiaTime = new Date(proposedTimes[0]).toLocaleString('en-MY', { 
-          timeZone: 'Asia/Kuala_Lumpur',
-          year: 'numeric',
-          month: '2-digit', 
-          day: '2-digit',
-          hour: '2-digit',
-          minute: '2-digit',
-          hour12: false
-        });
-        console.log('✅ Match time stored:', {
-          utc: proposedTimes[0].toISOString(),
-          malaysiaTime: malaysiaTime,
-          note: 'UTC time is stored, displays as Malaysia Time'
-        });
+        const firstProposedTime = proposedTimes[0];
+        if (firstProposedTime) {
+          // Store the date as-is (already in UTC from frontend)
+          matchData.scheduledStartTime = firstProposedTime;
+          matchData.scheduledTime = firstProposedTime; // For backward compatibility
+          matchData.proposedTimes = proposedTimes.map(t => t.toISOString());
+
+          // Log for verification (displays in Malaysia time)
+          const malaysiaTime = new Date(firstProposedTime).toLocaleString('en-MY', {
+            timeZone: 'Asia/Kuala_Lumpur',
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false
+          });
+          console.log('✅ Match time stored:', {
+            utc: firstProposedTime.toISOString(),
+            malaysiaTime: malaysiaTime,
+            note: 'UTC time is stored, displays as Malaysia Time'
+          });
+        }
       }
 
       const newMatch = await tx.match.create({ data: matchData });

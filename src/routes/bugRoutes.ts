@@ -28,14 +28,23 @@ import {
 const bugRouter = Router();
 
 // =============================================
-// PUBLIC ENDPOINTS (Widget - requires auth)
+// PUBLIC ENDPOINTS (No auth - for bug widget)
+// These endpoints allow reporting bugs even from login page
 // =============================================
 
-// Get modules for a specific app (for dropdown)
-bugRouter.get("/apps/:appId/modules", verifyAuth, getModulesByApp);
+// Initialize DLA app (auto-creates if not exists) - for DLAdmin widget
+// Public: allows bug reporting before login
+bugRouter.get("/init/dla", initDLAApp);
 
-// Create new bug report
-bugRouter.post("/reports", verifyAuth, createBugReport);
+// Create new bug report - Public: allows reporting login issues
+bugRouter.post("/reports", createBugReport);
+
+// Get modules for a specific app (for dropdown) - Public
+bugRouter.get("/apps/:appId/modules", getModulesByApp);
+
+// =============================================
+// AUTHENTICATED USER ENDPOINTS
+// =============================================
 
 // Get current user's bug reports
 bugRouter.get("/reports/my", verifyAuth, getMyBugReports);
@@ -51,9 +60,6 @@ bugRouter.post("/screenshots", verifyAuth, uploadScreenshot);
 
 // Get all apps (for app selector)
 bugRouter.get("/apps", verifyAuth, getApps);
-
-// Initialize DLA app (auto-creates if not exists) - for DLAdmin widget
-bugRouter.get("/init/dla", verifyAuth, initDLAApp);
 
 // =============================================
 // ADMIN ENDPOINTS

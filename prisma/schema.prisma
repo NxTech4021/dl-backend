@@ -34,7 +34,8 @@ model User {
   sessions          Session[]
   seasonMemberships SeasonMembership[]
   matchParticipants MatchParticipant[]
-  processedRequests WithdrawalRequest[] @relation("ProcessedByAdmin")
+  processedRequests    WithdrawalRequest[] @relation("ProcessedByAdmin")
+  withdrawalRequests   WithdrawalRequest[] @relation("WithdrawalRequester")
 
   divisionAssignments DivisionAssignment[] @relation("DivisionAssignments")
 
@@ -439,6 +440,7 @@ model WithdrawalRequest {
   processedByAdminId String?
   partnershipId      String? // For partner change requests
 
+  user             User           @relation("WithdrawalRequester", fields: [userId], references: [id])
   processedByAdmin User?          @relation("ProcessedByAdmin", fields: [processedByAdminId], references: [id])
   seasonId         String
   season           Season         @relation(fields: [seasonId], references: [id])
@@ -1671,8 +1673,11 @@ model BugReport {
   networkRequests     Json?
   localStorageData    Json?
 
-  // Reporter info
-  reporterId          String
+  // Reporter info (optional - for anonymous reports)
+  reporterId          String?
+  // Anonymous reporter info (when not logged in)
+  anonymousEmail      String?
+  anonymousName       String?
 
   // Resolution
   resolvedById        String?
@@ -1697,7 +1702,7 @@ model BugReport {
   // Relations
   app                 App             @relation(fields: [appId], references: [id])
   module              BugModule       @relation(fields: [moduleId], references: [id])
-  reporter            User            @relation("BugReporter", fields: [reporterId], references: [id])
+  reporter            User?           @relation("BugReporter", fields: [reporterId], references: [id])
   assignedTo          Admin?          @relation("BugAssignee", fields: [assignedToId], references: [id])
   resolvedBy          Admin?          @relation("BugResolver", fields: [resolvedById], references: [id])
   duplicateOf         BugReport?      @relation("BugDuplicates", fields: [duplicateOfId], references: [id], onDelete: SetNull)
@@ -1774,14 +1779,14 @@ model BugStatusChange {
   newStatus        BugStatus
   previousPriority BugPriority?
   newPriority      BugPriority?
-  changedById      String
+  changedById      String?
   notes            String?
 
   createdAt        DateTime     @default(now())
 
   // Relations
   bugReport        BugReport    @relation(fields: [bugReportId], references: [id], onDelete: Cascade)
-  changedBy        User         @relation("BugStatusChanger", fields: [changedById], references: [id])
+  changedBy        User?        @relation("BugStatusChanger", fields: [changedById], references: [id])
 
   @@index([bugReportId, createdAt(sort: Desc)])
   @@map("bug_status_change")
