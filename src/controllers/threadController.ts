@@ -175,10 +175,22 @@ export const getThreads = async (req: Request, res: Response) => {
           select: {
             id: true,
             name: true,
+            gameType: true,
+            genderCategory: true,
             league: {
               select: {
                 id: true,
+                name: true,
                 sportType: true
+              }
+            },
+            season: {
+              select: {
+                id: true,
+                name: true,
+                startDate: true,
+                endDate: true,
+                status: true
               }
             }
           }
@@ -190,13 +202,35 @@ export const getThreads = async (req: Request, res: Response) => {
       orderBy: { updatedAt: "desc" },
     });
 
-    // Get unread count for current user in each thread
+    // Get unread count for current user in each thread and format division data
     const threadsWithUnread = threads.map(thread => {
       const userThread = thread.members.find(m => m.userId === userId);
+      
+      // Format division data with full information
+      const divisionData = thread.division ? {
+        id: thread.division.id,
+        name: thread.division.name,
+        gameType: thread.division.gameType,
+        genderCategory: thread.division.genderCategory,
+        league: thread.division.league,
+        season: thread.division.season
+      } : null;
+
       return {
         ...thread,
         unreadCount: userThread?.unreadCount || 0,
-        sportType: thread.division?.league?.sportType || null
+        sportType: thread.division?.league?.sportType || null,
+        division: divisionData,
+        metadata: {
+          divisionId: thread.division?.id,
+          seasonId: thread.division?.season?.id,
+          leagueId: thread.division?.league?.id,
+          leagueName: thread.division?.league?.name,
+          seasonName: thread.division?.season?.name,
+          divisionName: thread.division?.name,
+          gameType: thread.division?.gameType,
+          genderCategory: thread.division?.genderCategory
+        }
       };
     });
 
