@@ -36,16 +36,28 @@ interface BugReportRow {
   reportType: string;
   reporter: string;
   reporterEmail: string;
-  assignedTo: string;
   stepsToReproduce: string;
   expectedBehavior: string;
   actualBehavior: string;
   pageUrl: string;
   browser: string;
   os: string;
+  screenshotUrls: string;
   createdAt: string;
   resolvedAt: string;
   resolutionNotes: string;
+}
+
+// Format date to user-friendly format: "Dec 4, 2024 10:30 AM"
+function formatDateTime(date: Date): string {
+  return date.toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  });
 }
 
 // Initialize Google Sheets client
@@ -88,7 +100,7 @@ export async function syncBugReportToSheet(bugReportId: string): Promise<boolean
         app: true,
         module: true,
         reporter: true,
-        assignedTo: { include: { user: true } },
+        screenshots: { select: { imageUrl: true } },
       },
     });
 
@@ -102,54 +114,75 @@ export async function syncBugReportToSheet(bugReportId: string): Promise<boolean
       where: { appId: bugReport.appId },
     });
 
-    if (!settings?.syncEnabled || !settings?.googleSheetId) {
-      console.log(`Sync disabled for app ${bugReport.app.code}`);
+    if (!settings) {
+      console.log(`[Google Sheets Sync] No BugReportSettings found for app ${bugReport.app.code}`);
+      return false;
+    }
+
+    if (!settings.syncEnabled) {
+      console.log(`[Google Sheets Sync] Sync disabled for app ${bugReport.app.code}. Enable it in BugReportSettings.`);
+      return false;
+    }
+
+    if (!settings.googleSheetId) {
+      console.log(`[Google Sheets Sync] No googleSheetId configured for app ${bugReport.app.code}. Update BugReportSettings with your Sheet ID.`);
       return false;
     }
 
     const sheetId = settings.googleSheetId;
     const sheetName = settings.googleSheetName || "Bug Reports";
 
+    // Get screenshot URLs as comma-separated list
+    const screenshotUrls = bugReport.screenshots
+      .map((s) => s.imageUrl)
+      .join(", ");
+
+    // Cast to access optional anonymous fields
+    const report = bugReport as typeof bugReport & {
+      anonymousName?: string | null;
+      anonymousEmail?: string | null;
+    };
+
     // Prepare row data
     const rowData: BugReportRow = {
-      reportNumber: bugReport.reportNumber,
-      title: bugReport.title,
-      description: bugReport.description,
-      module: bugReport.module.name,
-      status: bugReport.status,
-      severity: bugReport.severity,
-      priority: bugReport.priority,
-      reportType: bugReport.reportType,
-      reporter: bugReport.reporter?.name || bugReport.anonymousName || "Anonymous",
-      reporterEmail: bugReport.reporter?.email || bugReport.anonymousEmail || "",
-      assignedTo: bugReport.assignedTo?.user?.name || "",
-      stepsToReproduce: bugReport.stepsToReproduce || "",
-      expectedBehavior: bugReport.expectedBehavior || "",
-      actualBehavior: bugReport.actualBehavior || "",
-      pageUrl: bugReport.pageUrl || "",
-      browser: `${bugReport.browserName || ""} ${bugReport.browserVersion || ""}`.trim(),
-      os: `${bugReport.osName || ""} ${bugReport.osVersion || ""}`.trim(),
-      createdAt: bugReport.createdAt.toISOString(),
-      resolvedAt: bugReport.resolvedAt?.toISOString() || "",
-      resolutionNotes: bugReport.resolutionNotes || "",
+      reportNumber: report.reportNumber,
+      title: report.title,
+      description: report.description,
+      module: report.module.name,
+      status: report.status,
+      severity: report.severity,
+      priority: report.priority,
+      reportType: report.reportType,
+      reporter: report.reporter?.name || report.anonymousName || "User",
+      reporterEmail: report.reporter?.email || report.anonymousEmail || "",
+      stepsToReproduce: report.stepsToReproduce || "",
+      expectedBehavior: report.expectedBehavior || "",
+      actualBehavior: report.actualBehavior || "",
+      pageUrl: report.pageUrl || "",
+      browser: `${report.browserName || ""} ${report.browserVersion || ""}`.trim(),
+      os: `${report.osName || ""} ${report.osVersion || ""}`.trim(),
+      screenshotUrls,
+      createdAt: formatDateTime(report.createdAt),
+      resolvedAt: report.resolvedAt ? formatDateTime(report.resolvedAt) : "",
+      resolutionNotes: report.resolutionNotes || "",
     };
 
     const values = [Object.values(rowData)];
 
     // Check if row exists (by reportNumber)
     if (bugReport.sheetRowId) {
-      // Update existing row (A to T = 20 columns)
+      // Update existing row (A to U = 21 columns)
       await sheets.spreadsheets.values.update({
         spreadsheetId: sheetId,
-        range: `${sheetName}!A${bugReport.sheetRowId}:T${bugReport.sheetRowId}`,
+        range: `${sheetName}!A${bugReport.sheetRowId}:U${bugReport.sheetRowId}`,
         valueInputOption: "USER_ENTERED",
         requestBody: { values },
       });
     } else {
-      // Append new row (A to T = 20 columns)
+      // Append new row (A to U = 21 columns)
       const response = await sheets.spreadsheets.values.append({
         spreadsheetId: sheetId,
-        range: `${sheetName}!A:T`,
+        range: `${sheetName}!A:U`,
         valueInputOption: "USER_ENTERED",
         insertDataOption: "INSERT_ROWS",
         requestBody: { values },
@@ -206,11 +239,11 @@ export async function initializeSheet(appId: string): Promise<boolean> {
     // Check if sheet has headers
     const response = await sheets.spreadsheets.values.get({
       spreadsheetId: sheetId,
-      range: `${sheetName}!A1:T1`,
+      range: `${sheetName}!A1:U1`,
     });
 
     if (!response.data.values || response.data.values.length === 0) {
-      // Add headers (20 columns total)
+      // Add headers (21 columns total)
       const headers = [
         "Report #",
         "Title",
@@ -222,13 +255,13 @@ export async function initializeSheet(appId: string): Promise<boolean> {
         "Type",
         "Reporter",
         "Reporter Email",
-        "Assigned To",
         "Steps to Reproduce",
         "Expected Behavior",
         "Actual Behavior",
         "Page URL",
         "Browser",
         "OS",
+        "Screenshots",
         "Created At",
         "Resolved At",
         "Resolution Notes",
@@ -236,7 +269,7 @@ export async function initializeSheet(appId: string): Promise<boolean> {
 
       await sheets.spreadsheets.values.update({
         spreadsheetId: sheetId,
-        range: `${sheetName}!A1:T1`,
+        range: `${sheetName}!A1:U1`,
         valueInputOption: "USER_ENTERED",
         requestBody: { values: [headers] },
       });

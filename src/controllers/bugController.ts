@@ -11,6 +11,7 @@ import {
   notifyNewBugReport,
   notifyStatusChange,
 } from "../services/bug/bugNotificationService";
+import { uploadBugScreenshot } from "../config/cloudStorage.config";
 
 // =============================================
 // UTILITY FUNCTIONS
@@ -227,9 +228,11 @@ export const createBugReport = async (req: Request, res: Response) => {
       });
     }
 
-    // Send notifications and sync to Google Sheets (async, don't wait)
+    // Send notifications (async, don't wait)
     notifyNewBugReport(bugReport.id).catch(console.error);
-    syncBugReportToSheet(bugReport.id).catch(console.error);
+
+    // Google Sheets sync is handled by the frontend after screenshots are uploaded
+    // This avoids race conditions that cause duplicate rows
 
     res.status(201).json(bugReport);
   } catch (err: unknown) {
@@ -443,6 +446,132 @@ export const uploadScreenshot = async (req: Request, res: Response) => {
     console.error("Upload Screenshot Error:", err);
     const errorMessage =
       err instanceof Error ? err.message : "Failed to upload screenshot.";
+    res.status(500).json({ error: errorMessage });
+  }
+};
+
+// Allowed image MIME types for screenshots
+const ALLOWED_IMAGE_TYPES = [
+  "image/jpeg",
+  "image/png",
+  "image/gif",
+  "image/webp",
+];
+const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
+
+// Upload screenshot file (handles actual file upload to cloud storage)
+export const uploadScreenshotFile = async (req: Request, res: Response) => {
+  const { bugReportId } = req.body;
+  const file = req.file;
+
+  if (!bugReportId) {
+    return res.status(400).json({ error: "bugReportId is required." });
+  }
+
+  if (!file) {
+    return res.status(400).json({ error: "No file uploaded." });
+  }
+
+  // Security: Validate file type on server-side
+  if (!ALLOWED_IMAGE_TYPES.includes(file.mimetype)) {
+    return res.status(400).json({
+      error: "Invalid file type. Only JPEG, PNG, GIF, and WebP images are allowed.",
+    });
+  }
+
+  // Security: Validate file size on server-side
+  if (file.size > MAX_FILE_SIZE) {
+    return res.status(400).json({
+      error: "File too large. Maximum size is 5MB.",
+    });
+  }
+
+  try {
+    const report = await prisma.bugReport.findUnique({
+      where: { id: bugReportId },
+    });
+    if (!report) {
+      return res.status(404).json({ error: "Bug report not found." });
+    }
+
+    // Check max screenshots from settings
+    const settings = await prisma.bugReportSettings.findUnique({
+      where: { appId: report.appId },
+    });
+    const maxScreenshots = settings?.maxScreenshots || 5;
+
+    const currentCount = await prisma.bugScreenshot.count({
+      where: { bugReportId },
+    });
+    if (currentCount >= maxScreenshots) {
+      return res
+        .status(400)
+        .json({ error: `Maximum ${maxScreenshots} screenshots allowed.` });
+    }
+
+    // Upload to Google Cloud Storage
+    const { imageUrl, thumbnailUrl } = await uploadBugScreenshot(
+      file.buffer,
+      bugReportId,
+      file.originalname,
+      file.mimetype
+    );
+
+    // Save screenshot record to database
+    const screenshot = await prisma.bugScreenshot.create({
+      data: {
+        fileName: file.originalname,
+        fileSize: file.size,
+        mimeType: file.mimetype,
+        imageUrl,
+        thumbnailUrl,
+        bugReport: { connect: { id: bugReportId } },
+      },
+    });
+
+    // Note: Google Sheets sync is NOT triggered here to avoid race conditions
+    // Frontend should call /reports/:id/sync after all screenshots are uploaded
+
+    res.status(201).json(screenshot);
+  } catch (err: unknown) {
+    console.error("Upload Screenshot File Error:", err);
+    const errorMessage =
+      err instanceof Error ? err.message : "Failed to upload screenshot.";
+    res.status(500).json({ error: errorMessage });
+  }
+};
+
+// Sync bug report to Google Sheets - Public endpoint for frontend to call after uploads
+export const syncBugReport = async (req: Request, res: Response) => {
+  const { id } = req.params;
+
+  if (!id) {
+    return res.status(400).json({ error: "Bug report ID is required." });
+  }
+
+  try {
+    const report = await prisma.bugReport.findUnique({
+      where: { id },
+      select: { id: true, reportNumber: true },
+    });
+
+    if (!report) {
+      return res.status(404).json({ error: "Bug report not found." });
+    }
+
+    // Trigger sync
+    const success = await syncBugReportToSheet(id);
+
+    res.json({
+      success,
+      message: success
+        ? `Bug report ${report.reportNumber} synced to Google Sheets`
+        : "Sync skipped (not configured or disabled)",
+    });
+  } catch (err: unknown) {
+    console.error("Sync Bug Report Error:", err);
+    const errorMessage =
+      err instanceof Error ? err.message : "Failed to sync bug report.";
     res.status(500).json({ error: errorMessage });
   }
 };
@@ -911,7 +1040,33 @@ export const initDLAApp = async (req: Request, res: Response) => {
       },
     });
 
-    res.json({ appId: app.id, code: app.code, displayName: app.displayName });
+    // Also ensure BugReportSettings exists for this app
+    await prisma.bugReportSettings.upsert({
+      where: { appId: app.id },
+      update: {}, // No updates needed, just ensure it exists
+      create: {
+        appId: app.id,
+        // Default settings - Google Sheets sync disabled until configured
+        syncEnabled: false,
+      },
+    });
+
+    // Fetch settings to return sync status
+    const settings = await prisma.bugReportSettings.findUnique({
+      where: { appId: app.id },
+      select: {
+        syncEnabled: true,
+        googleSheetId: true,
+      },
+    });
+
+    res.json({
+      appId: app.id,
+      code: app.code,
+      displayName: app.displayName,
+      syncEnabled: settings?.syncEnabled ?? false,
+      googleSheetConfigured: !!settings?.googleSheetId,
+    });
   } catch (err: unknown) {
     console.error("Init DLA App Error:", err);
     const errorMessage = err instanceof Error ? err.message : "Failed to initialize app.";
