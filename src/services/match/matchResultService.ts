@@ -6,6 +6,7 @@
 import { prisma } from '../../lib/prisma';
 import {
   MatchStatus,
+  MatchType,
   WalkoverReason,
   DisputeCategory,
   DisputeStatus,
@@ -73,7 +74,8 @@ export class MatchResultService {
   }
 
   /**
-   * Submit match result
+   * Submit match result (Creator Only)
+   * The match creator submits the score, opponent must approve/deny
    */
   async submitResult(input: SubmitResultInput) {
     const { matchId, submittedById, setScores, gameScores, comment, evidence } = input;
@@ -92,18 +94,27 @@ export class MatchResultService {
       throw new Error('Match not found');
     }
 
+    // CRITICAL: Only the match creator can submit the initial result
+    if (match.createdById !== submittedById) {
+      throw new Error('Only the match creator can submit the result');
+    }
+
     // Verify submitter is a participant
     const isParticipant = match.participants.some(
       p => p.userId === submittedById && p.invitationStatus === InvitationStatus.ACCEPTED
     );
 
     if (!isParticipant) {
-      throw new Error('Only match participants can submit results');
+      throw new Error('Submitter must be a participant in the match');
     }
 
     // Check match status
     if (match.status === MatchStatus.COMPLETED) {
-      throw new Error('Match result has already been submitted');
+      throw new Error('Match has already been completed');
+    }
+
+    if (match.status === MatchStatus.ONGOING) {
+      throw new Error('Match result is pending opponent confirmation');
     }
 
     if (match.status === MatchStatus.CANCELLED || match.status === MatchStatus.VOID) {
@@ -154,9 +165,9 @@ export class MatchResultService {
           });
         }
 
-        // Update match
+        // Update match - Set to ONGOING (awaiting opponent approval)
         const matchUpdateData: any = {
-          status: MatchStatus.COMPLETED,
+          status: MatchStatus.ONGOING,
           team1Score,
           team2Score,
           setScores: JSON.stringify(gameScores),
@@ -193,9 +204,9 @@ export class MatchResultService {
           await tx.matchScore.create({ data: scoreData });
         }
 
-        // Update match
+        // Update match - Set to ONGOING (awaiting opponent approval)
         const matchUpdateData: any = {
-          status: MatchStatus.COMPLETED,
+          status: MatchStatus.ONGOING,
           team1Score,
           team2Score,
           setScores: JSON.stringify(setScores),
@@ -214,19 +225,18 @@ export class MatchResultService {
       }
     });
 
-    // Trigger post-match processing (reactivation, etc.)
-    await handlePostMatchCreation(matchId);
-
-    // Notify other participants
+    // Notify opponent participants to confirm/deny the submitted result
     await this.sendResultSubmittedNotification(matchId, submittedById);
 
-    logger.info(`Result submitted for match ${matchId} by user ${submittedById}`);
+    logger.info(`Result submitted for match ${matchId} by creator ${submittedById}, awaiting opponent confirmation`);
 
     return this.getMatchWithResults(matchId);
   }
 
   /**
-   * Confirm or dispute match result
+   * Confirm or dispute match result (Opponent Captain Only)
+   * - Opponent confirms: Match completed, standings updated
+   * - Opponent denies: Dispute created, sent to division admin
    */
   async confirmResult(input: ConfirmResultInput) {
     const {
@@ -262,84 +272,161 @@ export class MatchResultService {
       throw new Error('No result has been submitted for this match');
     }
 
-    // Can't confirm your own submission
-    if (match.resultSubmittedById === userId && confirmed) {
-      throw new Error('You cannot confirm your own result submission');
+    // CRITICAL: Match creator cannot confirm their own submission
+    if (match.resultSubmittedById === userId) {
+      throw new Error('Match creator cannot confirm their own submission. Opponent must approve or deny.');
+    }
+
+    // Check match is in correct status
+    if (match.status !== MatchStatus.ONGOING) {
+      throw new Error(`Match is not pending confirmation (current status: ${match.status})`);
     }
 
     if (confirmed) {
-      // Confirm the result
+      // Opponent APPROVED - Complete the match and update standings
       await prisma.match.update({
         where: { id: matchId },
         data: {
+          status: MatchStatus.COMPLETED,
           resultConfirmedById: userId,
           resultConfirmedAt: new Date(),
           isAutoApproved: false
         }
       });
 
-      // NEW: Best 6 System Integration with improved error handling
-      const best6Results = {
-        matchResultsCreated: false,
-        best6Recalculated: false,
-        standingsRecalculated: false
-      };
+      // Process match completion: update standings for ALL participants (including partnerships)
+      await this.processMatchCompletion(matchId);
 
+      // Notify all participants of completion
+      await this.sendResultConfirmedNotification(matchId, userId);
+
+      logger.info(`Match ${matchId} confirmed and completed by opponent ${userId}`);
+    } else {
+      // Opponent DENIED - Create dispute and notify division admin
+      if (!disputeReason || !disputeCategory) {
+        throw new Error('Dispute reason and category are required when denying result');
+      }
+
+      // Check if dispute already exists
+      if (match.disputes.length > 0 && match.disputes.some(d => d.status !== DisputeStatus.RESOLVED)) {
+        throw new Error('A dispute already exists for this match');
+      }
+
+      await prisma.$transaction(async (tx) => {
+        // Create dispute with HIGH priority (score disputes are critical)
+        const disputeData: any = {
+          matchId,
+          raisedByUserId: userId,
+          disputeCategory,
+          disputeComment: disputeReason,
+          status: DisputeStatus.OPEN,
+          priority: 'HIGH'
+        };
+        if (disputerScore) disputeData.disputerScore = JSON.stringify(disputerScore);
+        if (evidenceUrl) disputeData.evidenceUrl = evidenceUrl;
+
+        await tx.matchDispute.create({
+          data: disputeData
+        });
+
+        // Mark match as disputed and under admin review
+        await tx.match.update({
+          where: { id: matchId },
+          data: {
+            status: MatchStatus.ONGOING,
+            isDisputed: true,
+            requiresAdminReview: true
+          }
+        });
+      });
+
+      // Notify division admin and match creator of dispute
+      await this.sendDisputeCreatedNotification(matchId, userId, disputeReason);
+
+      logger.info(`Opponent denied result for match ${matchId}, dispute created for division admin review`);
+    }
+
+    return this.getMatchWithResults(matchId);
+  }
+
+  /**
+   * Process match completion - Update standings for ALL participants including partnerships
+   * CRITICAL: For doubles matches, BOTH partners on each team get their standings updated
+   */
+  private async processMatchCompletion(matchId: string) {
+    try {
+      const match = await prisma.match.findUnique({
+        where: { id: matchId },
+        include: {
+          participants: {
+            include: { user: true }
+          },
+          scores: true,
+          pickleballScores: true,
+          division: true
+        }
+      });
+
+      if (!match || !match.divisionId) {
+        logger.error(`Cannot process completion - match ${matchId} not found or has no division`);
+        return;
+      }
+
+      // Step 1: Create MatchResult records for all participants
       try {
-        // Step 1: Create MatchResult records (CRITICAL - must succeed)
         const matchResultService = new MatchResultCreationService();
         await matchResultService.createMatchResults(matchId);
-        best6Results.matchResultsCreated = true;
         logger.info(`Created MatchResult records for match ${matchId}`);
-
-        // Step 2: Recalculate Best 6 (Important - try but don't block)
-        try {
-          const best6Handler = new Best6EventHandler();
-          await best6Handler.onMatchCompleted(matchId);
-          best6Results.best6Recalculated = true;
-          logger.info(`Recalculated Best 6 for match ${matchId}`);
-        } catch (error) {
-          logger.error(`Failed to recalculate Best 6 for match ${matchId}:`, {}, error as Error);
-          // Continue - can be fixed with admin recalculation
-        }
-
-        // Step 3: Recalculate standings (Important - try but don't block)
-        try {
-          if (match.divisionId && match.seasonId) {
-            const standingsV2 = new StandingsV2Service();
-            await standingsV2.recalculateDivisionStandings(match.divisionId, match.seasonId);
-            best6Results.standingsRecalculated = true;
-            logger.info(`Recalculated standings for division ${match.divisionId}`);
-          }
-        } catch (error) {
-          logger.error(`Failed to recalculate standings:`, {}, error as Error);
-          // Continue - can be fixed with admin recalculation
-        }
-
       } catch (error) {
-        // Critical error in MatchResult creation
-        logger.error(`CRITICAL: Failed to create MatchResult records for match ${matchId}`,
-          best6Results, error as Error);
-
-        // This is a critical failure - match results won't count for standings
-        // Mark match for admin review
+        logger.error(`CRITICAL: Failed to create MatchResult records for match ${matchId}`, {}, error as Error);
         await prisma.match.update({
           where: { id: matchId },
           data: { requiresAdminReview: true }
         });
-
-        // Still allow match confirmation but log the issue
-        logger.warn(`Match ${matchId} confirmed but marked for admin review due to Best 6 processing failure`);
+        throw error; // This is critical, must succeed
       }
 
-      // Update ratings after confirmation (keep existing for now)
+      // Step 2: Update Best 6 System
+      try {
+        const best6Handler = new Best6EventHandler();
+        await best6Handler.onMatchCompleted(matchId);
+        logger.info(`Updated Best 6 for match ${matchId}`);
+      } catch (error) {
+        logger.error(`Failed to update Best 6 for match ${matchId}`, {}, error as Error);
+      }
+
+      // Step 3: Update Division Standings (V2 - Best 6 Compliant)
+      if (match.divisionId && match.seasonId) {
+        try {
+          const standingsV2 = new StandingsV2Service();
+          await standingsV2.recalculateDivisionStandings(match.divisionId, match.seasonId);
+          logger.info(`Updated V2 standings for division ${match.divisionId}`);
+        } catch (error) {
+          logger.error(`Failed to update V2 standings`, {}, error as Error);
+        }
+
+        // Step 4: Update Legacy Standings (for backward compatibility)
+        try {
+          await updateMatchStandings(matchId);
+          logger.info(`Updated legacy standings for match ${matchId}`);
+        } catch (error) {
+          logger.error(`Failed to update legacy standings`, {}, error as Error);
+        }
+      }
+
+      // Step 5: For DOUBLES matches - Update standings for BOTH partners on each team
+      if (match.matchType === MatchType.DOUBLES) {
+        await this.updatePartnershipStandings(matchId, match);
+      }
+
+      // Step 6: Update Ratings
       try {
         const ratingUpdates = await calculateMatchRatings(matchId);
         if (ratingUpdates) {
           await applyMatchRatings(matchId, ratingUpdates);
           logger.info(`Applied rating updates for match ${matchId}`);
 
-          // Send rating change notifications
+          // Notify participants of rating changes
           const ratingChanges = [ratingUpdates.winner, ratingUpdates.loser].map((update: any) => ({
             userId: update.userId,
             oldRating: update.previousSinglesRating ?? update.previousDoublesRating ?? 1500,
@@ -349,67 +436,120 @@ export class MatchResultService {
           await notifyBatchRatingChanges(this.notificationService, ratingChanges);
         }
       } catch (error) {
-        logger.error(`Failed to update ratings for match ${matchId}:`, {}, error as Error);
-        // Don't throw - ratings failure shouldn't block confirmation
+        logger.error(`Failed to update ratings for match ${matchId}`, {}, error as Error);
       }
 
-      // OLD standings update (keep for backward compatibility)
+      // Step 7: Trigger post-match actions (reactivation, etc.)
       try {
-        await updateMatchStandings(matchId);
-        logger.info(`Updated old standings for match ${matchId}`);
+        await handlePostMatchCreation(matchId);
       } catch (error) {
-        logger.error(`Failed to update old standings for match ${matchId}:`, {}, error as Error);
-        // Don't throw - standings failure shouldn't block confirmation
+        logger.error(`Failed post-match actions for match ${matchId}`, {}, error as Error);
       }
 
-      // Notify submitter
-      await this.sendResultConfirmedNotification(matchId, userId);
+      logger.info(`Match ${matchId} processing completed successfully`);
 
-      logger.info(`Result confirmed for match ${matchId} by user ${userId}`);
-    } else {
-      // Create dispute
-      if (!disputeReason || !disputeCategory) {
-        throw new Error('Dispute reason and category are required');
-      }
-
-      // Check if dispute already exists
-      if (match.disputes.length > 0 && match.disputes.some(d => d.status !== DisputeStatus.RESOLVED)) {
-        throw new Error('A dispute already exists for this match');
-      }
-
-      await prisma.$transaction(async (tx) => {
-        // Create dispute
-        const disputeData: any = {
-          matchId,
-          raisedByUserId: userId,
-          disputeCategory,
-          disputeComment: disputeReason,
-          status: DisputeStatus.OPEN
-        };
-        if (disputerScore) disputeData.disputerScore = JSON.stringify(disputerScore);
-        if (evidenceUrl) disputeData.evidenceUrl = evidenceUrl;
-
-        await tx.matchDispute.create({
-          data: disputeData
-        });
-
-        // Mark match as disputed
-        await tx.match.update({
-          where: { id: matchId },
-          data: {
-            isDisputed: true,
-            requiresAdminReview: true
-          }
-        });
+    } catch (error) {
+      logger.error(`Failed to process match completion for ${matchId}`, {}, error as Error);
+      await prisma.match.update({
+        where: { id: matchId },
+        data: { requiresAdminReview: true }
       });
-
-      // Notify admin and other participants
-      await this.sendDisputeCreatedNotification(matchId, userId, disputeReason);
-
-      logger.info(`Dispute raised for match ${matchId} by user ${userId}`);
+      throw error;
     }
+  }
 
-    return this.getMatchWithResults(matchId);
+  /**
+   * Update standings for partnerships in doubles matches
+   * CRITICAL: Both partners on winning team AND both partners on losing team get standings updated
+   */
+  private async updatePartnershipStandings(matchId: string, match: any) {
+    try {
+      if (!match.divisionId) return;
+
+      // Get participants by team
+      const team1Participants = match.participants.filter((p: any) => p.team === 'team1');
+      const team2Participants = match.participants.filter((p: any) => p.team === 'team2');
+
+      // Calculate sets and games won by each team
+      let team1SetsWon = 0, team2SetsWon = 0;
+      let team1GamesWon = 0, team2GamesWon = 0;
+
+      if (match.sport === 'PICKLEBALL') {
+        for (const game of match.pickleballScores) {
+          if (game.player1Points > game.player2Points) {
+            team1SetsWon++;
+            team1GamesWon += game.player1Points;
+            team2GamesWon += game.player2Points;
+          } else {
+            team2SetsWon++;
+            team1GamesWon += game.player1Points;
+            team2GamesWon += game.player2Points;
+          }
+        }
+      } else {
+        // Tennis/Padel
+        for (const set of match.scores) {
+          if (set.player1Games > set.player2Games) {
+            team1SetsWon++;
+          } else {
+            team2SetsWon++;
+          }
+          team1GamesWon += set.player1Games;
+          team2GamesWon += set.player2Games;
+        }
+      }
+
+      const team1Won = match.outcome === 'team1';
+
+      // Import standings update function
+      const { updatePlayerStanding } = await import('../rating/standingsCalculationService');
+
+      // Update BOTH partners on team1
+      for (const participant of team1Participants) {
+        // Each partner's standing is updated against each opponent
+        const opponentIds = team2Participants.map((p: any) => p.userId);
+        for (const opponentId of opponentIds) {
+          try {
+            await updatePlayerStanding(participant.userId, match.divisionId, {
+              odlayerId: participant.userId,
+              odversaryId: opponentId,
+              userWon: team1Won,
+              userSetsWon: team1SetsWon,
+              userSetsLost: team2SetsWon,
+              userGamesWon: team1GamesWon,
+              userGamesLost: team2GamesWon
+            });
+          } catch (error) {
+            logger.error(`Failed to update standings for player ${participant.userId}`, {}, error as Error);
+          }
+        }
+      }
+
+      // Update BOTH partners on team2
+      for (const participant of team2Participants) {
+        const opponentIds = team1Participants.map((p: any) => p.userId);
+        for (const opponentId of opponentIds) {
+          try {
+            await updatePlayerStanding(participant.userId, match.divisionId, {
+              odlayerId: participant.userId,
+              odversaryId: opponentId,
+              userWon: !team1Won,
+              userSetsWon: team2SetsWon,
+              userSetsLost: team1SetsWon,
+              userGamesWon: team2GamesWon,
+              userGamesLost: team1GamesWon
+            });
+          } catch (error) {
+            logger.error(`Failed to update standings for player ${participant.userId}`, {}, error as Error);
+          }
+        }
+      }
+
+      logger.info(`Updated partnership standings for all ${team1Participants.length + team2Participants.length} participants in match ${matchId}`);
+
+    } catch (error) {
+      logger.error(`Failed to update partnership standings for match ${matchId}`, {}, error as Error);
+    }
   }
 
   /**
