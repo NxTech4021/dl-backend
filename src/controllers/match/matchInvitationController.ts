@@ -37,8 +37,8 @@ export const createMatch = async (req: Request, res: Response) => {
       opponentId,
       partnerId,
       opponentPartnerId,
-      matchDate,           // Using single matchDate
-      // proposedTimes,    // COMMENTED OUT
+      matchDate,           // Naive datetime string (user's selected time)
+      deviceTimezone,      // User's device timezone (e.g., "Asia/Dhaka", "Europe/London")
       location,
       venue,
       notes,
@@ -58,16 +58,34 @@ export const createMatch = async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Valid matchType (SINGLES/DOUBLES) is required' });
     }
 
-    // SIMPLIFIED: Parse single matchDate as Malaysia Time
+    // TIMEZONE CONVERSION: Convert from device timezone to Malaysia timezone
     let parsedMatchDate: Date | undefined;
     if (matchDate) {
-      const malaysiaDayjs = dayjs.tz(matchDate, 'Asia/Kuala_Lumpur');
-      parsedMatchDate = malaysiaDayjs.toDate();
-      console.log('\u{1F4C5} Parsed match date:', {
-        input: matchDate,
-        malaysiaTime: malaysiaDayjs.format('YYYY-MM-DD HH:mm:ss Z'),
-        utcTime: malaysiaDayjs.utc().format('YYYY-MM-DD HH:mm:ss Z')
-      });
+      if (deviceTimezone && deviceTimezone !== 'Asia/Kuala_Lumpur') {
+        // User is NOT in Malaysia - convert their local time to Malaysia time
+        const deviceTime = dayjs.tz(matchDate, deviceTimezone);
+        const malaysiaTime = deviceTime.tz('Asia/Kuala_Lumpur');
+        parsedMatchDate = malaysiaTime.toDate();
+        
+        console.log('🌏 TIMEZONE CONVERSION - User Outside Malaysia:', {
+          userTimezone: deviceTimezone,
+          userSelectedTime: deviceTime.format('YYYY-MM-DD HH:mm (GMT Z)'),
+          malaysiaEquivalent: malaysiaTime.format('YYYY-MM-DD HH:mm (GMT+8)'),
+          storedUTC: parsedMatchDate.toISOString(),
+          explanation: `User selected ${deviceTime.format('h:mm A')} in ${deviceTimezone}, stored as ${malaysiaTime.format('h:mm A')} Malaysia time`
+        });
+      } else {
+        // User is in Malaysia OR no timezone provided (fallback to treating as Malaysia time)
+        const malaysiaTime = dayjs.tz(matchDate, 'Asia/Kuala_Lumpur');
+        parsedMatchDate = malaysiaTime.toDate();
+        
+        console.log('🕐 TIMEZONE CONVERSION - Malaysia User or Fallback:', {
+          receivedString: matchDate,
+          interpretedAs: 'Malaysia Time (GMT+8)',
+          malaysiaDateTime: malaysiaTime.format('YYYY-MM-DD HH:mm (GMT+8)'),
+          storedUTC: parsedMatchDate.toISOString()
+        });
+      }
     }
 
     // COMMENTED OUT - Complex time parsing
