@@ -10,7 +10,6 @@ import {
   MatchStatus,
   InvitationStatus,
   ParticipantRole,
-  TimeSlotStatus,
   CancellationReason,
   MembershipStatus,
   JoinRequestStatus
@@ -31,7 +30,6 @@ export interface CreateMatchInput {
   partnerId?: string;          // For doubles - creator's partner
   opponentPartnerId?: string;  // For doubles - opponent's partner
   matchDate?: Date;            // Single match date/time
-  // proposedTimes?: Date[];      // COMMENTED OUT - Using matchDate instead
   location?: string;
   venue?: string;
   notes?: string;
@@ -41,20 +39,6 @@ export interface CreateMatchInput {
   feeAmount?: number;          // Fee amount (for SPLIT or FIXED)
   message?: string;            // Message to send with invitation
   expiresInHours?: number;     // How long until invitation expires (default 48)
-}
-
-
-export interface ProposeTimeSlotInput {
-  matchId: string;
-  proposedById: string;
-  proposedTime: Date;
-  location?: string;
-  notes?: string;
-}
-
-export interface VoteTimeSlotInput {
-  timeSlotId: string;
-  userId: string;
 }
 
 export interface RespondToInvitationInput {
@@ -324,22 +308,6 @@ export class MatchInvitationService {
         }
       }
 
-      // COMMENTED OUT - Time slot creation
-      // if (proposedTimes && proposedTimes.length > 0) {
-      //   for (const time of proposedTimes) {
-      //     const timeSlotData: any = {
-      //       matchId: newMatch.id,
-      //       proposedById: createdById,
-      //       proposedTime: time,
-      //       status: TimeSlotStatus.PROPOSED,
-      //       votes: [createdById],
-      //       voteCount: 1
-      //     };
-      //     if (location) timeSlotData.location = location;
-      //     await tx.matchTimeSlot.create({ data: timeSlotData });
-      //   }
-      // }
-
       return newMatch;
     });
 
@@ -383,18 +351,9 @@ export class MatchInvitationService {
             }
           }
         },
-        timeSlots: {
-          include: {
-            proposedBy: {
-              select: { id: true, name: true, username: true }
-            }
-          },
-          orderBy: { proposedTime: 'asc' }
-        },
         createdBy: {
           select: { id: true, name: true, username: true, image: true }
         },
-        stats: true,
         scores: { orderBy: { setNumber: 'asc' } }
       }
     });
@@ -427,9 +386,9 @@ export class MatchInvitationService {
     }
 
     if (filters.fromDate || filters.toDate) {
-      where.scheduledTime = {};
-      if (filters.fromDate) where.scheduledTime.gte = filters.fromDate;
-      if (filters.toDate) where.scheduledTime.lte = filters.toDate;
+      where.matchDate = {};
+      if (filters.fromDate) where.matchDate.gte = filters.fromDate;
+      if (filters.toDate) where.matchDate.lte = filters.toDate;
     }
 
     // For joinable matches (open slots)
@@ -503,10 +462,6 @@ export class MatchInvitationService {
               }
             }
           },
-          timeSlots: {
-            where: { status: TimeSlotStatus.CONFIRMED },
-            take: 1
-          },
           createdBy: {
             select: { id: true, name: true, username: true }
           }
@@ -574,11 +529,11 @@ export class MatchInvitationService {
         where.location = { contains: additionalFilters.location, mode: 'insensitive' };
       }
 
-      // Date range filtering on scheduledTime
+      // Date range filtering on matchDate
       if (additionalFilters.fromDate || additionalFilters.toDate) {
         where.AND = where.AND || [];
         where.AND.push({
-          scheduledTime: {
+          matchDate: {
             ...(additionalFilters.fromDate && { gte: additionalFilters.fromDate }),
             ...(additionalFilters.toDate && { lte: additionalFilters.toDate })
           }
@@ -586,79 +541,74 @@ export class MatchInvitationService {
       }
 
       // Friends/Favorites filtering
-      if (additionalFilters.friendsOnly || additionalFilters.favoritesOnly) {
-        const creatorIds: string[] = [];
+    if (additionalFilters.friendsOnly || additionalFilters.favoritesOnly) {
+      const creatorIds: string[] = [];
 
-        if (additionalFilters.friendsOnly) {
-          const friendships = await prisma.friendship.findMany({
-            where: {
-              OR: [
-                { requesterId: userId, status: 'ACCEPTED' },
-                { recipientId: userId, status: 'ACCEPTED' }
-              ]
-            },
-            select: { requesterId: true, recipientId: true }
-          });
+      if (additionalFilters.friendsOnly) {
+        const friendships = await prisma.friendship.findMany({
+          where: {
+            OR: [
+              { requesterId: userId, status: 'ACCEPTED' },
+              { recipientId: userId, status: 'ACCEPTED' }
+            ]
+          },
+          select: { requesterId: true, recipientId: true }
+        });
 
-          const friendIds = friendships.map(f =>
-            f.requesterId === userId ? f.recipientId : f.requesterId
-          );
-          creatorIds.push(...friendIds);
-        }
+        const friendIds = friendships.map(f =>
+          f.requesterId === userId ? f.recipientId : f.requesterId
+        );
+        creatorIds.push(...friendIds);
+      }
 
-        if (additionalFilters.favoritesOnly) {
-          const favorites = await prisma.favorite.findMany({
-            where: { userId },
-            select: { favoritedId: true }
-          });
+      if (additionalFilters.favoritesOnly) {
+        const favorites = await prisma.favorite.findMany({
+          where: { userId },
+          select: { favoritedId: true }
+        });
 
-          const favoriteIds = favorites.map(f => f.favoritedId);
-          creatorIds.push(...favoriteIds);
-        }
+        const favoriteIds = favorites.map(f => f.favoritedId);
+        creatorIds.push(...favoriteIds);
+      }
 
-        const uniqueCreatorIds = [...new Set(creatorIds)];
+      const uniqueCreatorIds = [...new Set(creatorIds)];
 
-        if (uniqueCreatorIds.length > 0) {
-          where.createdById = { in: uniqueCreatorIds };
-        } else {
-          // If no friends/favorites found, return empty results
-          where.createdById = 'no-matches';
-        }
+      if (uniqueCreatorIds.length > 0) {
+        where.createdById = { in: uniqueCreatorIds };
+      } else {
+        // If no friends/favorites found, return empty results
+        where.createdById = 'no-matches';
       }
     }
+  }
 
-    const [matches, total] = await Promise.all([
-      prisma.match.findMany({
-        where,
-        include: {
-          participants: {
-            include: {
-              user: {
-                select: { id: true, name: true, username: true, image: true }
-              }
+  const [matches, total] = await Promise.all([
+    prisma.match.findMany({
+      where,
+      include: {
+        participants: {
+          include: {
+            user: {
+              select: { id: true, name: true, username: true, image: true }
             }
-          },
-          timeSlots: {
-            orderBy: { proposedTime: 'asc' }
-          },
-          createdBy: {
-            select: { id: true, name: true, username: true, image: true }
-          },
-          division: {
-            select: { id: true, name: true }
           }
         },
-        orderBy: [
-          { scheduledTime: 'asc' },
-          { createdAt: 'desc' }
-        ],
-        skip: (page - 1) * limit,
-        take: limit
-      }),
-      prisma.match.count({ where })
-    ]);
-
-    return {
+        createdBy: {
+          select: { id: true, name: true, username: true, image: true }
+        },
+        division: {
+          select: { id: true, name: true }
+        }
+      },
+      orderBy: [
+        { matchDate: 'asc' },
+        { createdAt: 'desc' }
+      ],
+      skip: (page - 1) * limit,
+      take: limit
+    }),
+    prisma.match.count({ where })
+  ]);    return {
       matches,
       total,
       page,
@@ -678,10 +628,7 @@ export class MatchInvitationService {
       include: {
         match: {
           include: {
-            participants: true,
-            timeSlots: {
-              where: { status: TimeSlotStatus.CONFIRMED }
-            }
+            participants: true
           }
         }
       }
@@ -705,7 +652,7 @@ export class MatchInvitationService {
 
     // Check for time conflicts if accepting
     if (accept) {
-      const matchTime = invitation.match.scheduledTime || invitation.match.timeSlots[0]?.proposedTime;
+      const matchTime = invitation.match.matchDate;
 
       if (matchTime) {
         const conflictCheck = await this.checkTimeConflict(userId, matchTime, invitation.matchId);
@@ -964,150 +911,6 @@ export class MatchInvitationService {
   }
 
   /**
-   * Propose a time slot for a match
-   */
-  async proposeTimeSlot(input: ProposeTimeSlotInput) {
-    const { matchId, proposedById, proposedTime, location, notes } = input;
-
-    // Verify user is participant
-    const participant = await prisma.matchParticipant.findUnique({
-      where: {
-        matchId_userId: { matchId, userId: proposedById }
-      }
-    });
-
-    if (!participant) {
-      throw new Error('You must be a participant to propose time slots');
-    }
-
-    const timeSlotData: any = {
-      matchId,
-      proposedById,
-      proposedTime,
-      status: TimeSlotStatus.PROPOSED,
-      votes: [proposedById],
-      voteCount: 1
-    };
-    if (location) timeSlotData.location = location;
-    if (notes) timeSlotData.notes = notes;
-
-    const timeSlot = await prisma.matchTimeSlot.create({
-      data: timeSlotData,
-      include: {
-        proposedBy: {
-          select: { id: true, name: true, username: true }
-        }
-      }
-    });
-
-    logger.info(`Time slot proposed for match ${matchId} by user ${proposedById}`);
-
-    return timeSlot;
-  }
-
-  /**
-   * Vote for a time slot
-   */
-  async voteForTimeSlot(input: VoteTimeSlotInput) {
-    const { timeSlotId, userId } = input;
-
-    const timeSlot = await prisma.matchTimeSlot.findUnique({
-      where: { id: timeSlotId },
-      include: { match: { include: { participants: true } } }
-    });
-
-    if (!timeSlot) {
-      throw new Error('Time slot not found');
-    }
-
-    // Verify user is participant
-    const isParticipant = timeSlot.match.participants.some(p => p.userId === userId);
-    if (!isParticipant) {
-      throw new Error('You must be a participant to vote');
-    }
-
-    // Check if already voted
-    const votes = (timeSlot.votes as string[]) || [];
-    if (votes.includes(userId)) {
-      throw new Error('You have already voted for this time slot');
-    }
-
-    // Add vote
-    const newVotes = [...votes, userId];
-    const updatedSlot = await prisma.matchTimeSlot.update({
-      where: { id: timeSlotId },
-      data: {
-        votes: newVotes,
-        voteCount: newVotes.length
-      }
-    });
-
-    // Check if all participants have voted
-    const acceptedParticipants = timeSlot.match.participants.filter(
-      p => p.invitationStatus === InvitationStatus.ACCEPTED
-    );
-
-    if (newVotes.length === acceptedParticipants.length) {
-      // Auto-confirm if unanimous
-      await this.confirmTimeSlot(timeSlotId);
-    }
-
-    logger.info(`User ${userId} voted for time slot ${timeSlotId}`);
-
-    return updatedSlot;
-  }
-
-  /**
-   * Confirm a time slot
-   */
-  async confirmTimeSlot(timeSlotId: string) {
-    const timeSlot = await prisma.matchTimeSlot.findUnique({
-      where: { id: timeSlotId }
-    });
-
-    if (!timeSlot) {
-      throw new Error('Time slot not found');
-    }
-
-    await prisma.$transaction(async (tx) => {
-      // Mark this slot as confirmed
-      await tx.matchTimeSlot.update({
-        where: { id: timeSlotId },
-        data: {
-          status: TimeSlotStatus.CONFIRMED,
-          confirmedAt: new Date()
-        }
-      });
-
-      // Reject other slots for this match
-      await tx.matchTimeSlot.updateMany({
-        where: {
-          matchId: timeSlot.matchId,
-          id: { not: timeSlotId }
-        },
-        data: { status: TimeSlotStatus.REJECTED }
-      });
-
-      // Update match with confirmed time
-      await tx.match.update({
-        where: { id: timeSlot.matchId },
-        data: {
-          scheduledTime: timeSlot.proposedTime,
-          scheduledStartTime: timeSlot.proposedTime,
-          location: timeSlot.location
-        }
-      });
-    });
-
-    // Send notifications
-    await this.sendTimeConfirmedNotification(timeSlot.matchId);
-
-    logger.info(`Time slot ${timeSlotId} confirmed for match ${timeSlot.matchId}`);
-
-    return this.getMatchById(timeSlot.matchId);
-  }
-
-  /**
    * Check if match is ready to be scheduled (all participants accepted)
    */
   private async checkMatchReadyToSchedule(tx: any, matchId: string) {
@@ -1204,17 +1007,13 @@ export class MatchInvitationService {
       const match = await prisma.match.findUnique({
         where: { id: matchId },
         include: {
-          participants: { select: { userId: true } },
-          timeSlots: {
-            where: { status: TimeSlotStatus.CONFIRMED },
-            take: 1
-          }
+          participants: { select: { userId: true } }
         }
       });
 
-      if (!match || !match.timeSlots[0]) return;
+      if (!match || !match.matchDate) return;
 
-      const confirmedTime = match.timeSlots[0].proposedTime;
+      const confirmedTime = match.matchDate;
       const participantIds = match.participants.map(p => p.userId);
 
       await this.notificationService.createNotification({
@@ -1436,8 +1235,7 @@ export class MatchInvitationService {
       opponentId,
       partnerId,
       opponentPartnerId,
-      matchDate,              // Using matchDate instead
-      // proposedTimes,       // COMMENTED OUT
+      matchDate,
       location,
       venue,
       notes,
@@ -1482,11 +1280,6 @@ export class MatchInvitationService {
 
       // Delete old invitations
       await tx.matchInvitation.deleteMany({
-        where: { matchId }
-      });
-
-      // Delete old time slots
-      await tx.matchTimeSlot.deleteMany({
         where: { matchId }
       });
 
@@ -1760,25 +1553,10 @@ export class MatchInvitationService {
         status: {
           in: [MatchStatus.SCHEDULED, MatchStatus.ONGOING]
         },
-        OR: [
-          {
-            scheduledTime: {
-              gte: startWindow,
-              lte: endWindow
-            }
-          },
-          {
-            timeSlots: {
-              some: {
-                status: TimeSlotStatus.CONFIRMED,
-                proposedTime: {
-                  gte: startWindow,
-                  lte: endWindow
-                }
-              }
-            }
-          }
-        ]
+        matchDate: {
+          gte: startWindow,
+          lte: endWindow
+        }
       };
 
       if (excludeMatchId) {
@@ -1788,25 +1566,19 @@ export class MatchInvitationService {
       const conflictingMatches = await prisma.match.findMany({
         where: whereClause,
         include: {
-          division: { select: { name: true } },
-          timeSlots: {
-            where: { status: TimeSlotStatus.CONFIRMED },
-            select: { proposedTime: true }
-          }
+          division: { select: { name: true } }
         }
       });
 
       if (conflictingMatches.length > 0) {
         const conflict = conflictingMatches[0];
         if (conflict) {
-          const conflictTime = conflict.scheduledTime || conflict.timeSlots?.[0]?.proposedTime;
-
           return {
             hasConflict: true,
             conflictingMatch: {
               id: conflict.id,
               division: conflict.division?.name,
-              scheduledTime: conflictTime
+              scheduledTime: conflict.matchDate
             }
           };
         }
@@ -1898,23 +1670,17 @@ export class MatchInvitationService {
                 include: {
                   user: {
                     select: { id: true, name: true, username: true, image: true }
-                  }
-                }
-              },
-              timeSlots: {
-                orderBy: { voteCount: 'desc' },
-                take: 3
-              }
             }
-          },
-          inviter: {
-            select: { id: true, name: true, username: true, image: true }
           }
-        },
-        orderBy: { sentAt: 'desc' }
-      });
-
-      // Add partner status for doubles matches
+        }
+      }
+    },
+    inviter: {
+      select: { id: true, name: true, username: true, image: true }
+    }
+  },
+  orderBy: { sentAt: 'desc' }
+});      // Add partner status for doubles matches
       const invitationsWithStatus = invitations.map(inv => {
         let partnerStatus = null;
         if (inv.match.matchType === MatchType.DOUBLES) {
@@ -1990,22 +1756,20 @@ export class MatchInvitationService {
                 invitationStatus: InvitationStatus.ACCEPTED
               }
             },
-            status: {
-              in: [MatchStatus.SCHEDULED, MatchStatus.ONGOING]
-            },
-            scheduledTime: {
-              gte: startTime,
-              lte: endTime
-            }
+          status: {
+            in: [MatchStatus.SCHEDULED, MatchStatus.ONGOING]
           },
-          select: {
-            id: true,
-            scheduledTime: true
-          },
-          take: 1
-        });
-
-        if (conflictingMatches.length > 0) {
+          matchDate: {
+            gte: startTime,
+            lte: endTime
+          }
+        },
+        select: {
+          id: true,
+          matchDate: true
+        },
+        take: 1
+      });        if (conflictingMatches.length > 0) {
           const user = await prisma.user.findUnique({
             where: { id: userId },
             select: { name: true }
