@@ -16,7 +16,7 @@ import { logger } from '../../utils/logger';
 import { NotificationService } from '../notificationService';
 import { handlePostMatchCreation } from '../matchService';
 import { calculateMatchRatings, applyMatchRatings } from '../rating/ratingCalculationService';
-import { updateMatchStandings } from '../rating/standingsCalculationService';
+// NOTE: updateMatchStandings removed - V2 standings handles everything now
 import { notifyAdminsDispute } from '../notification/adminNotificationService';
 import { notifyBatchRatingChanges } from '../notification/playerNotificationService';
 import { ScoreValidationService } from './validation/scoreValidationService';
@@ -405,18 +405,16 @@ export class MatchResultService {
           logger.error(`Failed to update V2 standings`, {}, error as Error);
         }
 
-        // Step 4: Update Legacy Standings (for backward compatibility)
-        try {
-          await updateMatchStandings(matchId);
-          logger.info(`Updated legacy standings for match ${matchId}`);
-        } catch (error) {
-          logger.error(`Failed to update legacy standings`, {}, error as Error);
-        }
+        // NOTE: Legacy standings (updateMatchStandings) REMOVED
+        // V2 standings now handles all standings updates correctly by recalculating from MatchResult records
+        // The legacy approach was causing double/triple counting because it increments instead of recalculates
       }
 
-      // Step 5: For DOUBLES matches - Update standings for BOTH partners on each team
+      // Step 5: For DOUBLES matches - Partnership standings are now handled by V2
+      // NOTE: updatePartnershipStandings REMOVED - it was causing triple counting
+      // V2 service already counts all participants correctly from MatchResult records
       if (match.matchType === MatchType.DOUBLES) {
-        await this.updatePartnershipStandings(matchId, match);
+        logger.info(`Doubles match ${matchId} - standings handled by V2 service`);
       }
 
       // Step 6: Update Ratings
@@ -1037,12 +1035,15 @@ export class MatchResultService {
             logger.error(`Failed to update ratings for auto-approved match ${match.id}:`, {}, error as Error);
           }
 
-          // Update old standings
-          try {
-            await updateMatchStandings(match.id);
-            logger.info(`Auto-approved: Updated old standings for match ${match.id}`);
-          } catch (error) {
-            logger.error(`Failed to update old standings for auto-approved match ${match.id}:`, {}, error as Error);
+          // Update V2 standings (replaces old updateMatchStandings)
+          if (match.divisionId && match.seasonId) {
+            try {
+              const standingsV2 = new StandingsV2Service();
+              await standingsV2.recalculateDivisionStandings(match.divisionId, match.seasonId);
+              logger.info(`Auto-approved: Updated V2 standings for match ${match.id}`);
+            } catch (error) {
+              logger.error(`Failed to update V2 standings for auto-approved match ${match.id}:`, {}, error as Error);
+            }
           }
 
           // Notify all participants
