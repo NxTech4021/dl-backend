@@ -99,9 +99,6 @@ model User {
   matchWalkoversRecorded Match[]          @relation("MatchWalkoverRecorder")
   matchInvitationsSent      MatchInvitation[] @relation("MatchInvitationsSent")
   matchInvitationsReceived  MatchInvitation[] @relation("MatchInvitationsReceived")
-  matchTimeSlotsProposed    MatchTimeSlot[]   @relation("MatchTimeSlotsProposed")
-  matchJoinRequests         MatchJoinRequest[] @relation("MatchJoinRequests")
-  matchJoinRequestResponses MatchJoinRequest[] @relation("MatchJoinRequestResponses")
 
   // Bracket system relations
   bracketPlayer1        BracketMatch[]    @relation("BracketPlayer1")
@@ -594,12 +591,6 @@ model Match {
   isDisputed     Boolean     @default(false)
   adminNotes     String?
 
-  // Scheduling fields
-  proposedTimes         Json?       // Array of proposed times
-  scheduledTime         DateTime?   // Final agreed time
-  scheduledStartTime    DateTime?
-  actualStartTime       DateTime?
-
   // Team-based scoring (for doubles)
   team1Score            Int?
   team2Score            Int?
@@ -662,9 +653,6 @@ model Match {
 
   participants  MatchParticipant[]
   invitations   MatchInvitation[]
-  timeSlots     MatchTimeSlot[]
-  joinRequests  MatchJoinRequest[]
-  stats         MatchStats?
   notifications Notification[]
 
   // Admin-focused relations
@@ -708,7 +696,6 @@ model Match {
   @@index([status])
   @@index([isDisputed])
   @@index([matchType])
-  @@index([scheduledStartTime])
   @@index([isLateCancellation])
   @@index([createdById])
   @@index([format])
@@ -746,25 +733,6 @@ model MatchParticipant {
   @@index([invitationStatus])
 }
 
-model MatchStats {
-  id                     String   @id @default(cuid())
-  matchId                String   @unique
-  playerAces             Int?
-  playerUnforcedErrors   Int?
-  playerWinners          Int?
-  playerDoubleFaults     Int?
-  opponentAces           Int?
-  opponentUnforcedErrors Int?
-  opponentWinners        Int?
-  opponentDoubleFaults   Int?
-  rallyCount             Int?
-  longestRally           Int?
-  breakPointsConverted   Int?
-  breakPointsTotal       Int?
-  createdAt              DateTime @default(now())
-  updatedAt              DateTime @updatedAt
-  match                  Match    @relation(fields: [matchId], references: [id], onDelete: Cascade)
-}
 
 model MatchInvitation {
   id              String           @id @default(cuid())
@@ -799,61 +767,6 @@ model MatchInvitation {
   @@map("match_invitation")
 }
 
-model MatchTimeSlot {
-  id              String         @id @default(cuid())
-  matchId         String
-  proposedById    String
-
-  // Time slot details
-  proposedTime    DateTime
-  status          TimeSlotStatus @default(PROPOSED)
-  location        String?
-  notes           String?
-
-  // Voting
-  votes           Json?          // Array of user IDs who voted for this slot
-  voteCount       Int            @default(0)
-
-  // Confirmation
-  confirmedAt     DateTime?
-
-  createdAt       DateTime       @default(now())
-  updatedAt       DateTime       @updatedAt
-
-  // Relations
-  match           Match          @relation(fields: [matchId], references: [id], onDelete: Cascade)
-  proposedBy      User           @relation("MatchTimeSlotsProposed", fields: [proposedById], references: [id], onDelete: Cascade)
-
-  @@index([matchId])
-  @@index([proposedById])
-  @@index([status])
-  @@index([proposedTime])
-  @@map("match_time_slot")
-}
-
-model MatchJoinRequest {
-  id            String            @id @default(cuid())
-  matchId       String
-  requesterId   String
-  status        JoinRequestStatus @default(PENDING)
-  message       String?           // Optional message from requester
-
-  requestedAt   DateTime          @default(now())
-  respondedAt   DateTime?
-  respondedBy   String?           // User ID who approved/denied
-  declineReason String?
-
-  // Relations
-  match         Match             @relation(fields: [matchId], references: [id], onDelete: Cascade)
-  requester     User              @relation("MatchJoinRequests", fields: [requesterId], references: [id], onDelete: Cascade)
-  responder     User?             @relation("MatchJoinRequestResponses", fields: [respondedBy], references: [id])
-
-  @@unique([matchId, requesterId])
-  @@index([matchId])
-  @@index([requesterId])
-  @@index([status])
-  @@map("match_join_request")
-}
 
 // =============================================
 // FINALS BRACKET SYSTEM MODELS
@@ -1216,6 +1129,7 @@ model RatingHistory {
   @@map("rating_history")
 }
 
+// FOR SINGLES ?
 model MatchScore {
   id              String   @id @default(cuid())
   matchId         String
