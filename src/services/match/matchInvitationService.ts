@@ -30,7 +30,8 @@ export interface CreateMatchInput {
   opponentId?: string;         // For direct challenge
   partnerId?: string;          // For doubles - creator's partner
   opponentPartnerId?: string;  // For doubles - opponent's partner
-  proposedTimes?: Date[];
+  matchDate?: Date;            // Single match date/time
+  // proposedTimes?: Date[];      // COMMENTED OUT - Using matchDate instead
   location?: string;
   venue?: string;
   notes?: string;
@@ -99,7 +100,8 @@ export class MatchInvitationService {
       opponentId,
       partnerId,
       opponentPartnerId,
-      proposedTimes,
+      matchDate,              // Using single matchDate
+      // proposedTimes,       // COMMENTED OUT
       location,
       venue,
       notes,
@@ -139,22 +141,22 @@ export class MatchInvitationService {
       throw new Error('Partner is required for doubles matches');
     }
 
-    // Check for scheduling conflicts for creator and partner
-    if (proposedTimes && proposedTimes.length > 0) {
-      const firstProposedTime = proposedTimes[0];
-      if (firstProposedTime) {
-        const conflictCheck = await this.checkSchedulingConflicts(
-          createdById, 
-          partnerId, 
-          firstProposedTime,
-          divisionId
-        );
-        
-        if (conflictCheck.hasConflict) {
-          throw new Error(conflictCheck.message || 'Scheduling conflict detected');
-        }
-      }
-    }
+    // COMMENTED OUT - Scheduling conflict check
+    // if (proposedTimes && proposedTimes.length > 0) {
+    //   const firstProposedTime = proposedTimes[0];
+    //   if (firstProposedTime) {
+    //     const conflictCheck = await this.checkSchedulingConflicts(
+    //       createdById, 
+    //       partnerId, 
+    //       firstProposedTime,
+    //       divisionId
+    //     );
+    //     
+    //     if (conflictCheck.hasConflict) {
+    //       throw new Error(conflictCheck.message || 'Scheduling conflict detected');
+    //     }
+    //   }
+    // }
 
     // Calculate expiration time
     const expiresAt = new Date();
@@ -164,14 +166,22 @@ export class MatchInvitationService {
     const match = await prisma.$transaction(async (tx) => {
       // Create the match
       const matchData: any = {
-        divisionId,
-        seasonId: division.seasonId,
-        leagueId: division.leagueId,
+        division: {
+          connect: { id: divisionId }
+        },
+        season: {
+          connect: { id: division.seasonId }
+        },
+        league: {
+          connect: { id: division.leagueId }
+        },
         sport: division.league?.sportType || 'PADEL',
         matchType,
         format,
         status: MatchStatus.SCHEDULED,
-        createdById
+        createdBy: {
+          connect: { id: createdById }
+        }
       };
       if (location) matchData.location = location;
       if (venue) matchData.venue = venue;
@@ -181,32 +191,24 @@ export class MatchInvitationService {
       if (fee !== undefined) matchData.fee = fee;
       if (feeAmount !== undefined) matchData.feeAmount = feeAmount;
       
-      // Set scheduledStartTime from the first proposed time
-      if (proposedTimes && proposedTimes.length > 0) {
-        const firstProposedTime = proposedTimes[0];
-        if (firstProposedTime) {
-          // Store the date as-is (already in UTC from frontend)
-          matchData.scheduledStartTime = firstProposedTime;
-          matchData.scheduledTime = firstProposedTime; // For backward compatibility
-          matchData.proposedTimes = proposedTimes.map(t => t.toISOString());
-
-          // Log for verification (displays in Malaysia time)
-          const malaysiaTime = new Date(firstProposedTime).toLocaleString('en-MY', {
-            timeZone: 'Asia/Kuala_Lumpur',
-            year: 'numeric',
-            month: '2-digit',
-            day: '2-digit',
-            hour: '2-digit',
-            minute: '2-digit',
-            hour12: false
-          });
-          console.log('✅ Match time stored:', {
-            utc: firstProposedTime.toISOString(),
-            malaysiaTime: malaysiaTime,
-            note: 'UTC time is stored, displays as Malaysia Time'
-          });
-        }
+      // SIMPLIFIED: Use single matchDate field
+      if (matchDate) {
+        matchData.matchDate = matchDate;
+        console.log('✅ Match date stored:', {
+          matchDate: matchDate.toISOString(),
+          duration: duration || 2
+        });
       }
+
+      // COMMENTED OUT - Complex time slot logic
+      // if (proposedTimes && proposedTimes.length > 0) {
+      //   const firstProposedTime = proposedTimes[0];
+      //   if (firstProposedTime) {
+      //     matchData.scheduledStartTime = firstProposedTime;
+      //     matchData.scheduledTime = firstProposedTime;
+      //     matchData.proposedTimes = proposedTimes.map(t => t.toISOString());
+      //   }
+      // }
 
       const newMatch = await tx.match.create({ data: matchData });
 
@@ -322,21 +324,21 @@ export class MatchInvitationService {
         }
       }
 
-      // Create time slots from proposed times
-      if (proposedTimes && proposedTimes.length > 0) {
-        for (const time of proposedTimes) {
-          const timeSlotData: any = {
-            matchId: newMatch.id,
-            proposedById: createdById,
-            proposedTime: time,
-            status: TimeSlotStatus.PROPOSED,
-            votes: [createdById],
-            voteCount: 1
-          };
-          if (location) timeSlotData.location = location;
-          await tx.matchTimeSlot.create({ data: timeSlotData });
-        }
-      }
+      // COMMENTED OUT - Time slot creation
+      // if (proposedTimes && proposedTimes.length > 0) {
+      //   for (const time of proposedTimes) {
+      //     const timeSlotData: any = {
+      //       matchId: newMatch.id,
+      //       proposedById: createdById,
+      //       proposedTime: time,
+      //       status: TimeSlotStatus.PROPOSED,
+      //       votes: [createdById],
+      //       voteCount: 1
+      //     };
+      //     if (location) timeSlotData.location = location;
+      //     await tx.matchTimeSlot.create({ data: timeSlotData });
+      //   }
+      // }
 
       return newMatch;
     });
@@ -872,26 +874,24 @@ export class MatchInvitationService {
     let team: string | null = null;
 
     if (match.matchType === MatchType.DOUBLES) {
+      // For doubles, partnerId is REQUIRED - players must be in an established partnership
+      if (!partnerId) {
+        throw new Error('You must join with your partner. Solo joining is not allowed for doubles matches.');
+      }
+
       // Find which team needs players
       const team1Count = match.participants.filter(p => p.team === 'team1').length;
       const team2Count = match.participants.filter(p => p.team === 'team2').length;
 
-      if (asPartner && team1Count < 2) {
+      // Both players need a team with 0 players (space for 2)
+      if (team1Count === 0) {
         team = 'team1';
-        role = ParticipantRole.PARTNER;
-      } else if (team2Count < 2) {
+        role = ParticipantRole.OPPONENT;
+      } else if (team2Count === 0) {
         team = 'team2';
-        role = team2Count === 0 ? ParticipantRole.OPPONENT : ParticipantRole.PARTNER;
+        role = ParticipantRole.OPPONENT;
       } else {
-        throw new Error('This match is already full');
-      }
-
-      // If joining with a partner, check if team has space for both
-      if (partnerId) {
-        const targetTeamCount = team === 'team1' ? team1Count : team2Count;
-        if (targetTeamCount > 0) {
-          throw new Error('Not enough space on the team for both you and your partner');
-        }
+        throw new Error('This match is already full. Both teams have players.');
       }
     }
 
@@ -1436,7 +1436,8 @@ export class MatchInvitationService {
       opponentId,
       partnerId,
       opponentPartnerId,
-      proposedTimes,
+      matchDate,              // Using matchDate instead
+      // proposedTimes,       // COMMENTED OUT
       location,
       venue,
       notes,
@@ -1563,21 +1564,21 @@ export class MatchInvitationService {
         }
       }
 
-      // Create new time slots
-      if (proposedTimes && proposedTimes.length > 0) {
-        for (const time of proposedTimes) {
-          const timeSlotData: any = {
-            matchId,
-            proposedById: userId,
-            proposedTime: time,
-            status: TimeSlotStatus.PROPOSED,
-            votes: [userId],
-            voteCount: 1
-          };
-          if (location) timeSlotData.location = location;
-          await tx.matchTimeSlot.create({ data: timeSlotData });
-        }
-      }
+      // COMMENTED OUT - Time slot creation for edited matches
+      // if (proposedTimes && proposedTimes.length > 0) {
+      //   for (const time of proposedTimes) {
+      //     const timeSlotData: any = {
+      //       matchId,
+      //       proposedById: userId,
+      //       proposedTime: time,
+      //       status: TimeSlotStatus.PROPOSED,
+      //       votes: [userId],
+      //       voteCount: 1
+      //     };
+      //     if (location) timeSlotData.location = location;
+      //     await tx.matchTimeSlot.create({ data: timeSlotData });
+      //   }
+      // }
     });
 
     // Send new invitations
