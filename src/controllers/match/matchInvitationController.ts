@@ -37,12 +37,15 @@ export const createMatch = async (req: Request, res: Response) => {
       opponentId,
       partnerId,
       opponentPartnerId,
-      proposedTimes,
+      matchDate,           // Naive datetime string (user's selected time)
+      deviceTimezone,      // User's device timezone (e.g., "Asia/Dhaka", "Europe/London")
       location,
       venue,
       notes,
       duration,
       courtBooked,
+      fee,
+      feeAmount,
       message,
       expiresInHours
     } = req.body;
@@ -55,18 +58,41 @@ export const createMatch = async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Valid matchType (SINGLES/DOUBLES) is required' });
     }
 
-    // Parse dates as Malaysia Time
-    const parsedTimes = proposedTimes?.map((t: string) => {
-      // Parse the datetime string as Malaysia Time
-      const malaysiaDayjs = dayjs.tz(t, 'Asia/Kuala_Lumpur');
-      console.log('📅 Parsing time:', {
-        input: t,
-        malaysiaTime: malaysiaDayjs.format('YYYY-MM-DD HH:mm:ss Z'),
-        utcTime: malaysiaDayjs.utc().format('YYYY-MM-DD HH:mm:ss Z'),
-        dateObject: malaysiaDayjs.toDate()
-      });
-      return malaysiaDayjs.toDate();
-    });
+    // TIMEZONE CONVERSION: Convert from device timezone to Malaysia timezone
+    let parsedMatchDate: Date | undefined;
+    if (matchDate) {
+      if (deviceTimezone && deviceTimezone !== 'Asia/Kuala_Lumpur') {
+        // User is NOT in Malaysia - convert their local time to Malaysia time
+        const deviceTime = dayjs.tz(matchDate, deviceTimezone);
+        const malaysiaTime = deviceTime.tz('Asia/Kuala_Lumpur');
+        parsedMatchDate = malaysiaTime.toDate();
+        
+        console.log('🌏 TIMEZONE CONVERSION - User Outside Malaysia:', {
+          userTimezone: deviceTimezone,
+          userSelectedTime: deviceTime.format('YYYY-MM-DD HH:mm (GMT Z)'),
+          malaysiaEquivalent: malaysiaTime.format('YYYY-MM-DD HH:mm (GMT+8)'),
+          storedUTC: parsedMatchDate.toISOString(),
+          explanation: `User selected ${deviceTime.format('h:mm A')} in ${deviceTimezone}, stored as ${malaysiaTime.format('h:mm A')} Malaysia time`
+        });
+      } else {
+        // User is in Malaysia OR no timezone provided (fallback to treating as Malaysia time)
+        const malaysiaTime = dayjs.tz(matchDate, 'Asia/Kuala_Lumpur');
+        parsedMatchDate = malaysiaTime.toDate();
+        
+        console.log('🕐 TIMEZONE CONVERSION - Malaysia User or Fallback:', {
+          receivedString: matchDate,
+          interpretedAs: 'Malaysia Time (GMT+8)',
+          malaysiaDateTime: malaysiaTime.format('YYYY-MM-DD HH:mm (GMT+8)'),
+          storedUTC: parsedMatchDate.toISOString()
+        });
+      }
+    }
+
+    // COMMENTED OUT - Complex time parsing
+    // const parsedTimes = proposedTimes?.map((t: string) => {
+    //   const malaysiaDayjs = dayjs.tz(t, 'Asia/Kuala_Lumpur');
+    //   return malaysiaDayjs.toDate();
+    // });
 
     const match = await matchInvitationService.createMatch({
       createdById: userId,
@@ -76,12 +102,14 @@ export const createMatch = async (req: Request, res: Response) => {
       opponentId,
       partnerId,
       opponentPartnerId,
-      proposedTimes: parsedTimes,
+      matchDate: parsedMatchDate,
       location,
       venue,
       notes,
       duration,
       courtBooked,
+      fee,
+      feeAmount,
       message,
       expiresInHours
     });
@@ -407,10 +435,15 @@ export const editMatch = async (req: Request, res: Response) => {
       opponentId,
       partnerId,
       opponentPartnerId,
-      proposedTimes,
+      matchDate,           // Using matchDate
+      // proposedTimes,    // COMMENTED OUT
       location,
       venue,
       notes,
+      duration,
+      courtBooked,
+      fee,
+      feeAmount,
       message,
       expiresInHours
     } = req.body;
@@ -421,10 +454,15 @@ export const editMatch = async (req: Request, res: Response) => {
       opponentId,
       partnerId,
       opponentPartnerId,
-      proposedTimes: proposedTimes?.map((t: string) => new Date(t)),
+      ...(matchDate && { matchDate: new Date(matchDate) }),
+      // proposedTimes: proposedTimes?.map((t: string) => new Date(t)),  // COMMENTED OUT
       location,
       venue,
       notes,
+      duration,
+      courtBooked,
+      fee,
+      feeAmount,
       message,
       expiresInHours
     });
@@ -474,14 +512,32 @@ export const postMatchToChat = async (req: Request, res: Response) => {
       return res.status(404).json({ error: 'Division chat not found' });
     }
 
+
     // 4. Create match post message
     const matchData = {
+      matchId: match.id,
       matchType: match.matchType,
       format: match.format,
       location: match.location,
       venue: match.venue,
-      proposedTimes: match.timeSlots?.map(ts => ts.proposedTime),
-      notes: match.notes
+      date: match.matchDate || match.scheduledStartTime || new Date().toISOString(),
+      time: match.matchDate ? new Date(match.matchDate).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : 'TBD',
+      matchDate: match.matchDate,
+      duration: match.duration || 2,
+      numberOfPlayers: match.matchType === 'DOUBLES' ? '4' : '2',
+      sportType: match.division?.league?.sportType || 'PICKLEBALL',
+      leagueName: match.division?.league?.name || 'League Match',
+      courtBooked: match.courtBooked || false,
+      fee: (match as any).fee || 'FREE',
+      feeAmount: (match as any).feeAmount?.toString() || '0.00',
+      description: match.notes || '',
+      notes: match.notes,
+      participants: match.participants?.map(p => ({
+        userId: p.userId,
+        role: p.role,
+        team: p.team,
+        invitationStatus: p.invitationStatus
+      })) || []
     };
 
     const message = await prisma.message.create({

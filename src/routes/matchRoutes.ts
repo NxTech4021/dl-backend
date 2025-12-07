@@ -11,7 +11,9 @@ import {
   respondToInvitation,
   proposeTimeSlot,
   voteForTimeSlot,
-  confirmTimeSlot
+  confirmTimeSlot,
+  getPendingInvitations,
+  getInvitationById
 } from "../controllers/match/matchInvitationController";
 import {
   submitResult,
@@ -56,12 +58,9 @@ matchRoutes.delete('/delete/:id', deleteMatch);
 // Join match
 matchRoutes.post('/:id/join', joinMatch);
 
-// Time slots
-matchRoutes.post('/:id/timeslots', proposeTimeSlot);
-matchRoutes.post('/timeslots/:id/vote', voteForTimeSlot);
-matchRoutes.post('/timeslots/:id/confirm', confirmTimeSlot);
-
 // Invitations
+matchRoutes.get('/invitations/pending', getPendingInvitations);
+matchRoutes.get('/invitations/:id', getInvitationById);
 matchRoutes.post('/invitations/:id/respond', respondToInvitation);
 
 // Results
