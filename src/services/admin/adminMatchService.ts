@@ -403,6 +403,59 @@ export class AdminMatchService {
   }
 
   /**
+   * Start reviewing a dispute - changes status from OPEN to UNDER_REVIEW
+   */
+  async startDisputeReview(disputeId: string, adminId: string) {
+    const dispute = await prisma.matchDispute.findUnique({
+      where: { id: disputeId }
+    });
+
+    if (!dispute) {
+      throw new Error('Dispute not found');
+    }
+
+    if (dispute.status !== DisputeStatus.OPEN) {
+      // Already under review or resolved, just return current dispute
+      return prisma.matchDispute.findUnique({
+        where: { id: disputeId },
+        include: {
+          match: {
+            include: {
+              participants: { include: { user: true } },
+              scores: true,
+              division: { include: { season: true } }
+            }
+          },
+          raisedByUser: true,
+          reviewedByAdmin: { include: { user: true } },
+          resolvedByAdmin: { include: { user: true } }
+        }
+      });
+    }
+
+    return prisma.matchDispute.update({
+      where: { id: disputeId },
+      data: {
+        status: DisputeStatus.UNDER_REVIEW,
+        reviewedByAdminId: adminId,
+        reviewedAt: new Date()
+      },
+      include: {
+        match: {
+          include: {
+            participants: { include: { user: true } },
+            scores: true,
+            division: { include: { season: true } }
+          }
+        },
+        raisedByUser: true,
+        reviewedByAdmin: { include: { user: true } },
+        resolvedByAdmin: { include: { user: true } }
+      }
+    });
+  }
+
+  /**
    * Resolve a dispute (AS5)
    */
   async resolveDispute(input: ResolveDisputeInput) {
@@ -421,14 +474,19 @@ export class AdminMatchService {
       throw new Error('Dispute not found');
     }
 
-    if (dispute.status === DisputeStatus.RESOLVED) {
-      throw new Error('Dispute has already been resolved');
+    if (dispute.status === DisputeStatus.RESOLVED || dispute.status === DisputeStatus.REJECTED) {
+      throw new Error('Dispute has already been resolved or rejected');
     }
+
+    // Determine final status based on action
+    const finalStatus = action === DisputeResolutionAction.REJECT
+      ? DisputeStatus.REJECTED
+      : DisputeStatus.RESOLVED;
 
     await prisma.$transaction(async (tx) => {
       // Update dispute
       const disputeUpdateData: any = {
-        status: DisputeStatus.RESOLVED,
+        status: finalStatus,
         resolvedByAdminId: adminId,
         resolvedAt: new Date(),
         adminResolution: reason,
@@ -503,6 +561,12 @@ export class AdminMatchService {
             team2Score: finalScore?.team2Score || 0,
             outcome: (finalScore?.team1Score || 2) > (finalScore?.team2Score || 0) ? 'team1' : 'team2'
           }
+        });
+      } else if (action === DisputeResolutionAction.REJECT) {
+        // Reject dispute - mark match as no longer disputed, keep original score
+        await tx.match.update({
+          where: { id: dispute.matchId },
+          data: { isDisputed: false }
         });
       }
 
