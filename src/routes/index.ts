@@ -3,6 +3,7 @@ import adminRouter from "./adminRoutes";
 import playerRouter from "./playerRoutes";
 import seasonRouter from "./seasonRoutes";
 import divisionRoutes from "./divisionRoutes";
+import teamChangeRequestRoutes from "./teamChangeRequestRoutes";
 import leagueRoutes from "./leagueRoutes";
 import sponsorRoutes from "./sponsorRoutes";
 import categoryRoutes from "./categoryRoutes";
@@ -29,6 +30,7 @@ router.use("/onboarding", onboardingRouter);
 
 router.use("/league", leagueRoutes);
 router.use("/division", divisionRoutes);
+router.use("/team-change-requests", teamChangeRequestRoutes);
 router.use("/season", seasonRouter);
 router.use("/sponsor", sponsorRoutes);
 router.use("/category", categoryRoutes);
