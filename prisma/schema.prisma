@@ -36,6 +36,7 @@ model User {
   matchParticipants MatchParticipant[]
   processedRequests    WithdrawalRequest[] @relation("ProcessedByAdmin")
   withdrawalRequests   WithdrawalRequest[] @relation("WithdrawalRequester")
+  teamChangeRequests   TeamChangeRequest[] @relation("TeamChangeRequester")
 
   divisionAssignments DivisionAssignment[] @relation("DivisionAssignments")
 
@@ -164,6 +165,9 @@ model Admin {
 
   // Bracket system relations
   bracketsPublished         Bracket[]             @relation("BracketPublisher")
+
+  // Team change request relations
+  reviewedTeamChangeRequests TeamChangeRequest[]  @relation("TeamChangeReviewer")
 
   // Message audit log
   messageLogs               AdminMessageLog[]
@@ -351,6 +355,7 @@ model Season {
   memberships        SeasonMembership[]
   promoCodes         PromoCode[]         @relation("SeasonPromoCodes")
   withdrawalRequests WithdrawalRequest[]
+  teamChangeRequests TeamChangeRequest[]
 
   // Pairing Relations
   pairRequests      PairRequest[]
@@ -451,6 +456,34 @@ model WithdrawalRequest {
   updatedAt DateTime @updatedAt
 }
 
+model TeamChangeRequest {
+  id                  String                  @id @default(cuid())
+  userId              String
+  currentDivisionId   String
+  requestedDivisionId String
+  seasonId            String
+  reason              String?
+  status              TeamChangeRequestStatus @default(PENDING)
+  reviewedByAdminId   String?
+  reviewedAt          DateTime?
+  adminNotes          String?
+
+  user              User      @relation("TeamChangeRequester", fields: [userId], references: [id])
+  currentDivision   Division  @relation("CurrentDivisionRequests", fields: [currentDivisionId], references: [id])
+  requestedDivision Division  @relation("RequestedDivisionRequests", fields: [requestedDivisionId], references: [id])
+  season            Season    @relation(fields: [seasonId], references: [id])
+  reviewedByAdmin   Admin?    @relation("TeamChangeReviewer", fields: [reviewedByAdminId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([seasonId])
+  @@index([status])
+  @@index([currentDivisionId])
+  @@index([requestedDivisionId])
+}
+
 model Division {
   id             String         @id @default(cuid())
   name           String
@@ -503,6 +536,10 @@ model Division {
 
   // Bracket system relations
   brackets          Bracket[]
+
+  // Team change request relations
+  currentDivisionRequests   TeamChangeRequest[] @relation("CurrentDivisionRequests")
+  requestedDivisionRequests TeamChangeRequest[] @relation("RequestedDivisionRequests")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -2282,6 +2319,13 @@ enum WithdrawalStatus {
   REJECTED
 }
 
+enum TeamChangeRequestStatus {
+  PENDING
+  APPROVED
+  DENIED
+  CANCELLED
+}
+
 enum DivisionLevel {
   BEGINNER
   INTERMEDIATE
@@ -2372,6 +2416,7 @@ enum DisputeResolutionAction {
   VOID_MATCH
   AWARD_WALKOVER
   REQUEST_MORE_INFO
+  REJECT            // Dismiss dispute as invalid/spam/insufficient evidence
 }
 
 enum WalkoverReason {
