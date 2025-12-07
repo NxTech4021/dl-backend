@@ -142,6 +142,32 @@ export const getDisputeById = async (req: Request, res: Response) => {
 };
 
 /**
+ * Start reviewing a dispute - sets status to UNDER_REVIEW (AS5)
+ * POST /api/admin/disputes/:id/start-review
+ */
+export const startDisputeReview = async (req: Request, res: Response) => {
+  try {
+    const authReq = req as AuthenticatedRequest;
+    const adminId = authReq.user?.adminId;
+    if (!adminId) {
+      return res.status(401).json({ error: 'Admin authentication required' });
+    }
+
+    const { id } = req.params;
+    if (!id) {
+      return res.status(400).json({ error: 'Dispute ID is required' });
+    }
+
+    const dispute = await adminMatchService.startDisputeReview(id, adminId);
+    res.json(dispute);
+  } catch (error) {
+    console.error('Start Dispute Review Error:', error);
+    const message = error instanceof Error ? error.message : 'Failed to start dispute review';
+    res.status(400).json({ error: message });
+  }
+};
+
+/**
  * Resolve a dispute (AS5)
  * POST /api/admin/disputes/:id/resolve
  */
