@@ -9,6 +9,7 @@ import {
   getMatchStats,
   getDisputes,
   getDisputeById,
+  startDisputeReview,
   resolveDispute,
   addDisputeNote,
   editMatchResult,
@@ -46,6 +47,7 @@ router.get('/divisions/:divisionId/available-players', getAvailablePlayers);
 // AS5: Dispute Resolution
 router.get('/disputes', getDisputes);
 router.get('/disputes/:id', getDisputeById);
+router.post('/disputes/:id/start-review', startDisputeReview);
 router.post('/disputes/:id/resolve', resolveDispute);
 router.post('/disputes/:id/notes', addDisputeNote);
 
