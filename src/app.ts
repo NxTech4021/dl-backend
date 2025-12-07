@@ -71,7 +71,7 @@ app.use(
       "https://staging.appdevelopers.my",
     ], // Allow nginx proxy, direct access, and local IP
     credentials: true,
-    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allowedHeaders: [
       "Content-Type",
       "Authorization",
@@ -111,7 +111,7 @@ app.use(socketMiddleware(io));
 const apiPrefix = getApiPrefix();
 console.log(`📡 API routes mounted at: ${apiPrefix || "(root)"}`);
 // Mount router with the API prefix
-app.use(router);
+app.use(apiPrefix, router);
 
 // Health check endpoint
 app.get("/health", (req, res) => {
