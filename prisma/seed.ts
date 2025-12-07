@@ -44,6 +44,7 @@ import {
   Division,
   Admin,
   Match,
+  TeamChangeRequestStatus,
 } from "@prisma/client";
 
 const prisma = new PrismaClient();
@@ -1863,6 +1864,127 @@ async function seedBugTrackingApps(adminId: string) {
 }
 
 // =============================================
+// SEED TEAM CHANGE REQUESTS
+// =============================================
+
+async function seedTeamChangeRequests(users: User[], seasons: Season[], divisions: Division[], admins: SeededAdmin[]) {
+  const activeUsers = users.filter(u => u.status === UserStatus.ACTIVE && u.completedOnboarding);
+  const activeSeasons = seasons.filter(s => s.status === SeasonStatus.ACTIVE);
+  const adminId = admins[0]!.adminId;
+
+  if (activeSeasons.length === 0 || divisions.length === 0) {
+    console.log("   ⚠️ Not enough active seasons or divisions to create team change requests");
+    return [];
+  }
+
+  const createdRequests = [];
+
+  // Reasons for requesting team changes
+  const reasons = [
+    "I want to play with more competitive players",
+    "My schedule conflicts with current division match times",
+    "I believe I'm ready for a higher division",
+    "I'd prefer to play with players closer to my skill level",
+    "Looking for a more challenging competition",
+    "Work schedule changed, need different match times",
+    "Moving to a different area, prefer local division",
+    "Want to play with friends in another division",
+  ];
+
+  const adminNotes = [
+    "Reviewed player history, request approved based on performance.",
+    "Player has shown consistent improvement, moving to higher division.",
+    "Request denied - player rating doesn't match requested division level.",
+    "Approved after reviewing player's match history and win rate.",
+    "Denied - player should complete current season first.",
+    "Player's skills assessment confirms eligibility for requested division.",
+  ];
+
+  // Create requests for each active season
+  for (const season of activeSeasons) {
+    const seasonDivisions = divisions.filter(d => d.seasonId === season.id);
+
+    if (seasonDivisions.length < 2) {
+      continue; // Need at least 2 divisions to transfer between
+    }
+
+    // Create 8-12 requests per season covering all statuses
+    const requestCount = Math.min(12, Math.floor(activeUsers.length / 3));
+
+    for (let i = 0; i < requestCount; i++) {
+      const user = activeUsers[i % activeUsers.length]!;
+      const currentDivision = seasonDivisions[i % seasonDivisions.length]!;
+      const requestedDivision = seasonDivisions[(i + 1) % seasonDivisions.length]!;
+
+      // Skip if same division
+      if (currentDivision.id === requestedDivision.id) {
+        continue;
+      }
+
+      // Check if request already exists
+      const existing = await prisma.teamChangeRequest.findFirst({
+        where: {
+          userId: user.id,
+          seasonId: season.id,
+          currentDivisionId: currentDivision.id,
+          requestedDivisionId: requestedDivision.id,
+        },
+      });
+
+      if (existing) {
+        createdRequests.push(existing);
+        continue;
+      }
+
+      // Determine status based on index for variety
+      let status: TeamChangeRequestStatus;
+      let reviewedByAdminId: string | null = null;
+      let reviewedAt: Date | null = null;
+      let adminNotesText: string | null = null;
+
+      if (i < 4) {
+        // First 4: PENDING (no admin review yet)
+        status = TeamChangeRequestStatus.PENDING;
+      } else if (i < 7) {
+        // Next 3: APPROVED (admin reviewed and approved)
+        status = TeamChangeRequestStatus.APPROVED;
+        reviewedByAdminId = adminId;
+        reviewedAt = randomDate(new Date(Date.now() - 7 * 24 * 60 * 60 * 1000), new Date());
+        adminNotesText = adminNotes[i % adminNotes.length];
+      } else if (i < 10) {
+        // Next 3: DENIED (admin reviewed and denied)
+        status = TeamChangeRequestStatus.DENIED;
+        reviewedByAdminId = adminId;
+        reviewedAt = randomDate(new Date(Date.now() - 7 * 24 * 60 * 60 * 1000), new Date());
+        adminNotesText = adminNotes[(i + 2) % adminNotes.length];
+      } else {
+        // Remaining: CANCELLED (user cancelled their own request)
+        status = TeamChangeRequestStatus.CANCELLED;
+      }
+
+      const request = await prisma.teamChangeRequest.create({
+        data: {
+          userId: user.id,
+          currentDivisionId: currentDivision.id,
+          requestedDivisionId: requestedDivision.id,
+          seasonId: season.id,
+          reason: reasons[i % reasons.length],
+          status: status,
+          reviewedByAdminId: reviewedByAdminId,
+          reviewedAt: reviewedAt,
+          adminNotes: adminNotesText,
+          createdAt: randomDate(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000), new Date()),
+        },
+      });
+
+      createdRequests.push(request);
+    }
+  }
+
+  return createdRequests;
+}
+
+// =============================================
 // MAIN SEED FUNCTION
 // =============================================
 
@@ -1996,6 +2118,11 @@ async function main() {
     await seedBugTrackingApps(admins[0]!.adminId);
     console.log("   ✅ Created bug tracking apps and modules\n");
 
+    // 23. Seed team change requests
+    console.log("🔄 Seeding team change requests...");
+    const teamChangeRequests = await seedTeamChangeRequests(users, seasons, divisions, admins);
+    console.log(`   ✅ Created ${teamChangeRequests.length} team change requests (PENDING, APPROVED, DENIED, CANCELLED)\n`);
+
     console.log("═══════════════════════════════════════════════════════");
     console.log("🎉 COMPREHENSIVE DATABASE SEED COMPLETED SUCCESSFULLY!");
     console.log("═══════════════════════════════════════════════════════");
@@ -2014,7 +2141,8 @@ async function main() {
     console.log("   • Notifications: 50+ across categories");
     console.log("   • Ratings and standings");
     console.log("   • Achievements: 12 types with user awards");
-    console.log("   • Promo codes, Sponsorships, Bug tracking\n");
+    console.log("   • Promo codes, Sponsorships, Bug tracking");
+    console.log("   • Team Change Requests: PENDING, APPROVED, DENIED, CANCELLED\n");
 
   } catch (error) {
     console.error("❌ Error seeding database:", error);
