@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { verifyAuth } from "../middlewares/auth.middleware";
+import { verifyAuth, requireAdmin } from "../middlewares/auth.middleware";
 import {
   createSuperadmin,
   getInviteEmail,
@@ -20,8 +20,12 @@ import adminBest6Routes from "./admin/adminBest6Routes";
 import adminDashboardRoutes from "./adminDashboardRoutes";
 
 const adminRouter = Router();
-// TO DO
-// Make them protected routes
+
+// Apply authentication to all admin routes
+adminRouter.use(verifyAuth);
+adminRouter.use(requireAdmin);
+
+// Admin account routes
 adminRouter.get("/get-invite", getInviteEmail);
 adminRouter.get("/session", getAdminSession);
 adminRouter.get("/getadmins", fetchAdmins);
