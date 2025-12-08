@@ -65,7 +65,7 @@ export const createMatch = async (req: Request, res: Response) => {
 
     const match = await prisma.match.create({
       data: matchData,
-      include: { participants: true, stats: true },
+      include: { participants: true },
     });
     res.status(201).json(match);
   } catch (err: unknown) {
@@ -78,7 +78,7 @@ export const createMatch = async (req: Request, res: Response) => {
 export const getMatches = async (req: Request, res: Response) => {
   try {
     const matches = await prisma.match.findMany({
-      include: { division: true, participants: { include: { user: true } }, stats: true },
+      include: { division: true, participants: { include: { user: true } } },
       orderBy: { matchDate: "desc" },
     });
     res.json(matches);
@@ -96,7 +96,7 @@ export const getMatchById = async (req: Request, res: Response) => {
   try {
     const match = await prisma.match.findUnique({
       where: { id },
-      include: { division: true, participants: { include: { user: true } }, stats: true },
+      include: { division: true, participants: { include: { user: true } } },
     });
     if (!match) return res.status(404).json({ error: "Match not found." });
     res.json(match);
@@ -138,7 +138,7 @@ export const updateMatch = async (req: Request, res: Response) => {
     const match = await prisma.match.update({
       where: { id },
       data: updateData,
-      include: { participants: true, stats: true },
+      include: { participants: true },
     });
     res.json(match);
   } catch (err: unknown) {
