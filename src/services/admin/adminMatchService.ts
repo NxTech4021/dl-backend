@@ -488,7 +488,8 @@ export class AdminMatchService {
         status: finalStatus,
         resolvedByAdminId: adminId,
         adminResolution: reason,
-        resolutionAction: action
+        resolutionAction: action,
+        resolvedAt: new Date()
       };
       if (finalScore) disputeUpdateData.finalScore = JSON.stringify(finalScore);
 
