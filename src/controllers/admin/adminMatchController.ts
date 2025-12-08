@@ -728,3 +728,49 @@ export const clearMatchReport = async (req: Request, res: Response) => {
     res.status(400).json({ error: message });
   }
 };
+
+/**
+ * Convert a match to walkover
+ * POST /api/admin/matches/:id/convert-walkover
+ */
+export const convertToWalkover = async (req: Request, res: Response) => {
+  try {
+    const authReq = req as AuthenticatedRequest;
+    const adminId = authReq.user?.adminId;
+    if (!adminId) {
+      return res.status(401).json({ error: 'Admin authentication required' });
+    }
+
+    const { id } = req.params;
+    if (!id) {
+      return res.status(400).json({ error: 'Match ID is required' });
+    }
+
+    const { winnerId, reason, walkoverReason } = req.body;
+
+    if (!winnerId) {
+      return res.status(400).json({ error: 'winnerId is required' });
+    }
+
+    if (!reason) {
+      return res.status(400).json({ error: 'reason is required for audit trail' });
+    }
+
+    const match = await adminMatchService.convertToWalkover({
+      matchId: id,
+      adminId,
+      winnerId,
+      reason,
+      walkoverReason
+    });
+
+    res.json({
+      success: true,
+      data: match
+    });
+  } catch (error) {
+    console.error('Convert To Walkover Error:', error);
+    const message = error instanceof Error ? error.message : 'Failed to convert to walkover';
+    res.status(400).json({ error: message });
+  }
+};
