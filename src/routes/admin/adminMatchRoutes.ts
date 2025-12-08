@@ -25,7 +25,8 @@ import {
   hideMatch,
   unhideMatch,
   reportMatchAbuse,
-  clearMatchReport
+  clearMatchReport,
+  convertToWalkover
 } from '../../controllers/admin/adminMatchController';
 
 const router = Router();
@@ -38,6 +39,7 @@ router.post('/matches/:id/message', messageParticipants);
 // AS4: Edit Match Results
 router.put('/matches/:id/result', editMatchResult);
 router.post('/matches/:id/void', voidMatch);
+router.post('/matches/:id/convert-walkover', convertToWalkover);
 
 // AS7: Edit Match Participants
 router.put('/matches/:id/participants', editMatchParticipants);
