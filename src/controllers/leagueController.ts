@@ -7,8 +7,10 @@ import {
   TierType,
   PrismaClient,
   Prisma,
+  AdminActionType,
 } from "@prisma/client";
 import { ApiResponse } from "../utils/ApiResponse";
+import { logLeagueAction } from "../services/admin/adminLogService";
 
 interface CreateLeagueBody {
   name?: string;
@@ -227,6 +229,18 @@ export const createLeague = async (req: Request, res: Response) => {
 
     const newLeague = await leagueService.createLeague(leagueData);
 
+    // Log admin action if user is authenticated
+    if (req.user?.id) {
+      await logLeagueAction(
+        req.user.id,
+        AdminActionType.LEAGUE_CREATE,
+        newLeague.id,
+        `Created league: ${name}`,
+        undefined,
+        { name, location, description, sportType, gameType }
+      );
+    }
+
     return res
       .status(201)
       .json(
@@ -333,6 +347,18 @@ export const updateLeague = async (req: Request, res: Response) => {
 
     const updatedLeague = await leagueService.updateLeague(id, updateData);
 
+    // Log admin action if user is authenticated
+    if (req.user?.id) {
+      await logLeagueAction(
+        req.user.id,
+        AdminActionType.LEAGUE_UPDATE,
+        id,
+        `Updated league: ${updatedLeague.name}`,
+        undefined,
+        updateData
+      );
+    }
+
     return res
       .status(200)
       .json(
@@ -378,6 +404,18 @@ export const deleteLeague = async (req: Request, res: Response) => {
     }
 
     await leagueService.deleteLeague(id);
+
+    // Log admin action if user is authenticated
+    if (req.user?.id) {
+      await logLeagueAction(
+        req.user.id,
+        AdminActionType.LEAGUE_DELETE,
+        id,
+        `Deleted league`,
+        undefined,
+        undefined
+      );
+    }
 
     return res
       .status(200)
