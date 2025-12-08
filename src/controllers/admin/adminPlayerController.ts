@@ -4,8 +4,9 @@
  */
 
 import { Request, Response } from 'express';
-import { UserStatus, StatusChangeReason } from '@prisma/client';
+import { UserStatus, StatusChangeReason, AdminActionType } from '@prisma/client';
 import * as adminPlayerService from '../../services/admin/adminPlayerService';
+import { logPlayerAction } from '../../services/admin/adminLogService';
 import { logger } from '../../utils/logger';
 
 /**
@@ -45,6 +46,17 @@ export const banPlayer = async (req: Request, res: Response) => {
       reason: reason.trim(),
       notes: notes?.trim()
     });
+
+    // Log admin action
+    await logPlayerAction(
+      adminId,
+      AdminActionType.PLAYER_BAN,
+      playerId,
+      `Banned player: ${reason.trim()}`,
+      { status: result.previousStatus },
+      { status: result.player.status },
+      { notes: notes?.trim() }
+    );
 
     return res.status(200).json({
       success: true,
@@ -103,6 +115,17 @@ export const unbanPlayer = async (req: Request, res: Response) => {
       adminId,
       notes: notes?.trim()
     });
+
+    // Log admin action
+    await logPlayerAction(
+      adminId,
+      AdminActionType.PLAYER_UNBAN,
+      playerId,
+      'Unbanned player',
+      { status: result.previousStatus },
+      { status: result.player.status },
+      { notes: notes?.trim() }
+    );
 
     return res.status(200).json({
       success: true,
@@ -169,6 +192,17 @@ export const deletePlayer = async (req: Request, res: Response) => {
       reason: reason.trim(),
       hardDelete: hardDelete === true
     });
+
+    // Log admin action
+    await logPlayerAction(
+      adminId,
+      AdminActionType.PLAYER_DELETE,
+      playerId,
+      `Deleted player: ${reason.trim()}`,
+      { status: result.previousStatus },
+      { status: result.player?.status ?? 'DELETED', hardDelete: result.hardDelete },
+      { hardDelete: result.hardDelete }
+    );
 
     return res.status(200).json({
       success: true,
@@ -252,6 +286,17 @@ export const updatePlayerStatus = async (req: Request, res: Response) => {
       reason: statusReason,
       notes: notes?.trim() || reason?.trim()
     });
+
+    // Log admin action
+    await logPlayerAction(
+      adminId,
+      AdminActionType.PLAYER_STATUS_CHANGE,
+      playerId,
+      `Changed player status from ${result.previousStatus} to ${status}`,
+      { status: result.previousStatus },
+      { status: result.player.status },
+      { reason: notes?.trim() || reason?.trim() }
+    );
 
     return res.status(200).json({
       success: true,
@@ -387,6 +432,16 @@ export const updatePlayer = async (req: Request, res: Response) => {
       gender,
       dateOfBirth
     });
+
+    // Log admin action
+    await logPlayerAction(
+      adminId,
+      AdminActionType.PLAYER_UPDATE,
+      playerId,
+      'Updated player profile',
+      undefined,
+      { name, email, phoneNumber, area, bio, gender, dateOfBirth }
+    );
 
     return res.status(200).json({
       success: true,
