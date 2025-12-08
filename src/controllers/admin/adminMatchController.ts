@@ -8,6 +8,7 @@ import { AuthenticatedRequest } from '../../middlewares/auth.middleware';
 import { getAdminMatchService } from '../../services/admin/adminMatchService';
 import { AdminMatchParticipantService } from '../../services/admin/adminMatchParticipantService';
 import { validateParticipantEdit } from '../../services/admin/matchParticipantValidationService';
+import { logMatchAction, createAdminLog } from '../../services/admin/adminLogService';
 import {
   MatchStatus,
   DisputeStatus,
@@ -16,7 +17,9 @@ import {
   PenaltyType,
   PenaltySeverity,
   ParticipantRole,
-  MatchReportCategory
+  MatchReportCategory,
+  AdminActionType,
+  AdminTargetType
 } from '@prisma/client';
 
 const adminMatchService = getAdminMatchService();
@@ -208,6 +211,16 @@ export const resolveDispute = async (req: Request, res: Response) => {
       notifyPlayers
     });
 
+    // Log admin action
+    await createAdminLog({
+      adminId: authReq.user?.id || adminId,
+      actionType: AdminActionType.DISPUTE_RESOLVE,
+      targetType: AdminTargetType.DISPUTE,
+      targetId: id,
+      description: `Resolved dispute with action: ${action}`,
+      newValue: { action, finalScore, reason }
+    });
+
     res.json(dispute);
   } catch (error) {
     console.error('Resolve Dispute Error:', error);
@@ -282,6 +295,16 @@ export const editMatchResult = async (req: Request, res: Response) => {
       reason
     });
 
+    // Log admin action
+    await logMatchAction(
+      authReq.user?.id || adminId,
+      AdminActionType.MATCH_EDIT_RESULT,
+      id,
+      `Edited match result: ${reason}`,
+      undefined,
+      { team1Score, team2Score, setScores, outcome, isWalkover }
+    );
+
     res.json(match);
   } catch (error) {
     console.error('Edit Match Result Error:', error);
@@ -314,6 +337,17 @@ export const voidMatch = async (req: Request, res: Response) => {
     }
 
     const match = await adminMatchService.voidMatch(id, adminId, reason);
+
+    // Log admin action
+    await logMatchAction(
+      authReq.user?.id || adminId,
+      AdminActionType.MATCH_VOID,
+      id,
+      `Voided match: ${reason}`,
+      undefined,
+      { status: 'VOIDED', reason }
+    );
+
     res.json(match);
   } catch (error) {
     console.error('Void Match Error:', error);
@@ -763,6 +797,16 @@ export const convertToWalkover = async (req: Request, res: Response) => {
       reason,
       walkoverReason
     });
+
+    // Log admin action
+    await logMatchAction(
+      authReq.user?.id || adminId,
+      AdminActionType.MATCH_WALKOVER,
+      id,
+      `Converted match to walkover: ${reason}`,
+      undefined,
+      { winnerId, walkoverReason }
+    );
 
     res.json({
       success: true,
