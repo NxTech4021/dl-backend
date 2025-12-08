@@ -205,10 +205,13 @@ async function recalculateRanks(divisionId: string, seasonId: string) {
 
   // Update ranks
   for (let i = 0; i < standings.length; i++) {
-    await prisma.divisionStanding.update({
-      where: { id: standings[i].id },
-      data: { rank: i + 1 },
-    });
+    const standing = standings[i];
+    if (standing) {
+      await prisma.divisionStanding.update({
+        where: { id: standing.id },
+        data: { rank: i + 1 },
+      });
+    }
   }
 }
 
