@@ -1212,8 +1212,7 @@ export class MatchInvitationService {
       where: { id: matchId },
       include: {
         participants: true,
-        invitations: true,
-        timeSlots: true
+        invitations: true
       }
     });
 
@@ -1500,36 +1499,38 @@ export class MatchInvitationService {
 
   /**
    * Get all join requests for a match
+   * COMMENTED OUT - matchJoinRequest model doesn't exist in schema
    */
   async getMatchJoinRequests(matchId: string, status?: JoinRequestStatus) {
-    try {
-      const where: any = { matchId };
-      if (status) where.status = status;
+    throw new Error('Join request feature not yet implemented');
+    // try {
+    //   const where: any = { matchId };
+    //   if (status) where.status = status;
 
-      return await prisma.matchJoinRequest.findMany({
-        where,
-        include: {
-          requester: {
-            select: {
-              id: true,
-              name: true,
-              username: true,
-              image: true
-            }
-          },
-          responder: {
-            select: {
-              id: true,
-              name: true
-            }
-          }
-        },
-        orderBy: { requestedAt: 'desc' }
-      });
-    } catch (error) {
-      logger.error('Error getting match join requests', { matchId }, error as Error);
-      throw error;
-    }
+    //   return await prisma.matchJoinRequest.findMany({
+    //     where,
+    //     include: {
+    //       requester: {
+    //         select: {
+    //           id: true,
+    //           name: true,
+    //           username: true,
+    //           image: true
+    //         }
+    //       },
+    //       responder: {
+    //         select: {
+    //           id: true,
+    //           name: true
+    //         }
+    //       }
+    //     },
+    //     orderBy: { requestedAt: 'desc' }
+    //   });
+    // } catch (error) {
+    //   logger.error('Error getting match join requests', { matchId }, error as Error);
+    //   throw error;
+    // }
   }
 
   /**
@@ -1608,9 +1609,6 @@ export class MatchInvitationService {
                     select: { id: true, name: true, username: true, image: true }
                   }
                 }
-              },
-              timeSlots: {
-                orderBy: { voteCount: 'desc' }
               },
               createdBy: {
                 select: { id: true, name: true, username: true }
