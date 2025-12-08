@@ -31,7 +31,7 @@ export class MatchReminderService {
     // This ensures we only send one reminder per match
     const upcomingMatches = await prisma.match.findMany({
       where: {
-        scheduledTime: {
+        matchDate: {
           gte: in23Hours,
           lt: in24Hours
         },
@@ -93,7 +93,7 @@ export class MatchReminderService {
     }
 
     // Format match time
-    const matchTime = new Date(match.scheduledTime);
+    const matchTime = new Date(match.matchDate);
     const timeStr = matchTime.toLocaleTimeString('en-US', {
       hour: 'numeric',
       minute: '2-digit',
