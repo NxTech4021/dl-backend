@@ -63,21 +63,66 @@ export class MatchPointsCalculator {
    * Each player's opponentId is set to the first opponent for reference.
    */
   calculateForMatch(
-    matchId: string,
+    _matchId: string,
     outcome: MatchOutcome,
-    participants: Array<{ userId: string; team: string }>
+    participants: Array<{ userId: string; team: string | null }>
   ): PlayerMatchPoints[] {
     const results: PlayerMatchPoints[] = [];
 
-    // Team 1 participants
-    const team1Participants = participants.filter(p => p.team === 'team1');
-    const team2Participants = participants.filter(p => p.team === 'team2');
+    // Team 1 participants - also check for 'TEAM_A' for backwards compatibility
+    const team1Participants = participants.filter(p =>
+      p.team === 'team1' || p.team === 'TEAM_A'
+    );
+    // Team 2 participants - also check for 'TEAM_B' for backwards compatibility
+    const team2Participants = participants.filter(p =>
+      p.team === 'team2' || p.team === 'TEAM_B'
+    );
+
+    // If teams are not properly assigned, try to split by array order
+    // This handles legacy data where team field might be null
+    if (team1Participants.length === 0 && team2Participants.length === 0) {
+      // For singles: first player is team1, second is team2
+      // For doubles: first two are team1, second two are team2
+      const midpoint = Math.ceil(participants.length / 2);
+      const fallbackTeam1 = participants.slice(0, midpoint);
+      const fallbackTeam2 = participants.slice(midpoint);
+
+      if (fallbackTeam1.length === 0 || fallbackTeam2.length === 0) {
+        throw new Error(
+          `Cannot calculate match points: Invalid team assignment. ` +
+          `Found ${participants.length} participants but teams are not properly assigned. ` +
+          `Participants: ${JSON.stringify(participants.map(p => ({ id: p.userId, team: p.team })))}`
+        );
+      }
+
+      // Use fallback assignment
+      team1Participants.push(...fallbackTeam1);
+      team2Participants.push(...fallbackTeam2);
+    }
+
+    // Validate that both teams have at least one participant
+    if (team1Participants.length === 0) {
+      throw new Error(
+        `Cannot calculate match points: Team 1 has no participants. ` +
+        `All participants: ${JSON.stringify(participants.map(p => ({ id: p.userId, team: p.team })))}`
+      );
+    }
+    if (team2Participants.length === 0) {
+      throw new Error(
+        `Cannot calculate match points: Team 2 has no participants. ` +
+        `All participants: ${JSON.stringify(participants.map(p => ({ id: p.userId, team: p.team })))}`
+      );
+    }
+
+    // Get first opponent from each team (guaranteed to exist after validation above)
+    const team1FirstOpponent = team1Participants[0]!;
+    const team2FirstOpponent = team2Participants[0]!;
 
     // Calculate for Team 1 players (ONE result per player)
     for (const p1 of team1Participants) {
       results.push(this.calculateForPlayer(
         p1.userId,
-        team2Participants[0]?.userId || '',  // Reference first opponent
+        team2FirstOpponent.userId,  // Reference first opponent
         outcome.winner === 'team1',
         outcome.team1SetsWon,
         outcome.team2SetsWon,
@@ -90,7 +135,7 @@ export class MatchPointsCalculator {
     for (const p2 of team2Participants) {
       results.push(this.calculateForPlayer(
         p2.userId,
-        team1Participants[0]?.userId || '',  // Reference first opponent
+        team1FirstOpponent.userId,  // Reference first opponent
         outcome.winner === 'team2',
         outcome.team2SetsWon,
         outcome.team1SetsWon,

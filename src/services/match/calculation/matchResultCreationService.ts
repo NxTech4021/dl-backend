@@ -80,10 +80,41 @@ export class MatchResultCreationService {
     }
 
     // Calculate points for all participants
+    // For singles matches where team is null, assign teams based on participant order
+    let participantsWithTeams: Array<{ userId: string; team: string | null }>;
+
+    if (match.matchType === 'SINGLES') {
+      // For singles: first participant = team1, second = team2
+      participantsWithTeams = match.participants.map((p, index) => ({
+        userId: p.userId,
+        team: index === 0 ? 'team1' : 'team2'
+      }));
+    } else {
+      // For doubles: use existing team assignments (should already be team1/team2)
+      // If somehow null, use array position as fallback
+      const team1Count = match.participants.filter(p => p.team === 'team1').length;
+      const team2Count = match.participants.filter(p => p.team === 'team2').length;
+
+      if (team1Count > 0 && team2Count > 0) {
+        // Teams are properly assigned
+        participantsWithTeams = match.participants.map(p => ({
+          userId: p.userId,
+          team: p.team
+        }));
+      } else {
+        // Fallback: first 2 = team1, last 2 = team2
+        participantsWithTeams = match.participants.map((p, index) => ({
+          userId: p.userId,
+          team: index < 2 ? 'team1' : 'team2'
+        }));
+        logger.warn(`Match ${matchId} had improper team assignments, using fallback`);
+      }
+    }
+
     const matchPoints = this.pointsCalculator.calculateForMatch(
       matchId,
       outcome,
-      match.participants.map(p => ({ userId: p.userId, team: p.team || 'team1' }))
+      participantsWithTeams
     );
 
     // Create MatchResult records in transaction

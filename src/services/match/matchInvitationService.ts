@@ -197,6 +197,7 @@ export class MatchInvitationService {
       const newMatch = await tx.match.create({ data: matchData });
 
       // Add creator as participant
+      // Creator is always team1 (for both singles and doubles)
       await tx.matchParticipant.create({
         data: {
           matchId: newMatch.id,
@@ -204,7 +205,7 @@ export class MatchInvitationService {
           role: ParticipantRole.CREATOR,
           invitationStatus: InvitationStatus.ACCEPTED,
           acceptedAt: new Date(),
-          team: matchType === MatchType.DOUBLES ? 'team1' : null
+          team: 'team1'
         }
       });
 
@@ -261,13 +262,14 @@ export class MatchInvitationService {
         }
 
         // Add opponent as participant
+        // Opponent is always team2 (for both singles and doubles)
         await tx.matchParticipant.create({
           data: {
             matchId: newMatch.id,
             userId: opponentId,
             role: ParticipantRole.OPPONENT,
             invitationStatus: InvitationStatus.PENDING,
-            team: matchType === MatchType.DOUBLES ? 'team2' : null
+            team: 'team2'
           }
         });
 
@@ -820,7 +822,10 @@ export class MatchInvitationService {
     let role: ParticipantRole = ParticipantRole.OPPONENT;
     let team: string | null = null;
 
-    if (match.matchType === MatchType.DOUBLES) {
+    if (match.matchType === MatchType.SINGLES) {
+      // For singles: joiner is always team2 (creator is team1)
+      team = 'team2';
+    } else if (match.matchType === MatchType.DOUBLES) {
       // For doubles, partnerId is REQUIRED - players must be in an established partnership
       if (!partnerId) {
         throw new Error('You must join with your partner. Solo joining is not allowed for doubles matches.');
@@ -1317,7 +1322,7 @@ export class MatchInvitationService {
             userId: opponentId,
             role: ParticipantRole.OPPONENT,
             invitationStatus: InvitationStatus.PENDING,
-            team: matchType === MatchType.DOUBLES ? 'team2' : null
+            team: 'team2'  // Opponent is always team2 (for both singles and doubles)
           }
         });
 

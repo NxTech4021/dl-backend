@@ -155,7 +155,7 @@ export function scheduleScoreSubmissionReminders(): void {
 
       const matches = await prisma.match.findMany({
         where: {
-          scheduledStartTime: {
+          matchDate: {
             gte: twentyMinutesAgo,
             lte: fifteenMinutesAgo,
           },
