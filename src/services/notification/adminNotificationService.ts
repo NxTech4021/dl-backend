@@ -117,8 +117,7 @@ export async function notifyAdminsTeamChange(
       category: 'ADMIN',
       title: 'Team Change Request',
       message: `${data.playerName} has requested to change from ${data.currentTeam} to ${data.requestedTeam}.`,
-      seasonId: data.seasonId,
-      actionUrl: data.requestId ? `/team-change-requests?id=${data.requestId}` : '/team-change-requests'
+      seasonId: data.seasonId
     },
     'teamChangeRequests'
   );
