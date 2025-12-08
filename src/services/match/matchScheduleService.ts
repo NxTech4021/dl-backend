@@ -56,11 +56,7 @@ export class MatchScheduleService {
     const match = await prisma.match.findUnique({
       where: { id: matchId },
       include: {
-        participants: true,
-        timeSlots: {
-          where: { status: 'CONFIRMED' },
-          take: 1
-        }
+        participants: true
       }
     });
 
@@ -87,7 +83,7 @@ export class MatchScheduleService {
     }
 
     // Check if it's a late cancellation and requires admin review
-    const scheduledTime = match.scheduledTime || match.timeSlots[0]?.proposedTime;
+    const scheduledTime = match.matchDate;
     let isLateCancellation = false;
     let requiresAdminReview = false;
 
@@ -123,8 +119,11 @@ export class MatchScheduleService {
 
   /**
    * Request to reschedule a match (creates new time proposals)
+   * COMMENTED OUT - matchTimeSlot model doesn't exist in schema
    */
   async requestReschedule(input: RequestRescheduleInput) {
+    throw new Error('Time slot feature not yet implemented');
+    /*
     const { matchId, requestedById, proposedTimes, reason } = input;
 
     const match = await prisma.match.findUnique({
@@ -195,12 +194,16 @@ export class MatchScheduleService {
     logger.info(`Reschedule requested for match ${matchId} by user ${requestedById}`);
 
     return this.getMatchById(matchId);
+    */
   }
 
   /**
    * Reschedule a match (admin or mutual agreement)
+   * COMMENTED OUT - matchTimeSlot model doesn't exist in schema
    */
   async rescheduleMatch(input: RescheduleMatchInput) {
+    throw new Error('Time slot feature not yet implemented');
+    /*
     const { matchId, requestedById, newProposedTimes, reason } = input;
 
     const match = await prisma.match.findUnique({
@@ -284,6 +287,7 @@ export class MatchScheduleService {
     logger.info(`Match ${matchId} rescheduled to new match ${rescheduledMatch.id}`);
 
     return this.getMatchById(rescheduledMatch.id);
+    */
   }
 
   /**
@@ -301,14 +305,11 @@ export class MatchScheduleService {
             }
           }
         },
-        timeSlots: {
-          orderBy: { proposedTime: 'asc' }
-        },
         rescheduledFrom: {
           select: { id: true, matchDate: true }
         },
         rescheduledTo: {
-          select: { id: true, scheduledTime: true }
+          select: { id: true, matchDate: true }
         }
       }
     });
@@ -416,20 +417,14 @@ export class MatchScheduleService {
    */
   async getCancellationRuleImpact(matchId: string) {
     const match = await prisma.match.findUnique({
-      where: { id: matchId },
-      include: {
-        timeSlots: {
-          where: { status: 'CONFIRMED' },
-          take: 1
-        }
-      }
+      where: { id: matchId }
     });
 
     if (!match) {
       throw new Error('Match not found');
     }
 
-    const scheduledTime = match.scheduledTime || match.timeSlots[0]?.proposedTime;
+    const scheduledTime = match.matchDate;
 
     if (!scheduledTime) {
       return {
@@ -466,11 +461,7 @@ export class MatchScheduleService {
     const match = await prisma.match.findUnique({
       where: { id: matchId },
       include: {
-        participants: true,
-        timeSlots: {
-          where: { status: 'CONFIRMED' },
-          take: 1
-        }
+        participants: true
       }
     });
 
@@ -496,7 +487,7 @@ export class MatchScheduleService {
     }
 
     // Check if opponent is actually late
-    const scheduledTime = match.scheduledTime || match.timeSlots[0]?.proposedTime;
+    const scheduledTime = match.matchDate;
     if (scheduledTime) {
       const minutesSinceScheduled = (Date.now() - scheduledTime.getTime()) / (1000 * 60);
       if (minutesSinceScheduled < this.walkoverLateThresholdMinutes) {
@@ -565,8 +556,11 @@ export class MatchScheduleService {
 
   /**
    * Continue an unfinished match (reschedule for completion)
+   * COMMENTED OUT - matchTimeSlot model doesn't exist in schema
    */
   async continueUnfinishedMatch(matchId: string, requestedById: string, proposedTimes: Date[], notes?: string) {
+    throw new Error('Time slot feature not yet implemented');
+    /*
     const match = await prisma.match.findUnique({
       where: { id: matchId },
       include: { participants: true }
@@ -640,6 +634,7 @@ export class MatchScheduleService {
     logger.info(`Unfinished match ${matchId} continuation requested by user ${requestedById}`);
 
     return this.getMatchById(matchId);
+    */
   }
 }
 
