@@ -31,7 +31,7 @@ export interface SubmitResultInput {
   setScores?: SetScore[];        // For Tennis/Padel
   gameScores?: PickleballScore[]; // For Pickleball
   comment?: string;
-  evidence?: string;   // URL to photo evidence
+  evidence?: string;
 }
 
 export interface SetScore {
@@ -74,8 +74,8 @@ export class MatchResultService {
   }
 
   /**
-   * Submit match result (Creator Only)
-   * The match creator submits the score, opponent must approve/deny
+   * Submit match result (Any Participant)
+   * Either team's captain can submit the score, the OTHER team must approve/deny
    */
   async submitResult(input: SubmitResultInput) {
     const { matchId, submittedById, setScores, gameScores, comment, evidence } = input;
@@ -94,17 +94,12 @@ export class MatchResultService {
       throw new Error('Match not found');
     }
 
-    // CRITICAL: Only the match creator can submit the initial result
-    if (match.createdById !== submittedById) {
-      throw new Error('Only the match creator can submit the result');
-    }
-
-    // Verify submitter is a participant
-    const isParticipant = match.participants.some(
+    // Verify submitter is a participant with ACCEPTED status
+    const submitterParticipant = match.participants.find(
       p => p.userId === submittedById && p.invitationStatus === InvitationStatus.ACCEPTED
     );
 
-    if (!isParticipant) {
+    if (!submitterParticipant) {
       throw new Error('Submitter must be a participant in the match');
     }
 
@@ -234,7 +229,8 @@ export class MatchResultService {
   }
 
   /**
-   * Confirm or dispute match result (Opponent Captain Only)
+   * Confirm or dispute match result (Opposing Team Only)
+   * - The team that DIDN'T submit must confirm/dispute
    * - Opponent confirms: Match completed, standings updated
    * - Opponent denies: Dispute created, sent to division admin
    */
@@ -259,11 +255,11 @@ export class MatchResultService {
     }
 
     // Verify user is a participant
-    const isParticipant = match.participants.some(
+    const userParticipant = match.participants.find(
       p => p.userId === userId && p.invitationStatus === InvitationStatus.ACCEPTED
     );
 
-    if (!isParticipant) {
+    if (!userParticipant) {
       throw new Error('Only match participants can confirm results');
     }
 
@@ -272,9 +268,19 @@ export class MatchResultService {
       throw new Error('No result has been submitted for this match');
     }
 
-    // CRITICAL: Match creator cannot confirm their own submission
+    // Get the submitter's team to ensure confirmer is from opposing team
+    const submitterParticipant = match.participants.find(
+      p => p.userId === match.resultSubmittedById
+    );
+
+    // CRITICAL: User must be from the OPPOSING team (not the team that submitted)
+    if (submitterParticipant && userParticipant.team === submitterParticipant.team) {
+      throw new Error('Only the opposing team can confirm or dispute the submitted result');
+    }
+
+    // Also check: the person who submitted cannot confirm their own submission
     if (match.resultSubmittedById === userId) {
-      throw new Error('Match creator cannot confirm their own submission. Opponent must approve or deny.');
+      throw new Error('You cannot confirm your own submission. The opposing team must approve or deny.');
     }
 
     // Check match is in correct status
