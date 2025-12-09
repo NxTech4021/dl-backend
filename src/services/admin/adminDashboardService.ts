@@ -17,6 +17,10 @@ export interface DashboardKPIStats {
   previousTotalUsers: number;
   previousLeagueParticipants: number;
   previousRevenue: number;
+  totalMatches: number;
+  previousMatches: number;
+  activeUsers: number;
+  previousActiveUsers: number;
 }
 
 /**
@@ -60,9 +64,10 @@ export interface UserGrowthData {
 export async function getDashboardKPIStats(): Promise<DashboardKPIStats> {
   const now = new Date();
   const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+  const sixtyDaysAgo = new Date(now.getTime() - 60 * 24 * 60 * 60 * 1000);
 
   // Current period stats
-  const [totalUsers, leagueParticipants] = await Promise.all([
+  const [totalUsers, leagueParticipants, totalMatches, activeUsers] = await Promise.all([
     prisma.user.count({
       where: { role: Role.USER },
     }),
@@ -72,10 +77,29 @@ export async function getDashboardKPIStats(): Promise<DashboardKPIStats> {
         status: 'ACTIVE',
       },
     }).then(groups => groups.length),
+    // Total completed matches in last 30 days
+    prisma.match.count({
+      where: {
+        status: 'COMPLETED',
+        resultConfirmedAt: { gte: thirtyDaysAgo },
+      },
+    }),
+    // Active users = users who played a match in last 30 days
+    prisma.matchParticipant.groupBy({
+      by: ['userId'],
+      where: {
+        match: {
+          is: {
+            status: 'COMPLETED',
+            resultConfirmedAt: { gte: thirtyDaysAgo },
+          },
+        },
+      },
+    }).then(groups => groups.length),
   ]);
 
   // Previous period stats (30-60 days ago)
-  const [previousTotalUsers, previousLeagueParticipants] = await Promise.all([
+  const [previousTotalUsers, previousLeagueParticipants, previousMatches, previousActiveUsers] = await Promise.all([
     prisma.user.count({
       where: {
         role: Role.USER,
@@ -87,6 +111,25 @@ export async function getDashboardKPIStats(): Promise<DashboardKPIStats> {
       where: {
         status: 'ACTIVE',
         joinedAt: { lte: thirtyDaysAgo },
+      },
+    }).then(groups => groups.length),
+    // Total completed matches in previous 30-day period
+    prisma.match.count({
+      where: {
+        status: 'COMPLETED',
+        resultConfirmedAt: { gte: sixtyDaysAgo, lt: thirtyDaysAgo },
+      },
+    }),
+    // Active users in previous 30-day period
+    prisma.matchParticipant.groupBy({
+      by: ['userId'],
+      where: {
+        match: {
+          is: {
+            status: 'COMPLETED',
+            resultConfirmedAt: { gte: sixtyDaysAgo, lt: thirtyDaysAgo },
+          },
+        },
       },
     }).then(groups => groups.length),
   ]);
@@ -110,6 +153,10 @@ export async function getDashboardKPIStats(): Promise<DashboardKPIStats> {
     previousTotalUsers,
     previousLeagueParticipants,
     previousRevenue,
+    totalMatches,
+    previousMatches,
+    activeUsers,
+    previousActiveUsers,
   };
 }
 
@@ -180,81 +227,82 @@ export async function getSportMetrics(): Promise<SportMetrics[]> {
 
 /**
  * Get match activity data for charts
+ * Optimized: Single query with aggregation instead of 72 separate queries
  */
 export async function getMatchActivityData(weeks: number = 12): Promise<MatchActivityData[]> {
   const now = new Date();
   const startDate = new Date(now.getTime() - weeks * 7 * 24 * 60 * 60 * 1000);
 
-  const data: MatchActivityData[] = [];
+  // Fetch all matches in the date range with their sport type info in a single query
+  const matches = await prisma.match.findMany({
+    where: {
+      createdAt: { gte: startDate },
+    },
+    select: {
+      id: true,
+      createdAt: true,
+      divisionId: true,
+      division: {
+        select: {
+          league: {
+            select: { sportType: true },
+          },
+        },
+      },
+      league: {
+        select: { sportType: true },
+      },
+    },
+  });
 
+  // Initialize week buckets
+  const data: MatchActivityData[] = [];
   for (let i = 0; i < weeks; i++) {
     const weekStart = new Date(startDate.getTime() + i * 7 * 24 * 60 * 60 * 1000);
-    const weekEnd = new Date(weekStart.getTime() + 7 * 24 * 60 * 60 * 1000);
-
-    // Get matches for each sport (divisionId present = league match, null = friendly)
-    const [tennisLeague, tennisFriendly, pickleballLeague, pickleballFriendly, padelLeague, padelFriendly] = await Promise.all([
-      // Tennis league matches (have division)
-      prisma.match.count({
-        where: {
-          createdAt: { gte: weekStart, lt: weekEnd },
-          divisionId: { not: null },
-          division: { league: { sportType: 'TENNIS' } },
-        },
-      }),
-      // Tennis friendly matches (no division but has league)
-      prisma.match.count({
-        where: {
-          createdAt: { gte: weekStart, lt: weekEnd },
-          divisionId: null,
-          league: { sportType: 'TENNIS' },
-        },
-      }),
-      // Pickleball league matches
-      prisma.match.count({
-        where: {
-          createdAt: { gte: weekStart, lt: weekEnd },
-          divisionId: { not: null },
-          division: { league: { sportType: 'PICKLEBALL' } },
-        },
-      }),
-      // Pickleball friendly matches
-      prisma.match.count({
-        where: {
-          createdAt: { gte: weekStart, lt: weekEnd },
-          divisionId: null,
-          league: { sportType: 'PICKLEBALL' },
-        },
-      }),
-      // Padel league matches
-      prisma.match.count({
-        where: {
-          createdAt: { gte: weekStart, lt: weekEnd },
-          divisionId: { not: null },
-          division: { league: { sportType: 'PADEL' } },
-        },
-      }),
-      // Padel friendly matches
-      prisma.match.count({
-        where: {
-          createdAt: { gte: weekStart, lt: weekEnd },
-          divisionId: null,
-          league: { sportType: 'PADEL' },
-        },
-      }),
-    ]);
-
     const dateStr = weekStart.toISOString().split('T')[0];
-
     data.push({
       week: `Week ${i + 1}`,
       date: dateStr ?? '',
-      tennisLeague,
-      tennisFriendly,
-      pickleballLeague,
-      pickleballFriendly,
-      padelLeague,
-      padelFriendly,
+      tennisLeague: 0,
+      tennisFriendly: 0,
+      pickleballLeague: 0,
+      pickleballFriendly: 0,
+      padelLeague: 0,
+      padelFriendly: 0,
     });
+  }
+
+  // Categorize each match into its week bucket
+  for (const match of matches) {
+    const matchTime = match.createdAt.getTime();
+    const weekIndex = Math.floor((matchTime - startDate.getTime()) / (7 * 24 * 60 * 60 * 1000));
+
+    if (weekIndex < 0 || weekIndex >= weeks) continue;
+
+    const isLeagueMatch = match.divisionId !== null;
+    const sportType = isLeagueMatch
+      ? match.division?.league?.sportType
+      : match.league?.sportType;
+
+    if (!sportType) continue;
+
+    const weekData = data[weekIndex];
+    if (!weekData) continue;
+
+    switch (sportType) {
+      case 'TENNIS':
+        if (isLeagueMatch) weekData.tennisLeague++;
+        else weekData.tennisFriendly++;
+        break;
+      case 'PICKLEBALL':
+        if (isLeagueMatch) weekData.pickleballLeague++;
+        else weekData.pickleballFriendly++;
+        break;
+      case 'PADEL':
+        if (isLeagueMatch) weekData.padelLeague++;
+        else weekData.padelFriendly++;
+        break;
+    }
   }
 
   return data;
