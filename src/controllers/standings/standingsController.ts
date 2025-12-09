@@ -1,5 +1,5 @@
 import type { Request, Response } from 'express';
-import { getDivisionStandings } from '../services/standings/standingsService';
+import { getDivisionStandings } from '../../services/standingsService';
 
 export async function getStandings(req: Request, res: Response) {
   try {

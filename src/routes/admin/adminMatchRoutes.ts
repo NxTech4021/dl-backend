@@ -9,6 +9,7 @@ import {
   getMatchStats,
   getDisputes,
   getDisputeById,
+  startDisputeReview,
   resolveDispute,
   addDisputeNote,
   editMatchResult,
@@ -24,7 +25,8 @@ import {
   hideMatch,
   unhideMatch,
   reportMatchAbuse,
-  clearMatchReport
+  clearMatchReport,
+  convertToWalkover
 } from '../../controllers/admin/adminMatchController';
 
 const router = Router();
@@ -37,6 +39,7 @@ router.post('/matches/:id/message', messageParticipants);
 // AS4: Edit Match Results
 router.put('/matches/:id/result', editMatchResult);
 router.post('/matches/:id/void', voidMatch);
+router.post('/matches/:id/convert-walkover', convertToWalkover);
 
 // AS7: Edit Match Participants
 router.put('/matches/:id/participants', editMatchParticipants);
@@ -46,6 +49,7 @@ router.get('/divisions/:divisionId/available-players', getAvailablePlayers);
 // AS5: Dispute Resolution
 router.get('/disputes', getDisputes);
 router.get('/disputes/:id', getDisputeById);
+router.post('/disputes/:id/start-review', startDisputeReview);
 router.post('/disputes/:id/resolve', resolveDispute);
 router.post('/disputes/:id/notes', addDisputeNote);
 

@@ -107,6 +107,7 @@ export async function notifyAdminsTeamChange(
     currentTeam: string;
     requestedTeam: string;
     seasonId?: string;
+    requestId?: string;
   }
 ): Promise<void> {
   await notifyAdmins(

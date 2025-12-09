@@ -68,8 +68,7 @@ export async function getPlayerMatchHistory(
               select: { name: true, username: true, image: true }
             }
           }
-        },
-        stats: true,
+        }
       },
       orderBy: { matchDate: 'desc' },
       skip,
@@ -149,8 +148,7 @@ export async function getMatchDetails(matchId: string, userId: string) {
             select: { name: true, username: true, image: true, id: true }
           }
         }
-      },
-      stats: true,
+      }
     },
   });
 
@@ -273,22 +271,6 @@ export async function getPlayerMatchHistoryAdmin(playerId: string) {
               location: true
             }
           }
-        }
-      },
-      stats: {
-        select: {
-          playerAces: true,
-          playerUnforcedErrors: true,
-          playerWinners: true,
-          playerDoubleFaults: true,
-          opponentAces: true,
-          opponentUnforcedErrors: true,
-          opponentWinners: true,
-          opponentDoubleFaults: true,
-          rallyCount: true,
-          longestRally: true,
-          breakPointsConverted: true,
-          breakPointsTotal: true
         }
       },
       _count: {

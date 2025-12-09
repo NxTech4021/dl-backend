@@ -64,7 +64,16 @@ export const getAdminSession = async (headers: Headers) => {
     throw new Error("Not authorized");
   }
 
-  return { user };
+  // Fetch admin record to get admin ID
+  const admin = await prisma.admin.findFirst({
+    where: { userId: user.id },
+    select: {
+      id: true,
+      status: true,
+    },
+  });
+
+  return { user, admin };
 };
 
 /**

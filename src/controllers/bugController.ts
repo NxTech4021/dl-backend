@@ -593,6 +593,8 @@ export const getAllBugReports = async (req: Request, res: Response) => {
     search,
     page = "1",
     limit = "20",
+    sortBy = "createdAt",
+    sortOrder = "desc",
   } = req.query;
 
   try {
@@ -617,12 +619,17 @@ export const getAllBugReports = async (req: Request, res: Response) => {
     const skip = (parseInt(page as string) - 1) * parseInt(limit as string);
     const take = parseInt(limit as string);
 
+    // Build orderBy clause
+    const validSortFields = ["createdAt", "reportNumber", "title", "status", "severity", "priority"];
+    const sortField = validSortFields.includes(sortBy as string) ? sortBy as string : "createdAt";
+    const order = sortOrder === "asc" ? "asc" : "desc";
+
     const [reports, total] = await Promise.all([
       prisma.bugReport.findMany({
         where,
         skip,
         take,
-        orderBy: { createdAt: "desc" },
+        orderBy: { [sortField]: order },
         include: {
           app: { select: { code: true, displayName: true } },
           module: { select: { name: true } },

@@ -141,7 +141,6 @@ export class MatchHistoryService {
         format: match.format,
         status: match.status,
         matchDate: match.matchDate,
-        scheduledTime: match.scheduledTime,
         location: match.location,
         venue: match.venue,
         division: match.division ? {
@@ -366,10 +365,7 @@ export class MatchHistoryService {
           some: { userId }
         },
         status: MatchStatus.SCHEDULED,
-        OR: [
-          { scheduledTime: { gte: new Date() } },
-          { scheduledTime: null }
-        ]
+        matchDate: { gte: new Date() }
       },
       include: {
         division: true,
@@ -379,14 +375,10 @@ export class MatchHistoryService {
               select: { id: true, name: true, username: true, image: true }
             }
           }
-        },
-        timeSlots: {
-          where: { status: 'CONFIRMED' },
-          take: 1
         }
       },
       orderBy: [
-        { scheduledTime: 'asc' },
+        { matchDate: 'asc' },
         { createdAt: 'desc' }
       ],
       take: limit

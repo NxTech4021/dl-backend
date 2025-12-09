@@ -8,6 +8,7 @@ import { AuthenticatedRequest } from '../../middlewares/auth.middleware';
 import { getAdminMatchService } from '../../services/admin/adminMatchService';
 import { AdminMatchParticipantService } from '../../services/admin/adminMatchParticipantService';
 import { validateParticipantEdit } from '../../services/admin/matchParticipantValidationService';
+import { logMatchAction, createAdminLog } from '../../services/admin/adminLogService';
 import {
   MatchStatus,
   DisputeStatus,
@@ -16,7 +17,9 @@ import {
   PenaltyType,
   PenaltySeverity,
   ParticipantRole,
-  MatchReportCategory
+  MatchReportCategory,
+  AdminActionType,
+  AdminTargetType
 } from '@prisma/client';
 
 const adminMatchService = getAdminMatchService();
@@ -142,6 +145,32 @@ export const getDisputeById = async (req: Request, res: Response) => {
 };
 
 /**
+ * Start reviewing a dispute - sets status to UNDER_REVIEW (AS5)
+ * POST /api/admin/disputes/:id/start-review
+ */
+export const startDisputeReview = async (req: Request, res: Response) => {
+  try {
+    const authReq = req as AuthenticatedRequest;
+    const adminId = authReq.user?.adminId;
+    if (!adminId) {
+      return res.status(401).json({ error: 'Admin authentication required' });
+    }
+
+    const { id } = req.params;
+    if (!id) {
+      return res.status(400).json({ error: 'Dispute ID is required' });
+    }
+
+    const dispute = await adminMatchService.startDisputeReview(id, adminId);
+    res.json(dispute);
+  } catch (error) {
+    console.error('Start Dispute Review Error:', error);
+    const message = error instanceof Error ? error.message : 'Failed to start dispute review';
+    res.status(400).json({ error: message });
+  }
+};
+
+/**
  * Resolve a dispute (AS5)
  * POST /api/admin/disputes/:id/resolve
  */
@@ -180,6 +209,16 @@ export const resolveDispute = async (req: Request, res: Response) => {
       finalScore,
       reason,
       notifyPlayers
+    });
+
+    // Log admin action
+    await createAdminLog({
+      adminId: authReq.user?.id || adminId,
+      actionType: AdminActionType.DISPUTE_RESOLVE,
+      targetType: AdminTargetType.DISPUTE,
+      targetId: id,
+      description: `Resolved dispute with action: ${action}`,
+      newValue: { action, finalScore, reason }
     });
 
     res.json(dispute);
@@ -256,6 +295,16 @@ export const editMatchResult = async (req: Request, res: Response) => {
       reason
     });
 
+    // Log admin action
+    await logMatchAction(
+      authReq.user?.id || adminId,
+      AdminActionType.MATCH_EDIT_RESULT,
+      id,
+      `Edited match result: ${reason}`,
+      undefined,
+      { team1Score, team2Score, setScores, outcome, isWalkover }
+    );
+
     res.json(match);
   } catch (error) {
     console.error('Edit Match Result Error:', error);
@@ -288,6 +337,17 @@ export const voidMatch = async (req: Request, res: Response) => {
     }
 
     const match = await adminMatchService.voidMatch(id, adminId, reason);
+
+    // Log admin action
+    await logMatchAction(
+      authReq.user?.id || adminId,
+      AdminActionType.MATCH_VOID,
+      id,
+      `Voided match: ${reason}`,
+      undefined,
+      { status: 'VOIDED', reason }
+    );
+
     res.json(match);
   } catch (error) {
     console.error('Void Match Error:', error);
@@ -699,6 +759,62 @@ export const clearMatchReport = async (req: Request, res: Response) => {
   } catch (error) {
     console.error('Clear Match Report Error:', error);
     const message = error instanceof Error ? error.message : 'Failed to clear report';
+    res.status(400).json({ error: message });
+  }
+};
+
+/**
+ * Convert a match to walkover
+ * POST /api/admin/matches/:id/convert-walkover
+ */
+export const convertToWalkover = async (req: Request, res: Response) => {
+  try {
+    const authReq = req as AuthenticatedRequest;
+    const adminId = authReq.user?.adminId;
+    if (!adminId) {
+      return res.status(401).json({ error: 'Admin authentication required' });
+    }
+
+    const { id } = req.params;
+    if (!id) {
+      return res.status(400).json({ error: 'Match ID is required' });
+    }
+
+    const { winnerId, reason, walkoverReason } = req.body;
+
+    if (!winnerId) {
+      return res.status(400).json({ error: 'winnerId is required' });
+    }
+
+    if (!reason) {
+      return res.status(400).json({ error: 'reason is required for audit trail' });
+    }
+
+    const match = await adminMatchService.convertToWalkover({
+      matchId: id,
+      adminId,
+      winnerId,
+      reason,
+      walkoverReason
+    });
+
+    // Log admin action
+    await logMatchAction(
+      authReq.user?.id || adminId,
+      AdminActionType.MATCH_WALKOVER,
+      id,
+      `Converted match to walkover: ${reason}`,
+      undefined,
+      { winnerId, walkoverReason }
+    );
+
+    res.json({
+      success: true,
+      data: match
+    });
+  } catch (error) {
+    console.error('Convert To Walkover Error:', error);
+    const message = error instanceof Error ? error.message : 'Failed to convert to walkover';
     res.status(400).json({ error: message });
   }
 };

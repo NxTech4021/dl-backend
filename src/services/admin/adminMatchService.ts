@@ -403,6 +403,58 @@ export class AdminMatchService {
   }
 
   /**
+   * Start reviewing a dispute - changes status from OPEN to UNDER_REVIEW
+   */
+  async startDisputeReview(disputeId: string, adminId: string) {
+    const dispute = await prisma.matchDispute.findUnique({
+      where: { id: disputeId }
+    });
+
+    if (!dispute) {
+      throw new Error('Dispute not found');
+    }
+
+    if (dispute.status !== DisputeStatus.OPEN) {
+      // Already under review or resolved, just return current dispute
+      return prisma.matchDispute.findUnique({
+        where: { id: disputeId },
+        include: {
+          match: {
+            include: {
+              participants: { include: { user: true } },
+              scores: true,
+              division: { include: { season: true } }
+            }
+          },
+          raisedByUser: true,
+          reviewedByAdmin: { include: { user: true } },
+          resolvedByAdmin: { include: { user: true } }
+        }
+      });
+    }
+
+    return prisma.matchDispute.update({
+      where: { id: disputeId },
+      data: {
+        status: DisputeStatus.UNDER_REVIEW,
+        reviewedByAdminId: adminId
+      },
+      include: {
+        match: {
+          include: {
+            participants: { include: { user: true } },
+            scores: true,
+            division: { include: { season: true } }
+          }
+        },
+        raisedByUser: true,
+        reviewedByAdmin: { include: { user: true } },
+        resolvedByAdmin: { include: { user: true } }
+      }
+    });
+  }
+
+  /**
    * Resolve a dispute (AS5)
    */
   async resolveDispute(input: ResolveDisputeInput) {
@@ -421,18 +473,23 @@ export class AdminMatchService {
       throw new Error('Dispute not found');
     }
 
-    if (dispute.status === DisputeStatus.RESOLVED) {
-      throw new Error('Dispute has already been resolved');
+    if (dispute.status === DisputeStatus.RESOLVED || dispute.status === DisputeStatus.REJECTED) {
+      throw new Error('Dispute has already been resolved or rejected');
     }
+
+    // Determine final status based on action
+    const finalStatus = action === DisputeResolutionAction.REJECT
+      ? DisputeStatus.REJECTED
+      : DisputeStatus.RESOLVED;
 
     await prisma.$transaction(async (tx) => {
       // Update dispute
       const disputeUpdateData: any = {
-        status: DisputeStatus.RESOLVED,
+        status: finalStatus,
         resolvedByAdminId: adminId,
-        resolvedAt: new Date(),
         adminResolution: reason,
-        resolutionAction: action
+        resolutionAction: action,
+        resolvedAt: new Date()
       };
       if (finalScore) disputeUpdateData.finalScore = JSON.stringify(finalScore);
 
@@ -503,6 +560,12 @@ export class AdminMatchService {
             team2Score: finalScore?.team2Score || 0,
             outcome: (finalScore?.team1Score || 2) > (finalScore?.team2Score || 0) ? 'team1' : 'team2'
           }
+        });
+      } else if (action === DisputeResolutionAction.REJECT) {
+        // Reject dispute - mark match as no longer disputed, keep original score
+        await tx.match.update({
+          where: { id: dispute.matchId },
+          data: { isDisputed: false }
         });
       }
 
@@ -1077,21 +1140,22 @@ export class AdminMatchService {
 
       if (!dispute) return;
 
-      const actionText = {
-        [DisputeResolutionAction.UPHOLD_ORIGINAL]: 'Original score upheld',
-        [DisputeResolutionAction.UPHOLD_DISPUTER]: "Disputer's score accepted",
-        [DisputeResolutionAction.CUSTOM_SCORE]: 'Score adjusted by admin',
-        [DisputeResolutionAction.VOID_MATCH]: 'Match voided',
-        [DisputeResolutionAction.AWARD_WALKOVER]: 'Walkover awarded',
-        [DisputeResolutionAction.REQUEST_MORE_INFO]: 'More information requested'
-      }[action];
+      const actionText: Record<string, string> = {
+        'UPHOLD_ORIGINAL': 'Original score upheld',
+        'UPHOLD_DISPUTER': "Disputer's score accepted",
+        'CUSTOM_SCORE': 'Score adjusted by admin',
+        'VOID_MATCH': 'Match voided',
+        'AWARD_WALKOVER': 'Walkover awarded',
+        'REQUEST_MORE_INFO': 'More information requested'
+      };
+      const message = actionText[action] || 'Dispute resolved';
 
       const recipientIds = dispute.match.participants.map(p => p.userId);
 
       await this.notificationService.createNotification({
         type: 'MATCH_DISPUTE_RESOLVED',
         title: 'Dispute Resolved',
-        message: `${actionText}. ${reason}`,
+        message: `${message}. ${reason}`,
         category: 'MATCH',
         matchId: dispute.matchId,
         userIds: recipientIds
@@ -1341,6 +1405,120 @@ export class AdminMatchService {
     });
 
     logger.info(`Match ${matchId} abuse report cleared by admin ${adminId}`);
+
+    return updatedMatch;
+  }
+
+  /**
+   * Convert a match to walkover
+   */
+  async convertToWalkover(input: {
+    matchId: string;
+    adminId: string;
+    winnerId: string;
+    reason: string;
+    walkoverReason?: string;
+  }) {
+    const { matchId, adminId, winnerId, reason, walkoverReason } = input;
+
+    const match = await prisma.match.findUnique({
+      where: { id: matchId },
+      include: {
+        participants: {
+          include: {
+            user: { select: { id: true, name: true, username: true } }
+          }
+        }
+      }
+    });
+
+    if (!match) {
+      throw new Error('Match not found');
+    }
+
+    // Determine winner team
+    const winnerParticipant = match.participants.find(p => p.userId === winnerId);
+    if (!winnerParticipant) {
+      throw new Error('Winner must be a participant in this match');
+    }
+
+    const winnerTeam = winnerParticipant.team || 'team1';
+    const team1Score = winnerTeam === 'team1' ? 2 : 0;
+    const team2Score = winnerTeam === 'team2' ? 2 : 0;
+
+    const oldValue = {
+      status: match.status,
+      isWalkover: match.isWalkover,
+      team1Score: match.team1Score,
+      team2Score: match.team2Score
+    };
+
+    const updatedMatch = await prisma.$transaction(async (tx) => {
+      // Find the defaulting player (the loser)
+      const loserParticipant = match.participants.find(p => p.userId !== winnerId);
+      if (!loserParticipant) {
+        throw new Error('Could not determine defaulting player');
+      }
+
+      // Map reason to WalkoverReason enum
+      const walkoverReasonEnum = walkoverReason && ['NO_SHOW', 'LATE_CANCELLATION', 'INJURY', 'PERSONAL_EMERGENCY', 'OTHER'].includes(walkoverReason)
+        ? walkoverReason as 'NO_SHOW' | 'LATE_CANCELLATION' | 'INJURY' | 'PERSONAL_EMERGENCY' | 'OTHER'
+        : 'OTHER';
+
+      // Update match to COMPLETED with walkover flag
+      const updated = await tx.match.update({
+        where: { id: matchId },
+        data: {
+          status: MatchStatus.COMPLETED,
+          isWalkover: true,
+          team1Score,
+          team2Score,
+          outcome: winnerTeam,
+          adminNotes: reason
+        },
+        include: {
+          participants: {
+            include: {
+              user: { select: { id: true, name: true, username: true } }
+            }
+          }
+        }
+      });
+
+      // Create walkover record with proper fields
+      await tx.matchWalkover.create({
+        data: {
+          matchId,
+          walkoverFlag: true,
+          walkoverReason: walkoverReasonEnum,
+          walkoverReasonDetail: reason,
+          defaultingPlayerId: loserParticipant.userId,
+          winningPlayerId: winnerId,
+          reportedBy: adminId, // Admin reporting
+          adminVerified: true,
+          adminVerifiedBy: adminId,
+          adminVerifiedAt: new Date()
+        }
+      });
+
+      // Log admin action
+      await tx.matchAdminAction.create({
+        data: {
+          matchId,
+          adminId,
+          actionType: MatchAdminActionType.VOID_MATCH, // Using VOID as closest action type
+          oldValue,
+          newValue: { status: MatchStatus.COMPLETED, isWalkover: true, team1Score, team2Score },
+          reason,
+          affectedUserIds: match.participants.map(p => p.userId),
+          triggeredRecalculation: true
+        }
+      });
+
+      return updated;
+    });
+
+    logger.info(`Match ${matchId} converted to walkover by admin ${adminId}, winner: ${winnerId}`);
 
     return updatedMatch;
   }

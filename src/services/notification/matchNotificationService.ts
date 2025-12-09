@@ -21,7 +21,7 @@ export async function sendMatchScheduledNotification(
     const match = await prisma.match.findUnique({
       where: { id: matchId },
       select: {
-        scheduledStartTime: true,
+        matchDate: true,
         venue: true,
         location: true,
       },
@@ -32,8 +32,8 @@ export async function sendMatchScheduledNotification(
       return;
     }
 
-    const date = match.scheduledStartTime?.toLocaleDateString() || 'TBD';
-    const time = match.scheduledStartTime?.toLocaleTimeString() || 'TBD';
+    const date = match.matchDate?.toLocaleDateString() || 'TBD';
+    const time = match.matchDate?.toLocaleTimeString() || 'TBD';
     const venue = match.venue || match.location || 'TBD';
 
     // Get player names
@@ -77,10 +77,7 @@ export async function sendMatchReminder24h(matchId: string): Promise<void> {
   try {
     const match = await prisma.match.findUnique({
       where: { id: matchId },
-      select: {
-        scheduledStartTime: true,
-        venue: true,
-        location: true,
+      include: {
         participants: {
           include: {
             user: {
@@ -93,7 +90,7 @@ export async function sendMatchReminder24h(matchId: string): Promise<void> {
 
     if (!match || match.participants.length < 2) return;
 
-    const time = match.scheduledStartTime?.toLocaleTimeString() || 'TBD';
+    const time = match.matchDate?.toLocaleTimeString() || 'TBD';
     const venue = match.venue || match.location || 'TBD';
 
     const player1 = match.participants[0];
@@ -305,11 +302,11 @@ export async function sendMatchCancelledNotification(
       prisma.user.findUnique({ where: { id: cancelledById }, select: { name: true } }),
       prisma.match.findUnique({
         where: { id: matchId },
-        select: { scheduledStartTime: true },
+        select: { matchDate: true },
       }),
     ]);
 
-    const date = match?.scheduledStartTime?.toLocaleDateString() || 'TBD';
+    const date = match?.matchDate?.toLocaleDateString() || 'TBD';
 
     await notificationService.createNotification({
       type: 'MATCH_CANCELLED',

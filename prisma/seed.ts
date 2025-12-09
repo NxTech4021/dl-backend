@@ -6,6 +6,9 @@ import {
   SportType,
   Statuses,
   BugPriority,
+  BugSeverity,
+  BugStatus,
+  BugReportType,
   MatchStatus,
   MatchType,
   MatchFormat,
@@ -44,6 +47,18 @@ import {
   Division,
   Admin,
   Match,
+  TeamChangeRequestStatus,
+  // New imports for 100% coverage
+  AdminActionType,
+  AdminTargetType,
+  StatusChangeReason,
+  BracketType,
+  BracketStatus,
+  BracketMatchStatus,
+  SeedingSource,
+  AdjustmentType,
+  RecalculationScope,
+  RecalculationStatus,
 } from "@prisma/client";
 
 const prisma = new PrismaClient();
@@ -691,7 +706,6 @@ async function seedMatches(users: User[], divisions: Division[], seasons: Season
           format: MatchFormat.STANDARD,
           status: config.status,
           matchDate: matchDate,
-          scheduledStartTime: matchDate,
           location: randomElement(["Subang Sports Center", "KL Arena", "PJ Stadium", "Selangor Courts"]),
           venue: `Court ${randomInt(1, 8)}`,
 
@@ -1718,7 +1732,6 @@ async function seedFriendlyMatches(users: User[], leagues: any[]) {
         format: MatchFormat.STANDARD,
         status: isCompleted ? MatchStatus.COMPLETED : MatchStatus.SCHEDULED,
         matchDate: matchDate,
-        scheduledStartTime: matchDate,
         location: randomElement(["Community Courts", "Private Club", "Public Park", "Sports Center"]),
         venue: `Court ${randomInt(1, 6)}`,
         playerScore: isCompleted ? randomInt(0, 2) : null,
@@ -1863,6 +1876,1128 @@ async function seedBugTrackingApps(adminId: string) {
 }
 
 // =============================================
+// SEED TEAM CHANGE REQUESTS
+// =============================================
+
+async function seedTeamChangeRequests(users: User[], seasons: Season[], divisions: Division[], admins: SeededAdmin[]) {
+  const activeUsers = users.filter(u => u.status === UserStatus.ACTIVE && u.completedOnboarding);
+  const activeSeasons = seasons.filter(s => s.status === SeasonStatus.ACTIVE);
+  const adminId = admins[0]!.adminId;
+
+  if (activeSeasons.length === 0 || divisions.length === 0) {
+    console.log("   ⚠️ Not enough active seasons or divisions to create team change requests");
+    return [];
+  }
+
+  const createdRequests = [];
+
+  // Reasons for requesting team changes
+  const reasons = [
+    "I want to play with more competitive players",
+    "My schedule conflicts with current division match times",
+    "I believe I'm ready for a higher division",
+    "I'd prefer to play with players closer to my skill level",
+    "Looking for a more challenging competition",
+    "Work schedule changed, need different match times",
+    "Moving to a different area, prefer local division",
+    "Want to play with friends in another division",
+  ];
+
+  const adminNotes = [
+    "Reviewed player history, request approved based on performance.",
+    "Player has shown consistent improvement, moving to higher division.",
+    "Request denied - player rating doesn't match requested division level.",
+    "Approved after reviewing player's match history and win rate.",
+    "Denied - player should complete current season first.",
+    "Player's skills assessment confirms eligibility for requested division.",
+  ];
+
+  // Create requests for each active season
+  for (const season of activeSeasons) {
+    const seasonDivisions = divisions.filter(d => d.seasonId === season.id);
+
+    if (seasonDivisions.length < 2) {
+      continue; // Need at least 2 divisions to transfer between
+    }
+
+    // Create 8-12 requests per season covering all statuses
+    const requestCount = Math.min(12, Math.floor(activeUsers.length / 3));
+
+    for (let i = 0; i < requestCount; i++) {
+      const user = activeUsers[i % activeUsers.length]!;
+      const currentDivision = seasonDivisions[i % seasonDivisions.length]!;
+      const requestedDivision = seasonDivisions[(i + 1) % seasonDivisions.length]!;
+
+      // Skip if same division
+      if (currentDivision.id === requestedDivision.id) {
+        continue;
+      }
+
+      // Check if request already exists
+      const existing = await prisma.teamChangeRequest.findFirst({
+        where: {
+          userId: user.id,
+          seasonId: season.id,
+          currentDivisionId: currentDivision.id,
+          requestedDivisionId: requestedDivision.id,
+        },
+      });
+
+      if (existing) {
+        createdRequests.push(existing);
+        continue;
+      }
+
+      // Determine status based on index for variety
+      let status: TeamChangeRequestStatus;
+      let reviewedByAdminId: string | null = null;
+      let reviewedAt: Date | null = null;
+      let adminNotesText: string | null = null;
+
+      if (i < 4) {
+        // First 4: PENDING (no admin review yet)
+        status = TeamChangeRequestStatus.PENDING;
+      } else if (i < 7) {
+        // Next 3: APPROVED (admin reviewed and approved)
+        status = TeamChangeRequestStatus.APPROVED;
+        reviewedByAdminId = adminId;
+        reviewedAt = randomDate(new Date(Date.now() - 7 * 24 * 60 * 60 * 1000), new Date());
+        adminNotesText = adminNotes[i % adminNotes.length];
+      } else if (i < 10) {
+        // Next 3: DENIED (admin reviewed and denied)
+        status = TeamChangeRequestStatus.DENIED;
+        reviewedByAdminId = adminId;
+        reviewedAt = randomDate(new Date(Date.now() - 7 * 24 * 60 * 60 * 1000), new Date());
+        adminNotesText = adminNotes[(i + 2) % adminNotes.length];
+      } else {
+        // Remaining: CANCELLED (user cancelled their own request)
+        status = TeamChangeRequestStatus.CANCELLED;
+      }
+
+      const request = await prisma.teamChangeRequest.create({
+        data: {
+          userId: user.id,
+          currentDivisionId: currentDivision.id,
+          requestedDivisionId: requestedDivision.id,
+          seasonId: season.id,
+          reason: reasons[i % reasons.length],
+          status: status,
+          reviewedByAdminId: reviewedByAdminId,
+          reviewedAt: reviewedAt,
+          adminNotes: adminNotesText,
+          createdAt: randomDate(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000), new Date()),
+        },
+      });
+
+      createdRequests.push(request);
+    }
+  }
+
+  return createdRequests;
+}
+
+// =============================================
+// SEED ADMIN LOGS (NEW - Admin Action Tracking)
+// =============================================
+
+async function seedAdminLogs(admins: SeededAdmin[], users: User[], matches: Match[], seasons: Season[]) {
+  const adminId = admins[0]!.adminId;
+  const activeUsers = users.filter(u => u.status === UserStatus.ACTIVE);
+
+  const logEntries: Array<{
+    actionType: AdminActionType;
+    targetType: AdminTargetType;
+    targetId: string | null;
+    description: string;
+    oldValue?: object;
+    newValue?: object;
+    metadata?: object;
+  }> = [];
+
+  // Player management logs
+  for (let i = 0; i < 5; i++) {
+    const user = activeUsers[i];
+    if (user) {
+      logEntries.push({
+        actionType: AdminActionType.PLAYER_UPDATE,
+        targetType: AdminTargetType.PLAYER,
+        targetId: user.id,
+        description: `Updated player profile for ${user.name}`,
+        oldValue: { bio: "Old bio" },
+        newValue: { bio: user.bio },
+        metadata: { ipAddress: "192.168.1.1", userAgent: "Mozilla/5.0" },
+      });
+    }
+  }
+
+  // Player ban/unban logs
+  const suspendedUsers = users.filter(u => u.status === UserStatus.SUSPENDED);
+  for (const user of suspendedUsers) {
+    logEntries.push({
+      actionType: AdminActionType.PLAYER_BAN,
+      targetType: AdminTargetType.PLAYER,
+      targetId: user.id,
+      description: `Banned player ${user.name} for violation of terms`,
+      oldValue: { status: "ACTIVE" },
+      newValue: { status: "SUSPENDED" },
+      metadata: { reason: "Terms violation", ipAddress: "192.168.1.1" },
+    });
+  }
+
+  // Match management logs
+  const voidMatches = matches.filter(m => m.status === MatchStatus.VOID);
+  for (const match of voidMatches.slice(0, 3)) {
+    logEntries.push({
+      actionType: AdminActionType.MATCH_VOID,
+      targetType: AdminTargetType.MATCH,
+      targetId: match.id,
+      description: `Voided match due to dispute resolution`,
+      oldValue: { status: "COMPLETED" },
+      newValue: { status: "VOID" },
+    });
+  }
+
+  // Match result edits
+  for (const match of matches.slice(0, 5)) {
+    logEntries.push({
+      actionType: AdminActionType.MATCH_EDIT_RESULT,
+      targetType: AdminTargetType.MATCH,
+      targetId: match.id,
+      description: `Edited match result after dispute review`,
+      oldValue: { playerScore: 1, opponentScore: 2 },
+      newValue: { playerScore: match.playerScore, opponentScore: match.opponentScore },
+    });
+  }
+
+  // Season management logs
+  for (const season of seasons.slice(0, 3)) {
+    logEntries.push({
+      actionType: AdminActionType.SEASON_UPDATE,
+      targetType: AdminTargetType.SEASON,
+      targetId: season.id,
+      description: `Updated season "${season.name}" settings`,
+      oldValue: { withdrawalEnabled: false },
+      newValue: { withdrawalEnabled: season.withdrawalEnabled },
+    });
+  }
+
+  // Dispute resolution logs
+  logEntries.push({
+    actionType: AdminActionType.DISPUTE_RESOLVE,
+    targetType: AdminTargetType.DISPUTE,
+    targetId: null,
+    description: `Resolved match dispute - upheld original score`,
+  });
+
+  logEntries.push({
+    actionType: AdminActionType.DISPUTE_OVERRIDE,
+    targetType: AdminTargetType.DISPUTE,
+    targetId: null,
+    description: `Overrode match result based on evidence`,
+  });
+
+  // Settings update logs
+  logEntries.push({
+    actionType: AdminActionType.SETTINGS_UPDATE,
+    targetType: AdminTargetType.SETTINGS,
+    targetId: null,
+    description: `Updated inactivity threshold settings`,
+    oldValue: { inactivityThresholdDays: 14 },
+    newValue: { inactivityThresholdDays: 10 },
+  });
+
+  // Bug report logs
+  logEntries.push({
+    actionType: AdminActionType.BUG_ASSIGN,
+    targetType: AdminTargetType.BUG_REPORT,
+    targetId: null,
+    description: `Assigned bug report to admin for review`,
+  });
+
+  logEntries.push({
+    actionType: AdminActionType.BUG_RESOLVE,
+    targetType: AdminTargetType.BUG_REPORT,
+    targetId: null,
+    description: `Resolved bug report - issue fixed in latest release`,
+  });
+
+  const createdLogs = [];
+  for (let i = 0; i < logEntries.length; i++) {
+    const entry = logEntries[i]!;
+    const log = await prisma.adminLog.create({
+      data: {
+        adminId: adminId,
+        actionType: entry.actionType,
+        targetType: entry.targetType,
+        targetId: entry.targetId,
+        description: entry.description,
+        oldValue: entry.oldValue || null,
+        newValue: entry.newValue || null,
+        metadata: entry.metadata || null,
+        createdAt: randomDate(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000), new Date()),
+      },
+    });
+    createdLogs.push(log);
+  }
+
+  return createdLogs;
+}
+
+// =============================================
+// SEED ADMIN INVITE TOKENS
+// =============================================
+
+async function seedAdminInviteTokens(admins: SeededAdmin[]) {
+  const pendingAdmin = await prisma.admin.findFirst({
+    where: { status: AdminStatus.PENDING },
+  });
+
+  if (!pendingAdmin) return [];
+
+  const existingToken = await prisma.adminInviteToken.findUnique({
+    where: { adminId: pendingAdmin.id },
+  });
+
+  if (existingToken) return [existingToken];
+
+  const token = await prisma.adminInviteToken.create({
+    data: {
+      adminId: pendingAdmin.id,
+      email: "pending_admin@dleague.com",
+      token: `invite_${Date.now()}_${Math.random().toString(36).substring(7)}`,
+      status: "PENDING",
+      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+    },
+  });
+
+  return [token];
+}
+
+// =============================================
+// SEED MATCH RESULTS (Best 6 System)
+// =============================================
+
+async function seedMatchResults(matches: Match[], users: User[]) {
+  const completedMatches = matches.filter(m => m.status === MatchStatus.COMPLETED && !m.isWalkover);
+  const createdResults = [];
+
+  for (const match of completedMatches) {
+    const participants = await prisma.matchParticipant.findMany({
+      where: { matchId: match.id },
+    });
+
+    const player1 = participants.find(p => p.role === ParticipantRole.CREATOR);
+    const player2 = participants.find(p => p.role === ParticipantRole.OPPONENT);
+
+    if (!player1 || !player2) continue;
+
+    // Check if results already exist
+    const existingResult = await prisma.matchResult.findFirst({
+      where: { matchId: match.id },
+    });
+    if (existingResult) continue;
+
+    const player1Won = (match.playerScore || 0) > (match.opponentScore || 0);
+    const setsWon1 = match.playerScore || 0;
+    const setsLost1 = match.opponentScore || 0;
+    const gamesWon1 = setsWon1 * 6 + randomInt(0, 10);
+    const gamesLost1 = setsLost1 * 6 + randomInt(0, 10);
+
+    // Player 1 result
+    const result1 = await prisma.matchResult.create({
+      data: {
+        matchId: match.id,
+        playerId: player1.userId,
+        opponentId: player2.userId,
+        sportType: SportType.PICKLEBALL,
+        gameType: match.matchType === MatchType.SINGLES ? GameType.SINGLES : GameType.DOUBLES,
+        isWin: player1Won,
+        matchPoints: player1Won ? randomInt(3, 5) : randomInt(1, 2),
+        participationPoints: 1,
+        setsWonPoints: Math.min(setsWon1, 2),
+        winBonusPoints: player1Won ? 2 : 0,
+        margin: gamesWon1 - gamesLost1,
+        setsWon: setsWon1,
+        setsLost: setsLost1,
+        gamesWon: gamesWon1,
+        gamesLost: gamesLost1,
+        datePlayed: match.matchDate,
+        countsForStandings: true,
+        resultSequence: randomInt(1, 6),
+      },
+    });
+    createdResults.push(result1);
+
+    // Player 2 result (inverse)
+    const result2 = await prisma.matchResult.create({
+      data: {
+        matchId: match.id,
+        playerId: player2.userId,
+        opponentId: player1.userId,
+        sportType: SportType.PICKLEBALL,
+        gameType: match.matchType === MatchType.SINGLES ? GameType.SINGLES : GameType.DOUBLES,
+        isWin: !player1Won,
+        matchPoints: !player1Won ? randomInt(3, 5) : randomInt(1, 2),
+        participationPoints: 1,
+        setsWonPoints: Math.min(setsLost1, 2),
+        winBonusPoints: !player1Won ? 2 : 0,
+        margin: gamesLost1 - gamesWon1,
+        setsWon: setsLost1,
+        setsLost: setsWon1,
+        gamesWon: gamesLost1,
+        gamesLost: gamesWon1,
+        datePlayed: match.matchDate,
+        countsForStandings: true,
+        resultSequence: randomInt(1, 6),
+      },
+    });
+    createdResults.push(result2);
+  }
+
+  return createdResults;
+}
+
+// =============================================
+// SEED PICKLEBALL GAME SCORES
+// =============================================
+
+async function seedPickleballGameScores(matches: Match[]) {
+  const pickleballMatches = matches.filter(
+    m => m.sport === "PICKLEBALL" && m.status === MatchStatus.COMPLETED && !m.isWalkover
+  );
+  const createdScores = [];
+
+  for (const match of pickleballMatches.slice(0, 20)) {
+    const existingScore = await prisma.pickleballGameScore.findFirst({
+      where: { matchId: match.id },
+    });
+    if (existingScore) continue;
+
+    const gamesCount = match.playerScore === 2 || match.opponentScore === 2 ? 3 : 2;
+
+    for (let gameNum = 1; gameNum <= gamesCount; gameNum++) {
+      const score = await prisma.pickleballGameScore.create({
+        data: {
+          matchId: match.id,
+          gameNumber: gameNum,
+          player1Points: randomInt(5, 11),
+          player2Points: randomInt(5, 11),
+        },
+      });
+      createdScores.push(score);
+    }
+  }
+
+  return createdScores;
+}
+
+// =============================================
+// SEED PLAYER STATUS CHANGES
+// =============================================
+
+async function seedPlayerStatusChanges(users: User[], admins: SeededAdmin[], matches: Match[]) {
+  const adminId = admins[0]!.adminId;
+  const createdChanges = [];
+
+  // Status changes for suspended users (ban actions)
+  const suspendedUsers = users.filter(u => u.status === UserStatus.SUSPENDED);
+  for (const user of suspendedUsers) {
+    const change = await prisma.playerStatusChange.create({
+      data: {
+        userId: user.id,
+        previousStatus: UserStatus.ACTIVE,
+        newStatus: UserStatus.SUSPENDED,
+        reason: StatusChangeReason.ADMIN_BAN,
+        notes: "Banned for violation of community guidelines",
+        triggeredById: adminId,
+      },
+    });
+    createdChanges.push(change);
+  }
+
+  // Status changes for inactive users
+  const inactiveUsers = users.filter(u => u.status === UserStatus.INACTIVE);
+  for (const user of inactiveUsers) {
+    const change = await prisma.playerStatusChange.create({
+      data: {
+        userId: user.id,
+        previousStatus: UserStatus.ACTIVE,
+        newStatus: UserStatus.INACTIVE,
+        reason: StatusChangeReason.INACTIVITY_THRESHOLD,
+        notes: "Marked inactive due to no activity for 14+ days",
+        triggeredById: adminId,
+      },
+    });
+    createdChanges.push(change);
+  }
+
+  // Activity warnings for some active users
+  const activeUsers = users.filter(u => u.status === UserStatus.ACTIVE).slice(0, 5);
+  for (const user of activeUsers) {
+    await prisma.playerStatusChange.create({
+      data: {
+        userId: user.id,
+        previousStatus: UserStatus.ACTIVE,
+        newStatus: UserStatus.ACTIVE,
+        reason: StatusChangeReason.INACTIVITY_WARNING,
+        notes: "Warning: No matches played in 10 days",
+        triggeredById: adminId,
+      },
+    });
+  }
+
+  // Match played reactivations
+  for (let i = 0; i < 3; i++) {
+    const user = activeUsers[i];
+    const match = matches[i];
+    if (user && match) {
+      await prisma.playerStatusChange.create({
+        data: {
+          userId: user.id,
+          previousStatus: UserStatus.INACTIVE,
+          newStatus: UserStatus.ACTIVE,
+          reason: StatusChangeReason.MATCH_PLAYED,
+          notes: "Reactivated after playing a match",
+          matchId: match.id,
+        },
+      });
+    }
+  }
+
+  // Season start activations
+  for (let i = 5; i < 8; i++) {
+    const user = activeUsers[i];
+    if (user) {
+      await prisma.playerStatusChange.create({
+        data: {
+          userId: user.id,
+          previousStatus: UserStatus.INACTIVE,
+          newStatus: UserStatus.ACTIVE,
+          reason: StatusChangeReason.SEASON_START,
+          notes: "Reactivated for new season",
+        },
+      });
+    }
+  }
+
+  return createdChanges;
+}
+
+// =============================================
+// SEED BUG REPORTS AND RELATED
+// =============================================
+
+async function seedBugReports(users: User[], admins: SeededAdmin[]) {
+  const adminId = admins[0]!.adminId;
+  const activeUsers = users.filter(u => u.status === UserStatus.ACTIVE);
+
+  // Get apps and modules
+  const dlaApp = await prisma.app.findUnique({
+    where: { code: "DLA" },
+    include: { bugModules: true },
+  });
+
+  const dlmApp = await prisma.app.findUnique({
+    where: { code: "DLM" },
+    include: { bugModules: true },
+  });
+
+  if (!dlaApp || !dlmApp) {
+    console.log("   ⚠️ Apps not found, skipping bug reports");
+    return [];
+  }
+
+  const bugReportData = [
+    // DLA bugs
+    { app: dlaApp, title: "Dashboard charts not loading", description: "The match statistics charts on the dashboard fail to load on Firefox", severity: BugSeverity.HIGH, status: BugStatus.IN_PROGRESS, priority: BugPriority.HIGH, moduleCode: "DASHBOARD" },
+    { app: dlaApp, title: "Export to Excel fails for large datasets", description: "When exporting more than 1000 records, the Excel export times out", severity: BugSeverity.MEDIUM, status: BugStatus.NEW, priority: BugPriority.NORMAL, moduleCode: "PLAYERS" },
+    { app: dlaApp, title: "Season filter not persisting", description: "The season filter resets when navigating between pages", severity: BugSeverity.LOW, status: BugStatus.TRIAGED, priority: BugPriority.LOW, moduleCode: "SEASONS" },
+    { app: dlaApp, title: "Cannot void completed match", description: "Getting 500 error when trying to void a match that was completed more than 24 hours ago", severity: BugSeverity.HIGH, status: BugStatus.RESOLVED, priority: BugPriority.URGENT, moduleCode: "MATCHES", resolvedAt: new Date() },
+    { app: dlaApp, title: "Dispute notification not sending", description: "Admin notifications for new disputes are not being sent", severity: BugSeverity.CRITICAL, status: BugStatus.IN_PROGRESS, priority: BugPriority.URGENT, moduleCode: "NOTIFICATIONS" },
+
+    // DLM bugs
+    { app: dlmApp, title: "Push notifications delayed", description: "Match reminder notifications arriving 30+ minutes late", severity: BugSeverity.HIGH, status: BugStatus.NEEDS_INFO, priority: BugPriority.HIGH, moduleCode: "NOTIFICATIONS" },
+    { app: dlmApp, title: "Profile photo upload crashes app", description: "App crashes when uploading large photos (>5MB)", severity: BugSeverity.MEDIUM, status: BugStatus.NEW, priority: BugPriority.NORMAL, moduleCode: "PROFILE" },
+    { app: dlmApp, title: "Leaderboard showing stale data", description: "Division standings not updating after match completion", severity: BugSeverity.HIGH, status: BugStatus.TRIAGED, priority: BugPriority.HIGH, moduleCode: "LEADERBOARD" },
+    { app: dlmApp, title: "Chat messages out of order", description: "Messages sometimes appear in wrong chronological order", severity: BugSeverity.MEDIUM, status: BugStatus.IN_REVIEW, priority: BugPriority.NORMAL, moduleCode: "CHAT" },
+    { app: dlmApp, title: "Login session expires too quickly", description: "Users getting logged out every few hours", severity: BugSeverity.HIGH, status: BugStatus.RESOLVED, priority: BugPriority.HIGH, moduleCode: "AUTH", resolvedAt: new Date() },
+
+    // More variety
+    { app: dlaApp, title: "Date picker timezone issue", description: "Dates showing wrong timezone for Malaysian users", severity: BugSeverity.MEDIUM, status: BugStatus.CLOSED, priority: BugPriority.NORMAL, moduleCode: "OTHER", resolvedAt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) },
+    { app: dlmApp, title: "Duplicate registration entries", description: "Some users showing twice in season registration list", severity: BugSeverity.HIGH, status: BugStatus.WONT_FIX, priority: BugPriority.LOW, moduleCode: "REGISTRATION" },
+    { app: dlaApp, title: "Memory leak in player list", description: "Browser memory usage increases significantly when scrolling through large player lists", severity: BugSeverity.MEDIUM, status: BugStatus.DUPLICATE, priority: BugPriority.NORMAL, moduleCode: "PLAYERS" },
+  ];
+
+  const createdReports = [];
+  let reportNumber = 1001;
+
+  for (const bugData of bugReportData) {
+    const module = bugData.app.bugModules.find(m => m.code === bugData.moduleCode);
+    if (!module) continue;
+
+    const reporter = activeUsers[Math.floor(Math.random() * activeUsers.length)];
+
+    const report = await prisma.bugReport.create({
+      data: {
+        reportNumber: `BUG-${reportNumber++}`,
+        title: bugData.title,
+        description: bugData.description,
+        moduleId: module.id,
+        appId: bugData.app.id,
+        reportType: BugReportType.BUG,
+        severity: bugData.severity,
+        status: bugData.status,
+        priority: bugData.priority,
+        stepsToReproduce: "1. Navigate to the page\n2. Perform the action\n3. Observe the error",
+        expectedBehavior: "The feature should work correctly",
+        actualBehavior: bugData.description,
+        reporterId: reporter?.id,
+        assignedToId: bugData.status !== BugStatus.NEW ? adminId : null,
+        resolvedById: bugData.resolvedAt ? adminId : null,
+        resolvedAt: bugData.resolvedAt,
+        resolutionNotes: bugData.resolvedAt ? "Fixed in the latest release" : null,
+        pageUrl: `https://${bugData.app.code === "DLA" ? "admin" : "app"}.deuceleague.com/${bugData.moduleCode.toLowerCase()}`,
+        browserName: "Chrome",
+        browserVersion: "120.0.0",
+        osName: "Windows",
+        osVersion: "11",
+        screenWidth: 1920,
+        screenHeight: 1080,
+        appVersion: "1.2.3",
+        createdAt: randomDate(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000), new Date()),
+      },
+    });
+
+    createdReports.push(report);
+
+    // Add screenshots for some reports
+    if (Math.random() > 0.5) {
+      await prisma.bugScreenshot.create({
+        data: {
+          bugReportId: report.id,
+          fileName: `screenshot_${report.reportNumber}.png`,
+          fileSize: randomInt(50000, 500000),
+          mimeType: "image/png",
+          imageUrl: `https://storage.example.com/bugs/${report.id}/screenshot.png`,
+          thumbnailUrl: `https://storage.example.com/bugs/${report.id}/screenshot_thumb.png`,
+          width: 1920,
+          height: 1080,
+          caption: "Screenshot showing the issue",
+        },
+      });
+    }
+
+    // Add comments for some reports
+    if (bugData.status !== BugStatus.NEW) {
+      await prisma.bugComment.create({
+        data: {
+          bugReportId: report.id,
+          authorId: reporter?.id || activeUsers[0]!.id,
+          content: "I can reproduce this issue consistently",
+          isInternal: false,
+        },
+      });
+
+      if (bugData.status === BugStatus.IN_PROGRESS || bugData.status === BugStatus.RESOLVED) {
+        await prisma.bugComment.create({
+          data: {
+            bugReportId: report.id,
+            authorId: activeUsers[0]!.id,
+            content: "We are investigating this issue",
+            isInternal: true,
+          },
+        });
+      }
+    }
+
+    // Add status changes
+    await prisma.bugStatusChange.create({
+      data: {
+        bugReportId: report.id,
+        previousStatus: null,
+        newStatus: BugStatus.NEW,
+        newPriority: bugData.priority,
+        changedById: reporter?.id,
+        notes: "Bug report submitted",
+      },
+    });
+
+    if (bugData.status !== BugStatus.NEW) {
+      await prisma.bugStatusChange.create({
+        data: {
+          bugReportId: report.id,
+          previousStatus: BugStatus.NEW,
+          newStatus: bugData.status,
+          previousPriority: BugPriority.NORMAL,
+          newPriority: bugData.priority,
+          changedById: activeUsers[0]!.id,
+          notes: `Status changed to ${bugData.status}`,
+        },
+      });
+    }
+  }
+
+  return createdReports;
+}
+
+// =============================================
+// SEED WAITLIST SYSTEM
+// =============================================
+
+async function seedWaitlists(seasons: Season[], users: User[]) {
+  const upcomingSeasons = seasons.filter(s => s.status === SeasonStatus.UPCOMING);
+  const activeUsers = users.filter(u => u.status === UserStatus.ACTIVE && u.completedOnboarding);
+  const createdWaitlists = [];
+
+  for (const season of upcomingSeasons.slice(0, 2)) {
+    let waitlist = await prisma.waitlist.findUnique({
+      where: { seasonId: season.id },
+    });
+
+    if (!waitlist) {
+      waitlist = await prisma.waitlist.create({
+        data: {
+          seasonId: season.id,
+          enabled: true,
+          maxParticipants: 50,
+        },
+      });
+    }
+
+    createdWaitlists.push(waitlist);
+
+    // Add users to waitlist
+    for (let i = 0; i < Math.min(5, activeUsers.length); i++) {
+      const user = activeUsers[i];
+      if (!user) continue;
+
+      const existing = await prisma.waitlistUser.findFirst({
+        where: { waitlistId: waitlist.id, userId: user.id },
+      });
+
+      if (!existing) {
+        await prisma.waitlistUser.create({
+          data: {
+            waitlistId: waitlist.id,
+            userId: user.id,
+            waitlistDate: randomDate(new Date(Date.now() - 14 * 24 * 60 * 60 * 1000), new Date()),
+            promotedToRegistered: i < 2, // First 2 promoted
+          },
+        });
+      }
+    }
+  }
+
+  return createdWaitlists;
+}
+
+// =============================================
+// SEED MATCH INVITATIONS
+// =============================================
+
+async function seedMatchInvitations(matches: Match[], users: User[]) {
+  const scheduledMatches = matches.filter(m => m.status === MatchStatus.SCHEDULED || m.status === MatchStatus.DRAFT);
+  const createdInvitations = [];
+
+  for (const match of scheduledMatches.slice(0, 15)) {
+    const participants = await prisma.matchParticipant.findMany({
+      where: { matchId: match.id },
+    });
+
+    if (participants.length < 2) continue;
+
+    const inviter = participants[0];
+    const invitee = participants[1];
+
+    if (!inviter || !invitee) continue;
+
+    const existing = await prisma.matchInvitation.findFirst({
+      where: { matchId: match.id, inviteeId: invitee.userId },
+    });
+
+    if (existing) {
+      createdInvitations.push(existing);
+      continue;
+    }
+
+    const status = match.status === MatchStatus.DRAFT
+      ? randomElement([InvitationStatus.PENDING, InvitationStatus.EXPIRED, InvitationStatus.DECLINED])
+      : InvitationStatus.ACCEPTED;
+
+    const invitation = await prisma.matchInvitation.create({
+      data: {
+        matchId: match.id,
+        inviterId: inviter.userId,
+        inviteeId: invitee.userId,
+        status: status,
+        message: status === InvitationStatus.PENDING ? "Would you like to play a match?" : null,
+        declineReason: status === InvitationStatus.DECLINED ? "Schedule conflict" : null,
+        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+        respondedAt: status !== InvitationStatus.PENDING ? new Date() : null,
+        reminderSentAt: status === InvitationStatus.PENDING ? new Date() : null,
+        reminderCount: status === InvitationStatus.PENDING ? 1 : 0,
+      },
+    });
+
+    createdInvitations.push(invitation);
+  }
+
+  return createdInvitations;
+}
+
+// =============================================
+// SEED BRACKET SYSTEM
+// =============================================
+
+async function seedBrackets(seasons: Season[], divisions: Division[], users: User[], admins: SeededAdmin[]) {
+  const adminId = admins[0]!.adminId;
+  const finishedSeasons = seasons.filter(s => s.status === SeasonStatus.FINISHED);
+  const activeUsers = users.filter(u => u.status === UserStatus.ACTIVE && u.completedOnboarding);
+  const createdBrackets = [];
+
+  for (const season of finishedSeasons.slice(0, 2)) {
+    const seasonDivisions = divisions.filter(d => d.seasonId === season.id);
+
+    for (const division of seasonDivisions.slice(0, 1)) {
+      const existing = await prisma.bracket.findFirst({
+        where: { seasonId: season.id, divisionId: division.id },
+      });
+
+      if (existing) {
+        createdBrackets.push(existing);
+        continue;
+      }
+
+      const bracket = await prisma.bracket.create({
+        data: {
+          seasonId: season.id,
+          divisionId: division.id,
+          bracketName: `${division.name} Finals`,
+          bracketType: BracketType.SINGLE_ELIMINATION,
+          status: BracketStatus.COMPLETED,
+          isLocked: true,
+          seedingSource: SeedingSource.STANDINGS,
+          numPlayers: 8,
+          startDate: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000),
+          endDate: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
+          publishedAt: new Date(Date.now() - 21 * 24 * 60 * 60 * 1000),
+          publishedById: adminId,
+        },
+      });
+
+      createdBrackets.push(bracket);
+
+      // Create rounds
+      const roundNames = ["Quarter-Finals", "Semi-Finals", "Finals"];
+      const rounds = [];
+
+      for (let r = 0; r < 3; r++) {
+        const round = await prisma.bracketRound.create({
+          data: {
+            bracketId: bracket.id,
+            roundNumber: r + 1,
+            roundName: roundNames[r]!,
+            startDate: new Date(Date.now() - (21 - r * 3) * 24 * 60 * 60 * 1000),
+            endDate: new Date(Date.now() - (18 - r * 3) * 24 * 60 * 60 * 1000),
+          },
+        });
+        rounds.push(round);
+      }
+
+      // Create bracket matches
+      const matchesPerRound = [4, 2, 1]; // QF, SF, F
+
+      for (let r = 0; r < rounds.length; r++) {
+        const round = rounds[r]!;
+        const matchCount = matchesPerRound[r]!;
+
+        for (let m = 0; m < matchCount; m++) {
+          const player1 = activeUsers[(r * 4 + m * 2) % activeUsers.length];
+          const player2 = activeUsers[(r * 4 + m * 2 + 1) % activeUsers.length];
+
+          await prisma.bracketMatch.create({
+            data: {
+              bracketId: bracket.id,
+              roundId: round.id,
+              matchNumber: m + 1,
+              seed1: m * 2 + 1,
+              seed2: 8 - m * 2,
+              player1Id: player1?.id,
+              player2Id: player2?.id,
+              winnerId: player1?.id, // First player wins
+              status: BracketMatchStatus.COMPLETED,
+              scheduledTime: randomDate(round.startDate!, round.endDate!),
+              courtLocation: `Court ${randomInt(1, 4)}`,
+            },
+          });
+        }
+      }
+    }
+  }
+
+  return createdBrackets;
+}
+
+// =============================================
+// SEED RATING ADJUSTMENTS
+// =============================================
+
+async function seedRatingAdjustments(users: User[], seasons: Season[], admins: SeededAdmin[]) {
+  const adminId = admins[0]!.adminId;
+  const activeUsers = users.filter(u => u.status === UserStatus.ACTIVE && u.completedOnboarding);
+  const activeSeasons = seasons.filter(s => s.status === SeasonStatus.ACTIVE);
+  const createdAdjustments = [];
+
+  const adjustmentTypes = [
+    AdjustmentType.CORRECTION,
+    AdjustmentType.APPEAL_RESOLUTION,
+    AdjustmentType.ADMIN_OVERRIDE,
+    AdjustmentType.MIGRATION,
+  ];
+
+  for (let i = 0; i < Math.min(5, activeUsers.length); i++) {
+    const user = activeUsers[i]!;
+    const season = activeSeasons[i % activeSeasons.length];
+
+    if (!season) continue;
+
+    const playerRating = await prisma.playerRating.findFirst({
+      where: { userId: user.id, seasonId: season.id },
+    });
+
+    if (!playerRating) continue;
+
+    const adjustmentType = adjustmentTypes[i % adjustmentTypes.length]!;
+    const delta = randomInt(-50, 50);
+
+    const adjustment = await prisma.ratingAdjustment.create({
+      data: {
+        playerRatingId: playerRating.id,
+        adminId: adminId,
+        adjustmentType: adjustmentType,
+        ratingBefore: playerRating.currentRating - delta,
+        ratingAfter: playerRating.currentRating,
+        delta: delta,
+        reason: adjustmentType === AdjustmentType.CORRECTION
+          ? "Corrected rating calculation error"
+          : adjustmentType === AdjustmentType.APPEAL_RESOLUTION
+          ? "Rating adjusted after successful appeal"
+          : "Manual rating adjustment by admin",
+        internalNotes: "Verified by admin team",
+        playerNotified: true,
+        notifiedAt: new Date(),
+        ipAddress: "192.168.1.1",
+      },
+    });
+
+    createdAdjustments.push(adjustment);
+  }
+
+  return createdAdjustments;
+}
+
+// =============================================
+// SEED RATING RECALCULATIONS
+// =============================================
+
+async function seedRatingRecalculations(admins: SeededAdmin[], seasons: Season[]) {
+  const adminId = admins[0]!.adminId;
+  const createdRecalculations = [];
+
+  const recalcData = [
+    { scope: RecalculationScope.MATCH, status: RecalculationStatus.APPLIED },
+    { scope: RecalculationScope.PLAYER, status: RecalculationStatus.APPLIED },
+    { scope: RecalculationScope.DIVISION, status: RecalculationStatus.PREVIEW_READY },
+    { scope: RecalculationScope.SEASON, status: RecalculationStatus.PENDING },
+    { scope: RecalculationScope.MATCH, status: RecalculationStatus.FAILED },
+  ];
+
+  for (const data of recalcData) {
+    const recalc = await prisma.ratingRecalculation.create({
+      data: {
+        scope: data.scope,
+        status: data.status,
+        initiatedByAdminId: adminId,
+        seasonId: seasons[0]?.id,
+        affectedPlayersCount: data.status !== RecalculationStatus.PENDING ? randomInt(5, 50) : null,
+        changesPreview: data.status === RecalculationStatus.PREVIEW_READY ? { changes: [{ userId: "test", delta: 10 }] } : null,
+        previewGeneratedAt: data.status !== RecalculationStatus.PENDING ? new Date() : null,
+        appliedAt: data.status === RecalculationStatus.APPLIED ? new Date() : null,
+        failedAt: data.status === RecalculationStatus.FAILED ? new Date() : null,
+        errorMessage: data.status === RecalculationStatus.FAILED ? "Database connection timeout" : null,
+      },
+    });
+    createdRecalculations.push(recalc);
+  }
+
+  return createdRecalculations;
+}
+
+// =============================================
+// SEED SEASON LOCKS
+// =============================================
+
+async function seedSeasonLocks(seasons: Season[], admins: SeededAdmin[]) {
+  const adminId = admins[0]!.adminId;
+  const finishedSeasons = seasons.filter(s => s.status === SeasonStatus.FINISHED);
+  const createdLocks = [];
+
+  for (const season of finishedSeasons.slice(0, 2)) {
+    const existing = await prisma.seasonLock.findUnique({
+      where: { seasonId: season.id },
+    });
+
+    if (existing) {
+      createdLocks.push(existing);
+      continue;
+    }
+
+    const lock = await prisma.seasonLock.create({
+      data: {
+        seasonId: season.id,
+        isLocked: true,
+        lockedByAdminId: adminId,
+        finalExportUrl: `https://storage.example.com/exports/season_${season.id}_final.xlsx`,
+        exportGeneratedAt: new Date(),
+        overrideAllowed: false,
+      },
+    });
+    createdLocks.push(lock);
+  }
+
+  return createdLocks;
+}
+
+// =============================================
+// SEED NOTIFICATION PREFERENCES
+// =============================================
+
+async function seedNotificationPreferences(users: User[]) {
+  const activeUsers = users.filter(u => u.status === UserStatus.ACTIVE && u.completedOnboarding);
+  const createdPrefs = [];
+
+  for (const user of activeUsers.slice(0, 20)) {
+    const existing = await prisma.notificationPreference.findUnique({
+      where: { userId: user.id },
+    });
+
+    if (existing) {
+      createdPrefs.push(existing);
+      continue;
+    }
+
+    const pref = await prisma.notificationPreference.create({
+      data: {
+        userId: user.id,
+        matchReminders: true,
+        matchRescheduled: true,
+        matchCancelled: true,
+        matchResults: true,
+        partnerChange: randomElement([true, false]),
+        opponentChange: true,
+        ratingChange: true,
+        inactivityAlerts: randomElement([true, false]),
+        chatNotifications: true,
+        invitations: true,
+        seasonRegistration: true,
+        seasonUpdates: randomElement([true, false]),
+        disputeAlerts: true,
+        teamChangeRequests: true,
+        withdrawalRequests: true,
+        playerReports: true,
+        seasonJoinRequests: true,
+        pushEnabled: true,
+        emailEnabled: randomElement([true, false]),
+      },
+    });
+    createdPrefs.push(pref);
+  }
+
+  return createdPrefs;
+}
+
+// =============================================
+// SEED USER PUSH TOKENS
+// =============================================
+
+async function seedUserPushTokens(users: User[]) {
+  const activeUsers = users.filter(u => u.status === UserStatus.ACTIVE && u.completedOnboarding);
+  const createdTokens = [];
+
+  for (const user of activeUsers.slice(0, 30)) {
+    const existing = await prisma.userPushToken.findFirst({
+      where: { userId: user.id },
+    });
+
+    if (existing) {
+      createdTokens.push(existing);
+      continue;
+    }
+
+    const platform = randomElement(["ios", "android", "web"]);
+    const token = await prisma.userPushToken.create({
+      data: {
+        userId: user.id,
+        token: `${platform}_token_${user.id}_${Date.now()}`,
+        platform: platform,
+        deviceId: `device_${user.id.slice(0, 8)}`,
+        isActive: true,
+        failureCount: 0,
+        lastUsedAt: randomDate(new Date(Date.now() - 7 * 24 * 60 * 60 * 1000), new Date()),
+      },
+    });
+    createdTokens.push(token);
+  }
+
+  return createdTokens;
+}
+
+// =============================================
+// SEED ADMIN MESSAGE LOGS
+// =============================================
+
+async function seedAdminMessageLogs(admins: SeededAdmin[], matches: Match[], seasons: Season[], users: User[]) {
+  const adminId = admins[0]!.adminId;
+  const activeUsers = users.filter(u => u.status === UserStatus.ACTIVE);
+  const createdLogs = [];
+
+  const messageData = [
+    { subject: "Match Reminder", message: "Your match is scheduled for tomorrow at 3 PM. Please confirm your attendance.", sendEmail: true, sendPush: true },
+    { subject: "Season Registration Open", message: "Registration for the new season is now open. Don't miss out!", sendEmail: true, sendPush: true },
+    { subject: "Match Rescheduled", message: "Your match has been rescheduled due to venue unavailability.", sendEmail: true, sendPush: false },
+    { subject: "Important Update", message: "There have been changes to the scoring rules. Please review the updated guidelines.", sendEmail: false, sendPush: true },
+    { subject: "Welcome to DeuceLeague", message: "Welcome to the league! We're excited to have you join us.", sendEmail: true, sendPush: false },
+  ];
+
+  for (let i = 0; i < messageData.length; i++) {
+    const data = messageData[i]!;
+    const recipients = activeUsers.slice(0, randomInt(5, 15)).map(u => u.id);
+
+    const log = await prisma.adminMessageLog.create({
+      data: {
+        adminId: adminId,
+        matchId: matches[i % matches.length]?.id,
+        seasonId: seasons[i % seasons.length]?.id,
+        subject: data.subject,
+        message: data.message,
+        recipientIds: recipients,
+        sendEmail: data.sendEmail,
+        sendPush: data.sendPush,
+        inAppCount: recipients.length,
+        emailCount: data.sendEmail ? recipients.length - randomInt(0, 2) : 0,
+        emailSkipped: data.sendEmail ? randomInt(0, 2) : 0,
+        pushCount: data.sendPush ? recipients.length - randomInt(0, 3) : 0,
+        pushSkipped: data.sendPush ? randomInt(0, 3) : 0,
+        createdAt: randomDate(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000), new Date()),
+      },
+    });
+    createdLogs.push(log);
+  }
+
+  return createdLogs;
+}
+
+// =============================================
 // MAIN SEED FUNCTION
 // =============================================
 
@@ -1996,25 +3131,171 @@ async function main() {
     await seedBugTrackingApps(admins[0]!.adminId);
     console.log("   ✅ Created bug tracking apps and modules\n");
 
+    // 23. Seed team change requests
+    console.log("🔄 Seeding team change requests...");
+    const teamChangeRequests = await seedTeamChangeRequests(users, seasons, divisions, admins);
+    console.log(`   ✅ Created ${teamChangeRequests.length} team change requests (PENDING, APPROVED, DENIED, CANCELLED)\n`);
+
+    // =============================================
+    // NEW SEED FUNCTIONS FOR 100% COVERAGE
+    // =============================================
+
+    // 24. Seed admin logs (NEW)
+    console.log("📝 Seeding admin logs...");
+    const adminLogs = await seedAdminLogs(admins, users, matches, seasons);
+    console.log(`   ✅ Created ${adminLogs.length} admin action logs\n`);
+
+    // 25. Seed admin invite tokens
+    console.log("🎫 Seeding admin invite tokens...");
+    const inviteTokens = await seedAdminInviteTokens(admins);
+    console.log(`   ✅ Created ${inviteTokens.length} admin invite tokens\n`);
+
+    // 26. Seed match results (Best 6 System)
+    console.log("📈 Seeding match results (Best 6 system)...");
+    const matchResults = await seedMatchResults(matches, users);
+    console.log(`   ✅ Created ${matchResults.length} match results\n`);
+
+    // 27. Seed pickleball game scores
+    console.log("🏓 Seeding pickleball game scores...");
+    const pickleballScores = await seedPickleballGameScores(matches);
+    console.log(`   ✅ Created ${pickleballScores.length} pickleball game scores\n`);
+
+    // 28. Seed player status changes
+    console.log("📊 Seeding player status changes...");
+    const statusChanges = await seedPlayerStatusChanges(users, admins, matches);
+    console.log(`   ✅ Created ${statusChanges.length} player status changes\n`);
+
+    // 29. Seed bug reports
+    console.log("🐞 Seeding bug reports...");
+    const bugReports = await seedBugReports(users, admins);
+    console.log(`   ✅ Created ${bugReports.length} bug reports with screenshots, comments, and status changes\n`);
+
+    // 30. Seed waitlists
+    console.log("📋 Seeding waitlists...");
+    const waitlists = await seedWaitlists(seasons, users);
+    console.log(`   ✅ Created ${waitlists.length} season waitlists with users\n`);
+
+    // 31. Seed match invitations
+    console.log("✉️ Seeding match invitations...");
+    const matchInvitations = await seedMatchInvitations(matches, users);
+    console.log(`   ✅ Created ${matchInvitations.length} match invitations\n`);
+
+    // 32. Seed brackets
+    console.log("🏆 Seeding brackets...");
+    const brackets = await seedBrackets(seasons, divisions, users, admins);
+    console.log(`   ✅ Created ${brackets.length} brackets with rounds and matches\n`);
+
+    // 33. Seed rating adjustments
+    console.log("⚖️ Seeding rating adjustments...");
+    const ratingAdjustments = await seedRatingAdjustments(users, seasons, admins);
+    console.log(`   ✅ Created ${ratingAdjustments.length} rating adjustments\n`);
+
+    // 34. Seed rating recalculations
+    console.log("🔄 Seeding rating recalculations...");
+    const recalculations = await seedRatingRecalculations(admins, seasons);
+    console.log(`   ✅ Created ${recalculations.length} rating recalculation jobs\n`);
+
+    // 35. Seed season locks
+    console.log("🔒 Seeding season locks...");
+    const seasonLocks = await seedSeasonLocks(seasons, admins);
+    console.log(`   ✅ Created ${seasonLocks.length} season locks\n`);
+
+    // 36. Seed notification preferences
+    console.log("🔔 Seeding notification preferences...");
+    const notifPrefs = await seedNotificationPreferences(users);
+    console.log(`   ✅ Created ${notifPrefs.length} notification preferences\n`);
+
+    // 37. Seed user push tokens
+    console.log("📱 Seeding user push tokens...");
+    const pushTokens = await seedUserPushTokens(users);
+    console.log(`   ✅ Created ${pushTokens.length} user push tokens\n`);
+
+    // 38. Seed admin message logs
+    console.log("💬 Seeding admin message logs...");
+    const messageLogs = await seedAdminMessageLogs(admins, matches, seasons, users);
+    console.log(`   ✅ Created ${messageLogs.length} admin message logs\n`);
+
     console.log("═══════════════════════════════════════════════════════");
-    console.log("🎉 COMPREHENSIVE DATABASE SEED COMPLETED SUCCESSFULLY!");
+    console.log("🎉 100% COMPREHENSIVE DATABASE SEED COMPLETED!");
     console.log("═══════════════════════════════════════════════════════");
-    console.log("\n📝 SUMMARY:");
-    console.log("   • Admins: 5 (various statuses)");
+    console.log("\n📝 FULL MODEL COVERAGE SUMMARY:");
+    console.log("\n   👤 USER & AUTH MODELS:");
     console.log("   • Users: 75 (50 active, 10 inactive, 5 suspended, 10 incomplete)");
+    console.log("   • Admins: 5 (various statuses)");
+    console.log("   • Accounts, Sessions, Verification: Auto-seeded");
+    console.log("   • Admin Invite Tokens: Pending invites");
+    console.log("   • Admin Logs: Action tracking history");
+    console.log("   • Questionnaire Responses & Initial Ratings");
+
+    console.log("\n   🏆 LEAGUE & SEASON MODELS:");
     console.log("   • Leagues: 5 (Tennis, Pickleball, Padel)");
+    console.log("   • Categories: 7 types");
+    console.log("   • Sponsorships: 6 (all tiers)");
     console.log("   • Seasons: 20 (ACTIVE, UPCOMING, FINISHED, CANCELLED)");
-    console.log("   • Divisions: Multiple per active season (BEGINNER, INTERMEDIATE, ADVANCED)");
-    console.log("   • League Matches: 130+ (all 7 status variations + flags)");
-    console.log("   • Friendly Matches: 30 (non-league matches)");
-    console.log("   • Disputes, Walkovers, Penalties: Various statuses");
-    console.log("   • Season Invitations: Multiple per season");
-    console.log("   • Inactivity Settings: Global, league, and season-specific");
-    console.log("   • Chat threads and messages");
-    console.log("   • Notifications: 50+ across categories");
-    console.log("   • Ratings and standings");
-    console.log("   • Achievements: 12 types with user awards");
-    console.log("   • Promo codes, Sponsorships, Bug tracking\n");
+    console.log("   • Divisions: Multiple per season (all levels)");
+    console.log("   • Season Memberships & Division Assignments");
+    console.log("   • Waitlists & Waitlist Users");
+    console.log("   • Promo Codes");
+    console.log("   • Season Locks: For finished seasons");
+
+    console.log("\n   🎾 MATCH MODELS:");
+    console.log("   • League Matches: 130+ (all 7 status variations)");
+    console.log("   • Friendly Matches: 30 (non-league)");
+    console.log("   • Match Participants");
+    console.log("   • Match Invitations: PENDING, ACCEPTED, DECLINED, EXPIRED");
+    console.log("   • Match Scores & Pickleball Game Scores");
+    console.log("   • Match Results: Best 6 system tracking");
+
+    console.log("\n   ⚖️ DISPUTE & PENALTY MODELS:");
+    console.log("   • Match Disputes: All statuses");
+    console.log("   • Dispute Admin Notes & Comments");
+    console.log("   • Match Walkovers");
+    console.log("   • Player Penalties: WARNING, POINTS_DEDUCTION, SUSPENSION");
+    console.log("   • Match Admin Actions");
+
+    console.log("\n   🏆 BRACKET SYSTEM:");
+    console.log("   • Brackets: COMPLETED for finished seasons");
+    console.log("   • Bracket Rounds: Quarter-Finals, Semi-Finals, Finals");
+    console.log("   • Bracket Matches: With winners");
+
+    console.log("\n   📊 RATING SYSTEM:");
+    console.log("   • Player Ratings & Rating History");
+    console.log("   • Division Standings: Best 6 fields");
+    console.log("   • Rating Adjustments: Manual admin adjustments");
+    console.log("   • Rating Recalculations: Various statuses");
+    console.log("   • Rating Parameters");
+
+    console.log("\n   ⏰ INACTIVITY SYSTEM:");
+    console.log("   • Inactivity Settings: Global, league, season-specific");
+    console.log("   • Player Status Changes: All change reasons");
+
+    console.log("\n   🐛 BUG TRACKING:");
+    console.log("   • Apps: DLA, DLM");
+    console.log("   • Bug Modules");
+    console.log("   • Bug Reports: All statuses");
+    console.log("   • Bug Screenshots, Comments, Status Changes");
+    console.log("   • Bug Report Settings");
+
+    console.log("\n   🤝 SOCIAL MODELS:");
+    console.log("   • Friendships: All statuses");
+    console.log("   • Favorites");
+    console.log("   • Pair Requests & Partnerships");
+    console.log("   • Season Invitations");
+
+    console.log("\n   💬 MESSAGING:");
+    console.log("   • Threads (Division & DM)");
+    console.log("   • User Threads & Messages");
+    console.log("   • Admin Message Logs");
+
+    console.log("\n   🔔 NOTIFICATIONS:");
+    console.log("   • Notifications & User Notifications");
+    console.log("   • Notification Preferences");
+    console.log("   • User Push Tokens");
+
+    console.log("\n   🏅 OTHER MODELS:");
+    console.log("   • Achievements & User Achievements");
+    console.log("   • Withdrawal Requests");
+    console.log("   • Team Change Requests\n");
 
   } catch (error) {
     console.error("❌ Error seeding database:", error);

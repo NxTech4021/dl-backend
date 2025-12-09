@@ -36,6 +36,7 @@ model User {
   matchParticipants MatchParticipant[]
   processedRequests    WithdrawalRequest[] @relation("ProcessedByAdmin")
   withdrawalRequests   WithdrawalRequest[] @relation("WithdrawalRequester")
+  teamChangeRequests   TeamChangeRequest[] @relation("TeamChangeRequester")
 
   divisionAssignments DivisionAssignment[] @relation("DivisionAssignments")
 
@@ -162,8 +163,14 @@ model Admin {
   // Bracket system relations
   bracketsPublished         Bracket[]             @relation("BracketPublisher")
 
+  // Team change request relations
+  reviewedTeamChangeRequests TeamChangeRequest[]  @relation("TeamChangeReviewer")
+
   // Message audit log
   messageLogs               AdminMessageLog[]
+
+  // General admin action logging
+  adminLogs                 AdminLog[]        @relation("AdminLogs")
 }
 
 model AdminInviteToken {
@@ -175,6 +182,28 @@ model AdminInviteToken {
   createdAt DateTime @default(now())
   expiresAt DateTime
   admin     Admin    @relation(fields: [adminId], references: [id])
+}
+
+// General admin action log for tracking all admin activities
+model AdminLog {
+  id             String           @id @default(cuid())
+  adminId        String
+  actionType     AdminActionType
+  targetType     AdminTargetType
+  targetId       String?          // ID of the affected entity (player, league, match, etc.)
+  description    String           // Human-readable description of the action
+  oldValue       Json?            // Previous state (for edit operations)
+  newValue       Json?            // New state (for edit operations)
+  metadata       Json?            // Additional context (IP address, user agent, etc.)
+  createdAt      DateTime         @default(now())
+
+  admin Admin @relation("AdminLogs", fields: [adminId], references: [id])
+
+  @@index([adminId, createdAt(sort: Desc)])
+  @@index([actionType, createdAt(sort: Desc)])
+  @@index([targetType, targetId])
+  @@index([createdAt(sort: Desc)])
+  @@map("admin_log")
 }
 
 model Account {
@@ -348,6 +377,7 @@ model Season {
   memberships        SeasonMembership[]
   promoCodes         PromoCode[]         @relation("SeasonPromoCodes")
   withdrawalRequests WithdrawalRequest[]
+  teamChangeRequests TeamChangeRequest[]
 
   // Pairing Relations
   pairRequests      PairRequest[]
@@ -448,6 +478,34 @@ model WithdrawalRequest {
   updatedAt DateTime @updatedAt
 }
 
+model TeamChangeRequest {
+  id                  String                  @id @default(cuid())
+  userId              String
+  currentDivisionId   String
+  requestedDivisionId String
+  seasonId            String
+  reason              String?
+  status              TeamChangeRequestStatus @default(PENDING)
+  reviewedByAdminId   String?
+  reviewedAt          DateTime?
+  adminNotes          String?
+
+  user              User      @relation("TeamChangeRequester", fields: [userId], references: [id])
+  currentDivision   Division  @relation("CurrentDivisionRequests", fields: [currentDivisionId], references: [id])
+  requestedDivision Division  @relation("RequestedDivisionRequests", fields: [requestedDivisionId], references: [id])
+  season            Season    @relation(fields: [seasonId], references: [id])
+  reviewedByAdmin   Admin?    @relation("TeamChangeReviewer", fields: [reviewedByAdminId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([seasonId])
+  @@index([status])
+  @@index([currentDivisionId])
+  @@index([requestedDivisionId])
+}
+
 model Division {
   id             String         @id @default(cuid())
   name           String
@@ -500,6 +558,10 @@ model Division {
 
   // Bracket system relations
   brackets          Bracket[]
+
+  // Team change request relations
+  currentDivisionRequests   TeamChangeRequest[] @relation("CurrentDivisionRequests")
+  requestedDivisionRequests TeamChangeRequest[] @relation("RequestedDivisionRequests")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -2154,6 +2216,66 @@ enum UserStatus {
   ACTIVE
   INACTIVE
   SUSPENDED
+  BANNED
+  DELETED
+}
+
+// Admin action types for general admin logging
+enum AdminActionType {
+  // Player management
+  PLAYER_BAN
+  PLAYER_UNBAN
+  PLAYER_DELETE
+  PLAYER_UPDATE
+  PLAYER_STATUS_CHANGE
+  // League management
+  LEAGUE_CREATE
+  LEAGUE_UPDATE
+  LEAGUE_DELETE
+  LEAGUE_STATUS_CHANGE
+  // Season management
+  SEASON_CREATE
+  SEASON_UPDATE
+  SEASON_DELETE
+  SEASON_STATUS_CHANGE
+  // Division management
+  DIVISION_CREATE
+  DIVISION_UPDATE
+  DIVISION_DELETE
+  // Match management
+  MATCH_VOID
+  MATCH_EDIT_RESULT
+  MATCH_EDIT_SCHEDULE
+  MATCH_WALKOVER
+  // Dispute management
+  DISPUTE_RESOLVE
+  DISPUTE_OVERRIDE
+  // System settings
+  SETTINGS_UPDATE
+  // Bug reports
+  BUG_ASSIGN
+  BUG_RESOLVE
+  BUG_UPDATE
+  // Admin management
+  ADMIN_CREATE
+  ADMIN_UPDATE
+  ADMIN_DELETE
+  // Other
+  OTHER
+}
+
+// Target types for admin logging
+enum AdminTargetType {
+  PLAYER
+  LEAGUE
+  SEASON
+  DIVISION
+  MATCH
+  DISPUTE
+  SETTINGS
+  BUG_REPORT
+  ADMIN
+  OTHER
 }
 
 enum SeasonStatus {
@@ -2198,6 +2320,13 @@ enum WithdrawalStatus {
   PENDING
   APPROVED
   REJECTED
+}
+
+enum TeamChangeRequestStatus {
+  PENDING
+  APPROVED
+  DENIED
+  CANCELLED
 }
 
 enum DivisionLevel {
@@ -2290,6 +2419,7 @@ enum DisputeResolutionAction {
   VOID_MATCH
   AWARD_WALKOVER
   REQUEST_MORE_INFO
+  REJECT            // Dismiss dispute as invalid/spam/insufficient evidence
 }
 
 enum WalkoverReason {
@@ -2398,6 +2528,9 @@ enum StatusChangeReason {
   INACTIVITY_WARNING
   MATCH_PLAYED
   ADMIN_MANUAL
+  ADMIN_BAN
+  ADMIN_UNBAN
+  ADMIN_DELETE
   SEASON_START
   SEASON_END
   REGISTRATION

@@ -102,7 +102,7 @@ export const createMatch = async (req: Request, res: Response) => {
       opponentId,
       partnerId,
       opponentPartnerId,
-      matchDate: parsedMatchDate,
+      ...(parsedMatchDate && { matchDate: parsedMatchDate }),
       location,
       venue,
       notes,
@@ -349,68 +349,74 @@ export const respondToInvitation = async (req: Request, res: Response) => {
 /**
  * Propose a time slot
  * POST /api/matches/:id/timeslots
+ * COMMENTED OUT - timeSlots model doesn't exist in schema
  */
 export const proposeTimeSlot = async (req: Request, res: Response) => {
-  try {
-    const userId = req.user?.id;
-    if (!userId) {
-      return res.status(401).json({ error: 'Authentication required' });
-    }
+  return res.status(400).json({ error: 'Time slot feature not yet implemented' });
 
-    const { id } = req.params;
-    if (!id) {
-      return res.status(400).json({ error: 'Match ID is required' });
-    }
+  // try {
+  //   const userId = req.user?.id;
+  //   if (!userId) {
+  //     return res.status(401).json({ error: 'Authentication required' });
+  //   }
 
-    const { proposedTime, location, notes } = req.body;
+  //   const { id } = req.params;
+  //   if (!id) {
+  //     return res.status(400).json({ error: 'Match ID is required' });
+  //   }
 
-    if (!proposedTime) {
-      return res.status(400).json({ error: 'proposedTime is required' });
-    }
+  //   const { proposedTime, location, notes } = req.body;
 
-    const timeSlot = await matchInvitationService.proposeTimeSlot({
-      matchId: id,
-      proposedById: userId,
-      proposedTime: new Date(proposedTime),
-      location,
-      notes
-    });
+  //   if (!proposedTime) {
+  //     return res.status(400).json({ error: 'proposedTime is required' });
+  //   }
 
-    res.status(201).json(timeSlot);
-  } catch (error) {
-    console.error('Propose Time Slot Error:', error);
-    const message = error instanceof Error ? error.message : 'Failed to propose time slot';
-    res.status(400).json({ error: message });
-  }
+  //   const timeSlot = await matchInvitationService.proposeTimeSlot({
+  //     matchId: id,
+  //     proposedById: userId,
+  //     proposedTime: new Date(proposedTime),
+  //     location,
+  //     notes
+  //   });
+
+  //   res.status(201).json(timeSlot);
+  // } catch (error) {
+  //   console.error('Propose Time Slot Error:', error);
+  //   const message = error instanceof Error ? error.message : 'Failed to propose time slot';
+  //   res.status(400).json({ error: message });
+  // }
 };
 
 /**
  * Vote for a time slot
  * POST /api/matches/timeslots/:id/vote
+ * COMMENTED OUT - timeSlots model doesn't exist in schema
  */
 export const voteForTimeSlot = async (req: Request, res: Response) => {
-  try {
-    const userId = req.user?.id;
-    if (!userId) {
-      return res.status(401).json({ error: 'Authentication required' });
-    }
+  return res.status(400).json({ error: 'Time slot feature not yet implemented' });
 
-    const { id } = req.params;
-    if (!id) {
-      return res.status(400).json({ error: 'Time slot ID is required' });
-    }
+  // try {
+  //   const userId = req.user?.id;
+  //   if (!userId) {
+  //     return res.status(401).json({ error: 'Authentication required' });
+  //   }
 
-    const timeSlot = await matchInvitationService.voteForTimeSlot({
-      timeSlotId: id,
-      userId
-    });
+  //   const { id } = req.params;
+  //   if (!id) {
+  //     return res.status(400).json({ error: 'Time slot ID is required' });
+  //   }
 
-    res.json(timeSlot);
-  } catch (error) {
-    console.error('Vote Time Slot Error:', error);
-    const message = error instanceof Error ? error.message : 'Failed to vote for time slot';
-    res.status(400).json({ error: message });
-  }
+  //   const timeSlot = await matchInvitationService.voteForTimeSlot({
+  //     timeSlotId: id,
+  //     userId
+  //   });
+
+  //   res.json(timeSlot);
+  // } catch (error) {
+  //   console.error('Vote Time Slot Error:', error);
+  //   const message = error instanceof Error ? error.message : 'Failed to vote for time slot';
+  //   res.status(400).json({ error: message });
+  // }
 };
 
 /**
@@ -520,7 +526,7 @@ export const postMatchToChat = async (req: Request, res: Response) => {
       format: match.format,
       location: match.location,
       venue: match.venue,
-      date: match.matchDate || match.scheduledStartTime || new Date().toISOString(),
+      date: match.matchDate || new Date().toISOString(),
       time: match.matchDate ? new Date(match.matchDate).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : 'TBD',
       matchDate: match.matchDate,
       duration: match.duration || 2,
@@ -644,43 +650,48 @@ export const requestToJoinMatch = async (req: Request, res: Response) => {
     }
 
     // 3. Check if already requested
-    const existingRequest = await prisma.matchJoinRequest.findUnique({
-      where: {
-        matchId_requesterId: { matchId, requesterId: userId }
-      }
-    });
+    // COMMENTED OUT - matchJoinRequest model doesn't exist in schema
+    // const existingRequest = await prisma.matchJoinRequest.findUnique({
+    //   where: {
+    //     matchId_requesterId: { matchId, requesterId: userId }
+    //   }
+    // });
 
-    if (existingRequest) {
-      return res.status(400).json({ error: 'You already requested to join this match' });
-    }
+    // if (existingRequest) {
+    //   return res.status(400).json({ error: 'You already requested to join this match' });
+    // }
 
     // 4. Create join request
-    const joinRequest = await prisma.matchJoinRequest.create({
-      data: {
-        matchId,
-        requesterId: userId,
-        message
-      },
-      include: {
-        requester: {
-          select: { id: true, name: true, username: true, image: true }
-        }
-      }
-    });
+    // COMMENTED OUT - matchJoinRequest model doesn't exist in schema
+    // const joinRequest = await prisma.matchJoinRequest.create({
+    //   data: {
+    //     matchId,
+    //     requesterId: userId,
+    //     message
+    //   },
+    //   include: {
+    //     requester: {
+    //       select: { id: true, name: true, username: true, image: true }
+    //     }
+    //   }
+    // });
+
+    return res.status(400).json({ error: 'Join request feature not yet implemented' });
 
     // 5. Notify match creator
-    if (match.createdById) {
-      await notificationService.createNotification({
-        type: NOTIFICATION_TYPES.FRIENDLY_MATCH_JOIN_REQUEST,
-        category: 'MATCH',
-        title: 'Join Request Received',
-        message: `${joinRequest.requester.name} wants to join your match`,
-        userIds: [match.createdById],
-        matchId
-      });
-    }
+    // COMMENTED OUT - depends on joinRequest which doesn't exist
+    // if (match.createdById) {
+    //   await notificationService.createNotification({
+    //     type: NOTIFICATION_TYPES.FRIENDLY_MATCH_JOIN_REQUEST,
+    //     category: 'MATCH',
+    //     title: 'Join Request Received',
+    //     message: `${joinRequest.requester.name} wants to join your match`,
+    //     userIds: [match.createdById],
+    //     matchId
+    //   });
+    // }
 
-    res.status(201).json(joinRequest);
+    // res.status(201).json(joinRequest);
   } catch (error) {
     console.error('Request to Join Match Error:', error);
     res.status(500).json({ error: 'Failed to request join' });
@@ -709,85 +720,88 @@ export const respondToJoinRequest = async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'requestId is required' });
     }
 
-    // 1. Get join request
-    const joinRequest = await prisma.matchJoinRequest.findUnique({
-      where: { id: requestId },
-      include: {
-        match: {
-          include: {
-            participants: true
-          }
-        },
-        requester: {
-          select: { id: true, name: true }
-        }
-      }
-    });
+    // COMMENTED OUT - matchJoinRequest model doesn't exist in schema
+    return res.status(400).json({ error: 'Join request feature not yet implemented' });
 
-    if (!joinRequest) {
-      return res.status(404).json({ error: 'Join request not found' });
-    }
+    // // 1. Get join request
+    // const joinRequest = await prisma.matchJoinRequest.findUnique({
+    //   where: { id: requestId },
+    //   include: {
+    //     match: {
+    //       include: {
+    //         participants: true
+    //       }
+    //     },
+    //     requester: {
+    //       select: { id: true, name: true }
+    //     }
+    //   }
+    // });
 
-    // 2. Verify user is match creator
-    if (joinRequest.match.createdById !== userId) {
-      return res.status(403).json({ error: 'Only match creator can respond to join requests' });
-    }
+    // if (!joinRequest) {
+    //   return res.status(404).json({ error: 'Join request not found' });
+    // }
 
-    // 3. Check if request already responded
-    if (joinRequest.status !== JoinRequestStatus.PENDING) {
-      return res.status(400).json({ error: 'Request already responded to' });
-    }
+    // // 2. Verify user is match creator
+    // if (joinRequest.match.createdById !== userId) {
+    //   return res.status(403).json({ error: 'Only match creator can respond to join requests' });
+    // }
 
-    // 4. Update join request
-    await prisma.matchJoinRequest.update({
-      where: { id: requestId },
-      data: {
-        status: approve ? JoinRequestStatus.APPROVED : JoinRequestStatus.DENIED,
-        respondedAt: new Date(),
-        respondedBy: userId,
-        declineReason: approve ? null : declineReason
-      }
-    });
+    // // 3. Check if request already responded
+    // if (joinRequest.status !== JoinRequestStatus.PENDING) {
+    //   return res.status(400).json({ error: 'Request already responded to' });
+    // }
 
-    if (approve) {
-      // 5. Add player as opponent/partner
-      const role = joinRequest.match.matchType === MatchType.SINGLES
-        ? ParticipantRole.OPPONENT
-        : ParticipantRole.PARTNER;
+    // // 4. Update join request
+    // await prisma.matchJoinRequest.update({
+    //   where: { id: requestId },
+    //   data: {
+    //     status: approve ? JoinRequestStatus.APPROVED : JoinRequestStatus.DENIED,
+    //     respondedAt: new Date(),
+    //     respondedBy: userId,
+    //     declineReason: approve ? null : declineReason
+    //   }
+    // });
 
-      await prisma.matchParticipant.create({
-        data: {
-          matchId: joinRequest.matchId,
-          userId: joinRequest.requesterId,
-          role,
-          invitationStatus: InvitationStatus.ACCEPTED,
-          acceptedAt: new Date(),
-          team: role === ParticipantRole.OPPONENT ? 'team2' : 'team1'
-        }
-      });
+    // if (approve) {
+    //   // 5. Add player as opponent/partner
+    //   const role = joinRequest.match.matchType === MatchType.SINGLES
+    //     ? ParticipantRole.OPPONENT
+    //     : ParticipantRole.PARTNER;
 
-      // Notify requester - approved
-      await notificationService.createNotification({
-        type: NOTIFICATION_TYPES.FRIENDLY_MATCH_REQUEST_ACCEPTED,
-        category: 'MATCH',
-        title: 'Join Request Approved',
-        message: `Your request to join the match has been approved!`,
-        userIds: [joinRequest.requesterId],
-        matchId: joinRequest.matchId
-      });
-    } else {
-      // Notify requester - denied
-      await notificationService.createNotification({
-        type: NOTIFICATION_TYPES.FRIENDLY_MATCH_REQUEST_DECLINED,
-        category: 'MATCH',
-        title: 'Join Request Declined',
-        message: declineReason || 'Your request to join the match was declined',
-        userIds: [joinRequest.requesterId],
-        matchId: joinRequest.matchId
-      });
-    }
+    //   await prisma.matchParticipant.create({
+    //     data: {
+    //       matchId: joinRequest.matchId,
+    //       userId: joinRequest.requesterId,
+    //       role,
+    //       invitationStatus: InvitationStatus.ACCEPTED,
+    //       acceptedAt: new Date(),
+    //       team: role === ParticipantRole.OPPONENT ? 'team2' : 'team1'
+    //     }
+    //   });
 
-    res.json({ success: true, approved: approve });
+    //   // Notify requester - approved
+    //   await notificationService.createNotification({
+    //     type: NOTIFICATION_TYPES.FRIENDLY_MATCH_REQUEST_ACCEPTED,
+    //     category: 'MATCH',
+    //     title: 'Join Request Approved',
+    //     message: `Your request to join the match has been approved!`,
+    //     userIds: [joinRequest.requesterId],
+    //     matchId: joinRequest.matchId
+    //   });
+    // } else {
+    //   // Notify requester - denied
+    //   await notificationService.createNotification({
+    //     type: NOTIFICATION_TYPES.FRIENDLY_MATCH_REQUEST_DECLINED,
+    //     category: 'MATCH',
+    //     title: 'Join Request Declined',
+    //     message: declineReason || 'Your request to join the match was declined',
+    //     userIds: [joinRequest.requesterId],
+    //     matchId: joinRequest.matchId
+    //   });
+    // }
+
+    // res.json({ success: true, approved: approve });
   } catch (error) {
     console.error('Respond to Join Request Error:', error);
     res.status(500).json({ error: 'Failed to respond to join request' });
@@ -797,26 +811,29 @@ export const respondToJoinRequest = async (req: Request, res: Response) => {
 /**
  * Confirm a time slot (manual confirmation)
  * POST /api/matches/timeslots/:id/confirm
+ * COMMENTED OUT - timeSlots model doesn't exist in schema
  */
 export const confirmTimeSlot = async (req: Request, res: Response) => {
-  try {
-    const userId = req.user?.id;
-    if (!userId) {
-      return res.status(401).json({ error: 'Authentication required' });
-    }
+  return res.status(400).json({ error: 'Time slot feature not yet implemented' });
 
-    const { id } = req.params;
-    if (!id) {
-      return res.status(400).json({ error: 'Time slot ID is required' });
-    }
+  // try {
+  //   const userId = req.user?.id;
+  //   if (!userId) {
+  //     return res.status(401).json({ error: 'Authentication required' });
+  //   }
 
-    const match = await matchInvitationService.confirmTimeSlot(id);
-    res.json(match);
-  } catch (error) {
-    console.error('Confirm Time Slot Error:', error);
-    const message = error instanceof Error ? error.message : 'Failed to confirm time slot';
-    res.status(400).json({ error: message });
-  }
+  //   const { id } = req.params;
+  //   if (!id) {
+  //     return res.status(400).json({ error: 'Time slot ID is required' });
+  //   }
+
+  //   const match = await matchInvitationService.confirmTimeSlot(id);
+  //   res.json(match);
+  // } catch (error) {
+  //   console.error('Confirm Time Slot Error:', error);
+  //   const message = error instanceof Error ? error.message : 'Failed to confirm time slot';
+  //   res.status(400).json({ error: message });
+  // }
 };
 
 /**
