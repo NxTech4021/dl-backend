@@ -29,19 +29,28 @@ export async function getPlayerStats(): Promise<PlayerStats> {
     where: { role: Role.USER, status: UserStatus.SUSPENDED },
   });
 
+  const verifiedPlayers = prisma.user.count({
+    where: { role: Role.USER, emailVerified: true },
+  });
+
   const totalAdmins = prisma.user.count({
     where: { role: Role.ADMIN },
   });
 
-  const [total, active, inactive, suspended, admins] = await prisma.$transaction([
+  const [total, active, inactive, suspended, verified, admins] = await prisma.$transaction([
     totalPlayers,
     activePlayers,
     inactivePlayers,
     suspendedPlayers,
+    verifiedPlayers,
     totalAdmins,
   ]);
 
   return {
+    total,
+    active,
+    inactive,
+    verified,
     totalPlayers: total,
     activePlayers: active,
     inactivePlayers: inactive,
