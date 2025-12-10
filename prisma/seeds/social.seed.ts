@@ -8,6 +8,7 @@ import {
   FriendshipStatus,
   NotificationCategory,
   MessageType,
+  Prisma,
 } from "@prisma/client";
 import {
   prisma,
@@ -464,6 +465,240 @@ export async function seedFavorites(users: User[]): Promise<number> {
 }
 
 // =============================================
+// SEED TEST GROUP SCENARIOS
+// =============================================
+
+/**
+ * Creates test divisions with specific member counts for testing group chat UI
+ *
+ * Creates 6 divisions under an existing active season:
+ * - Solo Division: 1 member (test user only)
+ * - Duo Division: 2 members (test user + 1)
+ * - Trio Division: 3 members (test user + 2)
+ * - Quad Division: 4 members (test user + 3)
+ * - Hexa Division: 6 members (test user + 5)
+ * - Hepta Division: 7 members (test user + 6)
+ *
+ * Each division gets a group chat thread with all its members.
+ */
+export async function seedTestGroupScenarios(users: User[]): Promise<{
+  testUserId: string;
+  divisionCount: number;
+  threadCount: number;
+}> {
+  logSection("🧪 Seeding test group scenarios...");
+
+  // Find or create the test user
+  let testUser = await prisma.user.findFirst({
+    where: { email: "test_groups@test.com" },
+  });
+
+  if (!testUser) {
+    testUser = await prisma.user.create({
+      data: {
+        name: "Test Groups User",
+        email: "test_groups@test.com",
+        username: "test_groups",
+        status: "ACTIVE",
+        completedOnboarding: true,
+        role: "USER",
+        emailVerified: true,
+        bio: "Test user for group chat scenarios",
+        area: "Kuala Lumpur",
+      },
+    });
+
+    // Create account with password (password: Test@123)
+    const { hashPassword } = await import("better-auth/crypto");
+    const hashedPassword = await hashPassword("Test@123");
+    await prisma.account.create({
+      data: {
+        userId: testUser.id,
+        accountId: testUser.id,
+        providerId: "credential",
+        password: hashedPassword,
+      },
+    });
+
+    logProgress(`Created test user: ${testUser.email}`);
+  } else {
+    logProgress(`Using existing test user: ${testUser.email}`);
+  }
+
+  // Get an active season with its first league to create divisions under
+  const activeSeason = await prisma.season.findFirst({
+    where: { status: "ACTIVE" },
+    include: {
+      leagues: { take: 1 },
+      divisions: { take: 1 },
+    },
+  });
+
+  if (!activeSeason || activeSeason.leagues.length === 0) {
+    logProgress("No active season with league found, skipping test group scenarios");
+    return { testUserId: testUser.id, divisionCount: 0, threadCount: 0 };
+  }
+
+  const league = activeSeason.leagues[0]!;
+
+  // Get active users for populating groups (excluding test user)
+  const activeUsers = users.filter(
+    u => u.status === "ACTIVE" && u.completedOnboarding && u.id !== testUser!.id
+  );
+
+  if (activeUsers.length < 6) {
+    logProgress("Not enough active users, skipping test group scenarios");
+    return { testUserId: testUser.id, divisionCount: 0, threadCount: 0 };
+  }
+
+  // Division configurations: [name, totalMembers (including test user)]
+  const divisionConfigs: Array<{ name: string; memberCount: number; description: string }> = [
+    { name: "Solo Division", memberCount: 1, description: "Division with only 1 member" },
+    { name: "Duo Division", memberCount: 2, description: "Division with 2 members" },
+    { name: "Trio Division", memberCount: 3, description: "Division with 3 members" },
+    { name: "Quad Division", memberCount: 4, description: "Division with 4 members" },
+    { name: "Hexa Division", memberCount: 6, description: "Division with 6 members" },
+    { name: "Hepta Division", memberCount: 7, description: "Division with 7 members" },
+  ];
+
+  let divisionCount = 0;
+  let threadCount = 0;
+  let userIndex = 0;
+
+  for (const config of divisionConfigs) {
+    // Check if division already exists
+    const existingDivision = await prisma.division.findFirst({
+      where: {
+        name: config.name,
+        seasonId: activeSeason.id,
+      },
+    });
+
+    if (existingDivision) {
+      logProgress(`Division "${config.name}" already exists, skipping...`);
+      continue;
+    }
+
+    // Create division
+    const division = await prisma.division.create({
+      data: {
+        name: config.name,
+        description: config.description,
+        level: "BEGINNER",
+        gameType: league.gameType || "DOUBLES",
+        genderCategory: "MIXED",
+        maxSinglesPlayers: 16,
+        maxDoublesTeams: 8,
+        seasonId: activeSeason.id,
+        leagueId: league.id,
+        isActiveDivision: true,
+        prizePoolTotal: new Prisma.Decimal(500),
+      },
+    });
+    divisionCount++;
+    logProgress(`Created division: ${config.name}`);
+
+    // Prepare member list: always includes test user + additional users
+    const memberUserIds: string[] = [testUser.id];
+
+    // Add additional members (memberCount - 1 since test user is already included)
+    const additionalMembersNeeded = config.memberCount - 1;
+    for (let i = 0; i < additionalMembersNeeded && userIndex < activeUsers.length; i++) {
+      memberUserIds.push(activeUsers[userIndex]!.id);
+      userIndex++;
+    }
+
+    // Create season memberships and division assignments for each member
+    for (const userId of memberUserIds) {
+      // Check if season membership exists
+      const existingMembership = await prisma.seasonMembership.findFirst({
+        where: {
+          userId,
+          seasonId: activeSeason.id,
+          divisionId: division.id,
+        },
+      });
+
+      if (!existingMembership) {
+        await prisma.seasonMembership.create({
+          data: {
+            userId,
+            seasonId: activeSeason.id,
+            divisionId: division.id,
+            status: "ACTIVE",
+            paymentStatus: "COMPLETED",
+            joinedAt: new Date(),
+          },
+        });
+      }
+
+      // Check if division assignment exists
+      const existingAssignment = await prisma.divisionAssignment.findUnique({
+        where: {
+          divisionId_userId: {
+            divisionId: division.id,
+            userId,
+          },
+        },
+      });
+
+      if (!existingAssignment) {
+        await prisma.divisionAssignment.create({
+          data: {
+            divisionId: division.id,
+            userId,
+            notes: `Test scenario: ${config.name}`,
+          },
+        });
+      }
+    }
+
+    logProgress(`  - Assigned ${memberUserIds.length} members to ${config.name}`);
+
+    // Create group chat thread for this division
+    const thread = await prisma.thread.create({
+      data: {
+        name: `${config.name} Chat`,
+        isGroup: true,
+        divisionId: division.id,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        members: {
+          create: memberUserIds.map(userId => ({
+            userId,
+            joinedAt: new Date(),
+          })),
+        },
+      },
+    });
+    threadCount++;
+
+    // Add a welcome message to the thread
+    await prisma.message.create({
+      data: {
+        threadId: thread.id,
+        senderId: testUser.id,
+        content: `Welcome to ${config.name}! This group has ${config.memberCount} member(s).`,
+        messageType: "TEXT",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    });
+
+    logProgress(`  - Created group thread for ${config.name}`);
+  }
+
+  logSuccess(`Created ${divisionCount} test divisions with ${threadCount} group threads`);
+  logProgress(`Test user credentials: test_groups@test.com / Test@123`);
+
+  return {
+    testUserId: testUser.id,
+    divisionCount,
+    threadCount,
+  };
+}
+
+// =============================================
 // MAIN SOCIAL SEEDING FUNCTION
 // =============================================
 
@@ -472,6 +707,9 @@ export async function seedSocialFeatures(users: User[]): Promise<SeededSocialDat
   const { threadCount, messageCount } = await seedThreads(users);
   const notificationCount = await seedNotifications(users);
   await seedFavorites(users);
+
+  // Seed test group scenarios
+  await seedTestGroupScenarios(users);
 
   return {
     friendshipCount,

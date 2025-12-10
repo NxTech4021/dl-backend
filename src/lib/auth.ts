@@ -77,6 +77,8 @@ const defaultTrustedOrigins = [
   "http://172.20.10.11:8081",
   "exp://192.168.100.67:8081",
   "http://192.168.100.67:8081",
+  "exp://10.72.191.105:8081",
+  "http://10.72.191.105:8081",
   "https://staging.appdevelopers.my",
   "https://0.0.0.0",
   "deuceleague://",
