@@ -759,6 +759,24 @@ export class MatchInvitationService {
       throw new Error('You are already a participant in this match');
     }
 
+    // FEATURE: Check if user has already played against the match creator's team in this division
+    // For singles: check if user has a COMPLETED match against the match creator
+    // For doubles: check if user's partnership has a COMPLETED match against the creator's partnership
+    const creatorUserId = match.createdById;
+    if (creatorUserId && match.divisionId) {
+      const alreadyPlayedMatch = await this.checkIfAlreadyPlayed(
+        userId,
+        creatorUserId,
+        match.divisionId,
+        match.matchType,
+        partnerId
+      );
+      
+      if (alreadyPlayedMatch) {
+        throw new Error('You have already played against this opponent in this division. Each team can only play once per season.');
+      }
+    }
+
     // For doubles with partnerId, check partner is not already in the match
     if (partnerId && match.matchType === MatchType.DOUBLES) {
       // Verify both players are assigned to the same division
@@ -1727,6 +1745,106 @@ export class MatchInvitationService {
         status: p.invitationStatus
       }))
     };
+  }
+
+  /**
+   * Check if user has already played against an opponent in this division
+   * Used to enforce "one match per team per season" rule
+   */
+  private async checkIfAlreadyPlayed(
+    userId: string,
+    opponentUserId: string,
+    divisionId: string,
+    matchType: MatchType,
+    partnerId?: string
+  ): Promise<boolean> {
+    try {
+      // Find all COMPLETED or FINISHED matches in this division where both users participated
+      const completedMatches = await prisma.match.findMany({
+        where: {
+          divisionId,
+          status: {
+            in: [MatchStatus.COMPLETED]
+          },
+          // Both users must be participants
+          AND: [
+            {
+              participants: {
+                some: { userId }
+              }
+            },
+            {
+              participants: {
+                some: { userId: opponentUserId }
+              }
+            }
+          ]
+        },
+        include: {
+          participants: true
+        }
+      });
+
+      if (completedMatches.length === 0) {
+        return false;
+      }
+
+      // For each completed match, verify they were on OPPOSITE teams
+      for (const match of completedMatches) {
+        const userParticipant = match.participants.find(p => p.userId === userId);
+        const opponentParticipant = match.participants.find(p => p.userId === opponentUserId);
+
+        if (userParticipant && opponentParticipant) {
+          // They played - check if they were on opposite teams
+          if (userParticipant.team !== opponentParticipant.team) {
+            logger.info(`User ${userId} has already played against ${opponentUserId} in division ${divisionId} (match ${match.id})`);
+            return true;
+          }
+        }
+      }
+
+      // For doubles, also check if user's partner has played against opponent's team
+      if (matchType === MatchType.DOUBLES && partnerId) {
+        // Check if partner was on opponent's team in any completed match
+        const partnerPlayedOpponent = await prisma.match.findFirst({
+          where: {
+            divisionId,
+            status: MatchStatus.COMPLETED,
+            AND: [
+              {
+                participants: {
+                  some: { userId: partnerId }
+                }
+              },
+              {
+                participants: {
+                  some: { userId: opponentUserId }
+                }
+              }
+            ]
+          },
+          include: {
+            participants: true
+          }
+        });
+
+        if (partnerPlayedOpponent) {
+          const partnerParticipant = partnerPlayedOpponent.participants.find(p => p.userId === partnerId);
+          const opponentParticipant = partnerPlayedOpponent.participants.find(p => p.userId === opponentUserId);
+
+          if (partnerParticipant && opponentParticipant && partnerParticipant.team !== opponentParticipant.team) {
+            logger.info(`Partner ${partnerId} has already played against ${opponentUserId} in division ${divisionId}`);
+            return true;
+          }
+        }
+      }
+
+      return false;
+    } catch (error) {
+      logger.error('Error checking if already played', { userId, opponentUserId, divisionId }, error as Error);
+      // Don't block joining on check error - let it through
+      return false;
+    }
   }
 
   /**
