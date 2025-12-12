@@ -256,6 +256,9 @@ export const getAvailableMatches = async (req: Request, res: Response) => {
 /**
  * Get my matches (as participant)
  * GET /api/matches/my
+ *
+ * Returns matches with an additional `invitationStatus` field indicating
+ * the current user's invitation status for each match (useful for DRAFT matches).
  */
 export const getMyMatches = async (req: Request, res: Response) => {
   try {
@@ -275,7 +278,73 @@ export const getMyMatches = async (req: Request, res: Response) => {
       parseInt(limit as string)
     );
 
-    res.json(result);
+    // Enhance matches with the current user's invitation status
+    const matchesWithInvitationStatus = result.matches.map((match: any) => {
+      // Find current user's participant entry
+      const userParticipant = match.participants?.find(
+        (p: any) => p.userId === userId
+      );
+
+      const isCreator = match.createdById === userId;
+
+      // Determine invitation status for the current user
+      let invitationStatus: 'PENDING' | 'ACCEPTED' | 'DECLINED' | 'EXPIRED' | undefined;
+
+      if (userParticipant) {
+        // User is a participant - use their invitation status
+        invitationStatus = userParticipant.invitationStatus as any;
+      } else if (isCreator) {
+        // User is the creator (always accepted)
+        invitationStatus = 'ACCEPTED';
+      }
+
+      // For DRAFT matches, provide context based on perspective
+      if (match.status === 'DRAFT') {
+        if (isCreator) {
+          // Creator viewing their DRAFT match - check OTHER participants' invitation states
+          const otherParticipants = match.participants?.filter(
+            (p: any) => p.userId !== userId
+          ) || [];
+
+          const pendingInvites = otherParticipants.filter(
+            (p: any) => p.invitationStatus === 'PENDING'
+          ).length;
+          const declinedInvites = otherParticipants.filter(
+            (p: any) => p.invitationStatus === 'DECLINED'
+          ).length;
+          const expiredInvites = otherParticipants.filter(
+            (p: any) => p.invitationStatus === 'EXPIRED'
+          ).length;
+          const acceptedInvites = otherParticipants.filter(
+            (p: any) => p.invitationStatus === 'ACCEPTED'
+          ).length;
+
+          // Determine the overall invitation status for DRAFT (creator's view)
+          if (declinedInvites > 0) {
+            invitationStatus = 'DECLINED';
+          } else if (expiredInvites > 0) {
+            invitationStatus = 'EXPIRED';
+          } else if (pendingInvites > 0) {
+            invitationStatus = 'PENDING';
+          } else if (acceptedInvites === otherParticipants.length && otherParticipants.length > 0) {
+            // All other participants accepted
+            invitationStatus = 'ACCEPTED';
+          }
+        }
+        // For non-creator viewing DRAFT: keep their own invitationStatus
+        // (PENDING means they need to respond - but they should use INVITES tab)
+      }
+
+      return {
+        ...match,
+        invitationStatus
+      };
+    });
+
+    res.json({
+      ...result,
+      matches: matchesWithInvitationStatus
+    });
   } catch (error) {
     console.error('Get My Matches Error:', error);
     res.status(500).json({ error: 'Failed to retrieve your matches' });
