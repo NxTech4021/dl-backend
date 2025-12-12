@@ -25,7 +25,7 @@ export const submitResult = async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Match ID is required' });
     }
 
-    const { setScores, gameScores, comment, evidence } = req.body;
+    const { setScores, gameScores, comment, evidence, isUnfinished } = req.body;
 
     // Validate that at least one score type is provided
     if ((!setScores || !Array.isArray(setScores) || setScores.length === 0) &&
@@ -41,7 +41,8 @@ export const submitResult = async (req: Request, res: Response) => {
       setScores,
       gameScores,
       comment,
-      evidence
+      evidence,
+      isUnfinished: isUnfinished === true
     });
 
     res.json(match);
