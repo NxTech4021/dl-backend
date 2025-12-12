@@ -32,6 +32,7 @@ export interface SubmitResultInput {
   gameScores?: PickleballScore[]; // For Pickleball
   comment?: string;
   evidence?: string;
+  isUnfinished?: boolean;        // Mark match as unfinished (bypasses validation)
 }
 
 export interface SetScore {
@@ -76,9 +77,10 @@ export class MatchResultService {
   /**
    * Submit match result (Any Participant)
    * Either team's captain can submit the score, the OTHER team must approve/deny
+   * If isUnfinished=true, match is marked UNFINISHED and score validation is skipped
    */
   async submitResult(input: SubmitResultInput) {
-    const { matchId, submittedById, setScores, gameScores, comment, evidence } = input;
+    const { matchId, submittedById, setScores, gameScores, comment, evidence, isUnfinished } = input;
 
     // Get match with participants
     const match = await prisma.match.findUnique({
@@ -124,21 +126,27 @@ export class MatchResultService {
       if (!gameScores || !Array.isArray(gameScores) || gameScores.length === 0) {
         throw new Error('gameScores array is required for Pickleball matches');
       }
-      this.validatePickleballScores(gameScores);
+      // Skip validation for unfinished matches
+      if (!isUnfinished) {
+        this.validatePickleballScores(gameScores);
+      }
       const pickleballResult = this.calculatePickleballFinalScore(gameScores);
       team1Score = pickleballResult.team1Score;
       team2Score = pickleballResult.team2Score;
-      winner = pickleballResult.winner;
+      winner = isUnfinished ? 'unfinished' : pickleballResult.winner;
     } else {
       // Tennis/Padel validation and calculation
       if (!setScores || !Array.isArray(setScores) || setScores.length === 0) {
         throw new Error('setScores array is required for Tennis/Padel matches');
       }
-      this.validateSetScores(setScores, match.sport, match.set3Format || undefined);
+      // Skip validation for unfinished matches
+      if (!isUnfinished) {
+        this.validateSetScores(setScores, match.sport, match.set3Format || undefined);
+      }
       const tennisResult = this.calculateFinalScore(setScores);
       team1Score = tennisResult.team1Score;
       team2Score = tennisResult.team2Score;
-      winner = tennisResult.winner;
+      winner = isUnfinished ? 'unfinished' : tennisResult.winner;
     }
 
     await prisma.$transaction(async (tx) => {
@@ -160,9 +168,9 @@ export class MatchResultService {
           });
         }
 
-        // Update match - Set to ONGOING (awaiting opponent approval)
+        // Update match - Set to ONGOING (awaiting opponent approval) or UNFINISHED
         const matchUpdateData: any = {
-          status: MatchStatus.ONGOING,
+          status: isUnfinished ? MatchStatus.UNFINISHED : MatchStatus.ONGOING,
           team1Score,
           team2Score,
           setScores: JSON.stringify(gameScores),
@@ -199,9 +207,9 @@ export class MatchResultService {
           await tx.matchScore.create({ data: scoreData });
         }
 
-        // Update match - Set to ONGOING (awaiting opponent approval)
+        // Update match - Set to ONGOING (awaiting opponent approval) or UNFINISHED
         const matchUpdateData: any = {
-          status: MatchStatus.ONGOING,
+          status: isUnfinished ? MatchStatus.UNFINISHED : MatchStatus.ONGOING,
           team1Score,
           team2Score,
           setScores: JSON.stringify(setScores),
@@ -220,10 +228,16 @@ export class MatchResultService {
       }
     });
 
-    // Notify opponent participants to confirm/deny the submitted result
-    await this.sendResultSubmittedNotification(matchId, submittedById);
-
-    logger.info(`Result submitted for match ${matchId} by creator ${submittedById}, awaiting opponent confirmation`);
+    // Notify participants based on whether match is complete or unfinished
+    if (isUnfinished) {
+      // For unfinished matches, notify all participants that the match was marked incomplete
+      await this.sendMatchUnfinishedNotification(matchId, submittedById);
+      logger.info(`Match ${matchId} marked as UNFINISHED by ${submittedById}`);
+    } else {
+      // Notify opponent participants to confirm/deny the submitted result
+      await this.sendResultSubmittedNotification(matchId, submittedById);
+      logger.info(`Result submitted for match ${matchId} by creator ${submittedById}, awaiting opponent confirmation`);
+    }
 
     return this.getMatchWithResults(matchId);
   }
@@ -932,6 +946,40 @@ export class MatchResultService {
       await notifyAdminsDispute(this.notificationService, disputeInfo);
     } catch (error) {
       logger.error('Error sending dispute created notification', {}, error as Error);
+    }
+  }
+
+  /**
+   * Send notification when match is marked as unfinished
+   */
+  private async sendMatchUnfinishedNotification(matchId: string, submitterId: string) {
+    try {
+      const match = await prisma.match.findUnique({
+        where: { id: matchId },
+        include: {
+          participants: { select: { userId: true } }
+        }
+      });
+
+      if (!match) return;
+
+      const submitter = await prisma.user.findUnique({
+        where: { id: submitterId },
+        select: { name: true }
+      });
+
+      const participantIds = match.participants.map(p => p.userId);
+
+      await this.notificationService.createNotification({
+        type: 'MATCH_UNFINISHED',
+        title: 'Match Marked Incomplete',
+        message: `${submitter?.name} has marked the match as incomplete. Partial scores have been recorded.`,
+        category: 'MATCH',
+        matchId,
+        userIds: participantIds
+      });
+    } catch (error) {
+      logger.error('Error sending match unfinished notification', {}, error as Error);
     }
   }
 

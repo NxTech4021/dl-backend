@@ -325,7 +325,7 @@ export class MatchInvitationService {
    * Get match by ID with full details
    */
   async getMatchById(matchId: string) {
-    return prisma.match.findUnique({
+    const match = await prisma.match.findUnique({
       where: { id: matchId },
       include: {
         division: {
@@ -356,9 +356,29 @@ export class MatchInvitationService {
         createdBy: {
           select: { id: true, name: true, username: true, image: true }
         },
-        scores: { orderBy: { setNumber: 'asc' } }
+        scores: { orderBy: { setNumber: 'asc' } },
+        // Include dispute details if match is disputed (relation is disputes[] but @unique makes it 0 or 1)
+        disputes: {
+          include: {
+            raisedByUser: {
+              select: {
+                id: true,
+                name: true,
+                image: true,
+              }
+            }
+          }
+        }
       }
     });
+
+    if (!match) return null;
+
+    // Transform disputes array to single dispute object for frontend convenience
+    return {
+      ...match,
+      dispute: match.disputes?.[0] || null,
+    };
   }
 
   /**
@@ -447,32 +467,78 @@ export class MatchInvitationService {
       }
     }
 
-    const [matches, total] = await Promise.all([
-      prisma.match.findMany({
-        where,
-        include: {
-          division: {
-            include: {
-              league: true,
-              season: true
-            }
-          },
-          participants: {
-            include: {
-              user: {
-                select: { id: true, name: true, username: true, image: true }
-              }
-            }
-          },
-          createdBy: {
-            select: { id: true, name: true, username: true }
+    // Fetch all matches without pagination first for proper sorting
+    const allMatches = await prisma.match.findMany({
+      where,
+      include: {
+        division: {
+          include: {
+            league: true,
+            season: true
           }
         },
-        orderBy: { createdAt: 'desc' },
-        skip: (page - 1) * limit,
-        take: limit
-      }),
-      prisma.match.count({ where })
+        participants: {
+          include: {
+            user: {
+              select: { id: true, name: true, username: true, image: true }
+            }
+          }
+        },
+        createdBy: {
+          select: { id: true, name: true, username: true }
+        }
+      }
+    });
+
+    // Custom sorting: prioritize by status then by date
+    // 1. ONGOING (needs confirmation) - most urgent
+    // 2. SCHEDULED (upcoming) - sorted by matchDate ascending (soonest first)
+    // 3. DRAFT (pending) - by createdAt descending
+    // 4. COMPLETED, CANCELLED, VOID, UNFINISHED (historical) - by matchDate descending
+    const statusPriority: { [key: string]: number } = {
+      'ONGOING': 0,
+      'SCHEDULED': 1,
+      'DRAFT': 2,
+      'COMPLETED': 3,
+      'CANCELLED': 3,
+      'VOID': 3,
+      'UNFINISHED': 3
+    };
+
+    const sortedMatches = allMatches.sort((a, b) => {
+      const priorityA = statusPriority[a.status] ?? 4;
+      const priorityB = statusPriority[b.status] ?? 4;
+
+      // First sort by status priority
+      if (priorityA !== priorityB) {
+        return priorityA - priorityB;
+      }
+
+      // Within same priority, sort by date
+      const dateA = a.matchDate ? new Date(a.matchDate).getTime() : 0;
+      const dateB = b.matchDate ? new Date(b.matchDate).getTime() : 0;
+
+      if (a.status === 'SCHEDULED') {
+        // For SCHEDULED: ascending (soonest first)
+        return dateA - dateB;
+      } else if (a.status === 'DRAFT') {
+        // For DRAFT: by createdAt descending (newest first)
+        const createdA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const createdB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        return createdB - createdA;
+      } else {
+        // For historical (COMPLETED, CANCELLED, etc.): descending (most recent first)
+        return dateB - dateA;
+      }
+    });
+
+    // Apply pagination after sorting
+    const paginatedMatches = sortedMatches.slice((page - 1) * limit, page * limit);
+    const total = allMatches.length;
+
+    const [matches] = await Promise.all([
+      Promise.resolve(paginatedMatches),
+      Promise.resolve(total)
     ]);
 
     return {

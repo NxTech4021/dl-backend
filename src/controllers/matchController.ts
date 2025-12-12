@@ -1,4 +1,4 @@
-import { prisma } from "../lib/prisma";
+﻿import { prisma } from "../lib/prisma";
 import { Request, Response } from "express";
 import { Prisma, MatchType } from "@prisma/client";
 
@@ -96,10 +96,32 @@ export const getMatchById = async (req: Request, res: Response) => {
   try {
     const match = await prisma.match.findUnique({
       where: { id },
-      include: { division: true, participants: { include: { user: true } } },
+      include: {
+        division: true,
+        participants: { include: { user: true } },
+        // Include dispute details if match is disputed (relation is disputes[] but @unique makes it 0 or 1)
+        disputes: {
+          include: {
+            raisedByUser: {
+              select: {
+                id: true,
+                name: true,
+                image: true,
+              }
+            }
+          }
+        }
+      },
     });
     if (!match) return res.status(404).json({ error: "Match not found." });
-    res.json(match);
+
+    // Transform disputes array to single dispute object for frontend convenience
+    const response = {
+      ...match,
+      dispute: match.disputes?.[0] || null,
+    };
+
+    res.json(response);
   } catch (err: unknown) {
     console.error("Get Match By ID Error:", err);
     const errorMessage = err instanceof Error ? err.message : "Failed to retrieve match.";
