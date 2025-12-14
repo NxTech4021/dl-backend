@@ -28,7 +28,8 @@ import {
 
 import {
   checkDivisionCapacity,
-  getDivisionCapacityInfo
+  getDivisionCapacityInfo,
+  updateDivisionCounts
 } from '../services/division/divisionCapacityService';
 
 import {
@@ -38,27 +39,13 @@ import {
   getAdminIdFromUserId
 } from '../services/division/divisionValidationService';
 
+// Standings service for rank recalculation
+import { recalculateDivisionRanks } from '../services/rating/standingsCalculationService';
+
 // 🆕 Notification imports
 import { notificationService } from '../services/notificationService';
 import { notificationTemplates } from '../helpers/notification';
 import { logger } from '../utils/logger';
-
-const updateDivisionCounts = async (divisionId: string, increment: boolean) => {
-  try {
-    const count = await prisma.divisionAssignment.count({
-      where: { divisionId }
-    });
-    
-    await prisma.division.update({
-      where: { id: divisionId },
-      data: { currentSinglesCount: count }
-    });
-
-    logger.databaseOperation('update', 'division', 0, { divisionId, newCount: count });
-  } catch (error) {
-    logger.databaseError('update', 'division', error as Error, { divisionId });
-  }
-};
 
 interface CreateDivisionBody {
   seasonId?: string;
@@ -717,6 +704,44 @@ export const assignPlayerToDivision = async (req: Request, res: Response) => {
         logger.info('Added user to division group chat', { userId, threadId: divisionThread.id });
       }
 
+      // 🆕 Create or update division standing with initial zero stats
+      // This ensures players appear in standings as soon as they join
+      const existingStanding = await tx.divisionStanding.findFirst({
+        where: { userId, divisionId }
+      });
+
+      if (!existingStanding) {
+        await tx.divisionStanding.create({
+          data: {
+            divisionId,
+            seasonId,
+            userId,
+            rank: 0,
+            wins: 0,
+            losses: 0,
+            matchesPlayed: 0,
+            matchesScheduled: 9,
+            totalPoints: 0,
+            countedWins: 0,
+            countedLosses: 0,
+            setsWon: 0,
+            setsLost: 0,
+            gamesWon: 0,
+            gamesLost: 0,
+            best6SetsWon: 0,
+            best6SetsTotal: 0,
+            best6GamesWon: 0,
+            best6GamesTotal: 0,
+            winPoints: 0,
+            setPoints: 0,
+            completionBonus: 0,
+            setDifferential: 0,
+            headToHead: {},
+          }
+        });
+        logger.info('Created initial standing for user in division', { userId, divisionId });
+      }
+
       return { assignment, divisionThread };
     });
 
@@ -726,6 +751,9 @@ export const assignPlayerToDivision = async (req: Request, res: Response) => {
     if (isReassignment && previousDivisionId) {
       await updateDivisionCounts(previousDivisionId, false);
     }
+
+    // 🆕 Recalculate division ranks to include new player
+    await recalculateDivisionRanks(divisionId);
 
     // Get season info for notifications
     const season = await prisma.season.findUnique({
