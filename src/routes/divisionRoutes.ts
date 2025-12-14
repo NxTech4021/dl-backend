@@ -13,8 +13,8 @@ import {
     transferPlayerBetweenDivisions,
     getDivisionsBySeasonId,
     getDivisionSummaryBySeasonId,
-    // backfillDivisionStandings,
-    // syncDivisionCounts
+    backfillDivisionStandings,
+    syncDivisionCounts
 } from "../controllers/divisionController";
 
 const divisionRoutes = Router();
@@ -42,11 +42,13 @@ divisionRoutes.get("/users/:userId", getUserDivisionAssignments);
 divisionRoutes.post("/auto-assign", autoAssignPlayersToDivisions);
 divisionRoutes.post("/transfer", transferPlayerBetweenDivisions);
 
-// Utility - Backfill standings for existing players
-// divisionRoutes.post("/backfill-standings", backfillDivisionStandings);
+//  Utility 
 
-// // Utility - Sync division counts (fix currentSinglesCount/currentDoublesCount)
-// divisionRoutes.post("/sync-counts", syncDivisionCounts);
+// Backfill standings for existing players
+divisionRoutes.post("/backfill-standings", backfillDivisionStandings);
+
+// Sync division counts (fix standing issues - if any )
+divisionRoutes.post("/sync-counts", syncDivisionCounts);
 
 
 export default divisionRoutes;
