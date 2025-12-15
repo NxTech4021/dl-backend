@@ -203,3 +203,29 @@ export const getDisputedMatches = async (req: Request, res: Response) => {
     res.status(500).json({ error: 'Failed to retrieve disputed matches' });
   }
 };
+
+/**
+ * Get completed matches for a division (all matches, not user-specific)
+ * GET /api/match/division/:divisionId/results
+ */
+export const getDivisionResults = async (req: Request, res: Response) => {
+  try {
+    const { divisionId } = req.params;
+    const { limit = '3', seasonId } = req.query;
+
+    if (!divisionId) {
+      return res.status(400).json({ error: 'divisionId is required' });
+    }
+
+    const matches = await matchHistoryService.getDivisionResults(
+      divisionId,
+      seasonId as string | undefined,
+      parseInt(limit as string)
+    );
+
+    res.json({ matches });
+  } catch (error) {
+    console.error('Get Division Results Error:', error);
+    res.status(500).json({ error: 'Failed to retrieve division results' });
+  }
+};
