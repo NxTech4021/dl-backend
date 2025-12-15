@@ -549,6 +549,7 @@ export class MatchHistoryService {
           }
         },
         scores: { orderBy: { setNumber: 'asc' } },
+        pickleballScores: { orderBy: { gameNumber: 'asc' } },
         createdBy: {
           select: { id: true, name: true, username: true }
         },
@@ -601,6 +602,11 @@ export class MatchHistoryService {
           team1Tiebreak: s.player1Tiebreak,
           team2Tiebreak: s.player2Tiebreak,
           hasTiebreak: s.hasTiebreak
+        })),
+        gameScores: match.pickleballScores.map(g => ({
+          gameNumber: g.gameNumber,
+          team1Points: g.player1Points,
+          team2Points: g.player2Points
         })),
         team1Players: team1Players.map(p => ({
           id: p.user.id,
