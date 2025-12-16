@@ -177,4 +177,7 @@ if (process.env.NODE_ENV !== 'production') {
 }
 
 const prismaService = PrismaService.getInstance();
-export default prismaService; 
+export default prismaService;
+
+// Re-export PrismaClient type for dependency injection
+export { PrismaClient } from '@prisma/client'; 

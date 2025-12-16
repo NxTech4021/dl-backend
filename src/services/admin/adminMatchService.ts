@@ -676,21 +676,12 @@ export class AdminMatchService {
       });
     });
 
-    // Trigger rating and standings recalculation for completed matches
+    // Trigger rating and standings recalculation for completed matches using DMR
     if (match.status === MatchStatus.COMPLETED && match.divisionId && match.seasonId) {
       try {
-        // Reverse old ratings and recalculate with new result
-        const { reverseMatchRatings, calculateMatchRatings, applyMatchRatings } =
-          await import('../rating/ratingCalculationService');
-
-        // First reverse the old ratings
-        await reverseMatchRatings(matchId);
-
-        // Then calculate and apply new ratings
-        const newRatings = await calculateMatchRatings(matchId);
-        if (newRatings) {
-          await applyMatchRatings(matchId, newRatings);
-        }
+        // Use DMR service for rating recalculation
+        const { recalculateMatchRatings } = await import('../rating/adminRatingService');
+        await recalculateMatchRatings(matchId, adminId);
 
         // Recalculate standings for division
         const { recalculateDivisionStandings } = await import('../rating/standingsCalculationService');
@@ -707,9 +698,9 @@ export class AdminMatchService {
           );
         }
 
-        logger.info(`Rating and standings recalculated after match ${matchId} result edit`);
+        logger.info(`DMR ratings and standings recalculated after match ${matchId} result edit`);
       } catch (error) {
-        logger.error('Error during recalculation after result edit', { matchId }, error as Error);
+        logger.error('Error during DMR recalculation after result edit', { matchId }, error as Error);
         // Don't throw - the edit was successful, recalculation is secondary
       }
     }
