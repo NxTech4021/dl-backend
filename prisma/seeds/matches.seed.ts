@@ -133,15 +133,18 @@ export async function seedMatches(
       let playerScore: number | null = null;
       let opponentScore: number | null = null;
       let setScores: any = null;
+      let outcome: string | null = null;
 
       if (config.status === MatchStatus.COMPLETED && !config.isWalkover) {
         playerScore = randomInt(0, 2);
         opponentScore = playerScore === 2 ? randomInt(0, 1) : 2;
         setScores = generateSetScores(playerScore, opponentScore);
+        outcome = playerScore > opponentScore ? 'team1' : 'team2';
       } else if (config.isWalkover) {
         playerScore = 2;
         opponentScore = 0;
         setScores = { sets: [{ player1: 6, player2: 0 }, { player1: 6, player2: 0 }] };
+        outcome = 'team1';
       }
 
       const match = await prisma.match.create({
@@ -163,6 +166,7 @@ export async function seedMatches(
           team1Score: division.gameType === "DOUBLES" ? playerScore : null,
           team2Score: division.gameType === "DOUBLES" ? opponentScore : null,
           setScores: setScores,
+          outcome: outcome,
 
           // Flags
           isWalkover: config.isWalkover,
@@ -201,7 +205,7 @@ export async function seedMatches(
             matchId: match.id,
             userId: player1.id,
             role: ParticipantRole.CREATOR,
-            team: division.gameType === "DOUBLES" ? "team1" : null,
+            team: "team1",
             invitationStatus: InvitationStatus.ACCEPTED,
             acceptedAt: new Date(matchDate.getTime() - 7 * 24 * 60 * 60 * 1000),
             didAttend: config.status === MatchStatus.COMPLETED || config.status === MatchStatus.ONGOING,
@@ -210,7 +214,7 @@ export async function seedMatches(
             matchId: match.id,
             userId: player2.id,
             role: ParticipantRole.OPPONENT,
-            team: division.gameType === "DOUBLES" ? "team2" : null,
+            team: "team2",
             invitationStatus: config.status === MatchStatus.DRAFT ? InvitationStatus.PENDING : InvitationStatus.ACCEPTED,
             acceptedAt: config.status !== MatchStatus.DRAFT ? new Date(matchDate.getTime() - 5 * 24 * 60 * 60 * 1000) : null,
             didAttend: config.status === MatchStatus.COMPLETED && !config.isWalkover,
