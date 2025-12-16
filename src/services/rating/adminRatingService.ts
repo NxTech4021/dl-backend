@@ -7,10 +7,54 @@ import { prisma } from '../../lib/prisma';
 import {
   GameType,
   RatingChangeReason,
-  SportType
+  SportType,
+  MatchType
 } from '@prisma/client';
 import { logger } from '../../utils/logger';
-import { getRatingConfig } from './ratingCalculationService';
+import { DMRRatingService, SetScore as DMRSetScore } from './dmrRatingService';
+
+// Default config values (matching DMR defaults)
+const DEFAULT_RATING_CONFIG = {
+  initialRating: 1500,
+  initialRD: 350,
+  kFactorNew: 32,
+  kFactorEstablished: 24,
+  kFactorThreshold: 10,
+  singlesWeight: 1.0,
+  doublesWeight: 0.7,
+  oneSetMatchWeight: 0.5,
+  walkoverWinImpact: 0.5,
+  walkoverLossImpact: 0.5,
+  provisionalThreshold: 5
+};
+
+/**
+ * Get rating configuration for a season (or defaults)
+ */
+async function getRatingConfig(seasonId?: string) {
+  if (seasonId) {
+    const params = await prisma.ratingParameters.findFirst({
+      where: { seasonId, isActive: true },
+      orderBy: { version: 'desc' }
+    });
+    if (params) {
+      return {
+        initialRating: params.initialRating,
+        initialRD: params.initialRD,
+        kFactorNew: params.kFactorNew,
+        kFactorEstablished: params.kFactorEstablished,
+        kFactorThreshold: params.kFactorThreshold,
+        singlesWeight: params.singlesWeight,
+        doublesWeight: params.doublesWeight,
+        oneSetMatchWeight: params.oneSetMatchWeight,
+        walkoverWinImpact: params.walkoverWinImpact,
+        walkoverLossImpact: params.walkoverLossImpact,
+        provisionalThreshold: params.provisionalThreshold
+      };
+    }
+  }
+  return DEFAULT_RATING_CONFIG;
+}
 
 // Types
 export interface ManualAdjustmentInput {
@@ -424,7 +468,105 @@ export async function previewRecalculation(
 }
 
 /**
- * Recalculate ratings for a single match
+ * Helper function to process a single match using DMR algorithm
+ * Used by all recalculation functions for consistency
+ */
+async function processMatchWithDMR(match: any): Promise<boolean> {
+  if (!match.seasonId) {
+    logger.warn(`Match ${match.id} has no seasonId, skipping DMR processing`);
+    return false;
+  }
+
+  // Determine sport type
+  const sportType = match.sport === 'PICKLEBALL' ? SportType.PICKLEBALL :
+                    match.sport === 'TENNIS' ? SportType.TENNIS : SportType.PADEL;
+
+  const dmrService = new DMRRatingService(sportType);
+
+  // Convert scores to DMR format
+  let setScores: DMRSetScore[] = [];
+
+  if (match.sport === 'PICKLEBALL') {
+    const scores = match.pickleballScores?.length > 0
+      ? match.pickleballScores
+      : (match.setScores ? JSON.parse(match.setScores) : []);
+    setScores = scores.map((s: any) => ({
+      score1: s.player1Points ?? s.team1Points,
+      score2: s.player2Points ?? s.team2Points,
+    }));
+  } else {
+    const scores = match.scores?.length > 0
+      ? match.scores
+      : (match.setScores ? JSON.parse(match.setScores) : []);
+    setScores = scores.map((s: any) => ({
+      score1: s.player1Games ?? s.team1Games,
+      score2: s.player2Games ?? s.team2Games,
+    }));
+  }
+
+  if (setScores.length === 0) {
+    logger.warn(`Match ${match.id} has no scores, skipping DMR processing`);
+    return false;
+  }
+
+  // Get participants by team
+  const team1Participants = match.participants.filter((p: any) => p.team === 'team1');
+  const team2Participants = match.participants.filter((p: any) => p.team === 'team2');
+
+  // Determine winner based on outcome
+  const team1Won = match.outcome === 'team1' || match.outcome === 'team1_win';
+
+  if (match.matchType === MatchType.DOUBLES) {
+    if (team1Participants.length < 2 || team2Participants.length < 2) {
+      logger.warn(`Doubles match ${match.id} doesn't have enough participants`);
+      return false;
+    }
+
+    const team1Ids: [string, string] = [team1Participants[0].userId, team1Participants[1].userId];
+    const team2Ids: [string, string] = [team2Participants[0].userId, team2Participants[1].userId];
+
+    const adjustedScores = team1Won ? setScores : setScores.map(s => ({
+      score1: s.score2,
+      score2: s.score1,
+    }));
+
+    await dmrService.processDoublesMatch({
+      team1Ids: team1Won ? team1Ids : team2Ids,
+      team2Ids: team1Won ? team2Ids : team1Ids,
+      setScores: adjustedScores,
+      seasonId: match.seasonId,
+      matchId: match.id,
+      isWalkover: match.isWalkover ?? false,
+    });
+  } else {
+    if (team1Participants.length === 0 || team2Participants.length === 0) {
+      logger.warn(`Singles match ${match.id} doesn't have participants on each team`);
+      return false;
+    }
+
+    const winnerId = team1Won ? team1Participants[0].userId : team2Participants[0].userId;
+    const loserId = team1Won ? team2Participants[0].userId : team1Participants[0].userId;
+
+    const adjustedScores = team1Won ? setScores : setScores.map(s => ({
+      score1: s.score2,
+      score2: s.score1,
+    }));
+
+    await dmrService.processsinglesMatch({
+      winnerId,
+      loserId,
+      setScores: adjustedScores,
+      seasonId: match.seasonId,
+      matchId: match.id,
+      isWalkover: match.isWalkover ?? false,
+    });
+  }
+
+  return true;
+}
+
+/**
+ * Recalculate ratings for a single match using DMR (Glicko-2)
  */
 export async function recalculateMatchRatings(
   matchId: string,
@@ -432,7 +574,11 @@ export async function recalculateMatchRatings(
 ): Promise<{ success: boolean; message: string }> {
   const match = await prisma.match.findUnique({
     where: { id: matchId },
-    include: { participants: true }
+    include: {
+      participants: true,
+      scores: true,
+      pickleballScores: true
+    }
   });
 
   if (!match) {
@@ -454,23 +600,28 @@ export async function recalculateMatchRatings(
     throw new Error(`Season is locked. Cannot recalculate.`);
   }
 
-  const { calculateMatchRatings, applyMatchRatings } = await import('./ratingCalculationService');
-
   try {
-    const updates = await calculateMatchRatings(matchId);
-    if (updates) {
-      await applyMatchRatings(matchId, updates);
+    // First reverse existing ratings for this match
+    const sportType = match.sport === 'PICKLEBALL' ? SportType.PICKLEBALL :
+                      match.sport === 'TENNIS' ? SportType.TENNIS : SportType.PADEL;
+    const dmrService = new DMRRatingService(sportType);
+    await dmrService.reverseMatchRatings(matchId);
+
+    // Then recalculate with DMR
+    const success = await processMatchWithDMR(match);
+    if (!success) {
+      throw new Error('DMR processing failed');
     }
 
-    logger.info(`Recalculated ratings for match ${matchId} by admin ${adminId}`);
-    return { success: true, message: `Recalculated ratings for match ${matchId}` };
+    logger.info(`Recalculated DMR ratings for match ${matchId} by admin ${adminId}`);
+    return { success: true, message: `Recalculated DMR ratings for match ${matchId}` };
   } catch (error) {
     throw new Error(`Failed to recalculate match: ${(error as Error).message}`);
   }
 }
 
 /**
- * Recalculate ratings for a single player
+ * Recalculate ratings for a single player using DMR (Glicko-2)
  */
 export async function recalculatePlayerRatings(
   userId: string,
@@ -525,26 +676,28 @@ export async function recalculatePlayerRatings(
     });
   }
 
-  // Get all completed matches for this player
+  // Get all completed matches for this player with scores
   const matches = await prisma.match.findMany({
     where: {
       seasonId,
       status: 'COMPLETED',
       participants: { some: { userId } }
     },
-    orderBy: { matchDate: 'asc' }
+    orderBy: { matchDate: 'asc' },
+    include: {
+      participants: true,
+      scores: true,
+      pickleballScores: true
+    }
   });
-
-  const { calculateMatchRatings, applyMatchRatings } = await import('./ratingCalculationService');
 
   let matchesProcessed = 0;
   let ratingsUpdated = 0;
 
   for (const match of matches) {
     try {
-      const updates = await calculateMatchRatings(match.id);
-      if (updates) {
-        await applyMatchRatings(match.id, updates);
+      const success = await processMatchWithDMR(match);
+      if (success) {
         ratingsUpdated++;
       }
       matchesProcessed++;
@@ -553,7 +706,7 @@ export async function recalculatePlayerRatings(
     }
   }
 
-  logger.info(`Recalculated ratings for player ${userId} by admin ${adminId}`, {
+  logger.info(`Recalculated DMR ratings for player ${userId} by admin ${adminId}`, {
     matchesProcessed,
     ratingsUpdated
   });
@@ -562,7 +715,7 @@ export async function recalculatePlayerRatings(
 }
 
 /**
- * Recalculate ratings for a division
+ * Recalculate ratings for a division using DMR (Glicko-2)
  */
 export async function recalculateDivisionRatings(
   divisionId: string,
@@ -624,25 +777,27 @@ export async function recalculateDivisionRatings(
     });
   }
 
-  // Get all completed matches in division
+  // Get all completed matches in division with scores
   const matches = await prisma.match.findMany({
     where: {
       divisionId,
       status: 'COMPLETED'
     },
-    orderBy: { matchDate: 'asc' }
+    orderBy: { matchDate: 'asc' },
+    include: {
+      participants: true,
+      scores: true,
+      pickleballScores: true
+    }
   });
-
-  const { calculateMatchRatings, applyMatchRatings } = await import('./ratingCalculationService');
 
   let matchesProcessed = 0;
   let ratingsUpdated = 0;
 
   for (const match of matches) {
     try {
-      const updates = await calculateMatchRatings(match.id);
-      if (updates) {
-        await applyMatchRatings(match.id, updates);
+      const success = await processMatchWithDMR(match);
+      if (success) {
         ratingsUpdated += 2;
       }
       matchesProcessed++;
@@ -651,7 +806,7 @@ export async function recalculateDivisionRatings(
     }
   }
 
-  logger.info(`Recalculated ratings for division ${divisionId} by admin ${adminId}`, {
+  logger.info(`Recalculated DMR ratings for division ${divisionId} by admin ${adminId}`, {
     matchesProcessed,
     ratingsUpdated
   });
@@ -660,7 +815,7 @@ export async function recalculateDivisionRatings(
 }
 
 /**
- * Recalculate all ratings for a season
+ * Recalculate all ratings for a season using DMR (Glicko-2)
  * This replays all matches in chronological order
  */
 export async function recalculateSeasonRatings(
@@ -679,9 +834,9 @@ export async function recalculateSeasonRatings(
     throw new Error(`Season ${seasonId} is locked. Cannot recalculate ratings.`);
   }
 
-  logger.info(`Starting rating recalculation for season ${seasonId} by admin ${adminId}`);
+  logger.info(`Starting DMR rating recalculation for season ${seasonId} by admin ${adminId}`);
 
-  // Get all completed matches in chronological order
+  // Get all completed matches in chronological order with scores
   const matches = await prisma.match.findMany({
     where: {
       seasonId,
@@ -689,7 +844,9 @@ export async function recalculateSeasonRatings(
     },
     orderBy: { matchDate: 'asc' },
     include: {
-      participants: true
+      participants: true,
+      scores: true,
+      pickleballScores: true
     }
   });
 
@@ -731,18 +888,14 @@ export async function recalculateSeasonRatings(
     }
   });
 
-  // Import dynamically to avoid circular dependency
-  const { calculateMatchRatings, applyMatchRatings } = await import('./ratingCalculationService');
-
-  // Replay all matches
+  // Replay all matches using DMR
   let matchesProcessed = 0;
   let ratingsUpdated = 0;
 
   for (const match of matches) {
     try {
-      const updates = await calculateMatchRatings(match.id);
-      if (updates) {
-        await applyMatchRatings(match.id, updates);
+      const success = await processMatchWithDMR(match);
+      if (success) {
         ratingsUpdated += 2; // Winner and loser
       }
       matchesProcessed++;
@@ -751,7 +904,7 @@ export async function recalculateSeasonRatings(
     }
   }
 
-  logger.info(`Completed rating recalculation for season ${seasonId}`, {
+  logger.info(`Completed DMR rating recalculation for season ${seasonId}`, {
     matchesProcessed,
     ratingsUpdated,
     adminId
