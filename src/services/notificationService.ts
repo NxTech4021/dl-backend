@@ -1,5 +1,5 @@
 import { Server as SocketIOServer } from "socket.io";
-import { prisma } from "../lib/prisma";
+import { prisma, PrismaClient } from "../lib/prisma";
 import { NotificationCategory } from "@prisma/client";
 import {
   CreateNotificationData,
@@ -44,6 +44,15 @@ export class NotificationService {
     throw new Error("Method not implemented.");
   }
   private io: SocketIOServer | null = null;
+  private prisma: PrismaClient;
+
+  /**
+   * Create a new NotificationService instance
+   * @param prismaClient - Optional Prisma client for dependency injection (useful for testing)
+   */
+  constructor(prismaClient?: PrismaClient) {
+    this.prisma = prismaClient ?? prisma;
+  }
 
   setSocketIO(io: SocketIOServer): void {
     this.io = io;
@@ -75,7 +84,7 @@ export class NotificationService {
       }
 
       // Validate users exist
-      const users = await prisma.user.findMany({
+      const users = await this.prisma.user.findMany({
         where: { id: { in: userIdArray } },
         select: { id: true },
       });
@@ -107,12 +116,12 @@ export class NotificationService {
       });
 
       // Create notification in database
-      const notification = await prisma.notification.create({
+      const notification = await this.prisma.notification.create({
         data: createData,
       });
 
       // Create UserNotification records for each user
-      await prisma.userNotification.createMany({
+      await this.prisma.userNotification.createMany({
         data: validUserIds.map((userId) => ({
           userId,
           notificationId: notification.id,
@@ -213,7 +222,7 @@ export class NotificationService {
       }
 
       const [userNotifications, total] = await Promise.all([
-        prisma.userNotification.findMany({
+        this.prisma.userNotification.findMany({
           where,
           include: {
             notification: true,
@@ -226,7 +235,7 @@ export class NotificationService {
           skip,
           take: limit,
         }),
-        prisma.userNotification.count({ where }),
+        this.prisma.userNotification.count({ where }),
       ]);
 
       const notifications: NotificationResult[] = userNotifications.map(
@@ -269,7 +278,7 @@ export class NotificationService {
 
   async markAsRead(notificationId: string, userId: string): Promise<void> {
     try {
-      await prisma.userNotification.update({
+      await this.prisma.userNotification.update({
         where: {
           userId_notificationId: {
             userId,
@@ -303,7 +312,7 @@ export class NotificationService {
 
   async markAllAsRead(userId: string): Promise<{ count: number }> {
     try {
-      const result = await prisma.userNotification.updateMany({
+      const result = await this.prisma.userNotification.updateMany({
         where: {
           userId,
           read: false,
@@ -342,7 +351,7 @@ export class NotificationService {
     userId: string
   ): Promise<void> {
     try {
-      await prisma.userNotification.delete({
+      await this.prisma.userNotification.delete({
         where: {
           userId_notificationId: {
             userId,
@@ -364,7 +373,7 @@ export class NotificationService {
 
   async getUnreadCount(userId: string): Promise<number> {
     try {
-      const count = await prisma.userNotification.count({
+      const count = await this.prisma.userNotification.count({
         where: {
           userId,
           read: false,
@@ -383,16 +392,16 @@ export class NotificationService {
     try {
       const [total, unread, archived, byTypeData, byCategoryData] =
         await Promise.all([
-          prisma.userNotification.count({ where: { userId } }),
-          prisma.userNotification.count({ where: { userId, read: false } }),
-          prisma.userNotification.count({ where: { userId, archive: true } }),
+          this.prisma.userNotification.count({ where: { userId } }),
+          this.prisma.userNotification.count({ where: { userId, read: false } }),
+          this.prisma.userNotification.count({ where: { userId, archive: true } }),
           // Group by notification type
-          prisma.userNotification.findMany({
+          this.prisma.userNotification.findMany({
             where: { userId },
             include: { notification: { select: { type: true } } },
           }),
           // Group by notification category
-          prisma.userNotification.findMany({
+          this.prisma.userNotification.findMany({
             where: { userId },
             include: { notification: { select: { category: true } } },
           }),
@@ -442,7 +451,7 @@ export class NotificationService {
     limit: number = 100
   ): Promise<NotificationResult[]> {
     try {
-      const notifications = await prisma.notification.findMany({
+      const notifications = await this.prisma.notification.findMany({
         where: { category },
         orderBy: { createdAt: "desc" },
         take: limit,
@@ -477,7 +486,7 @@ export class NotificationService {
       cutoffDate.setDate(cutoffDate.getDate() - daysOld);
 
       // Delete UserNotifications first (foreign key constraint)
-      await prisma.userNotification.deleteMany({
+      await this.prisma.userNotification.deleteMany({
         where: {
           notification: {
             createdAt: { lt: cutoffDate },
@@ -486,7 +495,7 @@ export class NotificationService {
       });
 
       // Then delete Notifications
-      const result = await prisma.notification.deleteMany({
+      const result = await this.prisma.notification.deleteMany({
         where: {
           createdAt: { lt: cutoffDate },
         },
@@ -591,7 +600,7 @@ export class NotificationService {
    */
   private async deactivatePushToken(token: string): Promise<void> {
     try {
-      await prisma.userPushToken.updateMany({
+      await this.prisma.userPushToken.updateMany({
         where: { token },
         data: {
           isActive: false,
