@@ -126,9 +126,11 @@ export async function seedDisputes(users: User[], admins: SeededAdmin[]): Promis
   const targetDisputes = 150;
 
   // Get matches that can have disputes (completed matches)
+  // Get matches that don't already have disputes
   const matches = await prisma.match.findMany({
     where: {
       status: "COMPLETED",
+      disputes: { none: {} }, // Exclude matches that already have disputes
     },
     include: {
       participants: {
