@@ -26,6 +26,7 @@ import { seedMatches, seedFriendlyMatches, seedMatchResults, seedPickleballGameS
 import { seedSocialFeatures } from "./social.seed";
 import { seedDisputesAndPenalties } from "./disputes.seed";
 import { seedRatingsAndStandings } from "./ratings.seed";
+import { seedDMRRatings } from "./dmr-ratings.seed";
 import { seedBugsAndFeedback } from "./bugs.seed";
 import { seedAdminActivityLogs } from "./admin-logs.seed";
 
@@ -98,23 +99,34 @@ async function main() {
     const disputeData = await seedDisputesAndPenalties(users, admins);
 
     // =========================================
-    // PHASE 6: RATINGS AND STANDINGS
+    // PHASE 6: DMR RATING PROCESSING
     // =========================================
-    logSection("═══ PHASE 6: RATINGS AND STANDINGS ═══");
+    logSection("═══ PHASE 6: DMR RATING PROCESSING ═══");
 
+    // Process all completed matches through the DMR (Glicko-2) rating system
+    // This generates realistic player ratings and rating history based on actual match results
+    const dmrData = await seedDMRRatings();
+
+    // =========================================
+    // PHASE 7: RATING ADMIN DATA
+    // =========================================
+    logSection("═══ PHASE 7: RATING ADMIN DATA ═══");
+
+    // Now seed admin-related rating data (adjustments, recalculations)
+    // These require DMR ratings to exist first
     const ratingData = await seedRatingsAndStandings(users, admins);
 
     // =========================================
-    // PHASE 7: BUG REPORTS AND FEEDBACK
+    // PHASE 8: BUG REPORTS AND FEEDBACK
     // =========================================
-    logSection("═══ PHASE 7: BUG REPORTS AND FEEDBACK ═══");
+    logSection("═══ PHASE 8: BUG REPORTS AND FEEDBACK ═══");
 
     const bugData = await seedBugsAndFeedback(users, admins);
 
     // =========================================
-    // PHASE 8: ADMIN ACTIVITY LOGS
+    // PHASE 9: ADMIN ACTIVITY LOGS
     // =========================================
-    logSection("═══ PHASE 8: ADMIN ACTIVITY LOGS ═══");
+    logSection("═══ PHASE 9: ADMIN ACTIVITY LOGS ═══");
 
     const adminLogData = await seedAdminActivityLogs(admins);
 
@@ -140,7 +152,9 @@ async function main() {
     console.log(`║  • Notifications: ${socialData.notificationCount}                                       ║`);
     console.log(`║  • Disputes: ${disputeData.disputeCount}                                              ║`);
     console.log(`║  • Penalties: ${disputeData.penaltyCount}                                             ║`);
-    console.log(`║  • User Ratings: ${ratingData.ratingCount}                                          ║`);
+    console.log(`║  • DMR Ratings: ${dmrData.ratingsCreated} (${dmrData.matchesProcessed} matches)                          ║`);
+    console.log(`║  • Rating History: ${dmrData.historyEntriesCreated}                                        ║`);
+    console.log(`║  • Rating Adjustments: ${ratingData.adjustmentCount}                                       ║`);
     console.log(`║  • Bug Reports: ${bugData.bugCount}                                              ║`);
     console.log(`║  • Admin Logs: ${adminLogData.logCount}                                              ║`);
     console.log("╠══════════════════════════════════════════════════════════════╣");
