@@ -4,6 +4,7 @@ import { NotificationType, NOTIFICATION_TYPES } from '../types/notificationTypes
 import { notificationService } from '../services/notificationService';
 import { prisma } from '../lib/prisma';
 import { Expo } from 'expo-server-sdk';
+import { notificationTemplates } from '../helpers/notification';
 
 // Validate Expo push token format
 function isValidExpoPushToken(token: string): boolean {
@@ -419,6 +420,42 @@ export const getUserPushTokens = async (req: Request, res: Response) => {
     res.status(500).json({
       success: false,
       error: 'Failed to get push tokens',
+    });
+  }
+};
+
+// Send a test push notification (uses a real push notification template)
+export const sendTestPushNotification = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.id;
+
+    if (!userId) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    // Use the "League Winner" push notification template as a test
+    const testNotification = notificationTemplates.leagueLifecycle.leagueWinner('Test League');
+
+    const result = await notificationService.createNotification({
+      userIds: userId,
+      ...testNotification,
+    });
+
+    res.json({
+      success: true,
+      data: result,
+      message: '🎉 Test push notification sent! Check your device.',
+      notification: {
+        title: testNotification.title,
+        message: testNotification.message,
+        isPush: testNotification.isPush,
+      },
+    });
+  } catch (error) {
+    console.error('Error sending test push notification:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to send test push notification',
     });
   }
 };

@@ -38,10 +38,26 @@ import {
 } from "../services/season/utils/formatters";
 
 import { notificationService } from '../services/notificationService';
+import { notificationTemplates } from '../helpers/notification';
 
 import { seasonNotifications, paymentNotifications } from '../helpers/notification';
 import { NOTIFICATION_TYPES } from '../types/notificationTypes';
 import { notifyAdminsWithdrawalRequest } from '../services/notification/adminNotificationService';
+
+// League Notification Service Functions
+import {
+  sendSeasonRegistrationConfirmed,
+  sendLeagueStartingSoonNotifications,
+  sendLeagueStartsTomorrowNotifications,
+  sendLeagueStartedWelcomeNotifications,
+  sendFinalWeekAlertNotifications,
+  sendLeagueEndedNotifications,
+  sendLeagueExtendedNotifications,
+  sendLeagueShortenedNotifications,
+  sendLeagueWinnerAnnouncement,
+  sendTop3FinishNotification,
+  sendLeagueCompleteBannerNotifications,
+} from '../services/notification/leagueNotificationService';
 
 
 
@@ -157,33 +173,8 @@ export const createSeason = async (req: Request, res: Response) => {
 
     const season = await createSeasonService(seasonData);
 
-    // 🆕 Send notification if season is starting soon
-    if (isActive && startDate) {
-      const startDateObj = new Date(startDate);
-      const now = new Date();
-      const daysDifference = Math.ceil((startDateObj.getTime() - now.getTime()) / (1000 * 3600 * 24));
-      
-      if (daysDifference <= 7 && daysDifference > 0) {
-        // Get all registered users for this season
-        const registeredUsers = await prisma.seasonMembership.findMany({
-          where: { seasonId: season.id },
-          select: { userId: true }
-        });
-
-        if (registeredUsers.length > 0) {
-          const notificationData = seasonNotifications.startingSoon(
-            season.name,
-            startDateObj.toLocaleDateString()
-          );
-
-          await notificationService.createNotification({
-            userIds: registeredUsers.map(u => u.userId),
-            ...notificationData,
-            seasonId: season.id
-          });
-        }
-      }
-    }
+    // 🆕 Send notification if season is starting soon (handled by cron jobs, not here)
+    // Note: League starting notifications (3 days, tomorrow, today) should be handled by scheduled cron jobs
 
     return res.status(201).json({
       success: true,
@@ -332,33 +323,79 @@ export const updateSeason = async (req: Request, res: Response) => {
 
     // 🆕 Send notifications for status changes
     if (status && currentSeason && status !== currentSeason.status) {
-      const registeredUsers = await prisma.seasonMembership.findMany({
-        where: { seasonId: id },
-        select: { userId: true }
+      // Status changed - send appropriate notification
+      if (status === 'ACTIVE') {
+        // League just started
+        await sendLeagueStartedWelcomeNotifications(id);
+      } else if (status === 'FINISHED') {
+        // League ended - send end notifications and winner announcements
+        await sendLeagueEndedNotifications(id);
+
+        // Get all divisions in this season and announce winners
+        const divisions = await prisma.division.findMany({
+          where: { seasonId: id },
+          select: { id: true },
+        });
+
+        for (const division of divisions) {
+          // Get top 3 players by rank in this division
+          const topPlayers = await prisma.seasonMembership.findMany({
+            where: {
+              seasonId: id,
+              divisionId: division.id,
+              status: 'ACTIVE',
+            },
+            orderBy: { rank: 'asc' },
+            take: 3,
+            select: { userId: true, rank: true },
+          });
+
+          // Announce winner (rank 1)
+          if (topPlayers.length > 0 && topPlayers[0].rank === 1) {
+            await sendLeagueWinnerAnnouncement(
+              topPlayers[0].userId,
+              id,
+              division.id
+            );
+          }
+
+          // Announce top 3 finishers (ranks 2 and 3)
+          for (const player of topPlayers.slice(1)) {
+            if (player.rank && player.rank >= 2 && player.rank <= 3) {
+              await sendTop3FinishNotification(
+                player.userId,
+                player.rank,
+                id,
+                division.id
+              );
+            }
+          }
+
+          // Send league complete banner to all other players
+          const top3Ids = topPlayers.map(p => p.userId);
+          await sendLeagueCompleteBannerNotifications(id, division.id, top3Ids);
+        }
+      }
+      // Note: CANCELLED and other status changes handled separately
+    }
+
+    // Handle date changes (extended/shortened)
+    if (endDate && currentSeason) {
+      const currentEndDate = await prisma.season.findUnique({
+        where: { id },
+        select: { endDate: true }
       });
 
-      if (registeredUsers.length > 0) {
-        let notificationData;
+      if (currentEndDate?.endDate && endDate !== currentEndDate.endDate.toISOString()) {
+        const newEndDate = new Date(endDate);
+        const oldEndDate = currentEndDate.endDate;
 
-        if (status === 'FINISHED') {
-          notificationData = seasonNotifications.ended(
-            season.name,
-            undefined,
-            undefined 
-          );
-        } else if (status === 'CANCELLED') {
-          notificationData = seasonNotifications.cancelled(
-            season.name,
-            'Season has been cancelled by administration'
-          );
-        }
-
-        if (notificationData) {
-          await notificationService.createNotification({
-            userIds: registeredUsers.map(u => u.userId),
-            ...notificationData,
-            seasonId: id
-          });
+        if (newEndDate > oldEndDate) {
+          // League extended
+          await sendLeagueExtendedNotifications(id, newEndDate.toLocaleDateString());
+        } else if (newEndDate < oldEndDate) {
+          // League shortened
+          await sendLeagueShortenedNotifications(id, newEndDate.toLocaleDateString());
         }
       }
     }
@@ -554,24 +591,26 @@ export const processWithdrawalRequest = async (req: AuthenticatedRequest, res: R
       }
     });
 
-    if (withdrawalRequest) {
-      let notificationData;
-
-      if (status === 'APPROVED') {
-        notificationData = {
-          type: NOTIFICATION_TYPES.WITHDRAWAL_REQUEST_APPROVED,
-          category: 'GENERAL' as const,
-          title: 'Withdrawal Request Approved',
-          message: `Your withdrawal request for ${withdrawalRequest.season.name} has been approved. Your refund will be processed within 5-7 business days.`
-        };
-      } else {
-        notificationData = {
-          type: NOTIFICATION_TYPES.WITHDRAWAL_REQUEST_REJECTED,
-          category: 'GENERAL' as const,
-          title: 'Withdrawal Request Rejected',
-          message: `Your withdrawal request for ${withdrawalRequest.season.name} has been rejected. Please contact support for more information.`
-        };
-      }
+    if (withdrawalRequest && status === 'APPROVED') {
+      // Use league lifecycle template for withdrawal approved
+      const notificationData = notificationTemplates.leagueLifecycle.withdrawalApproved(
+        withdrawalRequest.season.name
+      );
+      
+      await notificationService.createNotification({
+        userIds: withdrawalRequest.userId,
+        ...notificationData,
+        seasonId: withdrawalRequest.seasonId,
+        withdrawalRequestId: id
+      });
+    } else if (withdrawalRequest && status === 'REJECTED') {
+      // Keep custom notification for rejection (no template exists)
+      const notificationData = {
+        type: NOTIFICATION_TYPES.WITHDRAWAL_REQUEST_REJECTED,
+        category: 'GENERAL' as const,
+        title: 'Withdrawal Request Rejected',
+        message: `Your withdrawal request for ${withdrawalRequest.season.name} has been rejected. Please contact support for more information.`
+      };
 
       await notificationService.createNotification({
         userIds: withdrawalRequest.userId,
@@ -725,16 +764,8 @@ export const registerPlayerToSeason = async (req: Request, res: Response) => {
       // 🆕 Send registration confirmation notifications for both players
       const season = result.memberships[0]?.season;
       if (season) {
-        const notificationData = seasonNotifications.registrationConfirmed(
-          season.name,
-          `$${season.entryFee}`
-        );
-
-        await notificationService.createNotification({
-          userIds: [captainId, partnerId],
-          ...notificationData,
-          seasonId: seasonId
-        });
+        await sendSeasonRegistrationConfirmed(captainId, seasonId);
+        await sendSeasonRegistrationConfirmed(partnerId, seasonId);
       }
 
       // ✅ Emit Socket.IO events to notify both captain and partner about team registration completion
@@ -777,23 +808,7 @@ export const registerPlayerToSeason = async (req: Request, res: Response) => {
       const membership = await registerMembershipService({ userId, seasonId, payLater: payLater === true });
       
       // 🆕 Send registration confirmation notification
-      const season = await prisma.season.findUnique({
-        where: { id: seasonId },
-        select: { name: true, entryFee: true }
-      });
-
-      if (season) {
-        const notificationData = seasonNotifications.registrationConfirmed(
-          season.name,
-          `$${season.entryFee}`
-        );
-
-        await notificationService.createNotification({
-          userIds: userId,
-          ...notificationData,
-          seasonId: seasonId
-        });
-      }
+      await sendSeasonRegistrationConfirmed(userId, seasonId);
 
       const result = {
         ...membership,
@@ -875,36 +890,28 @@ export const updatePaymentStatus = async (req: Request, res: Response) => {
     const membershipWithSeason = await prisma.seasonMembership.findUnique({
       where: { id: membershipId },
       include: {
-        season: { select: { name: true, entryFee: true } }
+        season: { select: { name: true, entryFee: true } },
+        user: { select: { id: true } }
       }
     });
 
     if (membershipWithSeason) {
-      let notificationData;
+      const leagueName = membershipWithSeason.season.name;
+      const userId = membershipWithSeason.user.id;
 
       if (paymentStatus === 'COMPLETED') {
-        notificationData = paymentNotifications.confirmed(
-          membershipWithSeason.season.name,
-          `$${membershipWithSeason.season.entryFee}`,
-          'Credit Card' 
-        );
-      } else if (paymentStatus === 'FAILED') {
-        notificationData = paymentNotifications.failed(
-          membershipWithSeason.season.name,
-          `$${membershipWithSeason.season.entryFee}`,
-          'Payment processing failed'
-        );
-      } else if (paymentStatus === 'PENDING') {
-        notificationData = paymentNotifications.reminder(
-          membershipWithSeason.season.name,
-          `$${membershipWithSeason.season.entryFee}`,
-          'Please complete your payment soon'
-        );
-      }
-
-      if (notificationData) {
+        // Use league lifecycle template for payment confirmed
+        const notificationData = notificationTemplates.leagueLifecycle.paymentConfirmed(leagueName);
         await notificationService.createNotification({
-          userIds: membership.userId,
+          userIds: userId,
+          ...notificationData,
+          seasonId: membershipWithSeason.seasonId
+        });
+      } else if (paymentStatus === 'FAILED') {
+        // Use league lifecycle template for payment failed
+        const notificationData = notificationTemplates.leagueLifecycle.paymentFailed(leagueName);
+        await notificationService.createNotification({
+          userIds: userId,
           ...notificationData,
           seasonId: membershipWithSeason.seasonId
         });

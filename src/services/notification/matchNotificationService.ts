@@ -43,24 +43,29 @@ export async function sendMatchScheduledNotification(
     ]);
 
     // Notify both players
+    const notif1 = notificationTemplates.matchManagement.matchScheduled(
+      player2?.name || 'Opponent',
+      date,
+      time,
+      venue
+    );
+    const notif2 = notificationTemplates.matchManagement.matchScheduled(
+      player1?.name || 'Opponent',
+      date,
+      time,
+      venue
+    );
+
     await Promise.all([
       notificationService.createNotification({
-        type: 'MATCH_SCHEDULED',
-        category: 'MATCH',
-        title: 'Match Confirmed!',
-        message: `You are playing ${player2?.name} on ${date} at ${time} at ${venue}`,
+        ...notif1,
         userIds: player1Id,
         matchId,
-        metadata: { opponentName: player2?.name, date, time, venue },
       }),
       notificationService.createNotification({
-        type: 'MATCH_SCHEDULED',
-        category: 'MATCH',
-        title: 'Match Confirmed!',
-        message: `You are playing ${player1?.name} on ${date} at ${time} at ${venue}`,
+        ...notif2,
         userIds: player2Id,
         matchId,
-        metadata: { opponentName: player1?.name, date, time, venue },
       }),
     ]);
 
@@ -98,24 +103,27 @@ export async function sendMatchReminder24h(matchId: string): Promise<void> {
 
     if (!player1 || !player2) return;
 
+    const notif1 = notificationTemplates.matchManagement.matchReminder24h(
+      player2.user?.name || 'Opponent',
+      time,
+      venue
+    );
+    const notif2 = notificationTemplates.matchManagement.matchReminder24h(
+      player1.user?.name || 'Opponent',
+      time,
+      venue
+    );
+
     await Promise.all([
       notificationService.createNotification({
-        type: 'MATCH_REMINDER',
-        category: 'MATCH',
-        title: 'Match Tomorrow',
-        message: `You are playing ${player2.user?.name || 'Opponent'} tomorrow at ${time} at ${venue}`,
+        ...notif1,
         userIds: player1.userId,
         matchId,
-        metadata: { opponentName: player2.user?.name || 'Opponent', time, venue },
       }),
       notificationService.createNotification({
-        type: 'MATCH_REMINDER',
-        category: 'MATCH',
-        title: 'Match Tomorrow',
-        message: `You are playing ${player1.user?.name || 'Opponent'} tomorrow at ${time} at ${venue}`,
+        ...notif2,
         userIds: player2.userId,
         matchId,
-        metadata: { opponentName: player1.user?.name || 'Opponent', time, venue },
       }),
     ]);
 
@@ -153,24 +161,25 @@ export async function sendMatchReminder2h(matchId: string): Promise<void> {
 
     if (!player1 || !player2) return;
 
+    const notif1 = notificationTemplates.matchManagement.matchReminder2h(
+      player2.user?.name || 'Opponent',
+      venue
+    );
+    const notif2 = notificationTemplates.matchManagement.matchReminder2h(
+      player1.user?.name || 'Opponent',
+      venue
+    );
+
     await Promise.all([
       notificationService.createNotification({
-        type: 'MATCH_REMINDER',
-        category: 'MATCH',
-        title: 'Match Starting Soon',
-        message: `Get ready! You are playing ${player2.user?.name || 'Opponent'} in 2 hours at ${venue}`,
+        ...notif1,
         userIds: player1.userId,
         matchId,
-        metadata: { opponentName: player2.user?.name || 'Opponent', venue },
       }),
       notificationService.createNotification({
-        type: 'MATCH_REMINDER',
-        category: 'MATCH',
-        title: 'Match Starting Soon',
-        message: `Get ready! You are playing ${player1.user?.name || 'Opponent'} in 2 hours at ${venue}`,
+        ...notif2,
         userIds: player2.userId,
         matchId,
-        metadata: { opponentName: player1.user?.name || 'Opponent', venue },
       }),
     ]);
 
@@ -308,14 +317,15 @@ export async function sendMatchCancelledNotification(
 
     const date = match?.matchDate?.toLocaleDateString() || 'TBD';
 
+    const notification = notificationTemplates.matchManagement.matchCancelled(
+      canceller?.name || 'Opponent',
+      date
+    );
+
     await notificationService.createNotification({
-      type: 'MATCH_CANCELLED',
-      category: 'MATCH',
-      title: 'Match Cancelled',
-      message: `${canceller?.name} cancelled your league match on ${date}`,
+      ...notification,
       userIds: opponentId,
       matchId,
-      metadata: { cancellerName: canceller?.name, date },
     });
 
     logger.info('Match cancelled notification sent', { matchId, opponentId });

@@ -4,6 +4,7 @@
  */
 
 import { NotificationService } from '../notificationService';
+import { notificationTemplates } from '../../helpers/notifications';
 import {
   getAdminsWithPreference,
   NotificationPreferenceKey
@@ -59,13 +60,16 @@ export async function notifyAdminsWithdrawalRequest(
     withdrawalRequestId: string;
   }
 ): Promise<void> {
+  const notification = notificationTemplates.admin.withdrawalRequest(
+    data.playerName,
+    data.seasonName,
+    data.reason
+  );
+
   await notifyAdmins(
     notificationService,
     {
-      type: 'ADMIN_WITHDRAWAL_REQUEST',
-      category: 'ADMIN',
-      title: 'New Withdrawal Request',
-      message: `${data.playerName} has requested to withdraw from ${data.seasonName}. Reason: ${data.reason}`,
+      ...notification,
       seasonId: data.seasonId,
       withdrawalRequestId: data.withdrawalRequestId
     },
@@ -84,13 +88,15 @@ export async function notifyAdminsDispute(
     reason?: string;
   }
 ): Promise<void> {
+  const notification = notificationTemplates.admin.matchDispute(
+    data.disputerName,
+    data.reason || 'No reason provided'
+  );
+
   await notifyAdmins(
     notificationService,
     {
-      type: 'ADMIN_DISPUTE_SUBMITTED',
-      category: 'ADMIN',
-      title: 'New Dispute Submitted',
-      message: `${data.disputerName} has disputed a match result. ${data.reason ? `Reason: ${data.reason}` : 'Please review.'}`,
+      ...notification,
       matchId: data.matchId
     },
     'disputeAlerts'
@@ -159,13 +165,16 @@ export async function notifyAdminsPlayerReport(
     matchId?: string;
   }
 ): Promise<void> {
+  const notification = notificationTemplates.admin.playerReported(
+    data.reporterName,
+    data.reportedPlayerName,
+    data.reason
+  );
+
   await notifyAdmins(
     notificationService,
     {
-      type: 'ADMIN_PLAYER_REPORT',
-      category: 'ADMIN',
-      title: 'Player Report Submitted',
-      message: `${data.reporterName} has reported ${data.reportedPlayerName}. Reason: ${data.reason}`,
+      ...notification,
       matchId: data.matchId
     },
     'playerReports'

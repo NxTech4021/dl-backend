@@ -19,6 +19,11 @@ import { calculateMatchRatings, applyMatchRatings } from '../rating/ratingCalcul
 // NOTE: updateMatchStandings removed - V2 standings handles everything now
 import { notifyAdminsDispute } from '../notification/adminNotificationService';
 import { notifyBatchRatingChanges } from '../notification/playerNotificationService';
+import {
+  sendOpponentSubmittedScoreNotification,
+  sendScoreDisputeAlert,
+  checkAndSendWinningStreakNotification,
+} from '../notification/matchNotificationService';
 import { ScoreValidationService } from './validation/scoreValidationService';
 import { MatchResultCreationService } from './calculation/matchResultCreationService';
 import { Best6EventHandler } from './best6/best6EventHandler';
@@ -464,6 +469,16 @@ export class MatchResultService {
         logger.error(`Failed post-match actions for match ${matchId}`, {}, error as Error);
       }
 
+      // Step 8: Check for winning streaks and send notifications
+      try {
+        const winnerIds = ratingUpdates ? [ratingUpdates.winner.userId] : [];
+        for (const winnerId of winnerIds) {
+          await checkAndSendWinningStreakNotification(winnerId, matchId);
+        }
+      } catch (error) {
+        logger.error(`Failed to check winning streaks for match ${matchId}`, {}, error as Error);
+      }
+
       logger.info(`Match ${matchId} processing completed successfully`);
 
     } catch (error) {
@@ -849,23 +864,14 @@ export class MatchResultService {
 
       if (!match) return;
 
-      const submitter = await prisma.user.findUnique({
-        where: { id: submitterId },
-        select: { name: true }
-      });
-
       const otherParticipants = match.participants
         .filter(p => p.userId !== submitterId)
         .map(p => p.userId);
 
-      await this.notificationService.createNotification({
-        type: 'MATCH_RESULT_SUBMITTED',
-        title: 'Match Result Submitted',
-        message: `${submitter?.name} has submitted the match result. Please confirm or dispute.`,
-        category: 'MATCH',
-        matchId,
-        userIds: otherParticipants
-      });
+      // Send notification to each opponent
+      for (const opponentId of otherParticipants) {
+        await sendOpponentSubmittedScoreNotification(matchId, submitterId, opponentId);
+      }
     } catch (error) {
       logger.error('Error sending result submitted notification', {}, error as Error);
     }
@@ -913,35 +919,28 @@ export class MatchResultService {
       const match = await prisma.match.findUnique({
         where: { id: matchId },
         include: {
-          participants: { select: { userId: true } }
+          participants: {
+            select: { userId: true, user: { select: { name: true } } }
+          }
         }
       });
 
       if (!match) return;
 
+      // Get player names
+      const player1 = match.participants[0];
+      const player2 = match.participants[1];
+      if (!player1 || !player2) return;
+
+      // Send score dispute alert to both participants
+      await sendScoreDisputeAlert(matchId, player1.userId, player2.userId);
+
+      // Notify admins
       const disputer = await prisma.user.findUnique({
         where: { id: disputerId },
         select: { name: true }
       });
-
-      const disputerName = disputer?.name || 'A player';
-
-      // Notify other participants
-      const otherParticipants = match.participants
-        .filter(p => p.userId !== disputerId)
-        .map(p => p.userId);
-
-      await this.notificationService.createNotification({
-        type: 'MATCH_DISPUTED',
-        title: 'Match Result Disputed',
-        message: `${disputerName} has disputed the match result. An admin will review.`,
-        category: 'MATCH',
-        matchId,
-        userIds: otherParticipants
-      });
-
-      // Notify admins
-      const disputeInfo: any = { disputerName, matchId };
+      const disputeInfo: any = { disputerName: disputer?.name || 'A player', matchId };
       if (reason) disputeInfo.reason = reason;
       await notifyAdminsDispute(this.notificationService, disputeInfo);
     } catch (error) {

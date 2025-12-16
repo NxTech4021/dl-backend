@@ -4,6 +4,7 @@
  */
 
 import { NotificationService } from '../notificationService';
+import { notificationTemplates } from '../../helpers/notifications';
 import { filterUsersByPreference } from './notificationPreferenceService';
 import { NOTIFICATION_TYPES } from '../../types/notificationTypes';
 import { logger } from '../../utils/logger';
@@ -32,14 +33,18 @@ export async function notifyOpponentChange(
       return;
     }
 
-    const locationInfo = data.location ? ` at ${data.location}` : '';
+    const location = data.location || 'TBD';
+    const notification = notificationTemplates.matchManagement.opponentChanged(
+      data.oldOpponentName,
+      data.newOpponentName,
+      data.matchDate,
+      data.matchTime,
+      location
+    );
 
     await notificationService.createNotification({
+      ...notification,
       userIds: data.userId,
-      type: NOTIFICATION_TYPES.OPPONENT_CHANGED,
-      category: 'MATCH',
-      title: 'Opponent Changed',
-      message: `Your opponent has changed from ${data.oldOpponentName} to ${data.newOpponentName} for your match on ${data.matchDate} at ${data.matchTime}${locationInfo}.`,
       matchId: data.matchId
     });
 
@@ -73,14 +78,18 @@ export async function notifyPartnerChange(
       return;
     }
 
-    const locationInfo = data.location ? ` at ${data.location}` : '';
+    const location = data.location || 'TBD';
+    const notification = notificationTemplates.doublesLeague.doublesPartnerChanged(
+      data.oldPartnerName,
+      data.newPartnerName,
+      data.matchDate,
+      data.matchTime,
+      location
+    );
 
     await notificationService.createNotification({
+      ...notification,
       userIds: data.userId,
-      type: NOTIFICATION_TYPES.PARTNER_CHANGED,
-      category: 'MATCH',
-      title: 'Partner Changed',
-      message: `Your doubles partner has changed from ${data.oldPartnerName} to ${data.newPartnerName} for your match on ${data.matchDate} at ${data.matchTime}${locationInfo}.`,
       matchId: data.matchId
     });
 
@@ -112,16 +121,14 @@ export async function notifyRatingChange(
       return;
     }
 
-    const change = data.newRating - data.oldRating;
-    const changeStr = change >= 0 ? `+${change}` : `${change}`;
-    const reasonStr = data.reason ? ` ${data.reason}` : '';
+    const notification = notificationTemplates.ratingRanking.ratingChanged(
+      data.oldRating,
+      data.newRating
+    );
 
     await notificationService.createNotification({
+      ...notification,
       userIds: data.userId,
-      type: NOTIFICATION_TYPES.RATING_UPDATE,
-      category: 'GENERAL',
-      title: 'Rating Updated',
-      message: `Your rating changed from ${data.oldRating} to ${data.newRating} (${changeStr}).${reasonStr}`,
       matchId: data.matchId
     });
 
@@ -168,12 +175,14 @@ export async function notifySeasonRegistrationOpen(
       return;
     }
 
+    const notification = notificationTemplates.leagueLifecycle.registrationOpen(
+      data.seasonName,
+      data.registrationDeadline
+    );
+
     await notificationService.createNotification({
+      ...notification,
       userIds: recipients,
-      type: NOTIFICATION_TYPES.SEASON_REGISTRATION_OPEN,
-      category: 'SEASON',
-      title: 'Season Registration Open',
-      message: `Registration is now open for ${data.seasonName}! Season starts ${data.startDate}. Register by ${data.registrationDeadline}.`,
       seasonId: data.seasonId
     });
 
