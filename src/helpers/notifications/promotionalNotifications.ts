@@ -13,6 +13,7 @@ export const promotionalNotifications = {
     title: 'Next Season Soon',
     message: `New ${sport} season opens ${date}! Set a reminder`,
     metadata: { sport, date },
+    isPush: true, // Push notification (NOTIF-128)
   }),
 
   sponsoredLeagueAnnouncement: (sponsorName: string, leagueName: string): NotificationPayload => ({
@@ -21,6 +22,7 @@ export const promotionalNotifications = {
     title: 'Sponsored League',
     message: `${sponsorName} presents: ${leagueName}! Registration open`,
     metadata: { sponsorName, leagueName },
+    isPush: true, // Push notification (NOTIF-129)
   }),
 
   referralBonusAvailable: (reward: string): NotificationPayload => ({
@@ -29,6 +31,7 @@ export const promotionalNotifications = {
     title: 'Invite Friends',
     message: `Invite friends and earn ${reward} when they join`,
     metadata: { reward },
+    isPush: true, // Push notification (NOTIF-130)
   }),
 
   inactivePlayer14Days: (): NotificationPayload => ({
@@ -37,6 +40,7 @@ export const promotionalNotifications = {
     title: 'Fun Games Are Calling!',
     message: 'Jump back in, play a match, and meet new people',
     metadata: {},
+    isPush: true, // Push notification (NOTIF-131)
   }),
 
   inactivePlayer30Days: (): NotificationPayload => ({
@@ -45,6 +49,7 @@ export const promotionalNotifications = {
     title: 'We Miss You!',
     message: 'It is been awhile, see new league or friedly matches and join the action!',
     metadata: {},
+    isPush: true, // Push notification (NOTIF-132)
   }),
 
   leagueBetweenBreaks: (leagueName: string): NotificationPayload => ({
@@ -53,6 +58,7 @@ export const promotionalNotifications = {
     title: 'Miss the Competition?',
     message: `${leagueName} registration is open!`,
     metadata: { leagueName },
+    isPush: true, // Push notification (NOTIF-133)
   }),
 
   incompleteRegistration: (leagueName: string): NotificationPayload => ({
@@ -61,6 +67,7 @@ export const promotionalNotifications = {
     title: 'Complete Registration',
     message: `Complete your registration for ${leagueName} to secure your spot!`,
     metadata: { leagueName },
+    isPush: true, // Push notification (NOTIF-134)
   }),
 
   venueSpecialOffer: (venueName: string, discount: string, validUntil: string): NotificationPayload => ({
@@ -69,5 +76,6 @@ export const promotionalNotifications = {
     title: 'Court Discount Available',
     message: `${venueName} is offering ${discount}% off for DEUCE players! Valid until ${validUntil}`,
     metadata: { venueName, discount, validUntil },
+    isPush: true, // Push notification (NOTIF-135)
   }),
 };

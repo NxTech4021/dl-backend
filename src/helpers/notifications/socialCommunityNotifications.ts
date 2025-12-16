@@ -15,6 +15,7 @@ export const socialCommunityNotifications = {
       divisionName ? ` for ${divisionName}` : ''
     }`,
     metadata: { chatName, divisionName },
+    isPush: true, // Push notification (NOTIF-119)
   }),
 
   newMessage: (senderName: string, chatName: string, preview: string): NotificationPayload => ({
@@ -23,6 +24,7 @@ export const socialCommunityNotifications = {
     title: `New message from ${senderName}`,
     message: preview,
     metadata: { senderName, chatName, preview },
+    isPush: true, // Push notification (NOTIF-120)
   }),
 
   matchChatMessage: (opponentName: string, messagePreview: string): NotificationPayload => ({
@@ -31,6 +33,7 @@ export const socialCommunityNotifications = {
     title: opponentName,
     message: messagePreview,
     metadata: { opponentName, messagePreview },
+    isPush: true, // Push notification (NOTIF-121)
   }),
 
   friendRequest: (playerName: string): NotificationPayload => ({
@@ -39,6 +42,7 @@ export const socialCommunityNotifications = {
     title: 'Friend Request',
     message: `${playerName} wants to add you as friend`,
     metadata: { playerName },
+    isPush: true, // Push notification (NOTIF-122)
   }),
 
   groupChatMessage: (groupName: string, playerName: string, messagePreview: string): NotificationPayload => ({
@@ -47,6 +51,7 @@ export const socialCommunityNotifications = {
     title: groupName,
     message: `${playerName}: ${messagePreview}`,
     metadata: { groupName, playerName, messagePreview },
+    isPush: false, // In-App only (NOTIF-123)
   }),
 
   friendActivityScorecard: (friendName: string): NotificationPayload => ({
@@ -55,6 +60,7 @@ export const socialCommunityNotifications = {
     title: `${friendName} Played Today`,
     message: 'See their scorecard',
     metadata: { friendName },
+    isPush: false, // In-App only (NOTIF-124)
   }),
 
   friendActivityPost: (friendName: string): NotificationPayload => ({
@@ -63,6 +69,7 @@ export const socialCommunityNotifications = {
     title: `${friendName} Played Today`,
     message: 'View their scorecard and photo',
     metadata: { friendName },
+    isPush: false, // In-App only (NOTIF-125)
   }),
 
   similarSkillPlayerNearby: (city: string): NotificationPayload => ({
@@ -71,6 +78,7 @@ export const socialCommunityNotifications = {
     title: 'Player Nearby',
     message: `New player with similar DMR joined in ${city}!`,
     metadata: { city },
+    isPush: false, // In-App only (NOTIF-126)
   }),
 
   tournamentInvitation: (tournamentName: string, date: string, organizer: string): NotificationPayload => ({
@@ -79,6 +87,7 @@ export const socialCommunityNotifications = {
     title: 'Tournament Invitation',
     message: `${organizer} invited you to ${tournamentName} on ${date}`,
     metadata: { tournamentName, date, organizer },
+    isPush: false, // In-App only (NOTIF-127)
   }),
 
   tournamentResult: (tournamentName: string, position: number): NotificationPayload => ({

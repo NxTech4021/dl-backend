@@ -219,6 +219,7 @@ export interface NotificationPayload {
   title?: string | undefined;
   message: string;
   metadata?: Record<string, any> | undefined;
+  isPush?: boolean | undefined; // true = Push notification, false/undefined = In-App only
 }
 
 

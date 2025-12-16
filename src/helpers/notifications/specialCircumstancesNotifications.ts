@@ -13,6 +13,7 @@ export const specialCircumstancesNotifications = {
     title: 'Dispute Submitted',
     message: 'Your dispute has been received. We\'ll look into it and keep you updated',
     metadata: {},
+    isPush: true, // Push notification (NOTIF-136)
   }),
 
   disputeResolutionRequired: (opponentName: string): NotificationPayload => ({
@@ -21,6 +22,7 @@ export const specialCircumstancesNotifications = {
     title: 'Dispute Under Review',
     message: `Your dispute with ${opponentName} is being reviewed. Check updates`,
     metadata: { opponentName },
+    isPush: false, // In-App only (NOTIF-137)
   }),
 
   disputeResolved: (opponentName: string): NotificationPayload => ({
@@ -29,6 +31,7 @@ export const specialCircumstancesNotifications = {
     title: 'Dispute Resolved',
     message: `Your dispute with ${opponentName} has been resolved. View outcome`,
     metadata: { opponentName },
+    isPush: true, // Push notification (NOTIF-138)
   }),
 
   codeOfConductWarning: (reason: string): NotificationPayload => ({
@@ -37,6 +40,7 @@ export const specialCircumstancesNotifications = {
     title: 'Code of Conduct',
     message: `You've received a warning from the league admin. Reason: ${reason}. Please check the details and ensure your future conduct follows our guidelines`,
     metadata: { reason },
+    isPush: true, // Push notification (NOTIF-139)
   }),
 
   opponentReportedIssue: (opponentName: string, issueType: string): NotificationPayload => ({
@@ -45,5 +49,6 @@ export const specialCircumstancesNotifications = {
     title: 'Issue Reported',
     message: `${opponentName} reported an issue (${issueType}). Admin will contact you if needed`,
     metadata: { opponentName, issueType },
+    isPush: false, // In-App only (NOTIF-140)
   }),
 };

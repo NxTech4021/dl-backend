@@ -13,6 +13,7 @@ import { AppError } from "../utils/errors";
 import { logger } from "../utils/logger";
 import { sendEmail as sendEmailViaResend } from "../config/nodemailer";
 import { Expo, ExpoPushMessage } from "expo-server-sdk";
+import { isPushNotification, getNotificationPriority } from "../helpers/notificationConfig";
 
 // Initialize Expo SDK for push notifications
 const expo = new Expo();
@@ -119,7 +120,7 @@ export class NotificationService {
         })),
       });
 
-      // Send real-time notifications via Socket.IO
+      // Send real-time notifications via Socket.IO (for in-app display)
       if (this.io) {
         this.emitNotifications(validUserIds, {
           id: notification.id,
@@ -138,11 +139,26 @@ export class NotificationService {
         });
       }
 
+      // Send push notifications if notification type requires it
+      if (type && isPushNotification(type)) {
+        await this.sendPushToUsers(validUserIds, {
+          title: title || 'DEUCE',
+          body: message,
+          data: {
+            notificationId: notification.id,
+            type,
+            category,
+            ...metadata,
+          },
+        });
+      }
+
       logger.info("Notification created and sent", {
         notificationId: notification.id,
         category,
         type,
         userCount: validUserIds.length,
+        isPush: type ? isPushNotification(type) : false,
       });
 
       return validUserIds.map((userId) => ({
@@ -603,6 +619,60 @@ export class NotificationService {
       logger.error(
         "Failed to deactivate push token",
         { token },
+        error as Error
+      );
+    }
+  }
+
+  /**
+   * Send push notifications to multiple users
+   * Fetches active push tokens for users and sends notifications
+   */
+  async sendPushToUsers(
+    userIds: string[],
+    notification: {
+      title: string;
+      body: string;
+      data?: Record<string, any>;
+    }
+  ): Promise<void> {
+    try {
+      // Get active push tokens for the specified users
+      const pushTokens = await prisma.userPushToken.findMany({
+        where: {
+          userId: { in: userIds },
+          isActive: true,
+        },
+        select: {
+          token: true,
+          userId: true,
+        },
+      });
+
+      if (pushTokens.length === 0) {
+        logger.info("No active push tokens found for users", { userIds });
+        return;
+      }
+
+      // Send push notification to each token
+      const pushPromises = pushTokens.map(({ token }) =>
+        this.sendPushNotification(
+          token,
+          notification.title,
+          notification.body,
+          notification.data
+        )
+      );
+
+      await Promise.allSettled(pushPromises);
+      logger.info("Push notifications sent to users", {
+        userCount: userIds.length,
+        tokenCount: pushTokens.length,
+      });
+    } catch (error) {
+      logger.error(
+        "Failed to send push notifications to users",
+        { userIds },
         error as Error
       );
     }

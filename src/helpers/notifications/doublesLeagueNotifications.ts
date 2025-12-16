@@ -7,12 +7,13 @@ import { NotificationPayload, NOTIFICATION_TYPES, getCategoryForNotificationType
  */
 
 export const doublesLeagueNotifications = {
-  pairRequestReceived: (playerName: string, leagueName: string): NotificationPayload => ({
+  pairRequestReceived: (playerName: string, seasonName: string): NotificationPayload => ({
     type: NOTIFICATION_TYPES.PAIR_REQUEST_RECEIVED,
     category: getCategoryForNotificationType(NOTIFICATION_TYPES.PAIR_REQUEST_RECEIVED),
     title: 'Doubles Partner Request',
     message: `${playerName} wants to team up with you for ${leagueName}. Accept or decline`,
     metadata: { playerName, leagueName },
+    isPush: true, // Push notification (NOTIF-106)
   }),
 
   pairRequestAcceptedCaptain: (partnerName: string, leagueName: string): NotificationPayload => ({
@@ -21,6 +22,7 @@ export const doublesLeagueNotifications = {
     title: 'Team Confirmed!',
     message: `${partnerName} accepted! You are now a team for ${leagueName}. Complete registration to secure your spot`,
     metadata: { partnerName, leagueName },
+    isPush: true, // Push notification (NOTIF-107)
   }),
 
   pairRequestAcceptedPartner: (captainName: string, leagueName: string): NotificationPayload => ({
@@ -29,6 +31,7 @@ export const doublesLeagueNotifications = {
     title: 'Team Confirmed!',
     message: `You are now teaming with ${captainName} for ${leagueName}. Waiting for ${captainName} to complete registration`,
     metadata: { captainName, leagueName },
+    isPush: true, // Push notification (NOTIF-108)
   }),
 
   pairRequestRejected: (playerName: string, seasonName: string): NotificationPayload => ({
@@ -37,6 +40,7 @@ export const doublesLeagueNotifications = {
     title: 'Request Declined',
     message: `${playerName} declined your partner request for ${seasonName}`,
     metadata: { playerName, seasonName },
+    isPush: true, // Push notification (NOTIF-109)
   }),
 
   pairRequestDeclinedCaptain: (partnerName: string, leagueName: string): NotificationPayload => ({
@@ -45,6 +49,7 @@ export const doublesLeagueNotifications = {
     title: 'Request Declined',
     message: `${partnerName} declined your doubles request for ${leagueName}. Send a request to another partner`,
     metadata: { partnerName, leagueName },
+    isPush: true, // Push notification (NOTIF-110)
   }),
 
   pairRequestDeclinedPartner: (playerName: string, leagueName: string): NotificationPayload => ({
@@ -53,6 +58,7 @@ export const doublesLeagueNotifications = {
     title: 'Request Declined',
     message: `You declined ${playerName}'s doubles request for ${leagueName}`,
     metadata: { playerName, leagueName },
+    isPush: true, // Push notification (NOTIF-111)
   }),
 
   partnerAssigned: (partnerName: string, seasonName: string): NotificationPayload => ({
@@ -61,6 +67,7 @@ export const doublesLeagueNotifications = {
     title: 'Partner Assigned',
     message: `You have been paired with ${partnerName} for ${seasonName}`,
     metadata: { partnerName, seasonName },
+    isPush: true, // Push notification (NOTIF-112)
   }),
 
   partnerRequestSent: (partnerName: string, leagueName: string): NotificationPayload => ({
@@ -69,6 +76,7 @@ export const doublesLeagueNotifications = {
     title: 'Partner Request Sent',
     message: `Waiting for ${partnerName} to accept your doubles request for ${leagueName}`,
     metadata: { partnerName, leagueName },
+    isPush: false, // In-App only (NOTIF-113)
   }),
 
   partnershipDissolved: (partnerName: string, seasonName: string, reason?: string): NotificationPayload => ({
@@ -77,6 +85,7 @@ export const doublesLeagueNotifications = {
     title: 'Partnership Ended',
     message: `Your partnership with ${partnerName} for ${seasonName} has ended${reason ? `: ${reason}` : ''}`,
     metadata: { partnerName, seasonName, reason },
+    isPush: true, // Push notification (NOTIF-114)
   }),
 
   teamRegistrationReminder2h: (leagueName: string, partnerName: string): NotificationPayload => ({
@@ -85,6 +94,7 @@ export const doublesLeagueNotifications = {
     title: 'Complete Registration',
     message: `⏰ Complete registration for your doubles team in ${leagueName} with ${partnerName}`,
     metadata: { leagueName, partnerName },
+    isPush: true, // Push notification (NOTIF-115)
   }),
 
   teamRegistrationReminder24h: (leagueName: string): NotificationPayload => ({
@@ -93,6 +103,7 @@ export const doublesLeagueNotifications = {
     title: 'Registration Pending',
     message: `Register your doubles team for ${leagueName}. Don't lose your spot!`,
     metadata: { leagueName },
+    isPush: true, // Push notification (NOTIF-116)
   }),
 
   registrationDeadlineCaptain: (leagueName: string, deadline: string): NotificationPayload => ({
@@ -101,6 +112,7 @@ export const doublesLeagueNotifications = {
     title: 'Captain Reminder',
     message: `Complete team registration for ${leagueName} by ${deadline}`,
     metadata: { leagueName, deadline },
+    isPush: true, // Push notification (NOTIF-117)
   }),
 
   waitingForCaptain: (captainName: string, leagueName: string): NotificationPayload => ({
@@ -109,6 +121,7 @@ export const doublesLeagueNotifications = {
     title: 'Waiting for Registration',
     message: `${captainName} hasn't completed registration yet for ${leagueName}. You may want to remind them!`,
     metadata: { captainName, leagueName },
+    isPush: false, // In-App only (NOTIF-118)
   }),
 
   registrationDeadlineCaptainApproaching: (leagueName: string): NotificationPayload => ({

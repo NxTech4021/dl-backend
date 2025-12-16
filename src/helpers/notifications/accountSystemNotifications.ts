@@ -13,6 +13,7 @@ export const accountSystemNotifications = {
     title: 'Welcome to Deuce!',
     message: 'Explore leagues, connect with players in your area, and start playing',
     metadata: {},
+    isPush: false, // In-App only (NOTIF-001)
   }),
 
   profileIncompleteReminder: (): NotificationPayload => ({
@@ -21,6 +22,7 @@ export const accountSystemNotifications = {
     title: 'Complete Your Profile',
     message: 'Answer a quick questionnaire to get your starting DEUCE Match Rating (DMR)',
     metadata: {},
+    isPush: false, // In-App only (NOTIF-002)
   }),
 
   profilePhotoMissing: (): NotificationPayload => ({
@@ -29,6 +31,7 @@ export const accountSystemNotifications = {
     title: 'Add Profile Photo',
     message: 'Add a profile photo to help opponents recognize you at the courts',
     metadata: {},
+    isPush: false, // In-App only (NOTIF-003)
   }),
 
   profileVerificationNeeded: (): NotificationPayload => ({
@@ -37,6 +40,7 @@ export const accountSystemNotifications = {
     title: 'Verification Required',
     message: 'Verify your account to continue using the app',
     metadata: {},
+    isPush: false, // In-App only (NOTIF-004)
   }),
 
   firstMatchCompleted: (): NotificationPayload => ({
@@ -45,6 +49,7 @@ export const accountSystemNotifications = {
     title: 'First Match Completed!',
     message: 'Your DEUCE journey has begun, thanks for playing!',
     metadata: {},
+    isPush: true, // Push notification (NOTIF-005)
   }),
 
   matchesPlayedMilestone: (count: number): NotificationPayload => ({
@@ -53,6 +58,7 @@ export const accountSystemNotifications = {
     title: 'Milestone Reached',
     message: `${count} matches played! You are becoming a DEUCE regular`,
     metadata: { count },
+    isPush: true, // Push notification (NOTIF-006)
   }),
 
   firstLeagueCompleted: (seasonName: string): NotificationPayload => ({
@@ -85,6 +91,7 @@ export const accountSystemNotifications = {
     title: 'Multi-league Player',
     message: `You are competing in ${leagueCount} leagues! Looks like you're gearing up for a big season`,
     metadata: { leagueCount },
+    isPush: true, // Push notification (NOTIF-007)
   }),
 
   newWeeklyStreak: (weeks: number): NotificationPayload => ({
@@ -93,6 +100,7 @@ export const accountSystemNotifications = {
     title: 'Weekly Streak!',
     message: `${weeks}-week streak! You've played matches for ${weeks} consecutive weeks`,
     metadata: { weeks },
+    isPush: true, // Push notification (NOTIF-008)
   }),
 
   streakAtRisk: (weeks: number, deadline: string): NotificationPayload => ({
@@ -101,6 +109,7 @@ export const accountSystemNotifications = {
     title: 'Streak Ending Soon',
     message: `Your ${weeks}-week streak is at risk! Play a match before ${deadline} to keep it alive`,
     metadata: { weeks, deadline },
+    isPush: true, // Push notification (NOTIF-009)
   }),
 
   appUpdateAvailable: (): NotificationPayload => ({
@@ -109,6 +118,7 @@ export const accountSystemNotifications = {
     title: 'Update Available',
     message: 'DEUCE update available! New features and improvements',
     metadata: {},
+    isPush: false, // In-App only (NOTIF-010)
   }),
 
   maintenanceComplete: (): NotificationPayload => ({
@@ -117,6 +127,7 @@ export const accountSystemNotifications = {
     title: "We're Back",
     message: 'DEUCE is back online! Thanks for your patience',
     metadata: {},
+    isPush: false, // In-App only (NOTIF-011)
   }),
 
   tosUpdated: (): NotificationPayload => ({
@@ -125,6 +136,7 @@ export const accountSystemNotifications = {
     title: 'Tos Updated',
     message: 'Our Terms of Service have been updated. Please review',
     metadata: {},
+    isPush: false, // In-App only (NOTIF-012)
   }),
 
   achievementUnlocked: (achievementName: string): NotificationPayload => ({
@@ -133,6 +145,7 @@ export const accountSystemNotifications = {
     title: 'Achievement Unlocked',
     message: achievementName,
     metadata: { achievementName },
+    isPush: true, // Push notification (NOTIF-013)
   }),
 
   scheduledMaintenance: (time: string, duration: string): NotificationPayload => ({
@@ -141,6 +154,7 @@ export const accountSystemNotifications = {
     title: 'Maintenance Tomorrow',
     message: `DEUCE will be down tomorrow ${time} for ${duration}`,
     metadata: { time, duration },
+    isPush: false, // In-App only (NOTIF-014)
   }),
 
   featureAnnouncement: (featureName: string, description: string): NotificationPayload => ({
@@ -149,6 +163,7 @@ export const accountSystemNotifications = {
     title: 'New Feature',
     message: `${featureName}! ${description}`,
     metadata: { featureName, description },
+    isPush: false, // In-App only (NOTIF-015)
   }),
 
   inactivityWarning: (daysSinceLastMatch: number, daysRemaining: number): NotificationPayload => ({
@@ -157,6 +172,7 @@ export const accountSystemNotifications = {
     title: 'Inactivity Warning',
     message: `It's been ${daysSinceLastMatch} days since your last match. Play within ${daysRemaining} days to stay active!`,
     metadata: { daysSinceLastMatch, daysRemaining },
+    isPush: false, // In-App only (NOTIF-016)
   }),
 
   statusChangedToInactive: (): NotificationPayload => ({
@@ -165,6 +181,7 @@ export const accountSystemNotifications = {
     title: 'Account Status Changed',
     message: 'Your account has been marked inactive. Play a match to reactivate your rating!',
     metadata: { newStatus: 'INACTIVE' },
+    isPush: false, // In-App only (NOTIF-017)
   }),
 
   reactivated: (): NotificationPayload => ({
@@ -173,6 +190,7 @@ export const accountSystemNotifications = {
     title: 'Welcome Back!',
     message: 'Your account has been reactivated. Keep playing to maintain your rating!',
     metadata: { previousStatus: 'INACTIVE' },
+    isPush: false, // In-App only (NOTIF-018)
   }),
 
   inactivityDeadline7Days: (deadline: string): NotificationPayload => ({
@@ -181,6 +199,7 @@ export const accountSystemNotifications = {
     title: '7 Days to Stay Active',
     message: `Play a match within 7 days to stay active in the league. Deadline: ${deadline}`,
     metadata: { deadline },
+    isPush: false, // In-App only (NOTIF-019)
   }),
 
   inactivityDeadline3Days: (deadline: string): NotificationPayload => ({
@@ -189,6 +208,7 @@ export const accountSystemNotifications = {
     title: '3 Days to Stay Active',
     message: `Only 3 days left! Play a match by ${deadline} to avoid being marked inactive`,
     metadata: { deadline },
+    isPush: false, // In-App only (NOTIF-020)
   }),
 
   divisionUpdateNewPlayer: (playerName: string, divisionName: string): NotificationPayload => ({
@@ -197,5 +217,6 @@ export const accountSystemNotifications = {
     title: 'New Player in Division',
     message: `${playerName} joined ${divisionName}. Welcome them!`,
     metadata: { playerName, divisionName },
+    isPush: false, // In-App only (NOTIF-021)
   }),
 };

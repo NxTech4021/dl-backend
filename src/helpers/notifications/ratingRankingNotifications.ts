@@ -13,6 +13,7 @@ export const ratingRankingNotifications = {
     title: 'You Moved Up!',
     message: `You are now #${newPosition} in ${leagueName} ${divisionName}`,
     metadata: { newPosition, leagueName, divisionName },
+    isPush: true, // Push notification (NOTIF-097)
   }),
 
   enteredTop10: (leagueName: string, divisionName: string): NotificationPayload => ({
@@ -21,6 +22,7 @@ export const ratingRankingNotifications = {
     title: 'Top 5!',
     message: `You are now in the top 5 of ${leagueName} ${divisionName}`,
     metadata: { leagueName, divisionName },
+    isPush: true, // Push notification (NOTIF-098)
   }),
 
   enteredTop3: (position: number, leagueName: string, divisionName: string): NotificationPayload => ({
@@ -29,6 +31,7 @@ export const ratingRankingNotifications = {
     title: 'Top 3!',
     message: `You are now #${position} in ${leagueName} ${divisionName}`,
     metadata: { position, leagueName, divisionName },
+    isPush: true, // Push notification (NOTIF-099)
   }),
 
   leagueLeader: (leagueName: string, divisionName: string): NotificationPayload => ({
@@ -37,6 +40,7 @@ export const ratingRankingNotifications = {
     title: 'League Leader!',
     message: `You are now leading ${leagueName} ${divisionName}! Keep it up!`,
     metadata: { leagueName, divisionName },
+    isPush: true, // Push notification (NOTIF-100)
   }),
 
   weeklyRankingUpdate: (position: number, leagueName: string, weekNumber: number): NotificationPayload => ({
@@ -45,6 +49,7 @@ export const ratingRankingNotifications = {
     title: `Week ${weekNumber} Rankings`,
     message: `You are #${position} in ${leagueName}! Keep playing to climb higher`,
     metadata: { position, leagueName, weekNumber },
+    isPush: false, // In-App only (NOTIF-101)
   }),
 
   dmrIncreased: (sport: string, newRating: number, change: number): NotificationPayload => ({
@@ -53,6 +58,7 @@ export const ratingRankingNotifications = {
     title: 'DMR Increased',
     message: `Your ${sport} DMR is now ${newRating} (+${change})`,
     metadata: { sport, newRating, change },
+    isPush: true, // Push notification (NOTIF-102)
   }),
 
   monthlyDmrRecap: (summary: string): NotificationPayload => ({
@@ -61,6 +67,7 @@ export const ratingRankingNotifications = {
     title: 'Your Monthly DMR Summary',
     message: summary,
     metadata: {},
+    isPush: true, // Push notification (NOTIF-103)
   }),
 
   personalBestRating: (sport: string, newRating: number): NotificationPayload => ({
@@ -69,6 +76,7 @@ export const ratingRankingNotifications = {
     title: 'Personal Best!',
     message: `Your ${sport} DMR is now ${newRating} - your highest ever!`,
     metadata: { sport, newRating },
+    isPush: true, // Push notification (NOTIF-104)
   }),
 
   ratingMilestone: (rating: number, sport: string): NotificationPayload => ({
@@ -77,6 +85,7 @@ export const ratingRankingNotifications = {
     title: 'Milestone Achieved!',
     message: `You've reached ${rating} DMR in ${sport}`,
     metadata: { rating, sport },
+    isPush: true, // Push notification (NOTIF-105)
   }),
 
   ratingUpdate: (sport: string, newRating: number, oldRating: number): NotificationPayload => ({
