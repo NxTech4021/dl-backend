@@ -45,7 +45,9 @@ export const createFriendlyMatch = async (req: Request, res: Response) => {
       partnerId,
       opponentPartnerId,
       message,
-      expiresInHours
+      expiresInHours,
+      isRequest,
+      requestRecipientId
     } = req.body;
 
     if (!sport || !['PICKLEBALL', 'TENNIS', 'PADEL'].includes(sport)) {
@@ -94,7 +96,9 @@ export const createFriendlyMatch = async (req: Request, res: Response) => {
       partnerId,
       opponentPartnerId,
       message,
-      expiresInHours
+      expiresInHours,
+      isRequest: isRequest === true,
+      requestRecipientId
     });
 
     res.status(201).json(match);
@@ -281,6 +285,56 @@ export const confirmFriendlyResult = async (req: Request, res: Response) => {
   } catch (error) {
     console.error('Confirm Friendly Result Error:', error);
     const message = error instanceof Error ? error.message : 'Failed to confirm result';
+    res.status(400).json({ error: message });
+  }
+};
+
+/**
+ * Accept a friendly match request
+ * POST /api/friendly/:id/accept
+ */
+export const acceptFriendlyMatchRequest = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+
+    const { id } = req.params;
+    if (!id) {
+      return res.status(400).json({ error: 'Match ID is required' });
+    }
+
+    const match = await friendlyMatchService.acceptFriendlyMatchRequest(id, userId);
+    res.json(match);
+  } catch (error) {
+    console.error('Accept Friendly Match Request Error:', error);
+    const message = error instanceof Error ? error.message : 'Failed to accept friendly match request';
+    res.status(400).json({ error: message });
+  }
+};
+
+/**
+ * Decline a friendly match request
+ * POST /api/friendly/:id/decline
+ */
+export const declineFriendlyMatchRequest = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+
+    const { id } = req.params;
+    if (!id) {
+      return res.status(400).json({ error: 'Match ID is required' });
+    }
+
+    const match = await friendlyMatchService.declineFriendlyMatchRequest(id, userId);
+    res.json(match);
+  } catch (error) {
+    console.error('Decline Friendly Match Request Error:', error);
+    const message = error instanceof Error ? error.message : 'Failed to decline friendly match request';
     res.status(400).json({ error: message });
   }
 };

@@ -708,6 +708,12 @@ model Match {
   genderRestriction GenderRestriction?  // MALE, FEMALE, OPEN (null = OPEN/All)
   skillLevels     String[]  // Array: ["BEGINNER", "IMPROVER", "INTERMEDIATE", "UPPER_INTERMEDIATE", "EXPERT"]
 
+  // Friendly match request fields
+  isFriendlyRequest Boolean   @default(false)
+  requestExpiresAt  DateTime?
+  requestStatus     InvitationStatus?  // PENDING, ACCEPTED, DECLINED, EXPIRED
+  requestRecipientId String?
+
   // Relations
   division      Division?          @relation(fields: [divisionId], references: [id], onDelete: Cascade)
   league        League?            @relation("LeagueMatches", fields: [leagueId], references: [id], onDelete: SetNull)
@@ -771,6 +777,9 @@ model Match {
   @@index([isReportedForAbuse])
   @@index([isFriendly])
   @@index([genderRestriction])
+  @@index([isFriendlyRequest])
+  @@index([requestStatus])
+  @@index([requestExpiresAt])
 }
 
 model MatchParticipant {

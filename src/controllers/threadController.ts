@@ -521,10 +521,10 @@ export const getMessages = async (req: Request, res: Response) => {
       sortedMessages.map(async (msg: any) => {
         if (msg.messageType === 'MATCH' && msg.matchId) {
           try {
-            // Fetch current match data to get latest participants
+            // Fetch current match data to get latest participants and request status
             const match = await prisma.match.findUnique({
               where: { id: msg.matchId },
-              include: {
+              select: {
                 participants: {
                   select: {
                     userId: true,
@@ -532,18 +532,27 @@ export const getMessages = async (req: Request, res: Response) => {
                     team: true,
                     invitationStatus: true,
                   }
-                }
+                },
+                // Include friendly request fields to sync with actual match status
+                isFriendlyRequest: true,
+                requestStatus: true,
+                requestExpiresAt: true,
               }
             });
 
-            if (match && match.participants) {
-              // Update matchData with current participants
+            if (match) {
+              // Update matchData with current participants and request status
               const matchData = msg.matchData as any || {};
+              const matchAny = match as any;
               msg.matchData = {
                 ...matchData,
-                participants: match.participants,
+                participants: match.participants || [],
+                // Always sync friendly request status from the actual Match record
+                requestStatus: matchAny.requestStatus || matchData.requestStatus,
+                isFriendlyRequest: matchAny.isFriendlyRequest ?? matchData.isFriendlyRequest,
+                requestExpiresAt: matchAny.requestExpiresAt?.toISOString() || matchData.requestExpiresAt,
               };
-              console.log(`  ✅ Enriched match ${msg.matchId} with ${match.participants.length} participants`);
+              console.log(`  ✅ Enriched match ${msg.matchId} with ${match.participants?.length || 0} participants, requestStatus: ${matchAny.requestStatus}`);
             }
           } catch (err) {
             console.warn(`  ⚠️ Could not enrich match data for message ${msg.id}:`, err);

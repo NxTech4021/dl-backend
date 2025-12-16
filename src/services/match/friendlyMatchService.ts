@@ -41,6 +41,9 @@ export interface CreateFriendlyMatchInput {
   opponentPartnerId?: string;
   message?: string;
   expiresInHours?: number;
+  // Request fields
+  isRequest?: boolean;
+  requestRecipientId?: string;
 }
 
 export interface FriendlyMatchFilters {
@@ -115,7 +118,9 @@ export class FriendlyMatchService {
       partnerId,
       opponentPartnerId,
       message,
-      expiresInHours = 48
+      expiresInHours = 48,
+      isRequest = false,
+      requestRecipientId
     } = input;
 
     // Validate skill levels
@@ -127,10 +132,19 @@ export class FriendlyMatchService {
       throw new Error('Invalid skill level. Must be one of: BEGINNER, IMPROVER, INTERMEDIATE, UPPER_INTERMEDIATE, EXPERT');
     }
 
+    // Calculate expiration date for requests (24 hours from now)
+    const requestExpiresAt = isRequest && requestRecipientId
+      ? new Date(Date.now() + 24 * 60 * 60 * 1000) // 24 hours
+      : null;
+
     // Create match with isFriendly = true
     const match = await prisma.match.create({
       data: {
         isFriendly: true,
+        isFriendlyRequest: isRequest && requestRecipientId ? true : false,
+        requestRecipientId: isRequest && requestRecipientId ? requestRecipientId : null,
+        requestExpiresAt: requestExpiresAt,
+        requestStatus: isRequest && requestRecipientId ? InvitationStatus.PENDING : null,
         sport,
         matchType,
         format,
@@ -317,7 +331,15 @@ export class FriendlyMatchService {
     const skip = (page - 1) * limit;
 
     const where: any = {
-      isFriendly: true as any
+      isFriendly: true as any,
+      // Exclude pending/declined/expired requests - only show accepted requests or regular friendly matches
+      OR: [
+        { isFriendlyRequest: false }, // Regular friendly matches
+        { 
+          isFriendlyRequest: true,
+          requestStatus: InvitationStatus.ACCEPTED // Only accepted requests
+        }
+      ]
     };
 
     if (filters.sport) {
@@ -462,6 +484,43 @@ export class FriendlyMatchService {
 
     if (!match || !match.isFriendly) {
       throw new Error('Friendly match not found');
+    }
+
+    // If this is a request, check expiration and status
+    if (match.isFriendlyRequest) {
+      // Check if expired
+      if (match.requestExpiresAt && new Date(match.requestExpiresAt) < new Date()) {
+        // Auto-expire if not already expired
+        if (match.requestStatus !== InvitationStatus.EXPIRED) {
+          await prisma.match.update({
+            where: { id: matchId },
+            data: {
+              requestStatus: InvitationStatus.EXPIRED
+            } as any
+          });
+        }
+        throw new Error('This friendly match request has expired');
+      }
+
+      // Check if declined
+      if (match.requestStatus === InvitationStatus.DECLINED) {
+        throw new Error('This friendly match request has been declined');
+      }
+
+      // Check if user is the recipient
+      if (match.requestRecipientId !== userId) {
+        throw new Error('You are not the recipient of this request');
+      }
+
+      // If joining a request, automatically accept it
+      await prisma.match.update({
+        where: { id: matchId },
+        data: {
+          isFriendlyRequest: false,
+          requestStatus: InvitationStatus.ACCEPTED,
+          requestExpiresAt: null
+        } as any
+      });
     }
 
     // Check if match is full
@@ -825,6 +884,143 @@ export class FriendlyMatchService {
       team2Score: team2Sets,
       winner
     };
+  }
+
+  /**
+   * Accept a friendly match request
+   * This converts the request to a regular friendly match
+   */
+  async acceptFriendlyMatchRequest(matchId: string, userId: string) {
+    const match = await prisma.match.findUnique({
+      where: { id: matchId },
+      include: {
+        participants: true
+      }
+    }) as any;
+
+    if (!match || !match.isFriendly || !match.isFriendlyRequest) {
+      throw new Error('Friendly match request not found');
+    }
+
+    // Check if user is the recipient
+    if (match.requestRecipientId !== userId) {
+      throw new Error('You are not the recipient of this request');
+    }
+
+    // Check if already expired
+    if (match.requestExpiresAt && new Date(match.requestExpiresAt) < new Date()) {
+      throw new Error('This friendly match request has expired');
+    }
+
+    // Check if already declined
+    if (match.requestStatus === InvitationStatus.DECLINED) {
+      throw new Error('This friendly match request has been declined');
+    }
+
+    // Check if already accepted
+    if (match.requestStatus === InvitationStatus.ACCEPTED) {
+      return this.getFriendlyMatchById(matchId);
+    }
+
+    // Accept the request - convert to regular friendly match
+    await prisma.match.update({
+      where: { id: matchId },
+      data: {
+        isFriendlyRequest: false,
+        requestStatus: InvitationStatus.ACCEPTED,
+        requestExpiresAt: null
+      } as any
+    });
+
+    return this.getFriendlyMatchById(matchId);
+  }
+
+  /**
+   * Decline a friendly match request
+   */
+  async declineFriendlyMatchRequest(matchId: string, userId: string) {
+    const match = await prisma.match.findUnique({
+      where: { id: matchId },
+      include: {
+        participants: true
+      }
+    }) as any;
+
+    if (!match) {
+      throw new Error('Match not found');
+    }
+
+    if (!match.isFriendly) {
+      throw new Error('This is not a friendly match');
+    }
+
+    if (!match.isFriendlyRequest) {
+      throw new Error('This is not a friendly match request');
+    }
+
+    // Check if user is the recipient
+    if (match.requestRecipientId !== userId) {
+      throw new Error('You are not the recipient of this request');
+    }
+
+    // Check if already expired
+    if (match.requestExpiresAt && new Date(match.requestExpiresAt) < new Date()) {
+      throw new Error('This friendly match request has already expired');
+    }
+
+    // Check if already declined
+    if (match.requestStatus === InvitationStatus.DECLINED) {
+      return this.getFriendlyMatchById(matchId);
+    }
+
+    // Check if already accepted
+    if (match.requestStatus === InvitationStatus.ACCEPTED) {
+      throw new Error('This friendly match request has already been accepted');
+    }
+
+    // Decline the request
+    await prisma.match.update({
+      where: { id: matchId },
+      data: {
+        requestStatus: InvitationStatus.DECLINED
+      } as any
+    });
+
+    return this.getFriendlyMatchById(matchId);
+  }
+
+  /**
+   * Check and expire friendly match requests (background job)
+   */
+  async checkAndExpireFriendlyRequests() {
+    const now = new Date();
+    
+    const expiredRequests = await prisma.match.findMany({
+      where: {
+        isFriendlyRequest: true,
+        requestStatus: InvitationStatus.PENDING,
+        requestExpiresAt: {
+          lte: now
+        }
+      } as any
+    });
+
+    if (expiredRequests.length > 0) {
+      await prisma.match.updateMany({
+        where: {
+          id: {
+            in: expiredRequests.map(m => m.id)
+          }
+        },
+        data: {
+          requestStatus: InvitationStatus.EXPIRED
+        } as any
+      });
+
+      logger.info(`Expired ${expiredRequests.length} friendly match requests`);
+    }
+
+    return expiredRequests.length;
   }
 }
 
