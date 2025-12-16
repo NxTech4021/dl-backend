@@ -36,7 +36,8 @@ import {
   getUpcomingMatches,
   getRecentResults,
   getPendingConfirmationMatches,
-  getDisputedMatches
+  getDisputedMatches,
+  getDivisionResults
 } from "../controllers/match/matchHistoryController";
 
 const matchRoutes = Router();
@@ -87,5 +88,6 @@ matchRoutes.get('/recent', getRecentResults);
 matchRoutes.get('/pending-confirmation', getPendingConfirmationMatches);
 matchRoutes.get('/disputed', getDisputedMatches);
 matchRoutes.get('/head-to-head/:opponentId', getHeadToHead);
+matchRoutes.get('/division/:divisionId/results', getDivisionResults);
 
 export default matchRoutes;
