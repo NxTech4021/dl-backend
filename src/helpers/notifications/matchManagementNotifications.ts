@@ -15,11 +15,27 @@ export const matchManagementNotifications = {
     metadata: { opponentName, date, time, venue },
   }),
 
-  matchReminder: (opponentName: string, time: string, venue: string): NotificationPayload => ({
+  matchReminder24Hours: (opponentName: string, time: string, venue: string): NotificationPayload => ({
     type: NOTIFICATION_TYPES.MATCH_REMINDER,
     category: getCategoryForNotificationType(NOTIFICATION_TYPES.MATCH_REMINDER),
-    title: 'Match Reminder',
-    message: `Match vs ${opponentName} at ${time} at ${venue}`,
+    title: 'Match Tomorrow',
+    message: `You are playing ${opponentName} tomorrow at ${time} at ${venue}`,
+    metadata: { opponentName, time, venue },
+  }),
+
+  matchReminder2Hours: (opponentName: string, venue: string): NotificationPayload => ({
+    type: NOTIFICATION_TYPES.MATCH_REMINDER,
+    category: getCategoryForNotificationType(NOTIFICATION_TYPES.MATCH_REMINDER),
+    title: 'Match Starting Soon',
+    message: `Get ready! You are playing ${opponentName} in 2 hours at ${venue}`,
+    metadata: { opponentName, venue },
+  }),
+
+  matchDayMorning: (opponentName: string, time: string, venue: string): NotificationPayload => ({
+    type: NOTIFICATION_TYPES.MATCH_REMINDER,
+    category: getCategoryForNotificationType(NOTIFICATION_TYPES.MATCH_REMINDER),
+    title: 'Match Today',
+    message: `You have a match against ${opponentName} at ${time} at ${venue}`,
     metadata: { opponentName, time, venue },
   }),
 
@@ -29,6 +45,46 @@ export const matchManagementNotifications = {
     title: 'Friendly Match Posted',
     message: `Your match on ${date} at ${time} at ${venue} is now open for players to join`,
     metadata: { date, time, venue },
+  }),
+
+  leagueMatchPosted: (date: string, time: string): NotificationPayload => ({
+    type: NOTIFICATION_TYPES.MATCH_SCHEDULED,
+    category: getCategoryForNotificationType(NOTIFICATION_TYPES.MATCH_SCHEDULED),
+    title: 'League Match Posted',
+    message: `Waiting for player to join your match on ${date} at ${time}`,
+    metadata: { date, time },
+  }),
+
+  opponentPostedLeagueMatch: (opponentName: string, date: string, time: string, venue: string): NotificationPayload => ({
+    type: NOTIFICATION_TYPES.MATCH_SCHEDULED,
+    category: getCategoryForNotificationType(NOTIFICATION_TYPES.MATCH_SCHEDULED),
+    title: 'League Match Available',
+    message: `${opponentName} posted a league match on ${date} at ${time} at ${venue}. Join now!`,
+    metadata: { opponentName, date, time, venue },
+  }),
+
+  leagueMatchConfirmedYouJoined: (opponentName: string, date: string, time: string, venue: string): NotificationPayload => ({
+    type: NOTIFICATION_TYPES.MATCH_SCHEDULED,
+    category: getCategoryForNotificationType(NOTIFICATION_TYPES.MATCH_SCHEDULED),
+    title: 'Match Confirmed!',
+    message: `You are playing ${opponentName} on ${date} at ${time} at ${venue}`,
+    metadata: { opponentName, date, time, venue },
+  }),
+
+  leagueMatchConfirmedOpponentJoined: (opponentName: string, date: string, time: string, venue: string): NotificationPayload => ({
+    type: NOTIFICATION_TYPES.MATCH_SCHEDULED,
+    category: getCategoryForNotificationType(NOTIFICATION_TYPES.MATCH_SCHEDULED),
+    title: 'Match Confirmed!',
+    message: `${opponentName} joined your match on ${date} at ${time} at ${venue}`,
+    metadata: { opponentName, date, time, venue },
+  }),
+
+  leagueMatchCancelledByOpponent: (opponentName: string, date: string): NotificationPayload => ({
+    type: NOTIFICATION_TYPES.MATCH_CANCELLED,
+    category: getCategoryForNotificationType(NOTIFICATION_TYPES.MATCH_CANCELLED),
+    title: 'Match Cancelled',
+    message: `${opponentName} cancelled your league match on ${date}`,
+    metadata: { opponentName, date },
   }),
 
   friendlyMatchJoinRequest: (playerName: string, date: string, time: string): NotificationPayload => ({
@@ -82,8 +138,8 @@ export const matchManagementNotifications = {
   schedulingConflictDetected: (date: string, time: string): NotificationPayload => ({
     type: NOTIFICATION_TYPES.SCHEDULING_CONFLICT_DETECTED,
     category: getCategoryForNotificationType(NOTIFICATION_TYPES.SCHEDULING_CONFLICT_DETECTED),
-    title: 'Schedule Conflict',
-    message: `You have another match on ${date} at ${time}. Review your schedule`,
+    title: 'Scheduling Conflict',
+    message: `Just a heads-up, you already have a match scheduled on ${date} at ${time}`,
     metadata: { date, time },
   }),
 
@@ -162,8 +218,8 @@ export const matchManagementNotifications = {
   headToHeadHistory: (opponentName: string, record: string): NotificationPayload => ({
     type: NOTIFICATION_TYPES.HEAD_TO_HEAD_HISTORY,
     category: getCategoryForNotificationType(NOTIFICATION_TYPES.HEAD_TO_HEAD_HISTORY),
-    title: 'Head-to-Head',
-    message: `Your record vs ${opponentName}: ${record}. Check your history`,
+    title: "You've Played Before",
+    message: `You've played ${opponentName} before. Your record: ${record}. View past results`,
     metadata: { opponentName, record },
   }),
 
@@ -215,12 +271,20 @@ export const matchManagementNotifications = {
     metadata: { opponentName, score },
   }),
 
-  forfeitDisciplinary: (opponentName: string, reason: string): NotificationPayload => ({
+  scoreConfirmed: (yourScore: string, opponentScore: string): NotificationPayload => ({
+    type: NOTIFICATION_TYPES.MATCH_RESULT_CONFIRMED,
+    category: getCategoryForNotificationType(NOTIFICATION_TYPES.MATCH_RESULT_CONFIRMED),
+    title: 'Match Result Confirmed',
+    message: `${yourScore}-${opponentScore}, ${yourScore}-${opponentScore}`,
+    metadata: { yourScore, opponentScore },
+  }),
+
+  forfeitDisciplinary: (opponentName: string): NotificationPayload => ({
     type: NOTIFICATION_TYPES.FORFEIT_DISCIPLINARY,
     category: getCategoryForNotificationType(NOTIFICATION_TYPES.FORFEIT_DISCIPLINARY),
-    title: 'Match Forfeited',
-    message: `Match vs ${opponentName} forfeited due to ${reason}`,
-    metadata: { opponentName, reason },
+    title: 'Match Forfeit',
+    message: `Your match vs ${opponentName} has been recorded as a forfeit due to code of conduct violation. View details`,
+    metadata: { opponentName },
   }),
 
   winningStreak: (streakCount: number): NotificationPayload => ({

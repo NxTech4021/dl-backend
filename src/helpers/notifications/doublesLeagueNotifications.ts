@@ -7,20 +7,28 @@ import { NotificationPayload, NOTIFICATION_TYPES, getCategoryForNotificationType
  */
 
 export const doublesLeagueNotifications = {
-  pairRequestReceived: (playerName: string, seasonName: string): NotificationPayload => ({
+  pairRequestReceived: (playerName: string, leagueName: string): NotificationPayload => ({
     type: NOTIFICATION_TYPES.PAIR_REQUEST_RECEIVED,
     category: getCategoryForNotificationType(NOTIFICATION_TYPES.PAIR_REQUEST_RECEIVED),
-    title: 'Partner Request',
-    message: `${playerName} wants to partner with you for ${seasonName}`,
-    metadata: { playerName, seasonName },
+    title: 'Doubles Partner Request',
+    message: `${playerName} wants to team up with you for ${leagueName}. Accept or decline`,
+    metadata: { playerName, leagueName },
   }),
 
-  pairRequestAccepted: (playerName: string, seasonName: string): NotificationPayload => ({
+  pairRequestAcceptedCaptain: (partnerName: string, leagueName: string): NotificationPayload => ({
     type: NOTIFICATION_TYPES.PAIR_REQUEST_ACCEPTED,
     category: getCategoryForNotificationType(NOTIFICATION_TYPES.PAIR_REQUEST_ACCEPTED),
-    title: 'Request Accepted',
-    message: `${playerName} accepted your partner request for ${seasonName}!`,
-    metadata: { playerName, seasonName },
+    title: 'Team Confirmed!',
+    message: `${partnerName} accepted! You are now a team for ${leagueName}. Complete registration to secure your spot`,
+    metadata: { partnerName, leagueName },
+  }),
+
+  pairRequestAcceptedPartner: (captainName: string, leagueName: string): NotificationPayload => ({
+    type: NOTIFICATION_TYPES.PAIR_REQUEST_ACCEPTED,
+    category: getCategoryForNotificationType(NOTIFICATION_TYPES.PAIR_REQUEST_ACCEPTED),
+    title: 'Team Confirmed!',
+    message: `You are now teaming with ${captainName} for ${leagueName}. Waiting for ${captainName} to complete registration`,
+    metadata: { captainName, leagueName },
   }),
 
   pairRequestRejected: (playerName: string, seasonName: string): NotificationPayload => ({
@@ -31,12 +39,20 @@ export const doublesLeagueNotifications = {
     metadata: { playerName, seasonName },
   }),
 
-  pairRequestDeclined: (playerName: string, seasonName: string): NotificationPayload => ({
+  pairRequestDeclinedCaptain: (partnerName: string, leagueName: string): NotificationPayload => ({
     type: NOTIFICATION_TYPES.PAIR_REQUEST_DECLINED,
     category: getCategoryForNotificationType(NOTIFICATION_TYPES.PAIR_REQUEST_DECLINED),
     title: 'Request Declined',
-    message: `${playerName} declined your partner request for ${seasonName}`,
-    metadata: { playerName, seasonName },
+    message: `${partnerName} declined your doubles request for ${leagueName}. Send a request to another partner`,
+    metadata: { partnerName, leagueName },
+  }),
+
+  pairRequestDeclinedPartner: (playerName: string, leagueName: string): NotificationPayload => ({
+    type: NOTIFICATION_TYPES.PAIR_REQUEST_DECLINED,
+    category: getCategoryForNotificationType(NOTIFICATION_TYPES.PAIR_REQUEST_DECLINED),
+    title: 'Request Declined',
+    message: `You declined ${playerName}'s doubles request for ${leagueName}`,
+    metadata: { playerName, leagueName },
   }),
 
   partnerAssigned: (partnerName: string, seasonName: string): NotificationPayload => ({
@@ -93,6 +109,22 @@ export const doublesLeagueNotifications = {
     title: 'Waiting for Registration',
     message: `${captainName} hasn't completed registration yet for ${leagueName}. You may want to remind them!`,
     metadata: { captainName, leagueName },
+  }),
+
+  registrationDeadlineCaptainApproaching: (leagueName: string): NotificationPayload => ({
+    type: NOTIFICATION_TYPES.REGISTRATION_DEADLINE_CAPTAIN,
+    category: getCategoryForNotificationType(NOTIFICATION_TYPES.REGISTRATION_DEADLINE_CAPTAIN),
+    title: 'Registration Closes Soon',
+    message: `Your team isn't registered for ${leagueName} yet. Register your doubles team for ${leagueName} before registration closes tomorrow`,
+    metadata: { leagueName },
+  }),
+
+  registrationDeadlinePartnerApproaching: (leagueName: string): NotificationPayload => ({
+    type: NOTIFICATION_TYPES.REGISTRATION_DEADLINE_PARTNER,
+    category: getCategoryForNotificationType(NOTIFICATION_TYPES.REGISTRATION_DEADLINE_PARTNER),
+    title: 'Registration Closes Soon',
+    message: `Your team isn't registered for ${leagueName} yet. Ask your captain to complete the payment before registration closes tomorrow`,
+    metadata: { leagueName },
   }),
 
   registrationDeadlinePartner: (leagueName: string, deadline: string): NotificationPayload => ({

@@ -23,12 +23,12 @@ export const specialCircumstancesNotifications = {
     metadata: { opponentName },
   }),
 
-  disputeResolved: (opponentName: string, outcome: string): NotificationPayload => ({
+  disputeResolved: (opponentName: string): NotificationPayload => ({
     type: NOTIFICATION_TYPES.DISPUTE_RESOLVED,
     category: getCategoryForNotificationType(NOTIFICATION_TYPES.DISPUTE_RESOLVED),
     title: 'Dispute Resolved',
-    message: `Your dispute with ${opponentName} has been resolved. Outcome: ${outcome}`,
-    metadata: { opponentName, outcome },
+    message: `Your dispute with ${opponentName} has been resolved. View outcome`,
+    metadata: { opponentName },
   }),
 
   codeOfConductWarning: (reason: string): NotificationPayload => ({

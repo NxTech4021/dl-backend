@@ -122,9 +122,33 @@ export const accountSystemNotifications = {
   tosUpdated: (): NotificationPayload => ({
     type: NOTIFICATION_TYPES.TOS_UPDATED,
     category: getCategoryForNotificationType(NOTIFICATION_TYPES.TOS_UPDATED),
-    title: 'TOS Updated',
+    title: 'Tos Updated',
     message: 'Our Terms of Service have been updated. Please review',
     metadata: {},
+  }),
+
+  achievementUnlocked: (achievementName: string): NotificationPayload => ({
+    type: NOTIFICATION_TYPES.ACHIEVEMENT_UNLOCKED,
+    category: getCategoryForNotificationType(NOTIFICATION_TYPES.ACHIEVEMENT_UNLOCKED),
+    title: 'Achievement Unlocked',
+    message: achievementName,
+    metadata: { achievementName },
+  }),
+
+  scheduledMaintenance: (time: string, duration: string): NotificationPayload => ({
+    type: NOTIFICATION_TYPES.SYSTEM_MAINTENANCE,
+    category: getCategoryForNotificationType(NOTIFICATION_TYPES.SYSTEM_MAINTENANCE),
+    title: 'Maintenance Tomorrow',
+    message: `DEUCE will be down tomorrow ${time} for ${duration}`,
+    metadata: { time, duration },
+  }),
+
+  featureAnnouncement: (featureName: string, description: string): NotificationPayload => ({
+    type: NOTIFICATION_TYPES.NEW_FEATURE,
+    category: getCategoryForNotificationType(NOTIFICATION_TYPES.NEW_FEATURE),
+    title: 'New Feature',
+    message: `${featureName}! ${description}`,
+    metadata: { featureName, description },
   }),
 
   inactivityWarning: (daysSinceLastMatch: number, daysRemaining: number): NotificationPayload => ({

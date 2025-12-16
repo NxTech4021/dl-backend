@@ -43,7 +43,7 @@ export const promotionalNotifications = {
     type: NOTIFICATION_TYPES.INACTIVE_PLAYER_30_DAYS,
     category: getCategoryForNotificationType(NOTIFICATION_TYPES.INACTIVE_PLAYER_30_DAYS),
     title: 'We Miss You!',
-    message: 'It\'s been awhile, see new league or friendly matches and join the action!',
+    message: 'It is been awhile, see new league or friedly matches and join the action!',
     metadata: {},
   }),
 

@@ -25,36 +25,52 @@ export const socialCommunityNotifications = {
     metadata: { senderName, chatName, preview },
   }),
 
-  friendRequest: (senderName: string): NotificationPayload => ({
+  matchChatMessage: (opponentName: string, messagePreview: string): NotificationPayload => ({
+    type: NOTIFICATION_TYPES.NEW_MESSAGE,
+    category: getCategoryForNotificationType(NOTIFICATION_TYPES.NEW_MESSAGE),
+    title: opponentName,
+    message: messagePreview,
+    metadata: { opponentName, messagePreview },
+  }),
+
+  friendRequest: (playerName: string): NotificationPayload => ({
     type: NOTIFICATION_TYPES.FRIEND_REQUEST,
     category: getCategoryForNotificationType(NOTIFICATION_TYPES.FRIEND_REQUEST),
     title: 'Friend Request',
-    message: `${senderName} sent you a friend request`,
-    metadata: { senderName },
+    message: `${playerName} wants to add you as friend`,
+    metadata: { playerName },
   }),
 
-  friendActivityScorecard: (friendName: string, result: string, opponent: string): NotificationPayload => ({
+  groupChatMessage: (groupName: string, playerName: string, messagePreview: string): NotificationPayload => ({
+    type: NOTIFICATION_TYPES.NEW_MESSAGE,
+    category: getCategoryForNotificationType(NOTIFICATION_TYPES.NEW_MESSAGE),
+    title: groupName,
+    message: `${playerName}: ${messagePreview}`,
+    metadata: { groupName, playerName, messagePreview },
+  }),
+
+  friendActivityScorecard: (friendName: string): NotificationPayload => ({
     type: NOTIFICATION_TYPES.FRIEND_ACTIVITY_SCORECARD,
     category: getCategoryForNotificationType(NOTIFICATION_TYPES.FRIEND_ACTIVITY_SCORECARD),
-    title: 'Friend Activity',
-    message: `${friendName} ${result} vs ${opponent}. Check out the scorecard!`,
-    metadata: { friendName, result, opponent },
+    title: `${friendName} Played Today`,
+    message: 'See their scorecard',
+    metadata: { friendName },
   }),
 
-  friendActivityPost: (friendName: string, postType: string): NotificationPayload => ({
+  friendActivityPost: (friendName: string): NotificationPayload => ({
     type: NOTIFICATION_TYPES.FRIEND_ACTIVITY_POST,
     category: getCategoryForNotificationType(NOTIFICATION_TYPES.FRIEND_ACTIVITY_POST),
-    title: 'Friend Activity',
-    message: `${friendName} shared a new ${postType}`,
-    metadata: { friendName, postType },
+    title: `${friendName} Played Today`,
+    message: 'View their scorecard and photo',
+    metadata: { friendName },
   }),
 
-  similarSkillPlayerNearby: (playerName: string, dmr: number, distance: string): NotificationPayload => ({
+  similarSkillPlayerNearby: (city: string): NotificationPayload => ({
     type: NOTIFICATION_TYPES.SIMILAR_SKILL_PLAYER_NEARBY,
     category: getCategoryForNotificationType(NOTIFICATION_TYPES.SIMILAR_SKILL_PLAYER_NEARBY),
     title: 'Player Nearby',
-    message: `${playerName} (DMR ${dmr}) is ${distance} away. Send a match request!`,
-    metadata: { playerName, dmr, distance },
+    message: `New player with similar DMR joined in ${city}!`,
+    metadata: { city },
   }),
 
   tournamentInvitation: (tournamentName: string, date: string, organizer: string): NotificationPayload => ({

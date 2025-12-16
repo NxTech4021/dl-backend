@@ -7,28 +7,68 @@ import { NotificationPayload, NOTIFICATION_TYPES, getCategoryForNotificationType
  */
 
 export const leagueLifecycleNotifications = {
-  seasonRegistrationOpen: (seasonName: string, sport: string, closeDate: string): NotificationPayload => ({
+  newLeagueAnnouncement: (location: string, sport: string): NotificationPayload => ({
     type: NOTIFICATION_TYPES.SEASON_REGISTRATION_OPEN,
     category: getCategoryForNotificationType(NOTIFICATION_TYPES.SEASON_REGISTRATION_OPEN),
-    title: 'Registration Open',
-    message: `${sport} ${seasonName} registration is now open! Register by ${closeDate}`,
-    metadata: { seasonName, sport, closeDate },
+    title: 'New League Opening',
+    message: `New ${location} ${sport} League is now open. Join now`,
+    metadata: { location, sport },
   }),
 
-  registrationClosing3Days: (seasonName: string): NotificationPayload => ({
+  newSeasonAnnouncement: (seasonNumber: string, location: string, sport: string): NotificationPayload => ({
+    type: NOTIFICATION_TYPES.SEASON_REGISTRATION_OPEN,
+    category: getCategoryForNotificationType(NOTIFICATION_TYPES.SEASON_REGISTRATION_OPEN),
+    title: 'New Season Incoming',
+    message: `Season ${seasonNumber} of the ${location} ${sport} League is now open for registration. Sign up now!`,
+    metadata: { seasonNumber, location, sport },
+  }),
+
+  registrationClosing3Days: (seasonName: string, leagueName: string): NotificationPayload => ({
     type: NOTIFICATION_TYPES.REGISTRATION_CLOSING_3_DAYS,
     category: getCategoryForNotificationType(NOTIFICATION_TYPES.REGISTRATION_CLOSING_3_DAYS),
-    title: '3 Days Left',
-    message: `Registration for ${seasonName} closes in 3 days. Don't miss out!`,
-    metadata: { seasonName },
+    title: 'Registration Closes Soon',
+    message: `Registration for ${seasonName} of ${leagueName} closes in 3 days. Secure your spot!`,
+    metadata: { seasonName, leagueName },
   }),
 
-  registrationClosing24Hours: (seasonName: string): NotificationPayload => ({
+  registrationClosing24Hours: (seasonName: string, leagueName: string): NotificationPayload => ({
     type: NOTIFICATION_TYPES.REGISTRATION_CLOSING_24_HOURS,
     category: getCategoryForNotificationType(NOTIFICATION_TYPES.REGISTRATION_CLOSING_24_HOURS),
-    title: 'Last Call!',
-    message: `⏰ Registration for ${seasonName} closes tomorrow. Secure your spot now!`,
-    metadata: { seasonName },
+    title: 'Final Call',
+    message: `Final call! Registration for ${seasonName} of the ${leagueName} closes tomorrow`,
+    metadata: { seasonName, leagueName },
+  }),
+
+  registrationConfirmed: (leagueName: string, startDate: string): NotificationPayload => ({
+    type: NOTIFICATION_TYPES.SEASON_REGISTRATION_CONFIRMED,
+    category: getCategoryForNotificationType(NOTIFICATION_TYPES.SEASON_REGISTRATION_CONFIRMED),
+    title: 'Registration Confirmed',
+    message: `You are registered for ${leagueName}! League starts ${startDate}`,
+    metadata: { leagueName, startDate },
+  }),
+
+  paymentConfirmed: (leagueName: string): NotificationPayload => ({
+    type: NOTIFICATION_TYPES.PAYMENT_CONFIRMED,
+    category: getCategoryForNotificationType(NOTIFICATION_TYPES.PAYMENT_CONFIRMED),
+    title: 'Payment Successful',
+    message: `Payment confirmed for ${leagueName}. Get ready to play`,
+    metadata: { leagueName },
+  }),
+
+  paymentFailed: (leagueName: string): NotificationPayload => ({
+    type: NOTIFICATION_TYPES.PAYMENT_FAILED,
+    category: getCategoryForNotificationType(NOTIFICATION_TYPES.PAYMENT_FAILED),
+    title: 'Payment Failed',
+    message: `Payment failed for ${leagueName}. Update payment method to secure your spot`,
+    metadata: { leagueName },
+  }),
+
+  withdrawalApproved: (leagueName: string): NotificationPayload => ({
+    type: NOTIFICATION_TYPES.WITHDRAWAL_REQUEST_APPROVED,
+    category: getCategoryForNotificationType(NOTIFICATION_TYPES.WITHDRAWAL_REQUEST_APPROVED),
+    title: 'Withdrawal Approved',
+    message: `Your withdrawal from ${leagueName} is confirmed. Refund will be processed shortly`,
+    metadata: { leagueName },
   }),
 
   seasonRegistrationConfirmed: (seasonName: string, amount: string): NotificationPayload => ({
@@ -39,28 +79,52 @@ export const leagueLifecycleNotifications = {
     metadata: { seasonName, amount },
   }),
 
-  leagueStarting3Days: (seasonName: string, startDate: string): NotificationPayload => ({
+  leagueStarting3Days: (leagueName: string): NotificationPayload => ({
     type: NOTIFICATION_TYPES.LEAGUE_STARTING_3_DAYS,
     category: getCategoryForNotificationType(NOTIFICATION_TYPES.LEAGUE_STARTING_3_DAYS),
-    title: 'League Starting Soon',
-    message: `${seasonName} starts in 3 days on ${startDate}. Get ready!`,
-    metadata: { seasonName, startDate },
+    title: 'League Starts Soon',
+    message: `${leagueName} starts in 3 days! Get ready to compete`,
+    metadata: { leagueName },
   }),
 
-  leagueStartsTomorrow: (seasonName: string): NotificationPayload => ({
+  leagueStartsTomorrow: (seasonName: string, leagueName: string): NotificationPayload => ({
     type: NOTIFICATION_TYPES.LEAGUE_STARTS_TOMORROW,
     category: getCategoryForNotificationType(NOTIFICATION_TYPES.LEAGUE_STARTS_TOMORROW),
     title: 'League Starts Tomorrow',
-    message: `${seasonName} starts tomorrow! Time to bring your A-game`,
-    metadata: { seasonName },
+    message: `${seasonName} of the ${leagueName} starts tomorrow! Get ready for matches`,
+    metadata: { seasonName, leagueName },
   }),
 
-  leagueStartedWelcome: (seasonName: string, divisionName: string): NotificationPayload => ({
+  leagueStartedWelcome: (seasonName: string, leagueName: string): NotificationPayload => ({
     type: NOTIFICATION_TYPES.LEAGUE_STARTED_WELCOME,
     category: getCategoryForNotificationType(NOTIFICATION_TYPES.LEAGUE_STARTED_WELCOME),
-    title: 'League Started!',
-    message: `${seasonName} is underway! You are in ${divisionName}. Schedule your first match`,
-    metadata: { seasonName, divisionName },
+    title: 'Season Commences!',
+    message: `${seasonName} of the ${leagueName} has began! View your division and schedule your first game`,
+    metadata: { seasonName, leagueName },
+  }),
+
+  inactivePlayerWarning7Days: (): NotificationPayload => ({
+    type: NOTIFICATION_TYPES.INACTIVITY_WARNING,
+    category: getCategoryForNotificationType(NOTIFICATION_TYPES.INACTIVITY_WARNING),
+    title: 'Get Back in',
+    message: "You haven't played in a week. Schedule your league matches to stay competitive!",
+    metadata: {},
+  }),
+
+  inactivityDuringLeague2Weeks: (): NotificationPayload => ({
+    type: NOTIFICATION_TYPES.INACTIVITY_WARNING,
+    category: getCategoryForNotificationType(NOTIFICATION_TYPES.INACTIVITY_WARNING),
+    title: 'The League Is Heating Up',
+    message: 'Players in your league are already competing. Join in and play your first match',
+    metadata: {},
+  }),
+
+  inactivityMidSeason: (): NotificationPayload => ({
+    type: NOTIFICATION_TYPES.INACTIVITY_WARNING,
+    category: getCategoryForNotificationType(NOTIFICATION_TYPES.INACTIVITY_WARNING),
+    title: 'Keep It Going',
+    message: "Your season's still on. Play your next match and stay in the mix",
+    metadata: {},
   }),
 
   earlySeasonNudge: (): NotificationPayload => ({
@@ -119,14 +183,12 @@ export const leagueLifecycleNotifications = {
     metadata: { position, leagueName },
   }),
 
-  seasonEnded: (seasonName: string, divisionName?: string, finalPosition?: number): NotificationPayload => ({
+  seasonEnded: (leagueName: string): NotificationPayload => ({
     type: NOTIFICATION_TYPES.SEASON_ENDED,
     category: getCategoryForNotificationType(NOTIFICATION_TYPES.SEASON_ENDED),
-    title: 'Season Ended',
-    message: `${seasonName} has ended${
-      finalPosition ? `. You finished in position ${finalPosition}` : ''
-    }${divisionName ? ` in ${divisionName}` : ''}. Thank you for participating!`,
-    metadata: { seasonName, divisionName, finalPosition },
+    title: 'Season Complete',
+    message: `Thank you for being part of ${leagueName}. Final results will be available once all scores are confirmed`,
+    metadata: { leagueName },
   }),
 
   leagueCompleteBanner: (leagueName: string): NotificationPayload => ({
@@ -169,12 +231,12 @@ export const leagueLifecycleNotifications = {
     metadata: {},
   }),
 
-  seasonCancelled: (seasonName: string, reason?: string): NotificationPayload => ({
+  seasonCancelled: (leagueName: string): NotificationPayload => ({
     type: NOTIFICATION_TYPES.SEASON_CANCELLED,
     category: getCategoryForNotificationType(NOTIFICATION_TYPES.SEASON_CANCELLED),
-    title: 'Season Cancelled',
-    message: `${seasonName} has been cancelled${reason ? `. Reason: ${reason}` : ''}`,
-    metadata: { seasonName, reason },
+    title: 'League Cancelled',
+    message: `We're unable to run the ${leagueName} season this time. Refunds will be processed, and we'll share updates on future seasons soon`,
+    metadata: { leagueName },
   }),
 
   refundProcessed: (amount: string, leagueName: string): NotificationPayload => ({
@@ -191,6 +253,22 @@ export const leagueLifecycleNotifications = {
     title: 'Division Assignment',
     message: `You have been assigned to ${divisionName} for ${seasonName}`,
     metadata: { divisionName, seasonName },
+  }),
+
+  divisionRebalanced: (newDivision: string, leagueName: string): NotificationPayload => ({
+    type: NOTIFICATION_TYPES.DIVISION_REBALANCED,
+    category: getCategoryForNotificationType(NOTIFICATION_TYPES.DIVISION_REBALANCED),
+    title: 'Division Change',
+    message: `You've been moved to Division ${newDivision} of ${leagueName} to balance the competition. View your new division`,
+    metadata: { newDivision, leagueName },
+  }),
+
+  divisionUpdateNewPlayer: (leagueName: string): NotificationPayload => ({
+    type: NOTIFICATION_TYPES.DIVISION_UPDATE_NEW_PLAYER,
+    category: getCategoryForNotificationType(NOTIFICATION_TYPES.DIVISION_UPDATE_NEW_PLAYER),
+    title: 'Division Update',
+    message: `A new player has joined your division in ${leagueName}. You may now arrange matches with them`,
+    metadata: { leagueName },
   }),
 
   divisionPromotion: (newDivision: string, seasonName: string): NotificationPayload => ({
