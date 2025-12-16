@@ -703,6 +703,11 @@ model Match {
   // NEW: Set 3 format toggle
   set3Format      Set3Format?  // MATCH_TIEBREAK, FULL_SET
 
+  // Friendly match fields
+  isFriendly      Boolean   @default(false)
+  genderRestriction GenderRestriction?  // MALE, FEMALE, OPEN (null = OPEN/All)
+  skillLevels     String[]  // Array: ["BEGINNER", "IMPROVER", "INTERMEDIATE", "UPPER_INTERMEDIATE", "EXPERT"]
+
   // Relations
   division      Division?          @relation(fields: [divisionId], references: [id], onDelete: Cascade)
   league        League?            @relation("LeagueMatches", fields: [leagueId], references: [id], onDelete: SetNull)
@@ -764,6 +769,8 @@ model Match {
   @@index([requiresAdminReview])
   @@index([isHiddenFromPublic])
   @@index([isReportedForAbuse])
+  @@index([isFriendly])
+  @@index([genderRestriction])
 }
 
 model MatchParticipant {
