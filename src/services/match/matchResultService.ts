@@ -180,7 +180,15 @@ export class MatchResultService {
           resultSubmittedAt: new Date(),
           requiresAdminReview: false
         };
-        if (comment) matchUpdateData.resultComment = comment;
+        if (comment) {
+          await tx.matchComment.create({
+            data: {
+              matchId,
+              userId: submittedById,
+              comment,
+            }
+          });
+        }
         if (evidence) matchUpdateData.resultEvidence = evidence;
 
         await tx.match.update({
@@ -219,7 +227,15 @@ export class MatchResultService {
           resultSubmittedAt: new Date(),
           requiresAdminReview: false
         };
-        if (comment) matchUpdateData.resultComment = comment;
+        if (comment) {
+          await tx.matchComment.create({
+            data: {
+              matchId,
+              userId: submittedById,
+              comment,
+            }
+          });
+        }
         if (evidence) matchUpdateData.resultEvidence = evidence;
 
         await tx.match.update({
@@ -840,7 +856,13 @@ export class MatchResultService {
         },
         resultConfirmedBy: {
           select: { id: true, name: true, username: true }
-        }
+        },
+        comments: {
+          include: {
+            user: { select: { id: true, name: true, username: true, image: true } }
+          },
+          orderBy: { createdAt: 'asc' }
+        },
       }
     });
   }
