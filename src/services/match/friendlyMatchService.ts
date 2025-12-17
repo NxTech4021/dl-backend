@@ -73,6 +73,7 @@ export interface SetScore {
   team2Games: number;
   team1Tiebreak?: number;
   team2Tiebreak?: number;
+  tiebreakType?: 'STANDARD_7PT' | 'MATCH_10PT';
 }
 
 export interface PickleballScore {
@@ -699,48 +700,61 @@ export class FriendlyMatchService {
       team2Score = result.team2Score;
       winner = result.winner;
 
-      // Save set scores
-      await Promise.all(
-        setScores.map(score =>
-          prisma.matchScore.upsert({
-            where: {
-              matchId_setNumber: {
-                matchId: match.id,
-                setNumber: score.setNumber
-              }
-            },
-            create: {
-              matchId: match.id,
-              setNumber: score.setNumber,
-              player1Games: score.team1Games,
-              player2Games: score.team2Games,
-              player1Tiebreak: score.team1Tiebreak ?? null,
-              player2Tiebreak: score.team2Tiebreak ?? null
-            },
-            update: {
-              player1Games: score.team1Games,
-              player2Games: score.team2Games,
-              player1Tiebreak: score.team1Tiebreak ?? null,
-              player2Tiebreak: score.team2Tiebreak ?? null
-            }
-          })
-        )
-      );
+      // Save set scores - use transaction to ensure atomicity
+      await prisma.$transaction(async (tx) => {
+        // Delete existing scores first to avoid conflicts
+        await tx.matchScore.deleteMany({
+          where: { matchId: match.id }
+        });
+
+        // Create new set scores
+        for (const score of setScores) {
+          const scoreData: any = {
+            matchId: match.id,
+            setNumber: score.setNumber,
+            player1Games: score.team1Games,
+            player2Games: score.team2Games,
+            hasTiebreak: !!(score.team1Tiebreak || score.team2Tiebreak)
+          };
+          
+          if (score.team1Tiebreak !== undefined) {
+            scoreData.player1Tiebreak = score.team1Tiebreak;
+          }
+          if (score.team2Tiebreak !== undefined) {
+            scoreData.player2Tiebreak = score.team2Tiebreak;
+          }
+          // Add tiebreakType if provided (for Set 3 match tiebreaks)
+          if (score.tiebreakType) {
+            scoreData.tiebreakType = score.tiebreakType;
+          }
+
+          await tx.matchScore.create({ data: scoreData });
+        }
+      });
     }
 
     // Update match with result
+    const matchUpdateData: any = {
+      team1Score,
+      team2Score,
+      outcome: winner,
+      status: MatchStatus.ONGOING, // Pending confirmation
+      resultSubmittedById: submittedById,
+      resultSubmittedAt: new Date(),
+      resultComment: comment || null,
+      resultEvidence: evidence || null
+    };
+
+    // Save setScores to Match model (JSON field) for easy access
+    if (match.sport === 'PICKLEBALL' && gameScores) {
+      matchUpdateData.setScores = JSON.stringify(gameScores);
+    } else if (setScores) {
+      matchUpdateData.setScores = JSON.stringify(setScores);
+    }
+
     const updatedMatch = await prisma.match.update({
       where: { id: matchId },
-      data: {
-        team1Score,
-        team2Score,
-        outcome: winner,
-        status: MatchStatus.ONGOING, // Pending confirmation
-        resultSubmittedById: submittedById,
-        resultSubmittedAt: new Date(),
-        resultComment: comment || null,
-        resultEvidence: evidence || null
-      },
+      data: matchUpdateData,
       include: {
         createdBy: {
           select: { id: true, name: true, username: true, image: true }

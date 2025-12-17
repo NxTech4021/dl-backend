@@ -42,6 +42,7 @@ export interface SetScore {
   team2Games: number;
   team1Tiebreak?: number;
   team2Tiebreak?: number;
+  tiebreakType?: 'STANDARD_7PT' | 'MATCH_10PT';
 }
 
 export interface PickleballScore {
@@ -212,6 +213,10 @@ export class MatchResultService {
           };
           if (score.team1Tiebreak !== undefined) scoreData.player1Tiebreak = score.team1Tiebreak;
           if (score.team2Tiebreak !== undefined) scoreData.player2Tiebreak = score.team2Tiebreak;
+          // Add tiebreakType if provided (for Set 3 match tiebreaks)
+          if (score.tiebreakType) {
+            scoreData.tiebreakType = score.tiebreakType;
+          }
 
           await tx.matchScore.create({ data: scoreData });
         }
