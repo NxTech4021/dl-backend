@@ -99,7 +99,6 @@ export const getMatchById = async (req: Request, res: Response) => {
       include: {
         division: true,
         participants: { include: { user: true } },
-        // Include dispute details if match is disputed (relation is disputes[] but @unique makes it 0 or 1)
         disputes: {
           include: {
             raisedByUser: {
@@ -110,6 +109,12 @@ export const getMatchById = async (req: Request, res: Response) => {
               }
             }
           }
+        },
+        comments: {
+          include: {
+            user: { select: { id: true, name: true, username: true, image: true } }
+          },
+          orderBy: { createdAt: 'asc' }
         }
       },
     });
@@ -184,5 +189,28 @@ export const deleteMatch = async (req: Request, res: Response) => {
     console.error("Delete Match Error:", err);
     const errorMessage = err instanceof Error ? err.message : "Failed to delete match.";
     res.status(500).json({ error: errorMessage });
+  }
+};
+
+export const postMatchComment = async (req: Request, res: Response) => {
+  const userId = req.user?.id;
+  const { id } = req.params;
+  const { comment } = req.body;
+
+  if (!userId) return res.status(401).json({ error: 'Authentication required' });
+  if (!id) return res.status(400).json({ error: 'Match ID is required' });
+  if (!comment) return res.status(400).json({ error: 'Comment is required' });
+
+  try {
+    const matchComment = await prisma.matchComment.create({
+      data: {
+        matchId: id,
+        userId,
+        comment,
+      }
+    });
+    res.status(201).json(matchComment);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to post comment' });
   }
 };
