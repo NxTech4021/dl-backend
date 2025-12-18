@@ -42,6 +42,7 @@ export interface SetScore {
   team2Games: number;
   team1Tiebreak?: number;
   team2Tiebreak?: number;
+  tiebreakType?: 'STANDARD_7PT' | 'MATCH_10PT';
 }
 
 export interface PickleballScore {
@@ -180,7 +181,15 @@ export class MatchResultService {
           resultSubmittedAt: new Date(),
           requiresAdminReview: false
         };
-        if (comment) matchUpdateData.resultComment = comment;
+        if (comment) {
+          await tx.matchComment.create({
+            data: {
+              matchId,
+              userId: submittedById,
+              comment,
+            }
+          });
+        }
         if (evidence) matchUpdateData.resultEvidence = evidence;
 
         await tx.match.update({
@@ -204,6 +213,10 @@ export class MatchResultService {
           };
           if (score.team1Tiebreak !== undefined) scoreData.player1Tiebreak = score.team1Tiebreak;
           if (score.team2Tiebreak !== undefined) scoreData.player2Tiebreak = score.team2Tiebreak;
+          // Add tiebreakType if provided (for Set 3 match tiebreaks)
+          if (score.tiebreakType) {
+            scoreData.tiebreakType = score.tiebreakType;
+          }
 
           await tx.matchScore.create({ data: scoreData });
         }
@@ -219,7 +232,15 @@ export class MatchResultService {
           resultSubmittedAt: new Date(),
           requiresAdminReview: false
         };
-        if (comment) matchUpdateData.resultComment = comment;
+        if (comment) {
+          await tx.matchComment.create({
+            data: {
+              matchId,
+              userId: submittedById,
+              comment,
+            }
+          });
+        }
         if (evidence) matchUpdateData.resultEvidence = evidence;
 
         await tx.match.update({
@@ -840,7 +861,13 @@ export class MatchResultService {
         },
         resultConfirmedBy: {
           select: { id: true, name: true, username: true }
-        }
+        },
+        comments: {
+          include: {
+            user: { select: { id: true, name: true, username: true, image: true } }
+          },
+          orderBy: { createdAt: 'asc' }
+        },
       }
     });
   }
