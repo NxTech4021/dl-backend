@@ -13,6 +13,7 @@ import chatRoutes from "./threadRoutes";
 import notificationRouter from "./notificationRoutes";
 import notificationPreferenceRouter from "./notificationPreferenceRoutes";
 import matchRoutes from "./matchRoutes";
+import friendlyRoutes from "./friendlyRoutes";
 import bugRouter from "./bugRoutes";
 import ratingRoutes from "./ratingRoutes";
 import standingsRoutes from "./standingsRoutes";
@@ -37,6 +38,7 @@ router.use("/category", categoryRoutes);
 router.use("/pairing", pairingRouter);
 
 router.use("/match", matchRoutes);
+router.use("/friendly", friendlyRoutes);
 
 // Ratings & Standings
 router.use("/ratings", ratingRoutes);
