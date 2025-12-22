@@ -11,7 +11,6 @@ function isValidExpoPushToken(token: string): boolean {
   return Expo.isExpoPushToken(token);
 }
 
-
 // Get user notifications
 export const getUserNotifications = async (req: Request, res: Response) => {
   try {
@@ -289,12 +288,19 @@ export const sendTestNotification = async (req: Request, res: Response) => {
 // Register push notification token
 export const registerPushToken = async (req: Request, res: Response) => {
   try {
-    const userId = req.user?.id;
+    // Get user ID from auth middleware OR mobile header
+    let userId = req.user?.id;
+    
+    // Mobile fallback - get from x-user-id header
     if (!userId) {
-      return res.status(401).json({ error: 'Unauthorized' });
+      userId = req.headers["x-user-id"] as string;
     }
 
-    const { token, platform, deviceId } = req.body;
+    if (!userId) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+
+    const { token, platform = "android", deviceId } = req.body;
 
     if (!token) {
       return res.status(400).json({ error: 'Push token is required' });
@@ -313,11 +319,21 @@ export const registerPushToken = async (req: Request, res: Response) => {
       });
     }
 
+    // Verify user exists in database
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true }
+    });
+
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
     // Upsert push token - update if exists, create if not
     const pushToken = await prisma.userPushToken.upsert({
       where: { token },
       update: {
-        userId, // Transfer token to current user if different
+        userId,
         platform,
         deviceId: deviceId || null,
         isActive: true,
@@ -340,6 +356,7 @@ export const registerPushToken = async (req: Request, res: Response) => {
         id: pushToken.id,
         platform: pushToken.platform,
         isActive: pushToken.isActive,
+        userId: pushToken.userId, // Added for debugging
       },
     });
   } catch (error) {
@@ -424,38 +441,143 @@ export const getUserPushTokens = async (req: Request, res: Response) => {
   }
 };
 
-// Send a test push notification (uses a real push notification template)
-export const sendTestPushNotification = async (req: Request, res: Response) => {
+// Send test LOCAL/IN-APP notification (creates database record only)
+export const sendTestLocalNotification = async (req: Request, res: Response) => {
   try {
-    const userId = req.user?.id;
+    const {
+      userIds,
+      type,
+      category,
+      title,
+      message,
+      seasonId,
+      divisionId,
+      matchId,
+      partnershipId,
+      threadId,
+      pairRequestId,
+      withdrawalRequestId,
+    } = req.body;
 
-    if (!userId) {
-      return res.status(401).json({ error: 'Unauthorized' });
+    // Validation
+    if (!userIds || (!Array.isArray(userIds) && typeof userIds !== 'string')) {
+      return res.status(400).json({
+        error: 'userIds is required (string or array of strings)',
+      });
     }
 
-    // Use the "League Winner" push notification template as a test
-    const testNotification = notificationTemplates.leagueLifecycle.leagueWinner('Test League');
+    if (!category || !Object.values(NotificationCategory).includes(category)) {
+      return res.status(400).json({
+        error: 'Valid notification category is required',
+        validCategories: Object.values(NotificationCategory),
+      });
+    }
+
+    if (!message) {
+      return res.status(400).json({
+        error: 'message is required',
+      });
+    }
 
     const result = await notificationService.createNotification({
-      userIds: userId,
-      ...testNotification,
+      userIds,
+      type: type || 'TEST_NOTIFICATION',
+      category,
+      title,
+      message,
+      isPush: false, // Local only - no push notification
+      seasonId,
+      divisionId,
+      matchId,
+      partnershipId,
+      threadId,
+      pairRequestId,
+      withdrawalRequestId,
     });
 
     res.json({
       success: true,
       data: result,
-      message: '🎉 Test push notification sent! Check your device.',
-      notification: {
-        title: testNotification.title,
-        message: testNotification.message,
-        isPush: testNotification.isPush,
+      message: `Local notification created for ${Array.isArray(userIds) ? userIds.length : 1} user(s)`,
+      type: 'LOCAL_IN_APP',
+    });
+  } catch (error) {
+    console.error('Error sending local notification:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to send local notification',
+    });
+  }
+};
+
+// Send test PUSH notification (sends to Expo push service only)
+export const sendTestPushNotification = async (req: Request, res: Response) => {
+  try {
+    const { userIds, title, message, data } = req.body;
+
+    if (!userIds || !title || !message) {
+      return res.status(400).json({ error: 'Missing required fields: userIds, title, message' });
+    }
+
+    // Ensure userIds is an array
+    const userIdArray = Array.isArray(userIds) ? userIds : [userIds];
+
+    // Get push tokens for users
+    const pushTokens = await prisma.userPushToken.findMany({
+      where: {
+        userId: { in: userIdArray },
+        isActive: true,
+      },
+    });
+
+    if (pushTokens.length === 0) {
+      return res.status(400).json({ 
+        error: 'No active push tokens found',
+        userIds: userIdArray,
+      });
+    }
+
+    // Send to Expo push service directly
+    const expo = new Expo();
+    const messages = pushTokens.map(tokenRecord => ({
+      to: tokenRecord.token,
+      sound: 'default',
+      title,
+      body: message,
+      data: data || {},
+    }));
+
+    const chunks = expo.chunkPushNotifications(messages);
+    const results = [];
+
+    for (const chunk of chunks) {
+      try {
+        const ticketChunk = await expo.sendPushNotificationsAsync(chunk);
+        results.push(...ticketChunk);
+        console.log('Push notification sent:', ticketChunk);
+      } catch (error) {
+        console.error('Error sending push notification chunk:', error);
+      }
+    }
+
+    res.json({
+      success: true,
+      message: 'Push notification sent',
+      type: 'PUSH_NOTIFICATION',
+      tokensAttempted: pushTokens.length,
+      results,
+      data: {
+        title,
+        message,
+        userIds: userIdArray,
+        tokenCount: pushTokens.length,
       },
     });
   } catch (error) {
-    console.error('Error sending test push notification:', error);
-    res.status(500).json({
+    console.error('Error sending push notification:', error);
+    res.status(500).json({ 
       success: false,
-      error: 'Failed to send test push notification',
+      error: 'Failed to send push notification',
     });
   }
 };
