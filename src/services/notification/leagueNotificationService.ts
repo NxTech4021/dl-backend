@@ -5,6 +5,7 @@
 
 import { notificationService } from '../notificationService';
 import { notificationTemplates } from '../../helpers/notifications';
+import { divisionNotifications } from '../../helpers/notifications/divisionNotifications';
 import { prisma } from '../../lib/prisma';
 import { logger } from '../../utils/logger';
 import { MembershipStatus } from '@prisma/client';
@@ -515,5 +516,109 @@ export async function sendMidSeasonUpdateNotifications(
     logger.info('Mid-season update notifications sent', { seasonId, divisionId, playerCount: standings.length });
   } catch (error) {
     logger.error('Failed to send mid-season update notifications', { seasonId, divisionId }, error as Error);
+  }
+}
+
+/**
+ * Notify users about a division reassignment
+ */
+export async function notifyDivisionReassignment(userId: string, divisionId: string, adminId?: string): Promise<void> {
+  try {
+    const division = await prisma.division.findUnique({
+      where: { id: divisionId },
+      select: { name: true, league: { select: { name: true } } },
+    });
+
+    if (!division) {
+      throw new Error("Division not found");
+    }
+
+    const notification = divisionNotifications.divisionRebalanced(division.name, division.league.name);
+
+    await notificationService.createNotification({
+      ...notification,
+      userIds: [userId],
+      metadata: { divisionId },
+    });
+  } catch (error) {
+    logger.error("Failed to send division reassignment notification", { userId, divisionId }, error);
+  }
+}
+
+/**
+ * Notify users about a new player in their division
+ */
+export async function notifyNewPlayerInDivision(userId: string, divisionId: string, newPlayerName: string): Promise<void> {
+  try {
+    const division = await prisma.division.findUnique({
+      where: { id: divisionId },
+      select: { name: true, league: { select: { name: true } } },
+    });
+
+    if (!division) {
+      throw new Error("Division not found");
+    }
+
+    const notification = divisionNotifications.divisionUpdateNewPlayer(division.league.name);
+
+    await notificationService.createNotification({
+      ...notification,
+      userIds: [userId],
+      metadata: { divisionId },
+    });
+  } catch (error) {
+    logger.error("Failed to send new player in division notification", { userId, divisionId, newPlayerName }, error);
+  }
+}
+
+/**
+ * Notify users about a mid-season update
+ */
+export async function notifyMidSeasonUpdate(userId: string, seasonId: string, position: number): Promise<void> {
+  try {
+    const season = await prisma.season.findUnique({
+      where: { id: seasonId },
+      select: { name: true, league: { select: { name: true } } },
+    });
+
+    if (!season) {
+      throw new Error("Season not found");
+    }
+
+    const notification = divisionNotifications.midSeasonUpdate(position, season.league.name);
+
+    await notificationService.createNotification({
+      ...notification,
+      userIds: [userId],
+      metadata: { seasonId },
+    });
+  } catch (error) {
+    logger.error("Failed to send mid-season update notification", { userId, seasonId, position }, error);
+  }
+}
+
+/**
+ * Notify users about a late-season nudge
+ */
+export async function notifyLateSeasonNudge(userId: string, seasonId: string): Promise<void> {
+  try {
+    const season = await prisma.season.findUnique({
+      where: { id: seasonId },
+      select: { name: true, league: { select: { name: true } } },
+    });
+
+    if (!season) {
+      throw new Error("Season not found");
+    }
+
+    const notification = divisionNotifications.lateSeasonNudge();
+
+    await notificationService.createNotification({
+      ...notification,
+      userIds: [userId],
+      metadata: { seasonId },
+    });
+  } catch (error) {
+    logger.error("Failed to send late-season nudge notification", { userId, seasonId }, error);
   }
 }
