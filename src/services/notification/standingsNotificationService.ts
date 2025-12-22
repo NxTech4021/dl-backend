@@ -4,7 +4,7 @@
  */
 
 import { notificationService } from '../notificationService';
-import { notificationTemplates } from '../../helpers/notification';
+import { notificationTemplates } from '../../helpers/notifications';
 import { prisma } from '../../lib/prisma';
 import { logger } from '../../utils/logger';
 import { MatchStatus, SportType } from '@prisma/client';

@@ -484,7 +484,6 @@ export const sendTestLocalNotification = async (req: Request, res: Response) => 
       category,
       title,
       message,
-      isPush: false, // Local only - no push notification
       seasonId,
       divisionId,
       matchId,

@@ -5,6 +5,7 @@
 
 import { prisma } from '../../lib/prisma';
 import { NotificationService } from '../notificationService';
+import { notificationTemplates } from '../../helpers/notifications';
 import { filterUsersByPreference } from './notificationPreferenceService';
 import { logger } from '../../utils/logger';
 
@@ -112,16 +113,17 @@ export class MatchReminderService {
         .map((p: any) => p.user.name)
         .join(' & ');
 
-      const locationInfo = match.venue || match.location
-        ? `at ${match.venue || match.location}`
-        : 'Location TBD';
+      const venue = match.venue || match.location || 'TBD';
+
+      const reminderNotif = notificationTemplates.match.matchReminder24h(
+        opponents,
+        timeStr,
+        venue
+      );
 
       await this.notificationService.createNotification({
+        ...reminderNotif,
         userIds: recipientId,
-        type: 'MATCH_REMINDER',
-        category: 'MATCH',
-        title: 'Match Reminder - 24 Hours',
-        message: `Your match vs ${opponents} is tomorrow ${dateStr} at ${timeStr} ${locationInfo}.`,
         matchId: match.id
       });
     }

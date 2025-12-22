@@ -44,7 +44,7 @@ import { recalculateDivisionRanks } from '../services/rating/standingsCalculatio
 
 // 🆕 Notification imports
 import { notificationService } from '../services/notificationService';
-import { notificationTemplates } from '../helpers/notification';
+import { notificationTemplates } from '../helpers/notifications';
 import { logger } from '../utils/logger';
 
 interface CreateDivisionBody {

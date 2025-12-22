@@ -4,7 +4,7 @@
  */
 
 import { notificationService } from '../notificationService';
-import { notificationTemplates } from '../../helpers/notification';
+import { notificationTemplates } from '../../helpers/notifications';
 import { prisma } from '../../lib/prisma';
 import { logger } from '../../utils/logger';
 import { MatchStatus } from '@prisma/client';
@@ -18,6 +18,8 @@ export async function sendMatchScheduledNotification(
   player2Id: string
 ): Promise<void> {
   try {
+    console.log('🎾 [MatchNotification] Sending match scheduled notification:', { matchId, player1Id, player2Id });
+    
     const match = await prisma.match.findUnique({
       where: { id: matchId },
       select: {
@@ -28,6 +30,7 @@ export async function sendMatchScheduledNotification(
     });
 
     if (!match) {
+      console.warn('⚠️  [MatchNotification] Match not found for scheduled notification');
       logger.warn('Match not found for scheduled notification', { matchId });
       return;
     }
@@ -42,30 +45,39 @@ export async function sendMatchScheduledNotification(
       prisma.user.findUnique({ where: { id: player2Id }, select: { name: true } }),
     ]);
 
+    console.log('📅 [MatchNotification] Match details:', { date, time, venue, player1: player1?.name, player2: player2?.name });
+
     // Notify both players
+    const scheduledNotifP1 = notificationTemplates.match.matchScheduled(
+      player2?.name || 'Opponent',
+      date,
+      time,
+      venue
+    );
+    const scheduledNotifP2 = notificationTemplates.match.matchScheduled(
+      player1?.name || 'Opponent',
+      date,
+      time,
+      venue
+    );
+
     await Promise.all([
       notificationService.createNotification({
-        type: 'MATCH_SCHEDULED',
-        category: 'MATCH',
-        title: 'Match Confirmed!',
-        message: `You are playing ${player2?.name} on ${date} at ${time} at ${venue}`,
+        ...scheduledNotifP1,
         userIds: player1Id,
         matchId,
-        metadata: { opponentName: player2?.name, date, time, venue },
       }),
       notificationService.createNotification({
-        type: 'MATCH_SCHEDULED',
-        category: 'MATCH',
-        title: 'Match Confirmed!',
-        message: `You are playing ${player1?.name} on ${date} at ${time} at ${venue}`,
+        ...scheduledNotifP2,
         userIds: player2Id,
         matchId,
-        metadata: { opponentName: player1?.name, date, time, venue },
       }),
     ]);
 
+    console.log('✅ [MatchNotification] Match scheduled notifications sent successfully');
     logger.info('Match scheduled notifications sent', { matchId, player1Id, player2Id });
   } catch (error) {
+    console.error('❌ [MatchNotification] Failed to send match scheduled notifications:', error);
     logger.error('Failed to send match scheduled notifications', { matchId }, error as Error);
   }
 }
@@ -98,24 +110,27 @@ export async function sendMatchReminder24h(matchId: string): Promise<void> {
 
     if (!player1 || !player2) return;
 
+    const reminderP1 = notificationTemplates.match.matchReminder24h(
+      player2.user?.name || 'Opponent',
+      time,
+      venue
+    );
+    const reminderP2 = notificationTemplates.match.matchReminder24h(
+      player1.user?.name || 'Opponent',
+      time,
+      venue
+    );
+
     await Promise.all([
       notificationService.createNotification({
-        type: 'MATCH_REMINDER',
-        category: 'MATCH',
-        title: 'Match Tomorrow',
-        message: `You are playing ${player2.user?.name || 'Opponent'} tomorrow at ${time} at ${venue}`,
+        ...reminderP1,
         userIds: player1.userId,
         matchId,
-        metadata: { opponentName: player2.user?.name || 'Opponent', time, venue },
       }),
       notificationService.createNotification({
-        type: 'MATCH_REMINDER',
-        category: 'MATCH',
-        title: 'Match Tomorrow',
-        message: `You are playing ${player1.user?.name || 'Opponent'} tomorrow at ${time} at ${venue}`,
+        ...reminderP2,
         userIds: player2.userId,
         matchId,
-        metadata: { opponentName: player1.user?.name || 'Opponent', time, venue },
       }),
     ]);
 
@@ -153,24 +168,25 @@ export async function sendMatchReminder2h(matchId: string): Promise<void> {
 
     if (!player1 || !player2) return;
 
+    const reminder2hP1 = notificationTemplates.match.matchReminder2h(
+      player2.user?.name || 'Opponent',
+      venue
+    );
+    const reminder2hP2 = notificationTemplates.match.matchReminder2h(
+      player1.user?.name || 'Opponent',
+      venue
+    );
+
     await Promise.all([
       notificationService.createNotification({
-        type: 'MATCH_REMINDER',
-        category: 'MATCH',
-        title: 'Match Starting Soon',
-        message: `Get ready! You are playing ${player2.user?.name || 'Opponent'} in 2 hours at ${venue}`,
+        ...reminder2hP1,
         userIds: player1.userId,
         matchId,
-        metadata: { opponentName: player2.user?.name || 'Opponent', venue },
       }),
       notificationService.createNotification({
-        type: 'MATCH_REMINDER',
-        category: 'MATCH',
-        title: 'Match Starting Soon',
-        message: `Get ready! You are playing ${player1.user?.name || 'Opponent'} in 2 hours at ${venue}`,
+        ...reminder2hP2,
         userIds: player2.userId,
         matchId,
-        metadata: { opponentName: player1.user?.name || 'Opponent', venue },
       }),
     ]);
 
@@ -308,14 +324,15 @@ export async function sendMatchCancelledNotification(
 
     const date = match?.matchDate?.toLocaleDateString() || 'TBD';
 
+    const cancelledNotif = notificationTemplates.match.matchCancelled(
+      canceller?.name || 'Opponent',
+      date
+    );
+
     await notificationService.createNotification({
-      type: 'MATCH_CANCELLED',
-      category: 'MATCH',
-      title: 'Match Cancelled',
-      message: `${canceller?.name} cancelled your league match on ${date}`,
+      ...cancelledNotif,
       userIds: opponentId,
       matchId,
-      metadata: { cancellerName: canceller?.name, date },
     });
 
     logger.info('Match cancelled notification sent', { matchId, opponentId });

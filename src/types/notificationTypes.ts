@@ -15,6 +15,7 @@ export const NOTIFICATION_TYPES = {
   // Chat notifications
   GROUP_CHAT_ADDED: 'GROUP_CHAT_ADDED',
   NEW_MESSAGE: 'NEW_MESSAGE',
+  UNREAD_MESSAGES: 'UNREAD_MESSAGES',
   
   // Match notifications
   MATCH_SCHEDULED: 'MATCH_SCHEDULED',
