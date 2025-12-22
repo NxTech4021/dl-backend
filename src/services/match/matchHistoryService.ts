@@ -550,6 +550,14 @@ export class MatchHistoryService {
         },
         scores: { orderBy: { setNumber: 'asc' } },
         pickleballScores: { orderBy: { gameNumber: 'asc' } },
+        comments: {
+          include: {
+            user: {
+              select: { id: true, name: true, image: true }
+            }
+          },
+          orderBy: { createdAt: 'asc' }
+        },
         createdBy: {
           select: { id: true, name: true, username: true }
         },
@@ -622,6 +630,17 @@ export class MatchHistoryService {
         })),
         isWalkover: match.isWalkover,
         resultComment: match.resultComment,
+        comments: match.comments.map(c => ({
+          id: c.id,
+          userId: c.userId,
+          comment: c.comment,
+          createdAt: c.createdAt,
+          user: {
+            id: c.user.id,
+            name: c.user.name,
+            image: c.user.image
+          }
+        })),
         resultSubmittedBy: match.resultSubmittedBy ? {
           id: match.resultSubmittedBy.id,
           name: match.resultSubmittedBy.name

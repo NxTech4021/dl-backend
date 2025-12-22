@@ -297,6 +297,28 @@ export function socketHandler(httpServer: HttpServer) {
         socket.emit('error', { message: 'Admin access required' });
       }
     });
+
+    // Match room management (for real-time match updates and comments)
+    socket.on('join_match', (data: { matchId: string }) => {
+      if (!data.matchId) return;
+
+      const matchRoom = `match:${data.matchId}`;
+      socket.join(matchRoom);
+      console.log(`🎾 User ${userId} joined match room: ${matchRoom}`);
+      socket.emit('match_joined', {
+        matchId: data.matchId,
+        socketId: socket.id,
+        timestamp: new Date().toISOString()
+      });
+    });
+
+    socket.on('leave_match', (data: { matchId: string }) => {
+      if (!data.matchId) return;
+
+      const matchRoom = `match:${data.matchId}`;
+      socket.leave(matchRoom);
+      console.log(`🎾 User ${userId} left match room: ${matchRoom}`);
+    });
   });
   
   return io;
