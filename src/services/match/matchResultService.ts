@@ -84,8 +84,8 @@ export class MatchResultService {
   async submitResult(input: SubmitResultInput) {
     const { matchId, submittedById, setScores, gameScores, comment, evidence, isUnfinished } = input;
 
-    // Get match with participants
-    const match = await prisma.match.findUnique({
+    // Pre-fetch match for validation (outside transaction for read performance)
+    const matchPreCheck = await prisma.match.findUnique({
       where: { id: matchId },
       include: {
         participants: true,
@@ -94,12 +94,12 @@ export class MatchResultService {
       }
     });
 
-    if (!match) {
+    if (!matchPreCheck) {
       throw new Error('Match not found');
     }
 
     // Verify submitter is a participant with ACCEPTED status
-    const submitterParticipant = match.participants.find(
+    const submitterParticipant = matchPreCheck.participants.find(
       p => p.userId === submittedById && p.invitationStatus === InvitationStatus.ACCEPTED
     );
 
@@ -107,23 +107,10 @@ export class MatchResultService {
       throw new Error('Submitter must be a participant in the match');
     }
 
-    // Check match status
-    if (match.status === MatchStatus.COMPLETED) {
-      throw new Error('Match has already been completed');
-    }
-
-    if (match.status === MatchStatus.ONGOING) {
-      throw new Error('Match result is pending opponent confirmation');
-    }
-
-    if (match.status === MatchStatus.CANCELLED || match.status === MatchStatus.VOID) {
-      throw new Error('Cannot submit result for a cancelled or void match');
-    }
-
-    // Validate and calculate scores based on sport
+    // Validate and calculate scores based on sport (can do outside transaction)
     let team1Score: number, team2Score: number, winner: string;
 
-    if (match.sport === 'PICKLEBALL') {
+    if (matchPreCheck.sport === 'PICKLEBALL') {
       // Pickleball validation and calculation
       if (!gameScores || !Array.isArray(gameScores) || gameScores.length === 0) {
         throw new Error('gameScores array is required for Pickleball matches');
@@ -143,7 +130,7 @@ export class MatchResultService {
       }
       // Skip validation for unfinished matches
       if (!isUnfinished) {
-        this.validateSetScores(setScores, match.sport, match.set3Format || undefined);
+        this.validateSetScores(setScores, matchPreCheck.sport, matchPreCheck.set3Format || undefined);
       }
       const tennisResult = this.calculateFinalScore(setScores);
       team1Score = tennisResult.team1Score;
@@ -151,8 +138,36 @@ export class MatchResultService {
       winner = isUnfinished ? 'unfinished' : tennisResult.winner;
     }
 
+    // Use transaction with status check INSIDE to prevent race conditions
     await prisma.$transaction(async (tx) => {
-      if (match.sport === 'PICKLEBALL') {
+      // Re-fetch match with lock to prevent race conditions
+      const currentMatch = await tx.match.findUnique({
+        where: { id: matchId },
+        include: {
+          participants: true,
+          scores: true,
+          pickleballScores: true
+        }
+      });
+
+      if (!currentMatch) {
+        throw new Error('Match not found');
+      }
+
+      // Check match status INSIDE transaction to prevent race conditions
+      if (currentMatch.status === MatchStatus.COMPLETED) {
+        throw new Error('Match has already been completed');
+      }
+
+      if (currentMatch.status === MatchStatus.ONGOING) {
+        throw new Error('Match result is pending opponent confirmation');
+      }
+
+      if (currentMatch.status === MatchStatus.CANCELLED || currentMatch.status === MatchStatus.VOID) {
+        throw new Error('Cannot submit result for a cancelled or void match');
+      }
+
+      if (currentMatch.sport === 'PICKLEBALL') {
         // Delete existing Pickleball scores if any
         await tx.pickleballGameScore.deleteMany({
           where: { matchId }
@@ -691,7 +706,7 @@ export class MatchResultService {
           score2: s.score1,
         }));
 
-        const result = await dmrService.processsinglesMatch({
+        const result = await dmrService.processSinglesMatch({
           winnerId,
           loserId,
           setScores: adjustedScores,
@@ -827,7 +842,10 @@ export class MatchResultService {
     // Notify participants
     await this.sendWalkoverNotification(matchId, reportedById, defaultingUserId);
 
-    logger.info(`Walkover reported for match ${matchId} by user ${reportedById}`);
+    // Process match completion (ratings, standings, Best6) - same as regular match
+    await this.processMatchCompletion(matchId);
+
+    logger.info(`Walkover reported and processed for match ${matchId} by user ${reportedById}`);
 
     return this.getMatchWithResults(matchId);
   }
@@ -1184,9 +1202,11 @@ export class MatchResultService {
       const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
       // Find matches with submitted results that haven't been confirmed/disputed after 24 hours
+      // Note: When a result is submitted, match status is set to ONGOING (awaiting confirmation)
+      // Only after confirmation does it become COMPLETED
       const matches = await prisma.match.findMany({
         where: {
-          status: MatchStatus.COMPLETED,
+          status: MatchStatus.ONGOING,
           resultSubmittedAt: { lte: twentyFourHoursAgo },
           resultConfirmedAt: null,
           isDisputed: false,
@@ -1205,10 +1225,11 @@ export class MatchResultService {
 
       for (const match of matches) {
         try {
-          // Auto-approve the match
+          // Auto-approve the match and set status to COMPLETED
           await prisma.match.update({
             where: { id: match.id },
             data: {
+              status: MatchStatus.COMPLETED,
               isAutoApproved: true,
               resultConfirmedAt: new Date()
             }
@@ -1246,16 +1267,7 @@ export class MatchResultService {
             logger.error(`Failed to update DMR ratings for auto-approved match ${match.id}:`, {}, error as Error);
           }
 
-          // Update V2 standings (replaces old updateMatchStandings)
-          if (match.divisionId && match.seasonId) {
-            try {
-              const standingsV2 = new StandingsV2Service();
-              await standingsV2.recalculateDivisionStandings(match.divisionId, match.seasonId);
-              logger.info(`Auto-approved: Updated V2 standings for match ${match.id}`);
-            } catch (error) {
-              logger.error(`Failed to update V2 standings for auto-approved match ${match.id}:`, {}, error as Error);
-            }
-          }
+          // NOTE: V2 standings already recalculated above (line 1248) - removed duplicate call
 
           // Notify all participants
           const participantIds = match.participants.map(p => p.userId);
