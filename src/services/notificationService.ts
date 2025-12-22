@@ -9,6 +9,11 @@ import {
   NotificationStats,
   NotificationType,
 } from "../types/notificationTypes";
+import { 
+  getNotificationDeliveryType, 
+  shouldSendPushNotification,
+  NotificationDeliveryType 
+} from "../types/notificationDeliveryTypes";
 import { AppError } from "../utils/errors";
 import { logger } from "../utils/logger";
 import { sendEmail as sendEmailViaResend } from "../config/nodemailer";
@@ -30,7 +35,7 @@ interface SendPushInput {
   token: string;
   title: string;
   body: string;
-  data?: Record<string, string>;
+  data?: Record<string, string> | undefined;
 }
 
 export class NotificationService {
@@ -76,6 +81,16 @@ export class NotificationService {
         ...entityIds
       } = data;
 
+      // Log notification creation for debugging
+      console.log('🔔 [NotificationService] Creating notification:', {
+        type,
+        category,
+        title,
+        userCount: Array.isArray(userIds) ? userIds.length : 1,
+        deliveryType: type ? getNotificationDeliveryType(type) : 'UNKNOWN',
+        willSendPush: type ? shouldSendPushNotification(type) : false,
+      });
+
       // Normalize userIds to array
       const userIdArray = Array.isArray(userIds) ? userIds : [userIds];
 
@@ -94,6 +109,7 @@ export class NotificationService {
         const missingIds = userIdArray.filter(
           (id) => !existingIds.includes(id)
         );
+        console.warn('⚠️  [NotificationService] Some users not found:', { missingIds });
         logger.warn("Some users not found", { missingIds });
       }
 
@@ -108,10 +124,27 @@ export class NotificationService {
       if (title !== undefined) createData.title = title;
       if (type !== undefined) createData.type = type;
 
-      // Add entity IDs only if they have values
+      // Filter out invalid Prisma fields and convert entity IDs to proper format
+      const validEntityIds: Record<string, any> = {};
       Object.entries(entityIds).forEach(([key, value]) => {
-        if (value !== undefined) {
-          createData[key] = value;
+        if (value !== undefined && key !== 'isPush' && key !== 'skipPush') {
+          // Convert ID fields to proper Prisma relation format
+          if (key === 'threadId' && value) {
+            createData.threadId = value;
+          } else if (key === 'divisionId' && value) {
+            createData.divisionId = value;
+          } else if (key === 'seasonId' && value) {
+            createData.seasonId = value;
+          } else if (key === 'matchId' && value) {
+            createData.matchId = value;
+          } else if (key === 'partnershipId' && value) {
+            createData.partnershipId = value;
+          } else if (key === 'pairRequestId' && value) {
+            createData.pairRequestId = value;
+          } else if (key === 'withdrawalRequestId' && value) {
+            createData.withdrawalRequestId = value;
+          }
+          validEntityIds[key] = value;
         }
       });
 
@@ -130,6 +163,7 @@ export class NotificationService {
 
       // Send real-time notifications via Socket.IO
       if (this.io) {
+        console.log('📡 [NotificationService] Emitting via Socket.IO to users:', validUserIds);
         this.emitNotifications(validUserIds, {
           id: notification.id,
           title: notification.title ?? undefined,
@@ -141,9 +175,32 @@ export class NotificationService {
           createdAt: notification.createdAt,
           metadata: {
             ...metadata,
-            ...entityIds,
+            ...validEntityIds,
           },
           readAt: undefined,
+        });
+      }
+
+      // Send push notifications if required (based on notification type)
+      const shouldSendPush = type ? shouldSendPushNotification(type) : false;
+      console.log(`${shouldSendPush ? '📲' : '📱'} [NotificationService] Notification delivery type:`, {
+        type,
+        deliveryType: type ? getNotificationDeliveryType(type) : 'UNKNOWN',
+        willSendPush: shouldSendPush,
+      });
+
+      if (shouldSendPush && (title || message)) {
+        console.log('🚀 [NotificationService] Sending push notifications to users:', validUserIds);
+        await this.sendPushToUsers(validUserIds, {
+          title: title || notification.title || 'New Notification',
+          body: message,
+          data: {
+            notificationId: notification.id,
+            category,
+            type,
+            ...metadata,
+            ...validEntityIds,
+          },
         });
       }
 
@@ -152,6 +209,8 @@ export class NotificationService {
         category,
         type,
         userCount: validUserIds.length,
+        deliveryType: type ? getNotificationDeliveryType(type) : 'UNKNOWN',
+        isPush: shouldSendPush,
       });
 
       return validUserIds.map((userId) => ({
@@ -166,10 +225,11 @@ export class NotificationService {
         readAt: undefined,
         metadata: {
           ...metadata,
-          ...entityIds,
+          ...validEntityIds,
         },
       }));
     } catch (error) {
+      console.error('❌ [NotificationService] Error creating notification:', error);
       logger.error("Error creating notification", {}, error as Error);
       throw error instanceof AppError
         ? error
@@ -537,6 +597,52 @@ export class NotificationService {
   }
 
   /**
+   * Send push notifications to multiple users
+   */
+  private async sendPushToUsers(
+    userIds: string[],
+    pushData: { title: string; body: string; data?: Record<string, any> }
+  ): Promise<void> {
+    try {
+      console.log('📤 [NotificationService] Getting push tokens for users:', userIds);
+      
+      // Get active push tokens for users
+      const pushTokens = await this.prisma.userPushToken.findMany({
+        where: {
+          userId: { in: userIds },
+          isActive: true,
+        },
+        select: {
+          token: true,
+          userId: true,
+          platform: true,
+        },
+      });
+
+      if (pushTokens.length === 0) {
+        console.log('⚠️ [NotificationService] No active push tokens found for users:', userIds);
+        return;
+      }
+
+      // Send push notification to each token
+      const pushPromises = pushTokens.map(({ token }) =>
+        this.sendPushNotification({
+          token,
+          title: pushData.title,
+          body: pushData.body,
+          data: pushData.data,
+        })
+      );
+
+      await Promise.all(pushPromises);
+      console.log('✅ [NotificationService] Push notifications sent successfully');
+    } catch (error) {
+      console.error('❌ [NotificationService] Error sending push notifications:', error);
+      logger.error("Error sending push notifications to users", { userIds }, error as Error);
+    }
+  }
+
+  /**
    * Send push notification via Expo
    */
   async sendPushNotification(input: SendPushInput): Promise<void> {
@@ -559,10 +665,15 @@ export class NotificationService {
         data: data || {},
       };
 
+      logger.info("Preparing to send push notification", { message });
+
       const chunks = expo.chunkPushNotifications([message]);
 
       for (const chunk of chunks) {
+        logger.info("Sending push notification chunk", { chunk });
         const ticketChunk = await expo.sendPushNotificationsAsync(chunk);
+
+        logger.info("Received ticket chunk from Expo", { ticketChunk });
 
         // Handle tickets and potential errors
         for (const ticket of ticketChunk) {
@@ -576,9 +687,10 @@ export class NotificationService {
             // If device not registered, deactivate token
             if (ticket.details?.error === "DeviceNotRegistered") {
               await this.deactivatePushToken(token);
+              logger.warn("Token deactivated due to DeviceNotRegistered error", { token });
             }
           } else {
-            logger.info("Push notification sent", {
+            logger.info("Push notification sent successfully", {
               token,
               ticketId: ticket.id,
             });

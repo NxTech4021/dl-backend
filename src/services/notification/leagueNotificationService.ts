@@ -4,7 +4,7 @@
  */
 
 import { notificationService } from '../notificationService';
-import { notificationTemplates } from '../../helpers/notification';
+import { notificationTemplates } from '../../helpers/notifications';
 import { prisma } from '../../lib/prisma';
 import { logger } from '../../utils/logger';
 import { MembershipStatus } from '@prisma/client';
@@ -64,14 +64,12 @@ export async function sendLeagueStartingSoonNotifications(seasonId: string): Pro
 
     if (playerIds.length === 0) return;
 
+    const startingSoonNotif = notificationTemplates.league.leagueStarting3Days(season.name);
+
     await notificationService.createNotification({
-      type: 'LEAGUE_STARTING_3_DAYS',
-      category: 'SEASON',
-      title: 'League Starts Soon',
-      message: `${season.name} starts in 3 days! Get ready to compete`,
+      ...startingSoonNotif,
       userIds: playerIds,
       seasonId,
-      metadata: { seasonName: season.name, startDate: season.startDate.toISOString() },
     });
 
     logger.info('League starting soon notifications sent', { seasonId, playerCount: playerIds.length });
@@ -102,14 +100,12 @@ export async function sendLeagueStartsTomorrowNotifications(seasonId: string): P
 
     if (playerIds.length === 0) return;
 
+    const startsTomorrowNotif = notificationTemplates.league.leagueStartsTomorrow(season.name, season.name);
+
     await notificationService.createNotification({
-      type: 'LEAGUE_STARTS_TOMORROW',
-      category: 'SEASON',
-      title: 'League Starts Tomorrow',
-      message: `${season.name} starts tomorrow! Get ready for matches`,
+      ...startsTomorrowNotif,
       userIds: playerIds,
       seasonId,
-      metadata: { seasonName: season.name },
     });
 
     logger.info('League starts tomorrow notifications sent', { seasonId, playerCount: playerIds.length });
@@ -140,14 +136,12 @@ export async function sendLeagueStartedWelcomeNotifications(seasonId: string): P
 
     if (playerIds.length === 0) return;
 
+    const startedWelcomeNotif = notificationTemplates.league.leagueStartedWelcome(season.name, season.name);
+
     await notificationService.createNotification({
-      type: 'LEAGUE_STARTED_WELCOME',
-      category: 'SEASON',
-      title: 'Season Commences!',
-      message: `${season.name} has begun! View your division and schedule your first game`,
+      ...startedWelcomeNotif,
       userIds: playerIds,
       seasonId,
-      metadata: { seasonName: season.name },
     });
 
     logger.info('League started welcome notifications sent', { seasonId, playerCount: playerIds.length });
@@ -210,14 +204,12 @@ export async function sendLeagueEndedNotifications(seasonId: string): Promise<vo
 
     const playerIds = season.memberships.map(m => m.userId);
 
+    const leagueEndedNotif = notificationTemplates.league.leagueEndedFinalResults(season.name);
+
     await notificationService.createNotification({
-      type: 'SEASON_ENDED',
-      category: 'SEASON',
-      title: 'Season Complete',
-      message: `Thank you for being part of ${season.name}. Final results will be available once all scores are confirmed`,
+      ...leagueEndedNotif,
       userIds: playerIds,
       seasonId,
-      metadata: { seasonName: season.name },
     });
 
     logger.info('League ended notifications sent', { seasonId, playerCount: playerIds.length });
