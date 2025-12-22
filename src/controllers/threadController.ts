@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import { notificationTemplates } from '../helpers/notification';
 import { prisma } from "../lib/prisma";
 import { notificationService } from '../services/notificationService';
+import { getRecentSportContextsBatch } from '../services/userSportContextService';
 
 // Create a new thread (single or group)
 export const createThread = async (req: Request, res: Response) => {
@@ -202,6 +203,20 @@ export const getThreads = async (req: Request, res: Response) => {
       orderBy: { updatedAt: "desc" },
     });
 
+    // Extract other participant IDs from direct chat threads for batch sport context query
+    const directChatThreads = threads.filter(t => !t.isGroup);
+    const otherUserIds = directChatThreads
+      .map(thread => {
+        const otherMember = thread.members.find(m => m.userId !== userId);
+        return otherMember?.userId;
+      })
+      .filter((id): id is string => Boolean(id));
+
+    // Batch query sport contexts for all direct chat participants
+    const sportContextsByPair = otherUserIds.length > 0
+      ? await getRecentSportContextsBatch(userId, otherUserIds)
+      : new Map<string, any>();
+
     // Get unread count for current user in each thread and format division data
     const threadsWithUnread = threads.map(thread => {
       const userThread = thread.members.find(m => m.userId === userId);
@@ -216,10 +231,28 @@ export const getThreads = async (req: Request, res: Response) => {
         season: thread.division.season
       } : null;
 
+      // Get recent sport context for direct chats
+      let recentSportContext = null;
+      if (!thread.isGroup) {
+        const otherMember = thread.members.find(m => m.userId !== userId);
+        if (otherMember) {
+          const key = `${userId}-${otherMember.userId}`;
+          const context = sportContextsByPair.get(key);
+          if (context) {
+            recentSportContext = {
+              sportType: context.sportType,
+              lastInteractionAt: context.lastInteractionAt,
+              isValid: context.isValid
+            };
+          }
+        }
+      }
+
       return {
         ...thread,
         unreadCount: userThread?.unreadCount || 0,
         sportType: thread.division?.league?.sportType || null,
+        recentSportContext,
         division: divisionData,
         metadata: {
           divisionId: thread.division?.id,
@@ -521,7 +554,7 @@ export const getMessages = async (req: Request, res: Response) => {
       sortedMessages.map(async (msg: any) => {
         if (msg.messageType === 'MATCH' && msg.matchId) {
           try {
-            // Fetch current match data to get latest participants
+            // Fetch current match data to get latest participants and request status
             const match = await prisma.match.findUnique({
               where: { id: msg.matchId },
               include: {
@@ -536,14 +569,20 @@ export const getMessages = async (req: Request, res: Response) => {
               }
             });
 
-            if (match && match.participants) {
-              // Update matchData with current participants
+            if (match) {
+              // Update matchData with current participants and request status
               const matchData = msg.matchData as any || {};
+              const matchAny = match as any;
               msg.matchData = {
                 ...matchData,
-                participants: match.participants,
+                participants: matchAny.participants || [],
+                // Always sync friendly request status from the actual Match record
+                requestStatus: matchAny.requestStatus || matchData.requestStatus,
+                isFriendlyRequest: matchAny.isFriendlyRequest ?? matchData.isFriendlyRequest,
+                isFriendly: matchAny.isFriendly ?? matchData.isFriendly ?? matchAny.isFriendlyRequest ?? matchData.isFriendlyRequest,
+                requestExpiresAt: matchAny.requestExpiresAt?.toISOString() || matchData.requestExpiresAt,
               };
-              console.log(`  ✅ Enriched match ${msg.matchId} with ${match.participants.length} participants`);
+              console.log(`  ✅ Enriched match ${msg.matchId} with ${matchAny.participants?.length || 0} participants, requestStatus: ${matchAny.requestStatus}`);
             }
           } catch (err) {
             console.warn(`  ⚠️ Could not enrich match data for message ${msg.id}:`, err);

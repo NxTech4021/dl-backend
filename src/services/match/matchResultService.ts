@@ -15,7 +15,8 @@ import {
 import { logger } from '../../utils/logger';
 import { NotificationService } from '../notificationService';
 import { handlePostMatchCreation } from '../matchService';
-import { calculateMatchRatings, applyMatchRatings } from '../rating/ratingCalculationService';
+import { DMRRatingService, SetScore as DMRSetScore } from '../rating/dmrRatingService';
+import { SportType, GameType } from '@prisma/client';
 // NOTE: updateMatchStandings removed - V2 standings handles everything now
 import { notifyAdminsDispute } from '../notification/adminNotificationService';
 import { notifyBatchRatingChanges } from '../notification/playerNotificationService';
@@ -46,6 +47,7 @@ export interface SetScore {
   team2Games: number;
   team1Tiebreak?: number;
   team2Tiebreak?: number;
+  tiebreakType?: 'STANDARD_7PT' | 'MATCH_10PT';
 }
 
 export interface PickleballScore {
@@ -184,7 +186,15 @@ export class MatchResultService {
           resultSubmittedAt: new Date(),
           requiresAdminReview: false
         };
-        if (comment) matchUpdateData.resultComment = comment;
+        if (comment) {
+          await tx.matchComment.create({
+            data: {
+              matchId,
+              userId: submittedById,
+              comment,
+            }
+          });
+        }
         if (evidence) matchUpdateData.resultEvidence = evidence;
 
         await tx.match.update({
@@ -208,6 +218,10 @@ export class MatchResultService {
           };
           if (score.team1Tiebreak !== undefined) scoreData.player1Tiebreak = score.team1Tiebreak;
           if (score.team2Tiebreak !== undefined) scoreData.player2Tiebreak = score.team2Tiebreak;
+          // Add tiebreakType if provided (for Set 3 match tiebreaks)
+          if (score.tiebreakType) {
+            scoreData.tiebreakType = score.tiebreakType;
+          }
 
           await tx.matchScore.create({ data: scoreData });
         }
@@ -223,7 +237,15 @@ export class MatchResultService {
           resultSubmittedAt: new Date(),
           requiresAdminReview: false
         };
-        if (comment) matchUpdateData.resultComment = comment;
+        if (comment) {
+          await tx.matchComment.create({
+            data: {
+              matchId,
+              userId: submittedById,
+              comment,
+            }
+          });
+        }
         if (evidence) matchUpdateData.resultEvidence = evidence;
 
         await tx.match.update({
@@ -442,24 +464,12 @@ export class MatchResultService {
         logger.info(`Doubles match ${matchId} - standings handled by V2 service`);
       }
 
-      // Step 6: Update Ratings
+      // Step 6: Update Ratings (DMR - Glicko-2 based)
       try {
-        const ratingUpdates = await calculateMatchRatings(matchId);
-        if (ratingUpdates) {
-          await applyMatchRatings(matchId, ratingUpdates);
-          logger.info(`Applied rating updates for match ${matchId}`);
-
-          // Notify participants of rating changes
-          const ratingChanges = [ratingUpdates.winner, ratingUpdates.loser].map((update: any) => ({
-            userId: update.userId,
-            oldRating: update.previousSinglesRating ?? update.previousDoublesRating ?? 1500,
-            newRating: update.newSinglesRating ?? update.newDoublesRating ?? 1500,
-            matchId
-          }));
-          await notifyBatchRatingChanges(this.notificationService, ratingChanges);
-        }
+        await this.processMatchRatings(match);
+        logger.info(`Applied DMR rating updates for match ${matchId}`);
       } catch (error) {
-        logger.error(`Failed to update ratings for match ${matchId}`, {}, error as Error);
+        logger.error(`Failed to update DMR ratings for match ${matchId}`, {}, error as Error);
       }
 
       // Step 7: Trigger post-match actions (reactivation, etc.)
@@ -582,6 +592,148 @@ export class MatchResultService {
 
     } catch (error) {
       logger.error(`Failed to update partnership standings for match ${matchId}`, {}, error as Error);
+    }
+  }
+
+  /**
+   * Process match ratings using DMR (Glicko-2 based) algorithm
+   * Handles both singles and doubles matches
+   */
+  private async processMatchRatings(match: any): Promise<void> {
+    try {
+      if (!match.seasonId) {
+        logger.warn(`Match ${match.id} has no seasonId, skipping rating update`);
+        return;
+      }
+
+      // Determine sport type
+      const sportType = match.sport === 'PICKLEBALL' ? SportType.PICKLEBALL :
+                        match.sport === 'TENNIS' ? SportType.TENNIS : SportType.PADEL;
+
+      // Create DMR service instance for this sport
+      const dmrService = new DMRRatingService(sportType);
+
+      // Convert scores to DMR format
+      let setScores: DMRSetScore[] = [];
+
+      if (match.sport === 'PICKLEBALL') {
+        // Pickleball uses pickleballScores or parsed setScores
+        const scores = match.pickleballScores?.length > 0
+          ? match.pickleballScores
+          : (match.setScores ? JSON.parse(match.setScores) : []);
+
+        setScores = scores.map((s: any) => ({
+          score1: s.player1Points ?? s.team1Points,
+          score2: s.player2Points ?? s.team2Points,
+        }));
+      } else {
+        // Tennis/Padel uses matchScores
+        const scores = match.scores?.length > 0
+          ? match.scores
+          : (match.setScores ? JSON.parse(match.setScores) : []);
+
+        setScores = scores.map((s: any) => ({
+          score1: s.player1Games ?? s.team1Games,
+          score2: s.player2Games ?? s.team2Games,
+        }));
+      }
+
+      if (setScores.length === 0) {
+        logger.warn(`Match ${match.id} has no scores, skipping rating update`);
+        return;
+      }
+
+      // Get participants by team
+      const team1Participants = match.participants.filter((p: any) => p.team === 'team1');
+      const team2Participants = match.participants.filter((p: any) => p.team === 'team2');
+
+      // Determine winner based on outcome
+      const team1Won = match.outcome === 'team1' || match.outcome === 'team1_win';
+
+      if (match.matchType === MatchType.DOUBLES) {
+        // Doubles match - need both players from each team
+        if (team1Participants.length < 2 || team2Participants.length < 2) {
+          logger.warn(`Doubles match ${match.id} doesn't have enough participants on each team`);
+          return;
+        }
+
+        const team1Ids: [string, string] = [team1Participants[0].userId, team1Participants[1].userId];
+        const team2Ids: [string, string] = [team2Participants[0].userId, team2Participants[1].userId];
+
+        // Adjust scores based on winner
+        const adjustedScores = team1Won ? setScores : setScores.map(s => ({
+          score1: s.score2,
+          score2: s.score1,
+        }));
+
+        const result = await dmrService.processDoublesMatch({
+          team1Ids: team1Won ? team1Ids : team2Ids,
+          team2Ids: team1Won ? team2Ids : team1Ids,
+          setScores: adjustedScores,
+          seasonId: match.seasonId,
+          matchId: match.id,
+          isWalkover: match.isWalkover ?? false,
+        });
+
+        // Notify participants of rating changes
+        const ratingChanges = Object.entries(result.ratingChanges).map(([userId, update]) => ({
+          userId,
+          oldRating: update.oldRating,
+          newRating: update.newRating,
+          matchId: match.id,
+        }));
+        await notifyBatchRatingChanges(this.notificationService, ratingChanges);
+
+        logger.info(`DMR doubles ratings updated for match ${match.id}`, {
+          winnerIds: result.winnerIds,
+          loserIds: result.loserIds,
+          scoreFactor: result.scoreFactor,
+        });
+
+      } else {
+        // Singles match
+        if (team1Participants.length === 0 || team2Participants.length === 0) {
+          logger.warn(`Singles match ${match.id} doesn't have participants on each team`);
+          return;
+        }
+
+        const winnerId = team1Won ? team1Participants[0].userId : team2Participants[0].userId;
+        const loserId = team1Won ? team2Participants[0].userId : team1Participants[0].userId;
+
+        // Adjust scores so winner's score is always score1
+        const adjustedScores = team1Won ? setScores : setScores.map(s => ({
+          score1: s.score2,
+          score2: s.score1,
+        }));
+
+        const result = await dmrService.processsinglesMatch({
+          winnerId,
+          loserId,
+          setScores: adjustedScores,
+          seasonId: match.seasonId,
+          matchId: match.id,
+          isWalkover: match.isWalkover ?? false,
+        });
+
+        // Notify participants of rating changes
+        const ratingChanges = [
+          { userId: winnerId, oldRating: result.winner.oldRating, newRating: result.winner.newRating, matchId: match.id },
+          { userId: loserId, oldRating: result.loser.oldRating, newRating: result.loser.newRating, matchId: match.id },
+        ];
+        await notifyBatchRatingChanges(this.notificationService, ratingChanges);
+
+        logger.info(`DMR singles ratings updated for match ${match.id}`, {
+          winnerId,
+          loserId,
+          winnerDelta: result.winner.delta,
+          loserDelta: result.loser.delta,
+          scoreFactor: result.scoreFactor,
+        });
+      }
+
+    } catch (error) {
+      logger.error(`DMR rating update failed for match ${match.id}`, {}, error as Error);
+      throw error;
     }
   }
 
@@ -724,7 +876,13 @@ export class MatchResultService {
         },
         resultConfirmedBy: {
           select: { id: true, name: true, username: true }
-        }
+        },
+        comments: {
+          include: {
+            user: { select: { id: true, name: true, username: true, image: true } }
+          },
+          orderBy: { createdAt: 'asc' }
+        },
       }
     });
   }
@@ -1036,7 +1194,9 @@ export class MatchResultService {
         include: {
           participants: true,
           division: true,
-          season: true
+          season: true,
+          scores: true,
+          pickleballScores: true
         }
       });
 
@@ -1077,15 +1237,12 @@ export class MatchResultService {
             });
           }
 
-          // Update ratings
+          // Update ratings using DMR (Glicko-2)
           try {
-            const ratingUpdates = await calculateMatchRatings(match.id);
-            if (ratingUpdates) {
-              await applyMatchRatings(match.id, ratingUpdates);
-              logger.info(`Auto-approved: Applied rating updates for match ${match.id}`);
-            }
+            await this.processMatchRatings(match);
+            logger.info(`Auto-approved: Applied DMR rating updates for match ${match.id}`);
           } catch (error) {
-            logger.error(`Failed to update ratings for auto-approved match ${match.id}:`, {}, error as Error);
+            logger.error(`Failed to update DMR ratings for auto-approved match ${match.id}:`, {}, error as Error);
           }
 
           // Update V2 standings (replaces old updateMatchStandings)

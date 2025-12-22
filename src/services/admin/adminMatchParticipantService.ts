@@ -306,17 +306,27 @@ export class AdminMatchParticipantService {
       });
     });
 
-    // Step 6: Recalculate ratings with new participants (outside main transaction)
+    // Step 6: Recalculate ratings with new participants using DMR (outside main transaction)
     try {
-      const { calculateMatchRatings, applyMatchRatings } =
-        await import('../rating/ratingCalculationService');
-      const updates = await calculateMatchRatings(matchId);
-      if (updates) {
-        await applyMatchRatings(matchId, updates);
+      const { DMRRatingService } = await import('../rating/dmrRatingService');
+      const sportType = match.sport === 'PICKLEBALL' ? 'PICKLEBALL' :
+                        match.sport === 'TENNIS' ? 'TENNIS' : 'PADEL';
+      const dmrService = new DMRRatingService(sportType as any);
+
+      // Process match with DMR - the service handles score parsing internally
+      const matchWithScores = await prisma.match.findUnique({
+        where: { id: matchId },
+        include: { participants: true, scores: true, pickleballScores: true }
+      });
+
+      if (matchWithScores && matchWithScores.seasonId) {
+        // Use adminRatingService which now uses DMR
+        const { recalculateMatchRatings } = await import('../rating/adminRatingService');
+        await recalculateMatchRatings(matchId, adminId);
+        recalculationResult.ratingsRecalculated = true;
       }
-      recalculationResult.ratingsRecalculated = true;
     } catch (error) {
-      logger.error('Failed to recalculate match ratings', { matchId }, error as Error);
+      logger.error('Failed to recalculate DMR ratings', { matchId }, error as Error);
       // Don't throw - continue with other recalculations
     }
 

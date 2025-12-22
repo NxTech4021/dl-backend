@@ -368,6 +368,20 @@ export class MatchInvitationService {
               }
             }
           }
+        },
+        // Include comments with user details
+        comments: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                name: true,
+                username: true,
+                image: true
+              }
+            }
+          },
+          orderBy: { createdAt: 'asc' }
         }
       }
     });

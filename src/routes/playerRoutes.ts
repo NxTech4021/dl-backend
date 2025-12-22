@@ -14,6 +14,7 @@ import {
   changePlayerPassword,
   uploadProfileImage,
   upload,
+  getPlayerRatingHistory,
   // Phase 2: Player Discovery & Social Features
   searchPlayers,
   getAvailablePlayersForSeason,
@@ -46,8 +47,32 @@ playerRouter.put('/profile/me', verifyAuth, updatePlayerProfile as any);
 playerRouter.put('/profile/password', verifyAuth, changePlayerPassword as any);
 playerRouter.get('/profile/matches', verifyAuth, getPlayerMatchHistory as any);
 playerRouter.get('/profile/achievements', verifyAuth, getPlayerAchievements as any);
+playerRouter.get('/profile/rating-history', verifyAuth, getPlayerRatingHistory as any);
 playerRouter.post('/profile/upload-image', verifyAuth, upload.single('image'), uploadProfileImage as any);
 playerRouter.get('/matches/:matchId', verifyAuth, getMatchDetails as any);
+
+// Track login activity (for regular users)
+playerRouter.put('/track-login', verifyAuth, async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    await prisma.user.update({
+      where: { id: userId },
+      data: {
+        lastLogin: new Date(),
+        lastActivityCheck: new Date(),
+      },
+    });
+
+    return res.json({ success: true });
+  } catch (err) {
+    console.error('Failed updating login time:', err);
+    return res.status(500).json({ error: 'Server error' });
+  }
+});
 
 // Activity status route
 playerRouter.get('/activity-status/:playerId', verifyAuth, async (req, res) => {

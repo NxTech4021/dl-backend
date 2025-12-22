@@ -9,7 +9,55 @@ import { auth } from "./lib/auth";
 import { socketMiddleware } from "./middlewares/socketmiddleware";
 import router from "./routes/index";
 import { getApiPrefix } from "./config/network";
-import pino from "pino-http";
+import pinoHttp from "pino-http";
+import pino from "pino";
+
+// Configure pino for clean, concise logging
+const pinoLogger = pino({
+  level: process.env.LOG_LEVEL || 'info',
+  ...(process.env.NODE_ENV === 'development' && {
+    transport: {
+      target: 'pino-pretty',
+      options: {
+        colorize: true,
+        translateTime: 'HH:MM:ss',
+        ignore: 'pid,hostname',
+        singleLine: true,
+      },
+    },
+  }),
+});
+
+// Configure pino-http middleware
+const httpLogger = pinoHttp({
+  logger: pinoLogger,
+  // Customize serializers to reduce log noise
+  serializers: {
+    req: (req) => ({
+      method: req.method,
+      url: req.url,
+    }),
+    res: (res) => ({
+      statusCode: res.statusCode,
+    }),
+  },
+  // Custom log level based on status code
+  customLogLevel: (_req, res, err) => {
+    if (res.statusCode >= 500 || err) return 'error';
+    if (res.statusCode >= 400) return 'warn';
+    if (res.statusCode >= 300) return 'silent'; // Don't log redirects/304s
+    return 'info';
+  },
+  // Skip logging for noisy endpoints
+  autoLogging: {
+    ignore: (req) => {
+      const url = req.url || '';
+      return url === '/health' ||
+             url === '/favicon.ico' ||
+             url.startsWith('/socket.io');
+    },
+  },
+});
 import {
   securityHeaders,
   sanitizeInput,
@@ -37,15 +85,7 @@ app.use(ipBlocker);
 app.use(sanitizeInput);
 app.use(preventSQLInjection);
 
-// This is for debugging purposes only
-app.use((req, res, next) => {
-  console.log("--- INCOMING REQUEST ---");
-  console.log("Method:", req.method);
-  console.log("URL:", req.originalUrl);
-  console.log("Origin Header:", req.headers.origin);
-  console.log("----------------------");
-  next();
-});
+// Request logging is now handled by pino-http with clean, concise output
 
 // Set up CORS
 app.use(
@@ -58,16 +98,16 @@ app.use(
       "http://localhost:8081",
       "http://192.168.1.3:3001", // Added current IP from logs
       "http://192.168.1.7:3001",
-      "http://192.168.100.3:8081", // Mobile app origin
-      "exp://192.168.100.3:8081", // Expo development server
-      "http://192.168.100.53:8081", // Mobile app origin
-      "exp://192.168.100.53:8081", // Expo development server
-      "http://172.20.10.3:8081", // New mobile app origin
-      "exp://172.20.10.3:8081", // New Expo development server
-      "http://10.72.179.58:8081", // Previous network IP
-      "exp://10.72.179.58:8081", // Previous Expo origin
-      "http://10.72.180.20:8081", // Current network IP
-      "exp://10.72.180.20:8081", // Current Expo origin
+      "http://192.168.100.3:8081", 
+      "exp://192.168.100.3:8081", 
+      "http://192.168.100.53:8081",
+      "exp://192.168.100.53:8081", 
+      "http://172.20.10.3:8081",
+      "exp://172.20.10.3:8081", 
+      "http://10.72.179.58:8081", 
+      "exp://10.72.179.58:8081", 
+      "http://10.72.180.20:8081", 
+      "exp://10.72.180.20:8081", 
       "https://staging.appdevelopers.my",
     ], // Allow nginx proxy, direct access, and local IP
     credentials: true,
@@ -86,11 +126,10 @@ app.use(
 // the auth handler must be mounted BEFORE express.json().
 // Express v5 requires the {*any} syntax for wildcard routes.
 const authHandler = (req: Request, res: Response) => {
-  console.log(`🔐 Auth request: ${req.method} ${req.path}`);
   try {
     void toNodeHandler(auth)(req, res);
   } catch (error) {
-    console.error("❌ Auth handler error:", error);
+    pinoLogger.error({ err: error, method: req.method, path: req.path }, 'Auth handler error');
     res.status(500).json({ error: "Authentication error" });
   }
 };
@@ -102,14 +141,14 @@ app.all("/auth/{*any}", authHandler);
 // The JSON parser for any other routes you might add later.
 app.use(express.json());
 app.use(cookieParser());
-app.use(pino());
+app.use(httpLogger);
 
 app.use(socketMiddleware(io));
 
 // Mount API routes with configurable prefix
 // Development: /api, Production: "" (nginx handles /api prefix)
 const apiPrefix = getApiPrefix();
-console.log(`📡 API routes mounted at: ${apiPrefix || "(root)"}`);
+pinoLogger.info({ apiPrefix: apiPrefix || '/' }, 'API routes mounted');
 // Mount router with the API prefix
 app.use(apiPrefix, router);
 

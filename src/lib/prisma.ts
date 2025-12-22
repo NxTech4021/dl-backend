@@ -6,10 +6,12 @@ class PrismaService {
   private prisma: PrismaClient;
 
   private constructor() {
+    const logLevels = process.env.PRISMA_LOG
+      ? (process.env.PRISMA_LOG.split(',').filter(Boolean) as ('query' | 'info' | 'warn' | 'error')[])
+      : ['warn', 'error'];
+
     const basePrisma = new PrismaClient({
-      log: process.env.NODE_ENV === 'development'
-        ? ['query', 'info', 'warn', 'error']
-        : ['error'],
+      log: logLevels,
       errorFormat: process.env.NODE_ENV === 'development' ? 'pretty' : 'minimal',
     });
 
@@ -101,13 +103,10 @@ class PrismaService {
       },
     }) as unknown as PrismaClient;
 
-    // Handle connection errors
+    // Handle connection errors - connect silently, only log errors
     this.prisma.$connect()
-      .then(() => {
-        console.log('✅ Database connected successfully');
-      })
       .catch((error) => {
-        console.error('❌ Database connection failed:', error);
+        console.error('Database connection failed:', error);
         process.exit(1);
       });
 
@@ -128,7 +127,6 @@ class PrismaService {
   }
 
   private async shutdown() {
-    console.log('Shutting down database connection...');
     await this.prisma.$disconnect();
     process.exit(0);
   }
@@ -138,8 +136,7 @@ class PrismaService {
     try {
       await this.prisma.$queryRaw`SELECT 1`;
       return true;
-    } catch (error) {
-      console.error('Database health check failed:', error);
+    } catch {
       return false;
     }
   }
@@ -177,4 +174,7 @@ if (process.env.NODE_ENV !== 'production') {
 }
 
 const prismaService = PrismaService.getInstance();
-export default prismaService; 
+export default prismaService;
+
+// Re-export PrismaClient type for dependency injection
+export { PrismaClient } from '@prisma/client'; 

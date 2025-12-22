@@ -49,6 +49,7 @@ model User {
   partnerPartnerships       Partnership[]      @relation("PartnershipPartner")
   sentSeasonInvitations     SeasonInvitation[] @relation("SentSeasonInvitations")
   receivedSeasonInvitations SeasonInvitation[] @relation("ReceivedSeasonInvitations")
+  matchComments MatchComment[] 
 
   // Favorite relations
   favoritesMade     Favorite[] @relation("UserFavorites")
@@ -663,7 +664,7 @@ model Match {
   resultSubmittedAt     DateTime?
   resultConfirmedById   String?
   resultConfirmedAt     DateTime?
-  resultComment         String?
+ 
   resultEvidence        String?
   isAutoApproved        Boolean     @default(false)
 
@@ -703,6 +704,17 @@ model Match {
   // NEW: Set 3 format toggle
   set3Format      Set3Format?  // MATCH_TIEBREAK, FULL_SET
 
+  // Friendly match fields
+  isFriendly      Boolean   @default(false)
+  genderRestriction GenderRestriction?  // MALE, FEMALE, OPEN (null = OPEN/All)
+  skillLevels     String[]  // Array: ["BEGINNER", "IMPROVER", "INTERMEDIATE", "UPPER_INTERMEDIATE", "EXPERT"]
+
+  // Friendly match request fields
+  isFriendlyRequest Boolean   @default(false)
+  requestExpiresAt  DateTime?
+  requestStatus     InvitationStatus?  // PENDING, ACCEPTED, DECLINED, EXPIRED
+  requestRecipientId String?
+
   // Relations
   division      Division?          @relation(fields: [divisionId], references: [id], onDelete: Cascade)
   league        League?            @relation("LeagueMatches", fields: [leagueId], references: [id], onDelete: SetNull)
@@ -713,6 +725,7 @@ model Match {
   cancelledBy        User?         @relation("MatchCanceller", fields: [cancelledById], references: [id], onDelete: SetNull)
   walkoverRecordedBy User?         @relation("MatchWalkoverRecorder", fields: [walkoverRecordedById], references: [id], onDelete: SetNull)
 
+  comments      MatchComment[] 
   participants  MatchParticipant[]
   invitations   MatchInvitation[]
   notifications Notification[]
@@ -764,6 +777,11 @@ model Match {
   @@index([requiresAdminReview])
   @@index([isHiddenFromPublic])
   @@index([isReportedForAbuse])
+  @@index([isFriendly])
+  @@index([genderRestriction])
+  @@index([isFriendlyRequest])
+  @@index([requestStatus])
+  @@index([requestExpiresAt])
 }
 
 model MatchParticipant {
@@ -829,6 +847,22 @@ model MatchInvitation {
   @@map("match_invitation")
 }
 
+
+model MatchComment {
+  id        String   @id @default(cuid())
+  matchId   String
+  userId    String
+  comment   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  match     Match    @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([matchId])
+  @@index([userId])
+  @@index([createdAt])
+}
 
 // =============================================
 // FINALS BRACKET SYSTEM MODELS
