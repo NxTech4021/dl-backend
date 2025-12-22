@@ -982,7 +982,11 @@ async function seedFeatureTests() {
   }
   console.log(`   ✅ Created ${messages.length} text messages in Division A chat`);
 
-  // Create a MATCH type message for Match 1
+  // Create a MATCH type message for Match 1 with complete matchData
+  const matchDate = new Date(match1.matchDate);
+  const startTime = "2:00 PM";
+  const endTime = "4:00 PM";
+
   await prisma.message.create({
     data: {
       threadId: threadA.id,
@@ -992,11 +996,22 @@ async function seedFeatureTests() {
       matchId: match1.id,
       matchData: JSON.stringify({
         matchId: match1.id,
-        matchDate: match1.matchDate,
-        location: match1.location,
-        venue: match1.venue,
-        status: match1.status,
-        sport: match1.sport,
+        matchType: match1.matchType, // SINGLES
+        date: matchDate.toISOString().split('T')[0], // "2025-12-21"
+        time: `${startTime} - ${endTime}`,
+        duration: 2, // hours
+        numberOfPlayers: "2", // Singles
+        location: match1.location || "Test Court 1",
+        fee: "FREE",
+        feeAmount: "0.00",
+        description: "League match - singles",
+        sportType: match1.sport, // PICKLEBALL
+        leagueName: "Feature Test League",
+        courtBooked: true,
+        notes: "Court booked for league play",
+        participants: [], // Will be enriched by backend on fetch
+        isFriendly: false,
+        isFriendlyRequest: false,
       }),
       createdAt: new Date(),
     },
@@ -2634,16 +2649,16 @@ async function seedFeatureTests() {
 
   await prisma.userThread.createMany({
     data: [
-      { threadId: dmThread1.id, userId: player1.id, role: "member", unreadCount: 0 },
-      { threadId: dmThread1.id, userId: player2.id, role: "member", unreadCount: 2 }, // Player2 has unread
+      { threadId: dmThread1.id, userId: player1.id, role: "member", unreadCount: 2 }, // Player1 has 2 unread from player2
+      { threadId: dmThread1.id, userId: player2.id, role: "member", unreadCount: 0 },
     ],
   });
 
-  // Messages in DM - player1 sends, player2 hasn't read
+  // Messages in DM - player2 sends, player1 hasn't read (so player1 will see purple unread dot)
   await prisma.message.create({
     data: {
       threadId: dmThread1.id,
-      senderId: player1.id,
+      senderId: player2.id,
       content: "Good game yesterday! Want a rematch?",
       messageType: MessageType.TEXT,
       createdAt: hoursAgo(5),
@@ -2653,13 +2668,13 @@ async function seedFeatureTests() {
   await prisma.message.create({
     data: {
       threadId: dmThread1.id,
-      senderId: player1.id,
+      senderId: player2.id,
       content: "I'm free this Saturday afternoon",
       messageType: MessageType.TEXT,
       createdAt: hoursAgo(4),
     },
   });
-  console.log(`   ✅ DM 1: player1 ↔ player2 (PICKLEBALL context, 2 unread for player2)`);
+  console.log(`   ✅ DM 1: player1 ↔ player2 (PICKLEBALL context, 2 unread for player1 - PURPLE DOT)`);
 
   // Direct Chat 2: tennis1 ↔ tennis2 (TENNIS context - they played Tennis Match 1)
   const dmThread2 = await prisma.thread.create({
@@ -2799,6 +2814,405 @@ async function seedFeatureTests() {
   console.log("   └─────────────────────────────────────────────────────────────┘");
 
   // =============================================
+  // STEP 12: Edge Cases for Comprehensive Testing
+  // =============================================
+  console.log("\n📋 STEP 12: Creating Edge Cases...");
+
+  // ─────────────────────────────────────────────
+  // Edge Case 1: 60+ Day Old Context (Gray Fallback)
+  // ─────────────────────────────────────────────
+  console.log("\n   🕒 Edge Case 1: 60+ Day Old Context");
+
+  // Create a match between player4 and player5 from 70 days ago
+  const seventyDaysAgo = new Date();
+  seventyDaysAgo.setDate(seventyDaysAgo.getDate() - 70);
+
+  const oldMatch = await prisma.match.create({
+    data: {
+      matchType: MatchType.SINGLES,
+      division: { connect: { id: divisionA.id } },
+      matchDate: seventyDaysAgo,
+      location: "Old Court",
+      sport: SportType.PICKLEBALL,
+      status: MatchStatus.COMPLETED,
+      resultSubmittedAt: seventyDaysAgo,
+      resultConfirmedBy: { connect: { id: player4.id } },
+      createdAt: seventyDaysAgo,
+      updatedAt: seventyDaysAgo,
+    },
+  });
+
+  await prisma.matchParticipant.createMany({
+    data: [
+      {
+        matchId: oldMatch.id,
+        userId: player4.id,
+        role: ParticipantRole.CREATOR,
+        team: "team1",
+        invitationStatus: InvitationStatus.ACCEPTED,
+        acceptedAt: seventyDaysAgo,
+        didAttend: true,
+      },
+      {
+        matchId: oldMatch.id,
+        userId: player5.id,
+        role: ParticipantRole.OPPONENT,
+        team: "team2",
+        invitationStatus: InvitationStatus.ACCEPTED,
+        acceptedAt: seventyDaysAgo,
+        didAttend: true,
+      },
+    ],
+  });
+
+  // Create match results for the old match (not counted for standings)
+  await prisma.matchResult.createMany({
+    data: [
+      {
+        matchId: oldMatch.id,
+        playerId: player4.id,
+        opponentId: player5.id,
+        sportType: SportType.PICKLEBALL,
+        gameType: GameType.SINGLES,
+        isWin: true,
+        matchPoints: 5,
+        participationPoints: 1,
+        setsWonPoints: 2,
+        winBonusPoints: 2,
+        margin: 6, // 11 - 5
+        setsWon: 1,
+        setsLost: 0,
+        gamesWon: 11,
+        gamesLost: 5,
+        datePlayed: seventyDaysAgo,
+        countsForStandings: false, // Too old to count
+      },
+      {
+        matchId: oldMatch.id,
+        playerId: player5.id,
+        opponentId: player4.id,
+        sportType: SportType.PICKLEBALL,
+        gameType: GameType.SINGLES,
+        isWin: false,
+        matchPoints: 1,
+        participationPoints: 1,
+        setsWonPoints: 0,
+        winBonusPoints: 0,
+        margin: -6, // 5 - 11
+        setsWon: 0,
+        setsLost: 1,
+        gamesWon: 5,
+        gamesLost: 11,
+        datePlayed: seventyDaysAgo,
+        countsForStandings: false,
+      },
+    ],
+  });
+
+  // Create DM thread between player4 and player5
+  const dmOldContext = await prisma.thread.create({
+    data: {
+      name: null,
+      isGroup: false,
+      divisionId: null,
+    },
+  });
+
+  await prisma.userThread.createMany({
+    data: [
+      { threadId: dmOldContext.id, userId: player4.id, role: "member", unreadCount: 0 },
+      { threadId: dmOldContext.id, userId: player5.id, role: "member", unreadCount: 1 },
+    ],
+  });
+
+  await prisma.message.create({
+    data: {
+      threadId: dmOldContext.id,
+      senderId: player4.id,
+      content: "Hey! Long time no match.",
+      createdAt: hoursAgo(2),
+    },
+  });
+
+  console.log(`   ✅ DM 6: player4 ↔ player5 (70-day-old PICKLEBALL match - gray dot due to age)`);
+
+  // ─────────────────────────────────────────────
+  // Edge Case 2: Expired Friendly Request
+  // ─────────────────────────────────────────────
+  console.log("\n   ⏰ Edge Case 2: Expired Friendly Request");
+
+  const expiredRequestDate = new Date();
+  expiredRequestDate.setDate(expiredRequestDate.getDate() - 3); // 3 days ago
+
+  const expiredFriendlyMatch = await prisma.match.create({
+    data: {
+      matchType: MatchType.SINGLES,
+      matchDate: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000), // 5 days from now
+      location: "Friendly Court",
+      sport: SportType.TENNIS,
+      status: MatchStatus.SCHEDULED,
+      isFriendly: true,
+      isFriendlyRequest: true,
+      requestExpiresAt: expiredRequestDate, // Expired 3 days ago
+      createdAt: new Date(Date.now() - 4 * 24 * 60 * 60 * 1000), // Created 4 days ago
+    },
+  });
+
+  await prisma.matchParticipant.createMany({
+    data: [
+      {
+        matchId: expiredFriendlyMatch.id,
+        userId: tennis1.id,
+        role: ParticipantRole.CREATOR,
+        invitationStatus: InvitationStatus.PENDING,
+      },
+      {
+        matchId: expiredFriendlyMatch.id,
+        userId: tennis3.id,
+        role: ParticipantRole.INVITED,
+        invitationStatus: InvitationStatus.PENDING,
+      },
+    ],
+  });
+
+  console.log(`   ✅ Expired friendly request: tennis1 → tennis3 (expired 3 days ago)`);
+
+  // ─────────────────────────────────────────────
+  // Edge Case 3: Multiple Disputes (Different Categories)
+  // ─────────────────────────────────────────────
+  console.log("\n   ⚖️ Edge Case 3: Multiple Disputes");
+
+  // Dispute 2: Score disagreement in Tennis
+  const disputedMatchTennis = await prisma.match.create({
+    data: {
+      divisionId: tennisDivision.id,
+      leagueId: tennisLeague.id,
+      seasonId: tennisSeason.id,
+      matchType: MatchType.SINGLES,
+      sport: SportType.TENNIS,
+      format: MatchFormat.STANDARD,
+      matchDate: daysAgo(8),
+      location: "Tennis Court 3",
+      status: MatchStatus.COMPLETED,
+      resultSubmittedAt: daysAgo(8),
+      resultSubmittedById: tennis2.id,
+      resultConfirmedById: tennis2.id,
+      resultConfirmedAt: daysAgo(8),
+      isDisputed: true,
+      playerScore: 2,
+      opponentScore: 1,
+      courtBooked: true,
+      fee: MatchFeeType.FREE,
+      createdById: tennis2.id,
+      notes: "Tennis Dispute: Score disagreement - different set counts reported",
+    },
+  });
+
+  await prisma.matchParticipant.createMany({
+    data: [
+      {
+        matchId: disputedMatchTennis.id,
+        userId: tennis2.id,
+        role: ParticipantRole.CREATOR,
+        team: "team1",
+        invitationStatus: InvitationStatus.ACCEPTED,
+        acceptedAt: daysAgo(9),
+        didAttend: true,
+      },
+      {
+        matchId: disputedMatchTennis.id,
+        userId: tennis3.id,
+        role: ParticipantRole.OPPONENT,
+        team: "team2",
+        invitationStatus: InvitationStatus.ACCEPTED,
+        acceptedAt: daysAgo(9),
+        didAttend: true,
+      },
+    ],
+  });
+
+  // Create the dispute for tennis match
+  await prisma.matchDispute.create({
+    data: {
+      matchId: disputedMatchTennis.id,
+      raisedByUserId: tennis3.id,
+      disputeCategory: DisputeCategory.WRONG_SCORE,
+      disputeComment: "Different set counts reported - I counted 3 sets but submitter claims only 2",
+      disputerScore: { sets: [{ p1: 4, p2: 6 }, { p1: 6, p2: 4 }, { p1: 3, p2: 6 }] },
+      status: DisputeStatus.OPEN,
+      priority: DisputePriority.NORMAL,
+    },
+  });
+
+  // Dispute 3: No-show dispute in Padel
+  const disputedMatchPadel = await prisma.match.create({
+    data: {
+      divisionId: padelDivision.id,
+      leagueId: padelLeague.id,
+      seasonId: padelSeason.id,
+      matchType: MatchType.DOUBLES,
+      sport: SportType.PADEL,
+      format: MatchFormat.STANDARD,
+      matchDate: daysAgo(5),
+      location: "Padel Court 2",
+      status: MatchStatus.COMPLETED,
+      resultSubmittedAt: daysAgo(5),
+      resultSubmittedById: padel1.id,
+      resultConfirmedById: padel1.id,
+      resultConfirmedAt: daysAgo(5),
+      isDisputed: true,
+      playerScore: 1,
+      opponentScore: 0,
+      courtBooked: true,
+      fee: MatchFeeType.FREE,
+      createdById: padel1.id,
+      notes: "Padel Dispute: Opponent claims they arrived on time but court was empty",
+    },
+  });
+
+  await prisma.matchParticipant.createMany({
+    data: [
+      {
+        matchId: disputedMatchPadel.id,
+        userId: padel1.id,
+        role: ParticipantRole.CREATOR,
+        team: "team1",
+        invitationStatus: InvitationStatus.ACCEPTED,
+        acceptedAt: daysAgo(6),
+        didAttend: true,
+      },
+      {
+        matchId: disputedMatchPadel.id,
+        userId: padel2.id,
+        role: ParticipantRole.PARTNER,
+        team: "team1",
+        invitationStatus: InvitationStatus.ACCEPTED,
+        acceptedAt: daysAgo(6),
+        didAttend: true,
+      },
+      {
+        matchId: disputedMatchPadel.id,
+        userId: padel3.id,
+        role: ParticipantRole.OPPONENT,
+        team: "team2",
+        invitationStatus: InvitationStatus.ACCEPTED,
+        acceptedAt: daysAgo(6),
+        didAttend: true,
+      },
+      {
+        matchId: disputedMatchPadel.id,
+        userId: padel4.id,
+        role: ParticipantRole.PARTNER,
+        team: "team2",
+        invitationStatus: InvitationStatus.ACCEPTED,
+        acceptedAt: daysAgo(6),
+        didAttend: true,
+      },
+    ],
+  });
+
+  // Create the dispute for padel match
+  await prisma.matchDispute.create({
+    data: {
+      matchId: disputedMatchPadel.id,
+      raisedByUserId: padel3.id,
+      disputeCategory: DisputeCategory.NO_SHOW,
+      disputeComment: "We arrived on time at 14:00 but the court was empty. Opponents never showed up.",
+      status: DisputeStatus.OPEN,
+      priority: DisputePriority.NORMAL,
+    },
+  });
+
+  console.log(`   ✅ Dispute 2: tennis2 vs tennis3 (Score disagreement)`);
+  console.log(`   ✅ Dispute 3: Team Padel1 vs Team Padel2 (No-show claim)`);
+
+  // ─────────────────────────────────────────────
+  // Edge Case 4: Different Walkover Reasons
+  // ─────────────────────────────────────────────
+  console.log("\n   🚶 Edge Case 4: Different Walkover Reasons");
+
+  // Walkover - INJURY
+  const walkoverInjury = await prisma.match.create({
+    data: {
+      matchType: MatchType.SINGLES,
+      division: { connect: { id: divisionA.id } },
+      matchDate: daysAgo(9),
+      location: "Pickleball Court 5",
+      sport: SportType.PICKLEBALL,
+      status: MatchStatus.WALKOVER,
+      walkoverReason: WalkoverReason.INJURY,
+      resultSubmittedAt: daysAgo(9),
+      resultConfirmedBy: { connect: { id: player2.id } },
+    },
+  });
+
+  await prisma.matchParticipant.createMany({
+    data: [
+      {
+        matchId: walkoverInjury.id,
+        userId: player2.id,
+        role: ParticipantRole.CREATOR,
+        team: "team1",
+        invitationStatus: InvitationStatus.ACCEPTED,
+        acceptedAt: daysAgo(10),
+        didAttend: true,
+      },
+      {
+        matchId: walkoverInjury.id,
+        userId: player6.id,
+        role: ParticipantRole.OPPONENT,
+        team: "team2",
+        invitationStatus: InvitationStatus.ACCEPTED,
+        acceptedAt: daysAgo(10),
+        didAttend: false, // Didn't attend due to injury
+      },
+    ],
+  });
+
+  // Walkover - LATE_CANCELLATION
+  const walkoverLateCancellation = await prisma.match.create({
+    data: {
+      matchType: MatchType.SINGLES,
+      division: { connect: { id: tennisDivision.id } },
+      matchDate: daysAgo(6),
+      location: "Tennis Court 4",
+      sport: SportType.TENNIS,
+      status: MatchStatus.WALKOVER,
+      walkoverReason: WalkoverReason.LATE_CANCELLATION,
+      resultSubmittedAt: daysAgo(6),
+      resultConfirmedBy: { connect: { id: tennis1.id } },
+    },
+  });
+
+  await prisma.matchParticipant.createMany({
+    data: [
+      {
+        matchId: walkoverLateCancellation.id,
+        userId: tennis1.id,
+        role: ParticipantRole.CREATOR,
+        team: "team1",
+        invitationStatus: InvitationStatus.ACCEPTED,
+        acceptedAt: daysAgo(7),
+        didAttend: true,
+      },
+      {
+        matchId: walkoverLateCancellation.id,
+        userId: tennis4.id,
+        role: ParticipantRole.OPPONENT,
+        team: "team2",
+        invitationStatus: InvitationStatus.ACCEPTED,
+        acceptedAt: daysAgo(7),
+        didAttend: false, // Late cancellation
+      },
+    ],
+  });
+
+  console.log(`   ✅ Walkover (INJURY): player2 vs player6`);
+  console.log(`   ✅ Walkover (LATE_CANCELLATION): tennis1 vs tennis4`);
+
+  console.log("\n   ✨ All edge cases created successfully!");
+
+  // =============================================
   // PRINT SUMMARY
   // =============================================
   console.log("\n");
@@ -2865,13 +3279,30 @@ async function seedFeatureTests() {
   console.log("║     • Match 14: ONGOING with resultSubmittedAt 26 hours ago             ║");
   console.log("║     • Should be auto-approved by cron job                               ║");
   console.log("║                                                                          ║");
-  console.log("║  ⚠️  DISPUTE: Tennis Match 3 - Score disagreement (OPEN)                ║");
-  console.log("║  🚶 WALKOVER: Pickleball Match 5 - No-show scenario                     ║");
+  console.log("║  ⚠️  DISPUTES (3 total):                                                 ║");
+  console.log("║     • Tennis Match 3 - Score disagreement (OPEN)                        ║");
+  console.log("║     • Tennis singles - Different set counts reported                    ║");
+  console.log("║     • Padel doubles - No-show claim dispute                             ║");
+  console.log("║                                                                          ║");
+  console.log("║  🚶 WALKOVERS (3 total):                                                 ║");
+  console.log("║     • NO_SHOW: Pickleball Match 5                                       ║");
+  console.log("║     • INJURY: player2 vs player6                                        ║");
+  console.log("║     • LATE_CANCELLATION: tennis1 vs tennis4                             ║");
+  console.log("║                                                                          ║");
   console.log("║  ⏳ PENDING: Pickleball Match 6 - Awaiting confirmation                 ║");
   console.log("║  🎾 TIEBREAK: Tennis Match 2 - 7-6(5), 3-6, 10-7                        ║");
   console.log("║  👥 DOUBLES: Padel + Tennis + Pickleball with partnerships              ║");
   console.log("║  💬 CHAT: Messages, MATCH posts, replies, friendly match requests       ║");
-  console.log("║  🔵 UNREAD DOT COLOR: 5 DM threads testing recentSportContext          ║");
+  console.log("║                                                                          ║");
+  console.log("║  🔵 UNREAD DOT COLOR: 6 DM threads testing recentSportContext:          ║");
+  console.log("║     • DM 1: player1 ↔ player2 (PICKLEBALL - Purple)                     ║");
+  console.log("║     • DM 2: tennis1 ↔ tennis2 (TENNIS - Green)                          ║");
+  console.log("║     • DM 3: padel1 ↔ padel3 (PADEL - Blue)                              ║");
+  console.log("║     • DM 4: player1 ↔ player6 (No context - Gray)                       ║");
+  console.log("║     • DM 5: tennis1 ↔ player1 (No context - Gray)                       ║");
+  console.log("║     • DM 6: player4 ↔ player5 (70-day-old match - Gray)                 ║");
+  console.log("║                                                                          ║");
+  console.log("║  ⏰ EXPIRED FRIENDLY REQUEST: tennis1 → tennis3 (expired 3 days ago)    ║");
   console.log("╠══════════════════════════════════════════════════════════════════════════╣");
   console.log("║                                                                          ║");
   console.log("║  HOW TO TEST:                                                           ║");
