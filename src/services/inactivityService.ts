@@ -4,7 +4,7 @@
  */
 
 import { prisma } from '../lib/prisma';
-import { UserStatus } from '@prisma/client';
+import { UserStatus, StatusChangeReason, MatchStatus } from '@prisma/client';
 import { NotificationService } from './notificationService';
 import {
   INACTIVITY_CONFIG,
@@ -13,6 +13,7 @@ import {
 } from '../config/inactivity.config';
 import { getEffectiveThreshold } from './admin/adminInactivityService';
 import { logger } from '../utils/logger';
+import { getCurrentMalaysiaTime } from '../utils/timezone';
 
 export class InactivityService {
   private notificationService: NotificationService;
@@ -51,7 +52,7 @@ export class InactivityService {
       // Process each user
       for (const user of users) {
         try {
-          await this.processUserWithThresholds(user.id, user.createdAt, thresholds, results);
+          await this.processUserWithThresholds(user.id, user.createdAt, user.lastActivityCheck, thresholds, results);
         } catch (error) {
           logger.error(`Error processing user ${user.id}:`, {}, error as Error);
           results.errors++;
@@ -80,6 +81,7 @@ export class InactivityService {
   private async processUserWithThresholds(
     userId: string,
     createdAt: Date,
+    lastActivityCheck: Date | null,
     thresholds: { inactivityDays: number; warningDays: number },
     results: InactivityCheckResult
   ): Promise<void> {
@@ -103,8 +105,16 @@ export class InactivityService {
       await this.markAsInactive(userId, `${daysSinceLastMatch} days since last match`);
       results.markedInactive++;
     } else if (daysSinceLastMatch >= thresholds.warningDays) {
-      await this.sendWarningNotificationWithThreshold(userId, daysSinceLastMatch, thresholds.inactivityDays);
-      results.warnings++;
+      // Prevent duplicate warnings: Only send if no warning sent in the last 24 hours
+      const shouldSendWarning = !lastActivityCheck ||
+        this.calculateDaysSince(lastActivityCheck) >= 1;
+
+      if (shouldSendWarning) {
+        await this.sendWarningNotificationWithThreshold(userId, daysSinceLastMatch, thresholds.inactivityDays);
+        results.warnings++;
+      } else {
+        logger.debug(`Skipping warning for user ${userId} - already warned within 24 hours`);
+      }
     }
   }
 
@@ -160,17 +170,20 @@ export class InactivityService {
         createdAt: {
           lte: gracePeriodDate, // Only check users older than grace period
         },
+        inactivityExempt: false, // Skip users marked as exempt from inactivity checks
       },
       select: {
         id: true,
         createdAt: true,
         status: true,
+        lastActivityCheck: true, // Used to prevent duplicate warnings
       },
     });
   }
 
   /**
    * Calculate days since last match
+   * Only counts COMPLETED or ONGOING matches (excludes CANCELLED, VOID, DRAFT)
    */
   async getDaysSinceLastMatch(userId: string): Promise<number | null> {
     const lastMatch = await prisma.match.findFirst({
@@ -178,6 +191,10 @@ export class InactivityService {
         participants: {
           some: { userId },
         },
+        // Only count matches that actually happened
+        status: {
+          in: [MatchStatus.COMPLETED, MatchStatus.ONGOING, MatchStatus.SCHEDULED]
+        }
       },
       orderBy: { matchDate: 'desc' },
       select: { matchDate: true },
@@ -190,9 +207,10 @@ export class InactivityService {
 
   /**
    * Helper: Calculate days since a date
+   * Uses Malaysia timezone (UTC+8) for consistent calculations
    */
   private calculateDaysSince(date: Date): number {
-    const now = new Date();
+    const now = getCurrentMalaysiaTime();
     const diffMs = now.getTime() - date.getTime();
     return Math.floor(diffMs / (1000 * 60 * 60 * 24));
   }
@@ -203,11 +221,32 @@ export class InactivityService {
   private async markAsInactive(userId: string, reason: string): Promise<void> {
     logger.info(`Marking user ${userId} as inactive: ${reason}`);
 
+    // Get current status before updating
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { status: true }
+    });
+
+    const previousStatus = user?.status || UserStatus.ACTIVE;
+
+    // Update user status
     await prisma.user.update({
       where: { id: userId },
       data: {
         status: UserStatus.INACTIVE,
         lastActivityCheck: new Date(),
+        markedInactiveAt: new Date(),
+      },
+    });
+
+    // Create audit record for status change
+    await prisma.playerStatusChange.create({
+      data: {
+        userId,
+        previousStatus,
+        newStatus: UserStatus.INACTIVE,
+        reason: StatusChangeReason.INACTIVITY_THRESHOLD,
+        notes: reason,
       },
     });
 
@@ -292,7 +331,7 @@ export class InactivityService {
    * Reactivate user when they play a match
    * Called after match creation
    */
-  async reactivateUser(userId: string): Promise<void> {
+  async reactivateUser(userId: string, matchId?: string): Promise<void> {
     const user = await prisma.user.findUnique({
       where: { id: userId },
       select: { status: true, name: true },
@@ -308,6 +347,18 @@ export class InactivityService {
         data: {
           status: UserStatus.ACTIVE,
           lastActivityCheck: new Date(),
+        },
+      });
+
+      // Create audit record for reactivation
+      await prisma.playerStatusChange.create({
+        data: {
+          userId,
+          previousStatus: UserStatus.INACTIVE,
+          newStatus: UserStatus.ACTIVE,
+          reason: StatusChangeReason.MATCH_PLAYED,
+          matchId: matchId || null,
+          notes: 'Reactivated by playing a match',
         },
       });
 
