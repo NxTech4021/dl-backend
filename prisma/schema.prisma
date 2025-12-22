@@ -1889,7 +1889,7 @@ model Thread {
   isGroup   Boolean @default(false)
 
   divisionId String?
-  division   Division? @relation("DivisionThreads", fields: [divisionId], references: [id])
+  division   Division? @relation("DivisionThreads", fields: [divisionId], references: [id], onDelete: SetNull)
 
   members  UserThread[]
   messages Message[]
@@ -2062,6 +2062,7 @@ model Notification {
   message   String
   category  NotificationCategory
   type      String?
+  metadata  Json?
   createdAt DateTime             @default(now())
 
   seasonId            String?
