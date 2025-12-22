@@ -603,43 +603,37 @@ export class NotificationService {
     userIds: string[],
     pushData: { title: string; body: string; data?: Record<string, any> }
   ): Promise<void> {
-    try {
-      console.log('📤 [NotificationService] Getting push tokens for users:', userIds);
-      
-      // Get active push tokens for users
-      const pushTokens = await this.prisma.userPushToken.findMany({
-        where: {
-          userId: { in: userIds },
-          isActive: true,
-        },
-        select: {
-          token: true,
-          userId: true,
-          platform: true,
-        },
-      });
+    const pushTokens = await prisma.userPushToken.findMany({
+      where: { userId: { in: userIds }, isActive: true },
+      select: { token: true },
+    });
 
-      if (pushTokens.length === 0) {
-        console.log('⚠️ [NotificationService] No active push tokens found for users:', userIds);
-        return;
-      }
-
-      // Send push notification to each token
-      const pushPromises = pushTokens.map(({ token }) =>
-        this.sendPushNotification({
-          token,
-          title: pushData.title,
-          body: pushData.body,
-          data: pushData.data,
-        })
-      );
-
-      await Promise.all(pushPromises);
-      console.log('✅ [NotificationService] Push notifications sent successfully');
-    } catch (error) {
-      console.error('❌ [NotificationService] Error sending push notifications:', error);
-      logger.error("Error sending push notifications to users", { userIds }, error as Error);
+    if (pushTokens.length === 0) {
+      console.log('No active push tokens found for users:', userIds);
+      return;
     }
+
+    const messages = pushTokens.map((tokenRecord) => ({
+      to: tokenRecord.token,
+      sound: 'default',
+      title: pushData.title,
+      body: pushData.body,
+      data: pushData.data || {},
+    }));
+
+    const chunks = expo.chunkPushNotifications(messages);
+    const tickets = [];
+
+    for (const chunk of chunks) {
+      try {
+        const ticketChunk = await expo.sendPushNotificationsAsync(chunk);
+        tickets.push(...ticketChunk);
+      } catch (error) {
+        console.error('Error sending push notification chunk:', error);
+      }
+    }
+
+    console.log('Push notifications sent successfully:', tickets);
   }
 
   /**
