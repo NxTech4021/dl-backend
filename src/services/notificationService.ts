@@ -13,6 +13,7 @@ import { AppError } from "../utils/errors";
 import { logger } from "../utils/logger";
 import { sendEmail as sendEmailViaResend } from "../config/nodemailer";
 import { Expo, ExpoPushMessage } from "expo-server-sdk";
+import { isPushEnabled, isEmailEnabled } from "./notification/notificationPreferenceService";
 
 // Initialize Expo SDK for push notifications
 const expo = new Expo();
@@ -115,6 +116,11 @@ export class NotificationService {
         }
       });
 
+      // Persist metadata to database (so it's available on page refresh)
+      if (metadata && Object.keys(metadata).length > 0) {
+        createData.metadata = metadata;
+      }
+
       // Create notification in database
       const notification = await this.prisma.notification.create({
         data: createData,
@@ -146,6 +152,25 @@ export class NotificationService {
           readAt: undefined,
         });
       }
+
+      // Send push notifications to users who have push enabled
+      // This runs in the background to not block the response
+      this.sendPushNotificationsToUsers(validUserIds, {
+        title: notification.title ?? 'Deuce League',
+        body: notification.message,
+        data: {
+          notificationId: notification.id,
+          type: notification.type ?? '',
+          category: notification.category,
+          ...Object.fromEntries(
+            Object.entries(entityIds)
+              .filter(([_, v]) => v !== undefined)
+              .map(([k, v]) => [k, String(v)])
+          ),
+        },
+      }).catch(error => {
+        logger.error("Failed to send push notifications", { notificationId: notification.id }, error as Error);
+      });
 
       logger.info("Notification created and sent", {
         notificationId: notification.id,
@@ -249,6 +274,7 @@ export class NotificationService {
           archive: un.archive,
           createdAt: un.notification.createdAt,
           readAt: un.readAt || undefined,
+          metadata: un.notification.metadata as Record<string, any> | undefined,
         })
       );
 
@@ -467,6 +493,7 @@ export class NotificationService {
         archive: false,
         createdAt: notif.createdAt,
         readAt: undefined,
+        metadata: notif.metadata as Record<string, any> | undefined,
       }));
     } catch (error) {
       logger.error(
@@ -614,6 +641,66 @@ export class NotificationService {
         { token },
         error as Error
       );
+    }
+  }
+
+  /**
+   * Send push notifications to multiple users
+   * Checks user preferences and gets active push tokens
+   */
+  private async sendPushNotificationsToUsers(
+    userIds: string[],
+    notification: { title: string; body: string; data?: Record<string, string> }
+  ): Promise<void> {
+    if (userIds.length === 0) return;
+
+    try {
+      // Get users who have push notifications enabled
+      const usersWithPushEnabled = await Promise.all(
+        userIds.map(async (userId) => {
+          const enabled = await isPushEnabled(userId);
+          return enabled ? userId : null;
+        })
+      );
+      const eligibleUserIds = usersWithPushEnabled.filter((id): id is string => id !== null);
+
+      if (eligibleUserIds.length === 0) {
+        logger.debug("No users with push notifications enabled", { userIds });
+        return;
+      }
+
+      // Get active push tokens for eligible users
+      const tokens = await this.prisma.userPushToken.findMany({
+        where: {
+          userId: { in: eligibleUserIds },
+          isActive: true,
+        },
+        select: { token: true, userId: true },
+      });
+
+      if (tokens.length === 0) {
+        logger.debug("No active push tokens found", { userIds: eligibleUserIds });
+        return;
+      }
+
+      logger.info("Sending push notifications", {
+        eligibleUsers: eligibleUserIds.length,
+        tokens: tokens.length,
+      });
+
+      // Send push notifications in parallel (with error handling per token)
+      await Promise.allSettled(
+        tokens.map(({ token }) =>
+          this.sendPushNotification({
+            token,
+            title: notification.title,
+            body: notification.body,
+            data: notification.data,
+          })
+        )
+      );
+    } catch (error) {
+      logger.error("Error sending push notifications to users", { userIds }, error as Error);
     }
   }
 
