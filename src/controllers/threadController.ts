@@ -19,44 +19,112 @@ export const createThread = async (req: Request, res: Response) => {
         .json({ error: "At least two users are required to create a thread." });
     }
 
-    // Check if direct message already exists between these users
+    // For DM threads, use transaction to prevent race condition (duplicate DMs)
     if (!isGroup && userIds.length === 2) {
-      const existingThread = await prisma.thread.findFirst({
-        where: {
-          isGroup: false,
-          members: {
-            every: {
-              userId: { in: userIds }
+      const result = await prisma.$transaction(async (tx) => {
+        // Check if DM already exists INSIDE transaction
+        const existingThread = await tx.thread.findFirst({
+          where: {
+            isGroup: false,
+            members: {
+              every: {
+                userId: { in: userIds }
+              }
             }
-          }
-        },
-        include: {
-          members: {
-            include: {
-              user: {
-                select: {
-                  id: true,
-                  name: true,
-                  username: true,
-                  image: true
+          },
+          include: {
+            members: {
+              include: {
+                user: {
+                  select: {
+                    id: true,
+                    name: true,
+                    username: true,
+                    image: true
+                  }
                 }
               }
             }
           }
+        });
+
+        if (existingThread && existingThread.members.length === 2) {
+          return { thread: existingThread, isExisting: true };
         }
+
+        // Create new DM thread
+        const newThread = await tx.thread.create({
+          data: {
+            name: null,
+            isGroup: false,
+            divisionId: divisionId || null,
+            members: {
+              create: userIds.map((userId: string) => ({
+                userId,
+                role: null,
+                unreadCount: 0
+              })),
+            },
+          },
+          include: {
+            members: {
+              include: {
+                user: {
+                  select: {
+                    id: true,
+                    name: true,
+                    username: true,
+                    image: true,
+                    email: true
+                  }
+                },
+              },
+            },
+            division: {
+              select: {
+                id: true,
+                name: true,
+                league: {
+                  select: {
+                    id: true,
+                    sportType: true
+                  }
+                }
+              }
+            }
+          },
+        });
+
+        return { thread: newThread, isExisting: false };
       });
 
-      if (existingThread && existingThread.members.length === 2) {
-        console.log(`✅ DM already exists: ${existingThread.id}`);
+      if (result.isExisting) {
+        console.log(`✅ DM already exists: ${result.thread.id}`);
         return res.status(200).json({
           success: true,
-          data: existingThread,
+          data: result.thread,
           message: "Thread already exists",
           isExisting: true
         });
       }
+
+      console.log(`✅ DM thread created: ${result.thread.id}`);
+
+      // Socket notification for DM
+      if (req.io) {
+        userIds.forEach((userId) => {
+          req.io.to(userId).emit('thread_created', { thread: result.thread });
+        });
+      }
+
+      return res.status(201).json({
+        success: true,
+        data: result.thread,
+        message: "Thread created successfully"
+      });
     }
 
+    // For group threads (no race condition concern)
     const thread = await prisma.thread.create({
       data: {
         name: isGroup ? name : null,
@@ -73,14 +141,14 @@ export const createThread = async (req: Request, res: Response) => {
       include: {
         members: {
           include: {
-            user: { 
-              select: { 
-                id: true, 
-                name: true, 
+            user: {
+              select: {
+                id: true,
+                name: true,
                 username: true,
                 image: true,
                 email: true
-              } 
+              }
             },
           },
         },
@@ -220,7 +288,7 @@ export const getThreads = async (req: Request, res: Response) => {
     // Get unread count for current user in each thread and format division data
     const threadsWithUnread = threads.map(thread => {
       const userThread = thread.members.find(m => m.userId === userId);
-      
+
       // Format division data with full information
       const divisionData = thread.division ? {
         id: thread.division.id,
@@ -245,6 +313,17 @@ export const getThreads = async (req: Request, res: Response) => {
               isValid: context.isValid
             };
           }
+        }
+      }
+
+      // Parse matchData in last message if it's a JSON string
+      const lastMessage = thread.messages?.[0];
+      if (lastMessage && lastMessage.matchData && typeof lastMessage.matchData === 'string') {
+        try {
+          lastMessage.matchData = JSON.parse(lastMessage.matchData);
+        } catch (e) {
+          console.warn(`  ⚠️ Failed to parse matchData for last message in thread ${thread.id}`);
+          lastMessage.matchData = null;
         }
       }
 
@@ -282,19 +361,29 @@ export const getThreads = async (req: Request, res: Response) => {
 // Send a message in a thread
 export const sendMessage = async (req: Request, res: Response) => {
   const { threadId } = req.params;
-  const { senderId, content, repliesToId, messageType, matchId, matchData } = req.body;
+  const { content, repliesToId, messageType, matchId, matchData } = req.body;
+
+  // SECURITY: Use authenticated user ID, not the one from request body
+  // This prevents users from sending messages as other users
+  const authenticatedUserId = (req as any).user?.id;
+  const senderId = authenticatedUserId;
 
   console.log(
     `💬 Sending message - Thread: ${threadId}, Sender: ${senderId}, Type: ${messageType || 'TEXT'}`
   );
 
-  if (!senderId || !content) {
-    console.log(
-      `❌ Missing required fields - SenderId: ${senderId}, Content: ${!!content}`
-    );
+  if (!senderId) {
+    console.log(`❌ Authentication required - no authenticated user`);
+    return res
+      .status(401)
+      .json({ error: "Authentication required" });
+  }
+
+  if (!content) {
+    console.log(`❌ Missing content`);
     return res
       .status(400)
-      .json({ error: "Sender ID and content are required" });
+      .json({ error: "Content is required" });
   }
 
   try {
@@ -494,6 +583,7 @@ export const getMessages = async (req: Request, res: Response) => {
   try {
     const { threadId } = req.params;
     const { page = 1, limit = 50 } = req.query;
+    const userId = req.user?.id;
 
     console.log(
       `📖 Fetching messages for thread: ${threadId}, Page: ${page}, Limit: ${limit}`
@@ -501,6 +591,20 @@ export const getMessages = async (req: Request, res: Response) => {
 
     if (!threadId) {
       return res.status(400).json({ error: "Thread ID is required" });
+    }
+
+    // Security check: Verify the requesting user is a member of this thread
+    if (userId) {
+      const membership = await prisma.userThread.findUnique({
+        where: {
+          threadId_userId: { threadId, userId }
+        }
+      });
+
+      if (!membership) {
+        console.log(`❌ Access denied: User ${userId} is not a member of thread ${threadId}`);
+        return res.status(403).json({ error: "You are not a member of this thread" });
+      }
     }
 
     const skip = (Number(page) - 1) * Number(limit);
@@ -552,6 +656,16 @@ export const getMessages = async (req: Request, res: Response) => {
     // Enrich match messages with current participants
     const enrichedMessages = await Promise.all(
       sortedMessages.map(async (msg: any) => {
+        // Parse matchData if it's a JSON string (applies to all messages, not just MATCH type)
+        if (msg.matchData && typeof msg.matchData === 'string') {
+          try {
+            msg.matchData = JSON.parse(msg.matchData);
+          } catch (e) {
+            console.warn(`  ⚠️ Failed to parse matchData for message ${msg.id}`);
+            msg.matchData = null;
+          }
+        }
+
         if (msg.messageType === 'MATCH' && msg.matchId) {
           try {
             // Fetch current match data to get latest participants and request status
@@ -571,7 +685,18 @@ export const getMessages = async (req: Request, res: Response) => {
 
             if (match) {
               // Update matchData with current participants and request status
-              const matchData = msg.matchData as any || {};
+              // Parse matchData if it's a string (from database)
+              let matchData = msg.matchData;
+              if (typeof matchData === 'string') {
+                try {
+                  matchData = JSON.parse(matchData);
+                } catch (e) {
+                  console.warn(`  ⚠️ Failed to parse matchData for message ${msg.id}`);
+                  matchData = {};
+                }
+              }
+              matchData = matchData || {};
+
               const matchAny = match as any;
               msg.matchData = {
                 ...matchData,
@@ -621,12 +746,17 @@ export const getMessages = async (req: Request, res: Response) => {
 // 🆕 Mark entire thread as read (resets unread count to 0)
 export const markThreadAsRead = async (req: Request, res: Response) => {
   const { threadId } = req.params;
-  const { userId } = req.body;
+  // SECURITY: Use authenticated user ID instead of body to prevent users marking others' threads as read
+  const userId = req.user?.id;
+
+  if (!userId) {
+    return res.status(401).json({ error: "Authentication required" });
+  }
 
   console.log(`👁️ Marking thread ${threadId} as read by user ${userId}`);
 
-  if (!threadId || !userId) {
-    return res.status(400).json({ error: "Thread ID and User ID are required" });
+  if (!threadId) {
+    return res.status(400).json({ error: "Thread ID is required" });
   }
 
   try {
@@ -703,17 +833,22 @@ export const markThreadAsRead = async (req: Request, res: Response) => {
 export const getThreadUnreadCount = async (req: Request, res: Response) => {
   try {
     const { threadId } = req.params;
-    const { userId } = req.query;
+    // SECURITY: Use authenticated user ID
+    const userId = req.user?.id;
 
-    if (!threadId || !userId) {
-      return res.status(400).json({ error: "Thread ID and User ID are required" });
+    if (!userId) {
+      return res.status(401).json({ error: "Authentication required" });
+    }
+
+    if (!threadId) {
+      return res.status(400).json({ error: "Thread ID is required" });
     }
 
     const userThread = await prisma.userThread.findUnique({
       where: {
         threadId_userId: {
           threadId,
-          userId: userId as string
+          userId
         }
       },
       select: {
@@ -739,10 +874,11 @@ export const getThreadUnreadCount = async (req: Request, res: Response) => {
 // 🆕 Get total unread count across all threads for a user
 export const getTotalUnreadCount = async (req: Request, res: Response) => {
   try {
-    const { userId } = req.params;
+    // SECURITY: Use authenticated user ID
+    const userId = req.user?.id;
 
     if (!userId) {
-      return res.status(400).json({ error: "User ID is required" });
+      return res.status(401).json({ error: "Authentication required" });
     }
 
     const userThreads = await prisma.userThread.findMany({
