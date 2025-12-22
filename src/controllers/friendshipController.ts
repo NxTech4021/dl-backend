@@ -1,7 +1,10 @@
 import { Request, Response } from 'express';
+import { prisma } from '../lib/prisma';
 import * as friendshipService from '../services/friendshipService';
 import { ApiResponse } from '../utils/ApiResponse';
 import { AuthenticatedRequest } from '../middlewares/auth.middleware';
+import { socialCommunityNotifications } from '../helpers/notifications/socialCommunityNotifications';
+import { notificationService } from '../services/notificationService';
 
 interface SendFriendRequestBody {
   recipientId?: string;
@@ -13,27 +16,42 @@ export const sendFriendRequestHandler = async (req: AuthenticatedRequest, res: R
     const { recipientId } = req.body as SendFriendRequestBody;
 
     if (!userId) {
-      return res.status(401).json(new ApiResponse(false, 401, null, 'Unauthorized'));
+      return res.status(401).json({ error: 'Authentication required' });
     }
 
     if (!recipientId) {
-      return res.status(400).json(new ApiResponse(false, 400, null, 'Recipient ID required'));
+      return res.status(400).json({ error: 'Recipient ID is required' });
     }
 
+    // Create the friend request
     const friendship = await friendshipService.sendFriendRequest({
       requesterId: userId,
       recipientId,
     });
 
-    return res.status(201).json(
-      new ApiResponse(true, 201, friendship, 'Friend request sent successfully')
-    );
+
+    // Get sender's name for the notification
+    const sender = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { name: true, username: true },
+    });
+
+    if (sender) {
+      const notification = socialCommunityNotifications.friendRequest(sender.name || sender.username || 'Someone');
+      await notificationService.createNotification({
+        userIds: [recipientId],
+        ...notification,
+        metadata: {
+          ...notification.metadata,
+          senderId: userId,
+        },
+      });
+    }
+
+    res.status(201).json({ success: true, friendship });
   } catch (error: unknown) {
     console.error('Error sending friend request:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Failed to send friend request';
-    return res.status(400).json(
-      new ApiResponse(false, 400, null, errorMessage)
-    );
+    res.status(500).json({ error: 'Failed to send friend request' });
   }
 };
 
