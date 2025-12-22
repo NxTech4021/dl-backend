@@ -225,44 +225,111 @@ export class StandingsV2Service {
    *
    * SPEC ORDER:
    * 1. Total Points (from Best 6)
-   * 2. Head-to-Head Record (ALL matches)
+   * 2. Head-to-Head Record (for 2-way ties: direct H2H; for 3+ way ties: H2H within tied group)
    * 3. Set Win % (Best 6 only)
    * 4. Game Win % (Best 6 only)
    * 5. Alphabetical
    */
   private sortByTiebreakers(players: PlayerMetrics[]): PlayerMetrics[] {
-    return players.sort((a, b) => {
-      // 1. Total Points (descending)
-      if (a.metrics.totalPoints !== b.metrics.totalPoints) {
-        return b.metrics.totalPoints - a.metrics.totalPoints;
+    // First, group players by points
+    const pointGroups = new Map<number, PlayerMetrics[]>();
+    for (const player of players) {
+      const points = player.metrics.totalPoints;
+      if (!pointGroups.has(points)) {
+        pointGroups.set(points, []);
       }
+      pointGroups.get(points)!.push(player);
+    }
 
-      // 2. Head-to-Head (if they played each other)
-      const aVsB = a.metrics.headToHead[b.userId];
-      const bVsA = b.metrics.headToHead[a.userId];
+    // Sort each group and flatten
+    const sortedGroups: PlayerMetrics[] = [];
+    const sortedPoints = Array.from(pointGroups.keys()).sort((a, b) => b - a);
 
-      if (aVsB && bVsA) {
-        const aH2HWins = aVsB.wins;
-        const bH2HWins = bVsA.wins;
+    for (const points of sortedPoints) {
+      const group = pointGroups.get(points)!;
 
-        if (aH2HWins !== bH2HWins) {
-          return bH2HWins - aH2HWins;
+      if (group.length === 1) {
+        sortedGroups.push(group[0]);
+      } else if (group.length === 2) {
+        // 2-way tie: use direct H2H
+        sortedGroups.push(...this.sortTwoWayTie(group));
+      } else {
+        // 3+ way tie: calculate H2H within tied group
+        sortedGroups.push(...this.sortMultiWayTie(group));
+      }
+    }
+
+    return sortedGroups;
+  }
+
+  /**
+   * Sort a 2-way tie using direct head-to-head
+   */
+  private sortTwoWayTie(players: PlayerMetrics[]): PlayerMetrics[] {
+    const [a, b] = players;
+
+    const aVsB = a.metrics.headToHead[b.userId];
+    const bVsA = b.metrics.headToHead[a.userId];
+
+    if (aVsB && bVsA && aVsB.wins !== bVsA.wins) {
+      return aVsB.wins > bVsA.wins ? [a, b] : [b, a];
+    }
+
+    // If H2H tied or no matches, use set win %
+    if (a.metrics.setWinPct !== b.metrics.setWinPct) {
+      return b.metrics.setWinPct > a.metrics.setWinPct ? [b, a] : [a, b];
+    }
+
+    // Game win %
+    if (a.metrics.gameWinPct !== b.metrics.gameWinPct) {
+      return b.metrics.gameWinPct > a.metrics.gameWinPct ? [b, a] : [a, b];
+    }
+
+    // Alphabetical
+    return a.name.localeCompare(b.name) <= 0 ? [a, b] : [b, a];
+  }
+
+  /**
+   * Sort a 3+ way tie using H2H record within the tied group
+   * For each player, count wins against OTHER players in the tied group only
+   */
+  private sortMultiWayTie(players: PlayerMetrics[]): PlayerMetrics[] {
+    const tiedUserIds = new Set(players.map(p => p.userId));
+
+    // Calculate H2H wins within the tied group for each player
+    const groupH2HWins = players.map(player => {
+      let winsInGroup = 0;
+      for (const opponentId of tiedUserIds) {
+        if (opponentId === player.userId) continue;
+        const h2h = player.metrics.headToHead[opponentId];
+        if (h2h) {
+          winsInGroup += h2h.wins;
         }
       }
-
-      // 3. Set Win % (descending)
-      if (a.metrics.setWinPct !== b.metrics.setWinPct) {
-        return b.metrics.setWinPct - a.metrics.setWinPct;
-      }
-
-      // 4. Game Win % (descending)
-      if (a.metrics.gameWinPct !== b.metrics.gameWinPct) {
-        return b.metrics.gameWinPct - a.metrics.gameWinPct;
-      }
-
-      // 5. Alphabetical
-      return a.name.localeCompare(b.name);
+      return { player, winsInGroup };
     });
+
+    // Sort by H2H wins within group
+    groupH2HWins.sort((a, b) => {
+      if (b.winsInGroup !== a.winsInGroup) {
+        return b.winsInGroup - a.winsInGroup;
+      }
+
+      // If still tied, use set win %
+      if (a.player.metrics.setWinPct !== b.player.metrics.setWinPct) {
+        return b.player.metrics.setWinPct - a.player.metrics.setWinPct;
+      }
+
+      // Game win %
+      if (a.player.metrics.gameWinPct !== b.player.metrics.gameWinPct) {
+        return b.player.metrics.gameWinPct - a.player.metrics.gameWinPct;
+      }
+
+      // Alphabetical
+      return a.player.name.localeCompare(b.player.name);
+    });
+
+    return groupH2HWins.map(g => g.player);
   }
 
   /**
