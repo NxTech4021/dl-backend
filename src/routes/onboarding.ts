@@ -122,6 +122,109 @@ declare global {
   }
 }
 
+// IMPORTANT: Static routes must be defined BEFORE dynamic /:sport/ routes
+// to prevent "step" from being matched as a sport name
+
+// Update user's current onboarding step
+router.put("/step/:userId", async (req, res) => {
+  const startTime = Date.now();
+  const requestId = req.requestId!;
+  const { userId } = req.params;
+  const { step } = req.body;
+
+  try {
+    // Validate userId
+    const validation = validator.validateUserId(userId);
+    if (!validation.isValid) {
+      return handleQuestionnaireError(validation.errors[0], res);
+    }
+
+    // Validate step is a valid OnboardingStep enum value
+    const validSteps = [
+      "PERSONAL_INFO",
+      "LOCATION",
+      "GAME_SELECT",
+      "SKILL_ASSESSMENT",
+      "ASSESSMENT_RESULTS",
+      "PROFILE_PICTURE",
+    ];
+
+    if (!step || !validSteps.includes(step)) {
+      return res.status(400).json({
+        error: `Invalid step. Must be one of: ${validSteps.join(", ")}`,
+        code: "INVALID_STEP",
+        success: false,
+      });
+    }
+
+    logger.info("Updating onboarding step", {
+      userId,
+      step,
+      requestId,
+      operation: "update_onboarding_step",
+    });
+
+    const dbStart = Date.now();
+
+    // Check if user exists
+    const existingUser = await prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!existingUser) {
+      const error = new UserNotFoundError(userId);
+      logger.warn("User not found for onboarding step update", {
+        userId,
+        requestId,
+      });
+      return handleQuestionnaireError(error, res);
+    }
+
+    // Update user's onboarding step
+    const updatedUser = await prisma.user.update({
+      where: { id: userId },
+      data: {
+        onboardingStep: step,
+      },
+    });
+
+    const dbDuration = Date.now() - dbStart;
+    logger.databaseOperation("update_onboarding_step", "user", dbDuration);
+
+    const totalDuration = Date.now() - startTime;
+    logger.info("Onboarding step updated successfully", {
+      userId,
+      step,
+      requestId,
+      duration: totalDuration,
+      operation: "update_onboarding_step",
+    });
+
+    res.set("X-Request-ID", requestId);
+    res.json({
+      userId: updatedUser.id,
+      onboardingStep: updatedUser.onboardingStep,
+      success: true,
+      message: `Onboarding step updated to ${step}`,
+    });
+  } catch (error) {
+    const duration = Date.now() - startTime;
+    logger.error(
+      "Error updating onboarding step",
+      {
+        userId,
+        step,
+        requestId,
+        duration,
+        operation: "update_onboarding_step",
+      },
+      error as Error
+    );
+
+    handleQuestionnaireError(error, res);
+  }
+});
+
 // Serve questions directly from files with proper error handling
 router.get("/:sport/questions", validateSportParam, async (req, res) => {
   const startTime = Date.now();
@@ -434,11 +537,8 @@ router.post("/:sport/submit", validateSportParam, async (req, res) => {
 
     logger.responseSubmitted(submissionRequest.userId, sport, response.id);
 
-    // Check if user should be marked as completed onboarding
-    await checkAndUpdateOnboardingCompletion(
-      submissionRequest.userId,
-      requestId
-    );
+    // NOTE: Removed auto-completion check - onboarding should only complete
+    // via explicit call from ProfilePictureScreen after all steps are done
 
     const totalDuration = Date.now() - startTime;
     logger.info("Questionnaire submission completed successfully", {
@@ -800,11 +900,12 @@ router.post("/complete/:userId", async (req, res) => {
       return handleQuestionnaireError(error, res);
     }
 
-    // Update user's onboarding completion status
+    // Update user's onboarding completion status and set step to PROFILE_PICTURE
     const updatedUser = await prisma.user.update({
       where: { id: userId },
       data: {
         completedOnboarding: true,
+        onboardingStep: "PROFILE_PICTURE",
       },
     });
 
@@ -962,11 +1063,9 @@ router.get("/status/:userId", async (req, res) => {
       select: {
         id: true,
         completedOnboarding: true,
+        onboardingStep: true,
       },
     });
-
-    const dbDuration = Date.now() - dbStart;
-    logger.databaseOperation("fetch_onboarding_status", "user", dbDuration);
 
     if (!user) {
       const error = new UserNotFoundError(userId);
@@ -977,11 +1076,37 @@ router.get("/status/:userId", async (req, res) => {
       return handleQuestionnaireError(error, res);
     }
 
+    // Fetch user's questionnaire responses to determine selected sports and completed sports
+    const questionnaireResponses = await prisma.questionnaireResponse.findMany({
+      where: { userId },
+      select: {
+        sport: true,
+        completedAt: true,
+      },
+      orderBy: {
+        startedAt: 'asc', // Maintain the order sports were selected
+      },
+    });
+
+    // Extract selected sports (all sports with a response record)
+    const selectedSports = questionnaireResponses.map(r => r.sport);
+
+    // Extract completed sports (sports where questionnaire was actually completed)
+    const completedSports = questionnaireResponses
+      .filter(r => r.completedAt !== null)
+      .map(r => r.sport);
+
+    const dbDuration = Date.now() - dbStart;
+    logger.databaseOperation("fetch_onboarding_status", "user", dbDuration);
+
     const totalDuration = Date.now() - startTime;
     logger.info("Onboarding status fetched successfully", {
       userId,
       requestId,
       completedOnboarding: user.completedOnboarding,
+      onboardingStep: user.onboardingStep,
+      selectedSports,
+      completedSports,
       duration: totalDuration,
       operation: "get_onboarding_status",
     });
@@ -990,6 +1115,9 @@ router.get("/status/:userId", async (req, res) => {
     res.json({
       userId: user.id,
       completedOnboarding: user.completedOnboarding,
+      onboardingStep: user.onboardingStep,
+      selectedSports,
+      completedSports,
       success: true,
     });
   } catch (error) {
@@ -1450,6 +1578,7 @@ router.get("/profile/:userId", async (req, res) => {
         email: true,
         gender: true,
         dateOfBirth: true,
+        area: true,
         createdAt: true,
       },
     });
@@ -1492,72 +1621,5 @@ router.get("/profile/:userId", async (req, res) => {
     handleQuestionnaireError(error, res);
   }
 });
-
-// Helper function to check if user should be marked as completed onboarding
-async function checkAndUpdateOnboardingCompletion(
-  userId: string,
-  requestId: string
-): Promise<void> {
-  try {
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      select: {
-        id: true,
-        completedOnboarding: true,
-        name: true,
-        gender: true,
-        dateOfBirth: true,
-        area: true,
-      },
-    });
-
-    if (!user || user.completedOnboarding) {
-      return; // User not found or already completed
-    }
-
-    // Check if user has completed at least one questionnaire
-    const questionnaireResponseCount = await prisma.questionnaireResponse.count(
-      {
-        where: {
-          userId,
-          completedAt: { not: null },
-        },
-      }
-    );
-
-    // Check if user has basic profile information
-    const hasBasicProfile = user.name && user.gender && user.dateOfBirth;
-
-    // Check if user has location information
-    const hasLocation = user.area;
-
-    // Mark as completed if user has basic profile + location (questionnaire is optional)
-    if (hasBasicProfile && hasLocation) {
-      await prisma.user.update({
-        where: { id: userId },
-        data: { completedOnboarding: true },
-      });
-
-      logger.info("User onboarding automatically marked as completed", {
-        userId,
-        requestId,
-        questionnaireCount: questionnaireResponseCount,
-        hasBasicProfile: !!hasBasicProfile,
-        operation: "auto_complete_onboarding",
-      });
-    }
-  } catch (error) {
-    logger.error(
-      "Error checking onboarding completion",
-      {
-        userId,
-        requestId,
-        operation: "auto_complete_onboarding",
-      },
-      error as Error
-    );
-    // Don't throw error as this is supplementary functionality
-  }
-}
 
 export default router;
