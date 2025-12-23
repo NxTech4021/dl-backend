@@ -697,8 +697,6 @@ export async function changePlayerPassword(
     throw new Error('New password must be at least 8 characters long');
   }
 
-  console.log(`🔑 Attempting to change password via better-auth API...`);
-
   try {
     // Use better-auth's built-in password change functionality
     const result = await auth.api.changePassword({
@@ -709,7 +707,7 @@ export async function changePlayerPassword(
       headers: requestHeaders,
     });
 
-    console.log(`🔑 Better-auth result:`, result);
+    // console.log(`🔑 Better-auth result:`, result);
 
     // Check if result indicates failure (better-auth may return error differently)
     if (!result || !result.user) {

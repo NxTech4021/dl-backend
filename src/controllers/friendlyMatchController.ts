@@ -5,6 +5,7 @@
 
 import { Request, Response } from 'express';
 import { getFriendlyMatchService } from '../services/match/friendlyMatchService';
+import { getMatchCommentService } from '../services/match/matchCommentService';
 import { MatchType, MatchFormat, MatchStatus, GenderRestriction, SportType } from '@prisma/client';
 import dayjs from 'dayjs';
 import utc from 'dayjs/plugin/utc';
@@ -221,14 +222,26 @@ export const submitFriendlyResult = async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Match ID is required' });
     }
 
-    const { setScores, gameScores, comment, evidence } = req.body;
+    const { setScores, gameScores, comment, evidence, isCasualPlay, teamAssignments } = req.body;
 
-    // Validate that at least one score type is provided
-    if ((!setScores || !Array.isArray(setScores) || setScores.length === 0) &&
-        (!gameScores || !Array.isArray(gameScores) || gameScores.length === 0)) {
-      return res.status(400).json({
-        error: 'Either setScores (Tennis/Padel) or gameScores (Pickleball) array is required'
-      });
+    // For casual play, scores are not required
+    // For friendly match mode, scores are required
+    if (!isCasualPlay) {
+      // Validate that at least one score type is provided
+      if ((!setScores || !Array.isArray(setScores) || setScores.length === 0) &&
+          (!gameScores || !Array.isArray(gameScores) || gameScores.length === 0)) {
+        return res.status(400).json({
+          error: 'Either setScores (Tennis/Padel) or gameScores (Pickleball) array is required for Friendly Match mode'
+        });
+      }
+    }
+
+    // Validate teamAssignments structure if provided
+    if (teamAssignments) {
+      if (!teamAssignments.team1 || !teamAssignments.team2 ||
+          !Array.isArray(teamAssignments.team1) || !Array.isArray(teamAssignments.team2)) {
+        return res.status(400).json({ error: 'Invalid teamAssignments format. Expected { team1: string[], team2: string[] }' });
+      }
     }
 
     const match = await friendlyMatchService.submitFriendlyResult({
@@ -237,7 +250,9 @@ export const submitFriendlyResult = async (req: Request, res: Response) => {
       setScores,
       gameScores,
       comment,
-      evidence
+      evidence,
+      isCasualPlay: isCasualPlay ?? false,
+      teamAssignments
     });
 
     res.json(match);
@@ -336,5 +351,143 @@ export const declineFriendlyMatchRequest = async (req: Request, res: Response) =
     console.error('Decline Friendly Match Request Error:', error);
     const message = error instanceof Error ? error.message : 'Failed to decline friendly match request';
     res.status(400).json({ error: message });
+  }
+};
+
+// ==========================================
+// FRIENDLY MATCH COMMENT ENDPOINTS
+// ==========================================
+
+/**
+ * Get all comments for a friendly match
+ * GET /api/friendly/:id/comments
+ */
+export const getFriendlyMatchComments = async (req: Request, res: Response) => {
+  const { id } = req.params;
+
+  if (!id) return res.status(400).json({ error: 'Match ID is required' });
+
+  try {
+    const commentService = getMatchCommentService();
+    const comments = await commentService.getComments(id);
+    res.json(comments);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to get comments';
+    if (message === 'Match not found') {
+      return res.status(404).json({ error: message });
+    }
+    res.status(500).json({ error: message });
+  }
+};
+
+/**
+ * Create a comment on a friendly match (requires participant status)
+ * POST /api/friendly/:id/comment
+ */
+export const postFriendlyMatchComment = async (req: Request, res: Response) => {
+  const userId = req.user?.id;
+  const { id } = req.params;
+  const { comment } = req.body;
+
+  if (!userId) return res.status(401).json({ error: 'Authentication required' });
+  if (!id) return res.status(400).json({ error: 'Match ID is required' });
+
+  try {
+    const commentService = getMatchCommentService();
+    const newComment = await commentService.createComment({
+      matchId: id,
+      userId,
+      comment,
+    });
+    res.status(201).json(newComment);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to post comment';
+
+    if (message === 'Match not found') {
+      return res.status(404).json({ error: message });
+    }
+    if (message === 'Only match participants can comment' ||
+        message.includes('You can only')) {
+      return res.status(403).json({ error: message });
+    }
+    if (message.includes('Cannot comment on matches') ||
+        message === 'Comment cannot be empty' ||
+        message.includes('exceeds maximum length')) {
+      return res.status(400).json({ error: message });
+    }
+
+    res.status(500).json({ error: message });
+  }
+};
+
+/**
+ * Update a comment on a friendly match (owner only)
+ * PUT /api/friendly/:id/comment/:commentId
+ */
+export const updateFriendlyMatchComment = async (req: Request, res: Response) => {
+  const userId = req.user?.id;
+  const { id, commentId } = req.params;
+  const { comment } = req.body;
+
+  if (!userId) return res.status(401).json({ error: 'Authentication required' });
+  if (!id) return res.status(400).json({ error: 'Match ID is required' });
+  if (!commentId) return res.status(400).json({ error: 'Comment ID is required' });
+
+  try {
+    const commentService = getMatchCommentService();
+    const updatedComment = await commentService.updateComment({
+      commentId,
+      userId,
+      comment,
+    });
+    res.json(updatedComment);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to update comment';
+
+    if (message === 'Comment not found') {
+      return res.status(404).json({ error: message });
+    }
+    if (message === 'You can only edit your own comments') {
+      return res.status(403).json({ error: message });
+    }
+    if (message === 'Comment cannot be empty' ||
+        message.includes('exceeds maximum length')) {
+      return res.status(400).json({ error: message });
+    }
+
+    res.status(500).json({ error: message });
+  }
+};
+
+/**
+ * Delete a comment on a friendly match (owner only)
+ * DELETE /api/friendly/:id/comment/:commentId
+ */
+export const deleteFriendlyMatchComment = async (req: Request, res: Response) => {
+  const userId = req.user?.id;
+  const { id, commentId } = req.params;
+
+  if (!userId) return res.status(401).json({ error: 'Authentication required' });
+  if (!id) return res.status(400).json({ error: 'Match ID is required' });
+  if (!commentId) return res.status(400).json({ error: 'Comment ID is required' });
+
+  try {
+    const commentService = getMatchCommentService();
+    await commentService.deleteComment({
+      commentId,
+      userId,
+    });
+    res.json({ message: 'Comment deleted successfully' });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to delete comment';
+
+    if (message === 'Comment not found') {
+      return res.status(404).json({ error: message });
+    }
+    if (message === 'You can only delete your own comments') {
+      return res.status(403).json({ error: message });
+    }
+
+    res.status(500).json({ error: message });
   }
 };

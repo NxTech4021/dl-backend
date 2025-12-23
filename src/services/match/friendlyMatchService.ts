@@ -65,6 +65,13 @@ export interface SubmitFriendlyResultInput {
   gameScores?: PickleballScore[];
   comment?: string;
   evidence?: string;
+  // Casual Play / Friendly Match toggle
+  isCasualPlay?: boolean;  // defaults to false - when true, only save comment, skip score processing
+  // Team assignments for doubles friendly matches (assigned at result submission)
+  teamAssignments?: {
+    team1: string[];  // user IDs
+    team2: string[];  // user IDs
+  };
 }
 
 export interface SetScore {
@@ -333,10 +340,14 @@ export class FriendlyMatchService {
 
     const where: any = {
       isFriendly: true as any,
+      // Exclude completed/cancelled/void matches - they should show in "Past" of My Games tab
+      status: {
+        notIn: [MatchStatus.COMPLETED, MatchStatus.CANCELLED, MatchStatus.VOID]
+      },
       // Exclude pending/declined/expired requests - only show accepted requests or regular friendly matches
       OR: [
         { isFriendlyRequest: false }, // Regular friendly matches
-        { 
+        {
           isFriendlyRequest: true,
           requestStatus: InvitationStatus.ACCEPTED // Only accepted requests
         }
@@ -351,6 +362,7 @@ export class FriendlyMatchService {
       where.matchType = filters.matchType;
     }
 
+    // If a specific status filter is passed, override the default exclusion
     if (filters.status) {
       where.status = filters.status;
     }
@@ -460,7 +472,20 @@ export class FriendlyMatchService {
           }
         },
         scores: true,
-        pickleballScores: true
+        pickleballScores: true,
+        comments: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                name: true,
+                username: true,
+                image: true
+              }
+            }
+          },
+          orderBy: { createdAt: 'asc' }
+        }
       }
     });
 
@@ -569,19 +594,26 @@ export class FriendlyMatchService {
 
     // Determine role and team
     let role: ParticipantRole;
-    let team: string;
+    let team: string | null;
 
     if (match.matchType === MatchType.SINGLES) {
       role = ParticipantRole.OPPONENT;
       team = 'team2';
     } else {
       // Doubles
-      if (asPartner) {
-        role = ParticipantRole.PARTNER;
-        team = 'team1';
+      // For friendly doubles matches, defer team assignment to result submission
+      if (match.isFriendly) {
+        role = asPartner ? ParticipantRole.PARTNER : ParticipantRole.OPPONENT;
+        team = null;  // Will be assigned at result submission
       } else {
-        role = ParticipantRole.OPPONENT;
-        team = 'team2';
+        // Non-friendly doubles (e.g., division matches) keep existing behavior
+        if (asPartner) {
+          role = ParticipantRole.PARTNER;
+          team = 'team1';
+        } else {
+          role = ParticipantRole.OPPONENT;
+          team = 'team2';
+        }
       }
     }
 
@@ -608,8 +640,19 @@ export class FriendlyMatchService {
             role: ParticipantRole.PARTNER,
             invitationStatus: InvitationStatus.ACCEPTED,
             acceptedAt: new Date(),
-            team: 'team1'
+            team: match.isFriendly ? null : 'team1'  // Defer team assignment for friendly matches
           }
+        });
+      }
+    }
+
+    // Auto-detect doubles when 4th participant joins a friendly match
+    if (match.isFriendly) {
+      const updatedParticipantCount = activeParticipants.length + 1;
+      if (updatedParticipantCount === 4 && match.matchType === MatchType.SINGLES) {
+        await prisma.match.update({
+          where: { id: matchId },
+          data: { matchType: MatchType.DOUBLES }
         });
       }
     }
@@ -622,7 +665,7 @@ export class FriendlyMatchService {
    * Submit friendly match result (NO rating calculation)
    */
   async submitFriendlyResult(input: SubmitFriendlyResultInput) {
-    const { matchId, submittedById, setScores, gameScores, comment, evidence } = input;
+    const { matchId, submittedById, setScores, gameScores, comment, evidence, isCasualPlay = false, teamAssignments } = input;
 
     const match = await prisma.match.findUnique({
       where: { id: matchId },
@@ -653,6 +696,79 @@ export class FriendlyMatchService {
 
     if (match.status === MatchStatus.ONGOING) {
       throw new Error('Match result is pending opponent confirmation');
+    }
+
+    // CASUAL PLAY MODE: Only save comment, skip score processing
+    // Match goes directly to COMPLETED status (no confirmation needed)
+    if (isCasualPlay) {
+      // Create a match comment if provided
+      if (comment) {
+        await prisma.matchComment.create({
+          data: {
+            matchId,
+            userId: submittedById,
+            comment: comment,
+          }
+        });
+      }
+
+      const updatedMatch = await prisma.match.update({
+        where: { id: matchId },
+        data: {
+          status: MatchStatus.COMPLETED,
+          resultSubmittedById: submittedById,
+          resultSubmittedAt: new Date(),
+        },
+        include: {
+          createdBy: {
+            select: { id: true, name: true, username: true, image: true }
+          },
+          participants: {
+            include: {
+              user: {
+                select: { id: true, name: true, username: true, image: true }
+              }
+            }
+          },
+          division: true,
+        }
+      });
+      return updatedMatch;
+    }
+
+    // For doubles friendly matches, apply team assignments if provided
+    if (match.matchType === MatchType.DOUBLES && teamAssignments) {
+      // Validate exactly 2 players per team
+      if (teamAssignments.team1.length !== 2 || teamAssignments.team2.length !== 2) {
+        throw new Error('Doubles matches require exactly 2 players per team');
+      }
+
+      // Validate all assigned players are participants
+      const participantIds = (match.participants || [])
+        .filter((p: any) => p.invitationStatus === InvitationStatus.ACCEPTED)
+        .map((p: any) => p.userId);
+
+      const allAssigned = [...teamAssignments.team1, ...teamAssignments.team2];
+      const invalidPlayers = allAssigned.filter((id: string) => !participantIds.includes(id));
+      if (invalidPlayers.length > 0) {
+        throw new Error('All assigned players must be accepted participants');
+      }
+
+      // Update team assignments
+      await prisma.$transaction([
+        ...teamAssignments.team1.map((userId: string) =>
+          prisma.matchParticipant.updateMany({
+            where: { matchId, userId },
+            data: { team: 'team1' }
+          })
+        ),
+        ...teamAssignments.team2.map((userId: string) =>
+          prisma.matchParticipant.updateMany({
+            where: { matchId, userId },
+            data: { team: 'team2' }
+          })
+        )
+      ]);
     }
 
     // Calculate scores
@@ -733,6 +849,17 @@ export class FriendlyMatchService {
       });
     }
 
+    // Create a match comment if provided
+    if (comment) {
+      await prisma.matchComment.create({
+        data: {
+          matchId,
+          userId: submittedById,
+          comment: comment,
+        }
+      });
+    }
+
     // Update match with result
     const matchUpdateData: any = {
       team1Score,
@@ -741,7 +868,6 @@ export class FriendlyMatchService {
       status: MatchStatus.ONGOING, // Pending confirmation
       resultSubmittedById: submittedById,
       resultSubmittedAt: new Date(),
-      resultComment: comment || null,
       resultEvidence: evidence || null
     };
 
@@ -840,7 +966,6 @@ export class FriendlyMatchService {
           status: MatchStatus.SCHEDULED,
           resultSubmittedById: null,
           resultSubmittedAt: null,
-          resultComment: null,
           resultEvidence: null
         }
       });

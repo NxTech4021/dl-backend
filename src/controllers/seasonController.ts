@@ -39,7 +39,7 @@ import {
 
 import { notificationService } from '../services/notificationService';
 
-import { seasonNotifications, paymentNotifications } from '../helpers/notification';
+import { leagueLifecycleNotifications } from '../helpers/notifications';
 import { NOTIFICATION_TYPES } from '../types/notificationTypes';
 import { notifyAdminsWithdrawalRequest } from '../services/notification/adminNotificationService';
 
@@ -171,9 +171,8 @@ export const createSeason = async (req: Request, res: Response) => {
         });
 
         if (registeredUsers.length > 0) {
-          const notificationData = seasonNotifications.startingSoon(
-            season.name,
-            startDateObj.toLocaleDateString()
+          const notificationData = leagueLifecycleNotifications.leagueStarting3Days(
+            season.name
           );
 
           await notificationService.createNotification({
@@ -341,15 +340,12 @@ export const updateSeason = async (req: Request, res: Response) => {
         let notificationData;
 
         if (status === 'FINISHED') {
-          notificationData = seasonNotifications.ended(
-            season.name,
-            undefined,
-            undefined 
+          notificationData = leagueLifecycleNotifications.leagueEndedFinalResults(
+            season.name
           );
         } else if (status === 'CANCELLED') {
-          notificationData = seasonNotifications.cancelled(
-            season.name,
-            'Season has been cancelled by administration'
+          notificationData = leagueLifecycleNotifications.leagueCancelled(
+            season.name
           );
         }
 
@@ -783,7 +779,7 @@ export const registerPlayerToSeason = async (req: Request, res: Response) => {
       });
 
       if (season) {
-        const notificationData = seasonNotifications.registrationConfirmed(
+        const notificationData = leagueLifecycleNotifications.registrationConfirmed(
           season.name,
           `$${season.entryFee}`
         );
@@ -883,22 +879,20 @@ export const updatePaymentStatus = async (req: Request, res: Response) => {
       let notificationData;
 
       if (paymentStatus === 'COMPLETED') {
-        notificationData = paymentNotifications.confirmed(
+        notificationData = leagueLifecycleNotifications.paymentConfirmed(
           membershipWithSeason.season.name,
-          `$${membershipWithSeason.season.entryFee}`,
-          'Credit Card' 
+          `$${membershipWithSeason.season.entryFee}`
         );
       } else if (paymentStatus === 'FAILED') {
-        notificationData = paymentNotifications.failed(
+        notificationData = leagueLifecycleNotifications.paymentFailed(
           membershipWithSeason.season.name,
-          `$${membershipWithSeason.season.entryFee}`,
-          'Payment processing failed'
+          `$${membershipWithSeason.season.entryFee}`
         );
       } else if (paymentStatus === 'PENDING') {
-        notificationData = paymentNotifications.reminder(
+        // Use payment confirmed notification for pending status
+        notificationData = leagueLifecycleNotifications.paymentConfirmed(
           membershipWithSeason.season.name,
-          `$${membershipWithSeason.season.entryFee}`,
-          'Please complete your payment soon'
+          `$${membershipWithSeason.season.entryFee}`
         );
       }
 
