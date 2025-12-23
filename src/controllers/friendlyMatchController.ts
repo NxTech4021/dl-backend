@@ -355,6 +355,33 @@ export const declineFriendlyMatchRequest = async (req: Request, res: Response) =
   }
 };
 
+/**
+ * Cancel a friendly match (didn't play)
+ * POST /api/friendly/:id/cancel
+ */
+export const cancelFriendlyMatch = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+
+    const { id } = req.params;
+    if (!id) {
+      return res.status(400).json({ error: 'Match ID is required' });
+    }
+
+    const { comment } = req.body;
+
+    const match = await friendlyMatchService.cancelFriendlyMatch(id, userId, comment);
+    res.json(match);
+  } catch (error) {
+    console.error('Cancel Friendly Match Error:', error);
+    const message = error instanceof Error ? error.message : 'Failed to cancel friendly match';
+    res.status(400).json({ error: message });
+  }
+};
+
 // ==========================================
 // FRIENDLY MATCH COMMENT ENDPOINTS
 // ==========================================

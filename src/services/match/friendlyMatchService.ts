@@ -1129,6 +1129,61 @@ export class FriendlyMatchService {
   }
 
   /**
+   * Cancel a friendly match (mark as didn't play)
+   */
+  async cancelFriendlyMatch(matchId: string, userId: string, comment?: string) {
+    const match = await prisma.match.findUnique({
+      where: { id: matchId },
+      include: {
+        participants: true
+      }
+    }) as any;
+
+    if (!match) {
+      throw new Error('Match not found');
+    }
+
+    if (!match.isFriendly) {
+      throw new Error('This is not a friendly match');
+    }
+
+    // Check if user is a participant
+    const isParticipant = match.participants.some((p: any) => p.userId === userId);
+    if (!isParticipant) {
+      throw new Error('You are not a participant in this match');
+    }
+
+    // Check if match can be cancelled (not already completed or cancelled)
+    if (match.status === MatchStatus.COMPLETED || match.status === MatchStatus.CANCELLED) {
+      throw new Error('This match cannot be cancelled');
+    }
+
+    // Update match status to CANCELLED and create comment if provided
+    const updatedMatch = await prisma.match.update({
+      where: { id: matchId },
+      data: {
+        status: MatchStatus.CANCELLED,
+        cancelledById: userId,
+        cancelledAt: new Date(),
+      }
+    });
+
+    // Create a MatchComment if comment is provided
+    if (comment && comment.trim()) {
+      await prisma.matchComment.create({
+        data: {
+          matchId: matchId,
+          userId: userId,
+          comment: comment.trim(),
+        }
+      });
+    }
+
+    logger.info(`Friendly match ${matchId} cancelled by user ${userId}`);
+    return this.getFriendlyMatchById(matchId);
+  }
+
+  /**
    * Check and expire friendly match requests (background job)
    */
   async checkAndExpireFriendlyRequests() {
