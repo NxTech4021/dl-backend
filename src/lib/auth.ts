@@ -233,15 +233,20 @@ export const auth = betterAuth({
     },
   },
 
-  // socialProviders: {
-  //   google: {
-  //     clientId: process.env.GOOGLE_CLIENT_ID! as string,
-  //     clientSecret: process.env.GOOGLE_CLIENT_SECRET! as string,
-  //   },
-
-  //   facebook: {
-  //     clientId: process.env.FACEBOOK_CLIENT_ID! as string,
-  //     clientSecret: process.env.FACEBOOK_CLIENT_SECRET! as string,
-  //   },
-  // },
+  socialProviders: {
+    google: {
+      clientId: process.env.GOOGLE_CLIENT_ID! as string,
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET! as string,
+    },
+    // Facebook - uncomment when credentials are configured
+    // facebook: {
+    //   clientId: process.env.FACEBOOK_CLIENT_ID! as string,
+    //   clientSecret: process.env.FACEBOOK_CLIENT_SECRET! as string,
+    // },
+    // Apple - uncomment when credentials are configured
+    // apple: {
+    //   clientId: process.env.APPLE_CLIENT_ID! as string,
+    //   clientSecret: process.env.APPLE_CLIENT_SECRET! as string,
+    // },
+  },
 });
