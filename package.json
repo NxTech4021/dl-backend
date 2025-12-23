@@ -15,6 +15,7 @@
     "db:seed": "npx tsx prisma/seeds/seed.ts",
     "seed:test": "npx tsx prisma/seeds/featureTestSeed.ts",
     "seed:match-status": "npx tsx prisma/seeds/match-status-test.seed.ts",
+    "seed:superadmin": "npx tsx prisma/seeds/superadmin.seed.ts",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "lint:check": "eslint . --max-warnings 0",
