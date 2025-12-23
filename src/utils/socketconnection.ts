@@ -266,16 +266,35 @@ export function socketHandler(httpServer: HttpServer) {
     });
 
     // Thread room management
-    socket.on('join_thread', (data: string | { threadId: string }) => {
+    socket.on('join_thread', async (data: string | { threadId: string }) => {
       const threadId = typeof data === 'string' ? data : data.threadId;
       if (!threadId) return;
-      
-      socket.join(threadId);
-      socket.emit('thread_joined', { 
-        threadId, 
-        socketId: socket.id,
-        timestamp: new Date().toISOString() 
-      });
+
+      // Security check: Verify user is a member of this thread
+      try {
+        const membership = await prisma.userThread.findUnique({
+          where: { threadId_userId: { threadId, userId } }
+        });
+
+        if (!membership) {
+          console.log(`❌ Socket: User ${userId} denied access to thread ${threadId} - not a member`);
+          socket.emit('thread_join_error', {
+            threadId,
+            error: 'Access denied: You are not a member of this thread'
+          });
+          return;
+        }
+
+        socket.join(threadId);
+        socket.emit('thread_joined', {
+          threadId,
+          socketId: socket.id,
+          timestamp: new Date().toISOString()
+        });
+      } catch (error) {
+        console.error('❌ Socket: Error checking thread membership:', error);
+        socket.emit('thread_join_error', { threadId, error: 'Failed to verify thread access' });
+      }
     });
 
     socket.on('leave_thread', (data: string | { threadId: string }) => {

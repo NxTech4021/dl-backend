@@ -15,18 +15,19 @@ import { verifyAuth } from "../middlewares/auth.middleware";
 
 const chatRoutes = Router();
 
-// Thread management
-chatRoutes.post("/threads/", createThread);
-chatRoutes.get("/threads/:userId", getThreads);
-chatRoutes.get("/threads/:threadId/members", getThreadMembers);
-chatRoutes.get('/threads/users/available/:userId', getAvailableUsers);
+// Thread management - all routes require authentication
+chatRoutes.post("/threads/", verifyAuth, createThread);
+chatRoutes.get("/threads/:userId", verifyAuth, getThreads);
+chatRoutes.get("/threads/:threadId/members", verifyAuth, getThreadMembers);
+chatRoutes.get('/threads/users/available/:userId', verifyAuth, getAvailableUsers);
 
-chatRoutes.post('/:threadId/mark-read', markThreadAsRead);
-chatRoutes.get('/:threadId/unread-count', getThreadUnreadCount);
-chatRoutes.get('/user/:userId/total-unread', getTotalUnreadCount);
-// Message management
-chatRoutes.post("/threads/:threadId/messages", sendMessage);
-chatRoutes.get("/threads/:threadId/messages", getMessages);
+chatRoutes.post('/:threadId/mark-read', verifyAuth, markThreadAsRead);
+chatRoutes.get('/:threadId/unread-count', verifyAuth, getThreadUnreadCount);
+chatRoutes.get('/user/:userId/total-unread', verifyAuth, getTotalUnreadCount);
+
+// Message management - all routes require authentication
+chatRoutes.post("/threads/:threadId/messages", verifyAuth, sendMessage);
+chatRoutes.get("/threads/:threadId/messages", verifyAuth, getMessages);
 // chatRoutes.post("/messages/:messageId/read", markAsRead);
 chatRoutes.delete("/threads/messages/:messageId", verifyAuth, deleteMessage);
 

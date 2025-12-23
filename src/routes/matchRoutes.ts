@@ -33,7 +33,6 @@ import {
   cancelMatch,
   requestReschedule,
   getCancellationRuleImpact,
-  recordWalkover,
   continueMatch
 } from "../controllers/match/matchScheduleController";
 import {
@@ -84,7 +83,8 @@ matchRoutes.get('/disputes/:id', getDisputeById);
 matchRoutes.get('/:id/cancel-impact', getCancellationRuleImpact);
 matchRoutes.post('/:id/cancel', cancelMatch);
 matchRoutes.post('/:id/reschedule', requestReschedule);
-matchRoutes.post('/:id/walkover', recordWalkover);
+// Note: walkover endpoint is defined in Results section (line 75) using submitWalkover
+// recordWalkover was a duplicate that was never reachable - removed
 matchRoutes.post('/:id/continue', continueMatch);
 
 // History and Statistics
