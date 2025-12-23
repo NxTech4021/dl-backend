@@ -14,6 +14,7 @@ import {
   getMatchById,
   getAvailableMatches,
   getMyMatches,
+  getMyMatchesSummary,
   joinMatch,
   respondToInvitation,
   proposeTimeSlot,
@@ -54,6 +55,7 @@ matchRoutes.use(verifyAuth);
 // Match CRUD (using new invitation service)
 matchRoutes.post("/create", createMatch);
 matchRoutes.get('/', getMatches);
+matchRoutes.get('/my/summary', getMyMatchesSummary); // Lightweight endpoint for change detection
 matchRoutes.get('/my', getMyMatches);
 matchRoutes.get('/available/:divisionId', getAvailableMatches);
 matchRoutes.get('/:id', getMatchById);

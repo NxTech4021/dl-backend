@@ -7,6 +7,7 @@ import { Request, Response } from 'express';
 import { getFriendlyMatchService } from '../services/match/friendlyMatchService';
 import { getMatchCommentService } from '../services/match/matchCommentService';
 import { MatchType, MatchFormat, MatchStatus, GenderRestriction, SportType } from '@prisma/client';
+import { prisma } from '../lib/prisma';
 import dayjs from 'dayjs';
 import utc from 'dayjs/plugin/utc';
 import timezone from 'dayjs/plugin/timezone';
@@ -489,5 +490,44 @@ export const deleteFriendlyMatchComment = async (req: Request, res: Response) =>
     }
 
     res.status(500).json({ error: message });
+  }
+};
+
+/**
+ * Get lightweight summary of friendly matches for change detection
+ * GET /api/friendly/summary
+ * Returns count and latest updatedAt to enable smart skeleton loading
+ */
+export const getFriendlyMatchesSummary = async (req: Request, res: Response) => {
+  try {
+    const { sport } = req.query;
+
+    const whereClause: any = {
+      isFriendly: true,
+    };
+
+    if (sport) {
+      whereClause.sport = sport as SportType;
+    }
+
+    // Get count and latest updatedAt for friendly matches
+    const [countResult, latestMatch] = await Promise.all([
+      prisma.match.count({
+        where: whereClause
+      }),
+      prisma.match.findFirst({
+        where: whereClause,
+        orderBy: { updatedAt: 'desc' },
+        select: { updatedAt: true }
+      })
+    ]);
+
+    res.json({
+      count: countResult,
+      latestUpdatedAt: latestMatch?.updatedAt?.toISOString() || null
+    });
+  } catch (error) {
+    console.error('Get Friendly Matches Summary Error:', error);
+    res.status(500).json({ error: 'Failed to retrieve friendly matches summary' });
   }
 };

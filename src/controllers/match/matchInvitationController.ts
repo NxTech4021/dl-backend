@@ -949,3 +949,41 @@ export const getPendingInvitations = async (req: Request, res: Response) => {
     res.status(500).json({ error: 'Failed to get pending invitations' });
   }
 };
+
+/**
+ * Get lightweight summary of user's matches for change detection
+ * GET /api/matches/my/summary
+ * Returns count and latest updatedAt to enable smart skeleton loading
+ */
+export const getMyMatchesSummary = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+
+    // Get count and latest updatedAt for matches where user is a participant
+    const [countResult, latestMatch] = await Promise.all([
+      prisma.matchParticipant.count({
+        where: { userId }
+      }),
+      prisma.match.findFirst({
+        where: {
+          participants: {
+            some: { userId }
+          }
+        },
+        orderBy: { updatedAt: 'desc' },
+        select: { updatedAt: true }
+      })
+    ]);
+
+    res.json({
+      count: countResult,
+      latestUpdatedAt: latestMatch?.updatedAt?.toISOString() || null
+    });
+  } catch (error) {
+    console.error('Get My Matches Summary Error:', error);
+    res.status(500).json({ error: 'Failed to retrieve matches summary' });
+  }
+};
