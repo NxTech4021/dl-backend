@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-import { notificationTemplates } from '../helpers/notification';
+import { notificationTemplates } from '../helpers/notifications';
 import { prisma } from "../lib/prisma";
 import { notificationService } from '../services/notificationService';
 import { getRecentSportContextsBatch } from '../services/userSportContextService';
@@ -539,32 +539,102 @@ export const sendMessage = async (req: Request, res: Response) => {
 
     // 🆕 Send notifications to other thread members
     try {
+      console.log('🔔 [ThreadController] Starting notification process for thread:', threadId);
       const otherMembers = thread.members
         .filter(m => m.userId !== senderId)
         .map(m => m.userId);
+
+      console.log('🔔 [ThreadController] Other members in thread:', { count: otherMembers.length, memberIds: otherMembers });
 
       if (otherMembers.length > 0) {
         const messagePreview = content.length > 100 
           ? `${content.substring(0, 97)}...` 
           : content;
 
-        const chatNotif = notificationTemplates.chat.newMessage(
-          result.message.sender.name || 'Someone',
-          thread.name || (thread.division?.name ? `${thread.division.name} Chat` : 'Group Chat'),
+        // Determine if this is a group chat (more than 2 members) or single chat
+        const totalMembers = thread.members.length;
+        const isGroupChat = totalMembers > 2;
+        
+        let chatDisplayName: string;
+        let pushTitle: string;
+        const senderName = result.message.sender.name || 'Someone';
+
+        if (isGroupChat) {
+          // Group chat: show group name
+          chatDisplayName = thread.name || (thread.division?.name ? `${thread.division.name} Chat` : 'Group Chat');
+          pushTitle = `${senderName} in ${chatDisplayName}`;
+        } else {
+          // Single chat: show sender name only
+          chatDisplayName = senderName;
+          pushTitle = senderName;
+        }
+
+        console.log('🔔 [ThreadController] Creating notifications:', {
+          sender: senderName,
+          isGroupChat,
+          totalMembers,
+          chatDisplayName,
+          pushTitle,
           messagePreview
-        );
+        });
+
+        // Send PUSH notification with message preview (NEW_MESSAGE type)
+        const pushNotif = {
+          type: 'NEW_MESSAGE' as const,
+          category: 'CHAT' as const,
+          title: pushTitle,
+          message: messagePreview,
+          metadata: {
+            senderName,
+            chatName: chatDisplayName,
+            messagePreview,
+            isGroupChat,
+          }
+        };
+
+        console.log('🔔 [ThreadController] Push notification:', pushNotif);
 
         await notificationService.createNotification({
           userIds: otherMembers,
-          ...chatNotif,
+          ...pushNotif,
           threadId: threadId,
           divisionId: thread.divisionId || undefined,
         });
 
-        console.log(`📧 Sent chat notifications to ${otherMembers.length} members`);
+        // Send IN-APP notification with unread counts for each user
+        for (const userId of otherMembers) {
+          const userThread = result.updatedUserThreads.find(ut => ut.userId === userId);
+          const unreadCount = userThread?.unreadCount || 1;
+
+          const inAppNotif = {
+            type: 'UNREAD_MESSAGES' as const,
+            category: 'CHAT' as const,
+            title: 'Unread Messages',
+            message: `${unreadCount} unread ${unreadCount === 1 ? 'message' : 'messages'} from ${chatDisplayName}`,
+            metadata: {
+              senderName,
+              chatName: chatDisplayName,
+              unreadCount,
+              isGroupChat,
+            }
+          };
+
+          console.log('🔔 [ThreadController] IN-APP notification for user', userId, ':', inAppNotif);
+
+          await notificationService.createNotification({
+            userIds: [userId],
+            ...inAppNotif,
+            threadId: threadId,
+            divisionId: thread.divisionId || undefined,
+          });
+        }
+
+        console.log(`📧 Sent push + IN-APP notifications to ${otherMembers.length} members`);
+      } else {
+        console.log('⚠️  [ThreadController] No other members to notify (only sender in thread)');
       }
     } catch (notifError) {
-      console.error('Failed to send chat notifications:', notifError);
+      console.error('❌ [ThreadController] Failed to send chat notifications:', notifError);
     }
 
     return res.status(201).json({

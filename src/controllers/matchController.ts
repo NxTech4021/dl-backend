@@ -1,6 +1,7 @@
-﻿import { prisma } from "../lib/prisma";
+import { prisma } from "../lib/prisma";
 import { Request, Response } from "express";
 import { Prisma, MatchType } from "@prisma/client";
+import { getMatchCommentService } from "../services/match/matchCommentService";
 
 type MatchFeeType = 'FREE' | 'SPLIT' | 'FIXED';
 
@@ -192,6 +193,34 @@ export const deleteMatch = async (req: Request, res: Response) => {
   }
 };
 
+// ==========================================
+// MATCH COMMENT ENDPOINTS
+// ==========================================
+
+/**
+ * Get all comments for a match
+ */
+export const getMatchComments = async (req: Request, res: Response) => {
+  const { id } = req.params;
+
+  if (!id) return res.status(400).json({ error: 'Match ID is required' });
+
+  try {
+    const commentService = getMatchCommentService();
+    const comments = await commentService.getComments(id);
+    res.json(comments);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to get comments';
+    if (message === 'Match not found') {
+      return res.status(404).json({ error: message });
+    }
+    res.status(500).json({ error: message });
+  }
+};
+
+/**
+ * Create a comment on a match (requires participant status)
+ */
 export const postMatchComment = async (req: Request, res: Response) => {
   const userId = req.user?.id;
   const { id } = req.params;
@@ -199,18 +228,101 @@ export const postMatchComment = async (req: Request, res: Response) => {
 
   if (!userId) return res.status(401).json({ error: 'Authentication required' });
   if (!id) return res.status(400).json({ error: 'Match ID is required' });
-  if (!comment) return res.status(400).json({ error: 'Comment is required' });
 
   try {
-    const matchComment = await prisma.matchComment.create({
-      data: {
-        matchId: id,
-        userId,
-        comment,
-      }
+    const commentService = getMatchCommentService();
+    const newComment = await commentService.createComment({
+      matchId: id,
+      userId,
+      comment,
     });
-    res.status(201).json(matchComment);
+    res.status(201).json(newComment);
   } catch (error) {
-    res.status(500).json({ error: 'Failed to post comment' });
+    const message = error instanceof Error ? error.message : 'Failed to post comment';
+
+    if (message === 'Match not found') {
+      return res.status(404).json({ error: message });
+    }
+    if (message === 'Only match participants can comment' ||
+        message.includes('You can only')) {
+      return res.status(403).json({ error: message });
+    }
+    if (message.includes('Cannot comment on matches') ||
+        message === 'Comment cannot be empty' ||
+        message.includes('exceeds maximum length')) {
+      return res.status(400).json({ error: message });
+    }
+
+    res.status(500).json({ error: message });
+  }
+};
+
+/**
+ * Update a comment (owner only)
+ */
+export const updateMatchComment = async (req: Request, res: Response) => {
+  const userId = req.user?.id;
+  const { id, commentId } = req.params;
+  const { comment } = req.body;
+
+  if (!userId) return res.status(401).json({ error: 'Authentication required' });
+  if (!id) return res.status(400).json({ error: 'Match ID is required' });
+  if (!commentId) return res.status(400).json({ error: 'Comment ID is required' });
+
+  try {
+    const commentService = getMatchCommentService();
+    const updatedComment = await commentService.updateComment({
+      commentId,
+      userId,
+      comment,
+    });
+    res.json(updatedComment);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to update comment';
+
+    if (message === 'Comment not found') {
+      return res.status(404).json({ error: message });
+    }
+    if (message === 'You can only edit your own comments') {
+      return res.status(403).json({ error: message });
+    }
+    if (message === 'Comment cannot be empty' ||
+        message.includes('exceeds maximum length')) {
+      return res.status(400).json({ error: message });
+    }
+
+    res.status(500).json({ error: message });
+  }
+};
+
+/**
+ * Delete a comment (owner only)
+ */
+export const deleteMatchComment = async (req: Request, res: Response) => {
+  const userId = req.user?.id;
+  const { id, commentId } = req.params;
+
+  if (!userId) return res.status(401).json({ error: 'Authentication required' });
+  if (!id) return res.status(400).json({ error: 'Match ID is required' });
+  if (!commentId) return res.status(400).json({ error: 'Comment ID is required' });
+
+  try {
+    const commentService = getMatchCommentService();
+    await commentService.deleteComment({
+      commentId,
+      userId,
+    });
+    res.json({ message: 'Comment deleted successfully' });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to delete comment';
+
+    if (message === 'Comment not found') {
+      return res.status(404).json({ error: message });
+    }
+    if (message === 'You can only delete your own comments') {
+      return res.status(403).json({ error: message });
+    }
+
+    res.status(500).json({ error: message });
   }
 };

@@ -1,9 +1,12 @@
 import { Router } from "express";
 import { verifyAuth } from "../middlewares/auth.middleware";
-import { 
-  updateMatch, 
+import {
+  updateMatch,
   deleteMatch,
-  postMatchComment
+  getMatchComments,
+  postMatchComment,
+  updateMatchComment,
+  deleteMatchComment
 } from "../controllers/matchController";
 import {
   createMatch,
@@ -94,7 +97,10 @@ matchRoutes.get('/disputed', getDisputedMatches);
 matchRoutes.get('/head-to-head/:opponentId', getHeadToHead);
 matchRoutes.get('/division/:divisionId/results', getDivisionResults);
 
-// Comment on match
+// Comments
+matchRoutes.get('/:id/comments', getMatchComments);
 matchRoutes.post('/:id/comment', postMatchComment);
+matchRoutes.put('/:id/comment/:commentId', updateMatchComment);
+matchRoutes.delete('/:id/comment/:commentId', deleteMatchComment);
 
 export default matchRoutes;

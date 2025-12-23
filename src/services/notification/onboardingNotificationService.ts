@@ -4,7 +4,7 @@
  */
 
 import { notificationService } from '../notificationService';
-import { notificationTemplates } from '../../helpers/notification';
+import { notificationTemplates } from '../../helpers/notifications';
 import { prisma } from '../../lib/prisma';
 import { logger } from '../../utils/logger';
 import { MatchStatus, SeasonStatus } from '@prisma/client';
@@ -14,6 +14,7 @@ import { MatchStatus, SeasonStatus } from '@prisma/client';
  */
 export async function sendWelcomeNotification(userId: string): Promise<void> {
   try {
+    console.log('🎉 [OnboardingNotification] Sending welcome notification to user:', userId);
     const welcomeNotif = notificationTemplates.account.welcomeToDeuce();
 
     await notificationService.createNotification({
@@ -21,8 +22,10 @@ export async function sendWelcomeNotification(userId: string): Promise<void> {
       userIds: userId,
     });
 
+    console.log('✅ [OnboardingNotification] Welcome notification sent successfully');
     logger.info('Welcome notification sent', { userId });
   } catch (error) {
+    console.error('❌ [OnboardingNotification] Failed to send welcome notification:', error);
     logger.error('Failed to send welcome notification', { userId }, error as Error);
   }
 }
@@ -32,6 +35,7 @@ export async function sendWelcomeNotification(userId: string): Promise<void> {
  */
 export async function checkAndSendProfileReminders(userId: string): Promise<void> {
   try {
+    console.log('📝 [OnboardingNotification] Checking profile completeness for user:', userId);
     const user = await prisma.user.findUnique({
       where: { id: userId },
       select: {
@@ -45,12 +49,14 @@ export async function checkAndSendProfileReminders(userId: string): Promise<void
     });
 
     if (!user) {
+      console.warn('⚠️  [OnboardingNotification] User not found for profile reminder check');
       logger.warn('User not found for profile reminder check', { userId });
       return;
     }
 
     // Check if questionnaire not completed (no PlayerRating exists)
     if (!user.playerRatings || user.playerRatings.length === 0) {
+      console.log('📋 [OnboardingNotification] Sending profile incomplete reminder');
       const profileIncompleteNotif = notificationTemplates.account.profileIncompleteReminder();
 
       await notificationService.createNotification({

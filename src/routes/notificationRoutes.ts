@@ -9,6 +9,8 @@ import {
   registerPushToken,
   unregisterPushToken,
   getUserPushTokens,
+  sendTestLocalNotification,
+  sendTestPushNotification,
 } from '../controllers/notificationController';
 import { verifyAuth } from '../middlewares/auth.middleware';
 import { pushTokenLimiter } from '../middlewares/rateLimiter';
@@ -27,11 +29,14 @@ notificationRouter.put('/mark-all-read', verifyAuth, markAllNotificationsAsRead)
 notificationRouter.delete('/:id', verifyAuth, deleteNotification);
 
 // Push token management routes (with rate limiting)
-notificationRouter.post('/push-token', verifyAuth, pushTokenLimiter, registerPushToken);
+notificationRouter.post('/push-token',  pushTokenLimiter, registerPushToken);
 notificationRouter.delete('/push-token', verifyAuth, unregisterPushToken);
-notificationRouter.get('/push-tokens', verifyAuth, getUserPushTokens);
+notificationRouter.get('/push-tokens', getUserPushTokens);
 
 // routes for testing
-notificationRouter.post('/test', sendTestNotification);
+
+// Testing routes - separate endpoints for different notification types                          
+notificationRouter.post('/test/local', verifyAuth, sendTestLocalNotification);    
+notificationRouter.post('/test/push', verifyAuth, sendTestPushNotification);  
 
 export default notificationRouter;
