@@ -6,6 +6,7 @@
 import { NotificationPayload, NOTIFICATION_TYPES, getCategoryForNotificationType } from '../../types/notificationTypes';
 
 export const matchManagementNotifications = {
+   
   // IN-APP NOTIFICATIONS
 
   friendlyMatchPosted: (date: string, time: string, venue: string): NotificationPayload => ({
@@ -225,4 +226,38 @@ export const matchManagementNotifications = {
     message: `Match vs ${opponentName} has been forfeited. Reason: ${reason}`,
     metadata: { opponentName, reason },
   }),
+
+   // LEAGUE MATCH NOTIFICATIONS 
+    opponentPostedLeagueMatch: (opponentName: string, date: string, time: string, venue: string): NotificationPayload => ({
+      type: NOTIFICATION_TYPES.OPPONENT_POSTED_LEAGUE_MATCH,
+      category: getCategoryForNotificationType(NOTIFICATION_TYPES.OPPONENT_POSTED_LEAGUE_MATCH),
+      title: 'Opponent Posted League Match',
+      message: `Player ${opponentName} created a league match on ${date} at ${time} at ${venue}. Join now!`,
+      metadata: { opponentName, date, time, venue },
+    }),
+
+    leagueMatchConfirmedYouJoined: (date: string, time: string, venue: string): NotificationPayload => ({
+      type: NOTIFICATION_TYPES.LEAGUE_MATCH_CONFIRMED_YOU_JOINED,
+      category: getCategoryForNotificationType(NOTIFICATION_TYPES.LEAGUE_MATCH_CONFIRMED_YOU_JOINED),
+      title: 'League Match Confirmed',
+      message: `You have joined a league match on ${date} at ${time} at ${venue}. Good luck!`,
+      metadata: { date, time, venue },
+    }),
+
+    leagueMatchConfirmedOpponentJoined: (opponentName: string, date: string, time: string, venue: string): NotificationPayload => ({
+      type: NOTIFICATION_TYPES.LEAGUE_MATCH_CONFIRMED_OPPONENT_JOINED,
+      category: getCategoryForNotificationType(NOTIFICATION_TYPES.LEAGUE_MATCH_CONFIRMED_OPPONENT_JOINED),
+      title: 'Opponent Joined Your Match',
+      message: `${opponentName} has joined your posted league match on ${date} at ${time} at ${venue}.`,
+      metadata: { opponentName, date, time, venue },
+    }),
+
+    leagueMatchCancelledByOpponent: (opponentName: string, date: string, time: string, venue: string): NotificationPayload => ({
+      type: NOTIFICATION_TYPES.LEAGUE_MATCH_CANCELLED_BY_OPPONENT,
+      category: getCategoryForNotificationType(NOTIFICATION_TYPES.LEAGUE_MATCH_CANCELLED_BY_OPPONENT),
+      title: 'League Match Cancelled',
+      message: `${opponentName} cancelled the league match on ${date} at ${time} at ${venue}.`,
+      metadata: { opponentName, date, time, venue },
+    }),
+    
 };

@@ -283,9 +283,9 @@ export function scheduleSeasonStartsTomorrowNotifications(): void {
  */
 export function scheduleSeasonStartedNotifications(): void {
   // Production: 
-  // cron.schedule("0 8 * * *", async () => {
+  cron.schedule("0 8 * * *", async () => {
   // TESTING: every 5 mins
-  cron.schedule("* * * * *", async () => {
+  // cron.schedule("* * * * *", async () => {
     try {
       logger.info("Running season started job");
 
