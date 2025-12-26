@@ -14,9 +14,11 @@ import {
 import {
   sendLeagueStartingSoonNotifications,
   sendLeagueStartsTomorrowNotifications,
-  sendLeagueStartedWelcomeNotifications,
+  sendSeasonStartedWelcomeNotifications,
   sendFinalWeekAlertNotifications,
   sendMidSeasonUpdateNotifications,
+  sendRegistrationClosing3DaysNotifications,
+  sendRegistrationClosing24hNotifications,
 } from "../services/notification/leagueNotificationService";
 import { leagueLifecycleNotifications } from '../helpers/notifications';
 import {
@@ -295,22 +297,22 @@ export function scheduleLeagueStartedNotifications(): void {
       });
 
       for (const season of seasons) {
-        await sendLeagueStartedWelcomeNotifications(season.id);
+        await sendSeasonStartedWelcomeNotifications(season.id);
       }
 
-      logger.info("League started notifications sent", {
+      logger.info("Season started notifications sent", {
         count: seasons.length,
       });
     } catch (error) {
       logger.error(
-        "Failed to send league started notifications",
+        "Failed to send Season started notifications",
         {},
         error as Error
       );
     }
   });
 
-  logger.info("League started job scheduled");
+  logger.info("Season started job scheduled");
 }
 
 /**
@@ -401,6 +403,80 @@ export function scheduleLastMatchDeadline48h(): void {
   });
 
   logger.info('Last-match-deadline 48h job scheduled');
+}
+
+/**
+ * Check and send registration closing notifications (3 days before regiDeadline)
+ * Runs daily at 10:00 AM
+ */
+export function scheduleRegistrationClosing3Days(): void {
+  cron.schedule('0 10 * * *', async () => {
+    try {
+      logger.info('Running registration closing 3d job');
+
+      const now = new Date();
+      const in3Days = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000);
+      const in4Days = new Date(now.getTime() + 4 * 24 * 60 * 60 * 1000);
+
+      const seasons = await prisma.season.findMany({
+        where: {
+          regiDeadline: { gte: in3Days, lte: in4Days },
+          status: 'UPCOMING',
+        },
+        select: { id: true, name: true },
+      });
+
+      for (const season of seasons) {
+        try {
+          await sendRegistrationClosing3DaysNotifications(season.id);
+          logger.info('Registration closing 3d notifications processed', { seasonId: season.id });
+        } catch (innerErr) {
+          logger.error('Failed sending registration closing 3d for season', { seasonId: season.id }, innerErr as Error);
+        }
+      }
+    } catch (error) {
+      logger.error('Failed to run registration closing 3d job', {}, error as Error);
+    }
+  });
+
+  logger.info('Registration closing 3d job scheduled');
+}
+
+/**
+ * Check and send registration closing notifications (24 hours before regiDeadline)
+ * Runs daily at 10:00 AM
+ */
+export function scheduleRegistrationClosing24h(): void {
+  cron.schedule('0 10 * * *', async () => {
+    try {
+      logger.info('Running registration closing 24h job');
+
+      const now = new Date();
+      const in24Hours = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+      const in25Hours = new Date(now.getTime() + 25 * 60 * 60 * 1000);
+
+      const seasons = await prisma.season.findMany({
+        where: {
+          regiDeadline: { gte: in24Hours, lte: in25Hours },
+          status: 'UPCOMING',
+        },
+        select: { id: true, name: true },
+      });
+
+      for (const season of seasons) {
+        try {
+          await sendRegistrationClosing24hNotifications(season.id);
+          logger.info('Registration closing 24h notifications processed', { seasonId: season.id });
+        } catch (innerErr) {
+          logger.error('Failed sending registration closing 24h for season', { seasonId: season.id }, innerErr as Error);
+        }
+      }
+    } catch (error) {
+      logger.error('Failed to run registration closing 24h job', {}, error as Error);
+    }
+  });
+
+  logger.info('Registration closing 24h job scheduled');
 }
 
 /**
@@ -655,6 +731,8 @@ export function initializeNotificationJobs(): void {
   scheduleWeeklyRankingUpdates();
   scheduleMonthlyDMRRecaps();
   scheduleProfileReminders();
+  scheduleRegistrationClosing3Days();
+  scheduleRegistrationClosing24h();
   scheduleLastMatchDeadline48h();
   schedulePushTokenCleanup();
 

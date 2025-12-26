@@ -226,36 +226,36 @@ export const leagueLifecycleNotifications = {
     metadata: { location, sport },
   }),
 
-  newSeasonAnnouncement: (seasonNumber: number, location: string, sport: string): NotificationPayload => ({
-    type: NOTIFICATION_TYPES.SEASON_REGISTRATION_OPEN,
-    category: getCategoryForNotificationType(NOTIFICATION_TYPES.SEASON_REGISTRATION_OPEN),
+  newSeasonAnnouncement: (seasonName: string, location: string, sport: string): NotificationPayload => ({
+    type: NOTIFICATION_TYPES.NEW_SEASON_ANNOUNCEMENT.trim(),
+    category: getCategoryForNotificationType(NOTIFICATION_TYPES.NEW_SEASON_ANNOUNCEMENT),
     title: 'New Season Incoming',
-    message: `Season ${seasonNumber} of the ${location} ${sport} League is now open for registration. Sign up now!`,
-    metadata: { seasonNumber, location, sport },
+    message: `Season ${seasonName} of the ${location} ${sport} League is now open for registration. Sign up now!`,
+    metadata: { seasonName, location, sport },
   }),
 
   registrationClosing3Days: (seasonName: string, leagueName: string): NotificationPayload => ({
-    type: NOTIFICATION_TYPES.REGISTRATION_DEADLINE,
-    category: getCategoryForNotificationType(NOTIFICATION_TYPES.REGISTRATION_DEADLINE),
+    type: NOTIFICATION_TYPES.REGISTRATION_CLOSING_3_DAYS,
+    category: getCategoryForNotificationType(NOTIFICATION_TYPES.REGISTRATION_CLOSING_3_DAYS),
     title: 'Registration Closes Soon',
     message: `Registration for ${seasonName} of ${leagueName} closes in 3 days. Secure your spot!`,
     metadata: { seasonName, leagueName },
   }),
 
   registrationClosing24Hours: (seasonName: string, leagueName: string): NotificationPayload => ({
-    type: NOTIFICATION_TYPES.REGISTRATION_DEADLINE,
-    category: getCategoryForNotificationType(NOTIFICATION_TYPES.REGISTRATION_DEADLINE),
+    type: NOTIFICATION_TYPES.REGISTRATION_CLOSING_24_HOURS,
+    category: getCategoryForNotificationType(NOTIFICATION_TYPES.REGISTRATION_CLOSING_24_HOURS),
     title: 'Final Call',
     message: `Final call! Registration for ${seasonName} of the ${leagueName} closes tomorrow`,
     metadata: { seasonName, leagueName },
   }),
 
-  leagueStarting3Days: (leagueName: string): NotificationPayload => ({
+  seasonStarting3Days: (seasonName: string): NotificationPayload => ({
     type: NOTIFICATION_TYPES.SEASON_STARTING_SOON,
     category: getCategoryForNotificationType(NOTIFICATION_TYPES.SEASON_STARTING_SOON),
-    title: 'League Starts Soon',
-    message: `${leagueName} starts in 3 days! Get ready to compete`,
-    metadata: { leagueName },
+    title: 'Season Starts Soon',
+    message: `${seasonName} starts in 3 days! Get ready to compete`,
+    metadata: { seasonName },
   }),
 
   seasonStartsTomorrow: (seasonName: string, leagueName: string): NotificationPayload => ({
@@ -266,7 +266,7 @@ export const leagueLifecycleNotifications = {
     metadata: { seasonName, leagueName },
   }),
 
-  leagueStartedWelcome: (seasonName: string, leagueName: string): NotificationPayload => ({
+  seasonStartedWelcome: (seasonName: string, leagueName: string): NotificationPayload => ({
     type: NOTIFICATION_TYPES.SEASON_STARTING_SOON,
     category: getCategoryForNotificationType(NOTIFICATION_TYPES.SEASON_STARTING_SOON),
     title: 'Season Commences!',

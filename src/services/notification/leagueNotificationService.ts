@@ -65,7 +65,7 @@ export async function sendLeagueStartingSoonNotifications(seasonId: string): Pro
 
     if (playerIds.length === 0) return;
 
-    const startingSoonNotif = notificationTemplates.league.leagueStarting3Days(season.name);
+    const startingSoonNotif = notificationTemplates.league.seasonStarting3Days(season.name);
 
     await notificationService.createNotification({
       ...startingSoonNotif,
@@ -101,7 +101,7 @@ export async function sendLeagueStartsTomorrowNotifications(seasonId: string): P
 
     if (playerIds.length === 0) return;
 
-    const startsTomorrowNotif = notificationTemplates.league.leagueStartsTomorrow(season.name, season.name);
+    const startsTomorrowNotif = notificationTemplates.league.seasonStartsTomorrow(season.name, season.name);
 
     await notificationService.createNotification({
       ...startsTomorrowNotif,
@@ -118,7 +118,7 @@ export async function sendLeagueStartsTomorrowNotifications(seasonId: string): P
 /**
  * Send league started welcome notification
  */
-export async function sendLeagueStartedWelcomeNotifications(seasonId: string): Promise<void> {
+export async function sendSeasonStartedWelcomeNotifications(seasonId: string): Promise<void> {
   try {
     const season = await prisma.season.findUnique({
       where: { id: seasonId },
@@ -137,7 +137,7 @@ export async function sendLeagueStartedWelcomeNotifications(seasonId: string): P
 
     if (playerIds.length === 0) return;
 
-    const startedWelcomeNotif = notificationTemplates.league.leagueStartedWelcome(season.name, season.name);
+    const startedWelcomeNotif = notificationTemplates.league.seasonStartedWelcome(season.name, season.name);
 
     await notificationService.createNotification({
       ...startedWelcomeNotif,
@@ -145,7 +145,7 @@ export async function sendLeagueStartedWelcomeNotifications(seasonId: string): P
       seasonId,
     });
 
-    logger.info('League started welcome notifications sent', { seasonId, playerCount: playerIds.length });
+    logger.info('season started welcome notifications sent', { seasonId, playerCount: playerIds.length });
   } catch (error) {
     logger.error('Failed to send league started welcome notifications', { seasonId }, error as Error);
   }
@@ -541,7 +541,7 @@ export async function notifyDivisionReassignment(userId: string, divisionId: str
       metadata: { divisionId },
     });
   } catch (error) {
-    logger.error("Failed to send division reassignment notification", { userId, divisionId }, error);
+    logger.error("Failed to send division reassignment notification", { userId, divisionId } );
   }
 }
 
@@ -567,7 +567,7 @@ export async function notifyNewPlayerInDivision(userId: string, divisionId: stri
       metadata: { divisionId },
     });
   } catch (error) {
-    logger.error("Failed to send new player in division notification", { userId, divisionId, newPlayerName }, error);
+    logger.error("Failed to send new player in division notification", { userId, divisionId, newPlayerName });
   }
 }
 
@@ -593,7 +593,7 @@ export async function notifyMidSeasonUpdate(userId: string, seasonId: string, po
       metadata: { seasonId },
     });
   } catch (error) {
-    logger.error("Failed to send mid-season update notification", { userId, seasonId, position }, error);
+    logger.error("Failed to send mid-season update notification", { userId, seasonId, position });
   }
 }
 
@@ -620,5 +620,115 @@ export async function notifyLateSeasonNudge(userId: string, seasonId: string): P
     });
   } catch (error) {
     logger.error("Failed to send late-season nudge notification", { userId, seasonId }, error);
+  }
+}
+
+/**
+ * Send registration closing 3 days notifications
+ */
+export async function sendRegistrationClosing3DaysNotifications(seasonId: string): Promise<void> {
+  try {
+    const season = await prisma.season.findUnique({
+      where: { id: seasonId },
+      include: {
+        leagues: {
+          select: {
+            name: true,
+            location: true,
+            sportType: true
+          }
+        }
+      }
+    });
+
+    if (!season || !season.leagues.length) {
+      logger.warn('Season not found or has no leagues', { seasonId });
+      return;
+    }
+
+    const league = season.leagues[0]; // Use first league
+    
+    // Check if league data is valid
+    if (!league || !league.location || !league.sportType) {
+      logger.warn('League missing location or sportType', { seasonId, leagueId: league?.name });
+      return;
+    }
+    
+    const leagueName = `${league.location} ${league.sportType} League`;
+
+    const notificationData = notificationTemplates.leagueLifecycle.registrationClosing3Days(
+      season.name,
+      leagueName
+    );
+
+    // Get all users to broadcast to everyone
+    const allUsers = await prisma.user.findMany({ select: { id: true } });
+    const userIds = allUsers.map(u => u.id);
+
+    // Send to all users as this is a general announcement
+    await notificationService.createNotification({
+      ...notificationData,
+      seasonId,
+      userIds
+    });
+
+    logger.info('Registration closing 3 days notifications sent', { seasonId, seasonName: season.name });
+  } catch (error) {
+    logger.error('Failed to send registration closing 3 days notifications', { seasonId }, error as Error);
+  }
+}
+
+/**
+ * Send registration closing 24 hours notifications
+ */
+export async function sendRegistrationClosing24hNotifications(seasonId: string): Promise<void> {
+  try {
+    const season = await prisma.season.findUnique({
+      where: { id: seasonId },
+      include: {
+        leagues: {
+          select: {
+            name: true,
+            location: true,
+            sportType: true
+          }
+        }
+      }
+    });
+
+    if (!season || !season.leagues.length) {
+      logger.warn('Season not found or has no leagues', { seasonId });
+      return;
+    }
+
+    const league = season.leagues[0]; // Use first league
+    
+    // Check if league data is valid
+    if (!league || !league.location || !league.sportType) {
+      logger.warn('League missing location or sportType', { seasonId, leagueId: league?.name });
+      return;
+    }
+    
+    const leagueName = `${league.location} ${league.sportType} League`;
+
+    const notificationData = notificationTemplates.leagueLifecycle.registrationClosing24Hours(
+      season.name,
+      leagueName
+    );
+
+    // Get all users to broadcast to everyone
+    const allUsers = await prisma.user.findMany({ select: { id: true } });
+    const userIds = allUsers.map(u => u.id);
+
+    // Send to all users as this is a general announcement
+    await notificationService.createNotification({
+      ...notificationData,
+      seasonId,
+      userIds
+    });
+
+    logger.info('Registration closing 24h notifications sent', { seasonId, seasonName: season.name });
+  } catch (error) {
+    logger.error('Failed to send registration closing 24h notifications', { seasonId }, error as Error);
   }
 }
