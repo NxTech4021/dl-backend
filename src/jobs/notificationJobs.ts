@@ -18,6 +18,7 @@ import {
   sendFinalWeekAlertNotifications,
   sendMidSeasonUpdateNotifications,
 } from "../services/notification/leagueNotificationService";
+import { leagueLifecycleNotifications } from '../helpers/notifications';
 import {
   sendWeeklyRankingUpdates,
   sendMonthlyDMRRecap,
@@ -350,6 +351,59 @@ export function scheduleFinalWeekAlerts(): void {
 }
 
 /**
+ * Check and send last-match-deadline (48 hours before season end)
+ * Runs daily at 10:00 AM
+ */
+export function scheduleLastMatchDeadline48h(): void {
+  cron.schedule('0 10 * * *', async () => {
+    try {
+      logger.info('Running last-match-deadline 48h job');
+
+      const now = new Date();
+      const in48Hours = new Date(now.getTime() + 48 * 60 * 60 * 1000);
+      const in49Hours = new Date(now.getTime() + 49 * 60 * 60 * 1000);
+
+      const seasons = await prisma.season.findMany({
+        where: {
+          endDate: { gte: in48Hours, lte: in49Hours },
+          status: 'ACTIVE',
+        },
+        select: { id: true, name: true },
+      });
+
+      for (const season of seasons) {
+        try {
+          const members = await prisma.seasonMembership.findMany({
+            where: { seasonId: season.id, status: 'ACTIVE' },
+            select: { userId: true },
+          });
+
+          if (members.length === 0) continue;
+
+          const userIds = members.map(m => m.userId);
+
+          const notif = leagueLifecycleNotifications.lastMatchDeadline48h();
+
+          await notificationService.createNotification({
+            userIds,
+            ...notif,
+            seasonId: season.id,
+          });
+
+          logger.info('Last-match 48h notifications sent', { seasonId: season.id, count: userIds.length });
+        } catch (innerErr) {
+          logger.error('Failed sending last-match 48h for season', { seasonId: season.id }, innerErr as Error);
+        }
+      }
+    } catch (error) {
+      logger.error('Failed to run last-match-deadline 48h job', {}, error as Error);
+    }
+  });
+
+  logger.info('Last-match-deadline 48h job scheduled');
+}
+
+/**
  * Send mid-season updates
  * Runs weekly on Mondays at 10:00 AM
  */
@@ -601,6 +655,7 @@ export function initializeNotificationJobs(): void {
   scheduleWeeklyRankingUpdates();
   scheduleMonthlyDMRRecaps();
   scheduleProfileReminders();
+  scheduleLastMatchDeadline48h();
   schedulePushTokenCleanup();
 
   logger.info("✅ All notification jobs initialized successfully");
