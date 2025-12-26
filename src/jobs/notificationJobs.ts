@@ -12,7 +12,7 @@ import {
   sendScoreSubmissionReminder,
 } from "../services/notification/matchNotificationService";
 import {
-  sendLeagueStartingSoonNotifications,
+  sendSeasonStartingSoonNotifications,
   sendLeagueStartsTomorrowNotifications,
   sendSeasonStartedWelcomeNotifications,
   sendFinalWeekAlertNotifications,
@@ -182,13 +182,16 @@ export function scheduleScoreSubmissionReminders(): void {
 }
 
 /**
- * Check and send league starting soon notifications (3 days before)
+ * Check and send Season Starting soon notifications (3 days before)
  * Runs daily at 10:00 AM
  */
-export function scheduleLeagueStartingSoonNotifications(): void {
-  cron.schedule("0 10 * * *", async () => {
+export function scheduleSeasonStartingSoonNotifications(): void {
+  // Production: 
+  // cron.schedule("0 10 * * *", async () => {
+  // TESTING: every min
+  cron.schedule("* * * * *", async () => {
     try {
-      logger.info("Running league starting soon job");
+      logger.info("Running Season starting soon job");
 
       const now = new Date();
       const in3Days = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000);
@@ -206,10 +209,10 @@ export function scheduleLeagueStartingSoonNotifications(): void {
       });
 
       for (const season of seasons) {
-        await sendLeagueStartingSoonNotifications(season.id);
+        await sendSeasonStartingSoonNotifications(season.id);
       }
 
-      logger.info("League starting soon notifications sent", {
+      logger.info("Season starting soon notifications sent", {
         count: seasons.length,
       });
     } catch (error) {
@@ -221,17 +224,19 @@ export function scheduleLeagueStartingSoonNotifications(): void {
     }
   });
 
-  logger.info("League starting soon job scheduled");
+  logger.info("Season starting soon job scheduled");
 }
 
 /**
- * Check and send league starts tomorrow notifications
+ * Check and send Season starts tomorrow notifications
  * Runs daily at 8:00 PM
  */
-export function scheduleLeagueStartsTomorrowNotifications(): void {
-  cron.schedule("0 20 * * *", async () => {
+export function scheduleSeasonStartsTomorrowNotifications(): void {
+  // Production: cron.schedule("0 20 * * *", async () => {
+  // TESTING: every 5 mins
+  cron.schedule("*/2 * * * *", async () => {
     try {
-      logger.info("Running league starts tomorrow job");
+      logger.info("Running Season starts tomorrow job");
 
       const tomorrow = new Date();
       tomorrow.setDate(tomorrow.getDate() + 1);
@@ -275,7 +280,9 @@ export function scheduleLeagueStartsTomorrowNotifications(): void {
  * Runs daily at 8:00 AM
  */
 export function scheduleLeagueStartedNotifications(): void {
-  cron.schedule("0 8 * * *", async () => {
+  // Production: cron.schedule("0 8 * * *", async () => {
+  // TESTING: every 5 mins
+  cron.schedule("*/5 * * * *", async () => {
     try {
       logger.info("Running league started job");
 
@@ -723,8 +730,8 @@ export function initializeNotificationJobs(): void {
   scheduleMatch24hReminders();
   scheduleMatch2hReminders();
   scheduleScoreSubmissionReminders();
-  scheduleLeagueStartingSoonNotifications();
-  scheduleLeagueStartsTomorrowNotifications();
+  scheduleSeasonStartingSoonNotifications();
+  scheduleSeasonStartsTomorrowNotifications();
   scheduleLeagueStartedNotifications();
   scheduleFinalWeekAlerts();
   scheduleMidSeasonUpdates();

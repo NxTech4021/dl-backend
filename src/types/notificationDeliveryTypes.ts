@@ -14,6 +14,11 @@ export enum NotificationDeliveryType {
  * Generated from: deuce notifications masterlist.xlsx - All Notifications (V1.0).csv
  */
 export const NOTIFICATION_DELIVERY_MAP: Record<string, NotificationDeliveryType> = {
+  // Season notifications - PUSH
+  SEASON_STARTING_SOON: NotificationDeliveryType.PUSH,
+  SEASON_ENDED: NotificationDeliveryType.PUSH,
+  SEASON_CANCELLED: NotificationDeliveryType.PUSH,
+  
   // Account & System - IN_APP
   WELCOME_TO_DEUCE: NotificationDeliveryType.IN_APP,
   PROFILE_INCOMPLETE_REMINDER: NotificationDeliveryType.IN_APP,

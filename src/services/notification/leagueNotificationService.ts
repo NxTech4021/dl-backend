@@ -45,7 +45,7 @@ export async function sendSeasonRegistrationConfirmed(
 /**
  * Send league starting soon notification (3 days before)
  */
-export async function sendLeagueStartingSoonNotifications(seasonId: string): Promise<void> {
+export async function sendSeasonStartingSoonNotifications(seasonId: string): Promise<void> {
   try {
     const season = await prisma.season.findUnique({
       where: { id: seasonId },

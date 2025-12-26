@@ -175,7 +175,7 @@ export const createSeason = async (req: Request, res: Response) => {
         });
 
         if (seasonWithLeagues && seasonWithLeagues.leagues.length > 0) {
-          const league = seasonWithLeagues.leagues[0]; // Use first league for announcement
+          const league = seasonWithLeagues.leagues[0]; // needs to be updated 
           
           // Only proceed if we have valid league data
           if (league && league.location && league.sportType) {
