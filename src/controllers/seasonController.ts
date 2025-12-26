@@ -767,16 +767,21 @@ export const registerPlayerToSeason = async (req: Request, res: Response) => {
       // 🆕 Send registration confirmation notifications for both players
       const season = result.memberships[0]?.season;
       if (season) {
-        const notificationData = seasonNotifications.registrationConfirmed(
-          season.name,
-          `$${season.entryFee}`
-        );
+        try {
+          const notificationData = leagueLifecycleNotifications.registrationConfirmed(
+            season.name,
+            `$${season.entryFee}`
+          );
 
-        await notificationService.createNotification({
-          userIds: [captainId, partnerId],
-          ...notificationData,
-          seasonId: seasonId
-        });
+          await notificationService.createNotification({
+            userIds: [captainId, partnerId],
+            ...notificationData,
+            seasonId: seasonId
+          });
+        } catch (notificationError) {
+          console.error('Error sending registration notification for doubles:', notificationError);
+          // Don't fail the registration if notification fails
+        }
       }
 
       // ✅ Emit Socket.IO events to notify both captain and partner about team registration completion
@@ -825,16 +830,21 @@ export const registerPlayerToSeason = async (req: Request, res: Response) => {
       });
 
       if (season) {
-        const notificationData = leagueLifecycleNotifications.registrationConfirmed(
-          season.name,
-          `$${season.entryFee}`
-        );
+        try {
+          const notificationData = leagueLifecycleNotifications.registrationConfirmed(
+            season.name,
+            `$${season.entryFee}`
+          );
 
-        await notificationService.createNotification({
-          userIds: userId,
-          ...notificationData,
-          seasonId: seasonId
-        });
+          await notificationService.createNotification({
+            userIds: userId,
+            ...notificationData,
+            seasonId: seasonId
+          });
+        } catch (notificationError) {
+          console.error('Error sending registration notification for singles:', notificationError);
+          // Don't fail the registration if notification fails
+        }
       }
 
       const result = {

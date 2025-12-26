@@ -243,10 +243,15 @@ export async function getPlayerMatchHistoryAdmin(playerId: string) {
     },
     include: {
       participants: {
-        where: { userId: playerId },
-        select: {
-          isStarter: true,
-          team: true
+        include: {
+          user: {
+            select: {
+              id: true,
+              name: true,
+              username: true,
+              image: true
+            }
+          }
         }
       },
       division: {
@@ -273,6 +278,16 @@ export async function getPlayerMatchHistoryAdmin(playerId: string) {
           }
         }
       },
+      scores: {
+        orderBy: {
+          setNumber: 'asc'
+        }
+      },
+      pickleballScores: {
+        orderBy: {
+          gameNumber: 'asc'
+        }
+      },
       _count: {
         select: {
           participants: true
@@ -285,11 +300,102 @@ export async function getPlayerMatchHistoryAdmin(playerId: string) {
   });
 
   // Transform data for better frontend consumption
-  const transformedMatches = playerMatches.map(match => ({
-    ...match,
-    participation: match.participants[0], // Player's participation details
-    participants: undefined // Remove the array since we only need the player's participation
-  }));
+  const transformedMatches = playerMatches.map(match => {
+    // Find player's participation
+    const playerParticipation = match.participants.find(p => p.userId === playerId);
+    // Find opponents (other participants)
+    const opponents = match.participants.filter(p => p.userId !== playerId);
+
+    // Determine player's team and scores based on team assignment
+    const playerTeam = playerParticipation?.team;
+    let playerScore = null;
+    let opponentScore = null;
+
+    if (playerTeam === 'team1') {
+      playerScore = match.team1Score;
+      opponentScore = match.team2Score;
+    } else if (playerTeam === 'team2') {
+      playerScore = match.team2Score;
+      opponentScore = match.team1Score;
+    } else {
+      // For singles or unassigned teams, use playerScore/opponentScore
+      playerScore = match.playerScore;
+      opponentScore = match.opponentScore;
+    }
+
+    // Format set scores for display
+    let formattedSetScores = null;
+    if (match.scores && match.scores.length > 0) {
+      formattedSetScores = match.scores.map(score => ({
+        set: score.setNumber,
+        player: playerTeam === 'team2' ? score.player2Games : score.player1Games,
+        opponent: playerTeam === 'team2' ? score.player1Games : score.player2Games,
+        tiebreak: score.hasTiebreak ? {
+          player: playerTeam === 'team2' ? score.player2Tiebreak : score.player1Tiebreak,
+          opponent: playerTeam === 'team2' ? score.player1Tiebreak : score.player2Tiebreak,
+        } : null
+      }));
+    }
+
+    // Format pickleball scores for display
+    let formattedPickleballScores = null;
+    if (match.pickleballScores && match.pickleballScores.length > 0) {
+      formattedPickleballScores = match.pickleballScores.map(score => ({
+        game: score.gameNumber,
+        player: playerTeam === 'team2' ? score.player2Points : score.player1Points,
+        opponent: playerTeam === 'team2' ? score.player1Points : score.player2Points,
+      }));
+    }
+
+    return {
+      id: match.id,
+      sport: match.sport || match.division?.league?.sportType?.toLowerCase() || 'unknown',
+      matchType: match.matchType,
+      matchDate: match.matchDate,
+      status: match.status,
+      location: match.location,
+      venue: match.venue,
+      duration: match.duration,
+      notes: match.notes,
+      isFriendly: match.isFriendly,
+      isWalkover: match.isWalkover,
+      isDisputed: match.isDisputed,
+      requiresAdminReview: match.requiresAdminReview,
+      isReportedForAbuse: match.isReportedForAbuse,
+
+      // Player's participation info
+      participation: playerParticipation ? {
+        isStarter: playerParticipation.isStarter,
+        team: playerParticipation.team,
+        role: playerParticipation.role,
+      } : null,
+
+      // Opponent info
+      opponents: opponents.map(opp => ({
+        id: opp.user?.id,
+        name: opp.user?.name,
+        username: opp.user?.username,
+        image: opp.user?.image,
+        team: opp.team,
+        role: opp.role,
+      })),
+
+      // Scores (adjusted for player's perspective)
+      playerScore,
+      opponentScore,
+      team1Score: match.team1Score,
+      team2Score: match.team2Score,
+      setScores: formattedSetScores,
+      pickleballScores: formattedPickleballScores,
+
+      // Division/League info
+      division: match.division,
+
+      // Timestamps
+      createdAt: match.createdAt,
+      completedAt: match.completedAt,
+    };
+  });
 
   return {
     player: {

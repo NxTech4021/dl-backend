@@ -26,7 +26,7 @@ export const INACTIVITY_CONFIG = {
    */
   EXCLUSIONS: {
     NEW_USER_GRACE_PERIOD: 14,  // Don't check users created < 14 days ago
-    EXCLUDED_STATUSES: ['SUSPENDED'] as const,
+    EXCLUDED_STATUSES: ['SUSPENDED', 'INACTIVE'] as const,  // Skip already-inactive users
   },
 
   /**

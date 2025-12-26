@@ -18,6 +18,8 @@ import {
 } from '@prisma/client';
 import { logger } from '../../utils/logger';
 import { NotificationService } from '../notificationService';
+import { DMRRatingService } from '../rating/dmrRatingService';
+import { StandingsV2Service } from '../rating/standingsV2Service';
 
 // Types
 export interface AdminMatchFilters {
@@ -721,6 +723,7 @@ export class AdminMatchService {
 
   /**
    * Void a match (AS4)
+   * Reverses ratings and recalculates standings
    */
   async voidMatch(matchId: string, adminId: string, reason: string) {
     const match = await prisma.match.findUnique({
@@ -731,6 +734,9 @@ export class AdminMatchService {
     if (!match) {
       throw new Error('Match not found');
     }
+
+    // Only reverse ratings if match was previously completed
+    const wasCompleted = match.status === MatchStatus.COMPLETED;
 
     await prisma.$transaction(async (tx) => {
       await tx.match.update({
@@ -754,6 +760,28 @@ export class AdminMatchService {
         }
       });
     });
+
+    // Reverse ratings if match was completed
+    if (wasCompleted) {
+      try {
+        const dmrService = new DMRRatingService(match.sport as any);
+        await dmrService.reverseMatchRatings(matchId);
+        logger.info(`Reversed ratings for voided match ${matchId}`);
+      } catch (error) {
+        logger.error(`Failed to reverse ratings for match ${matchId}:`, {}, error as Error);
+      }
+
+      // Recalculate standings
+      if (match.divisionId && match.seasonId) {
+        try {
+          const standingsV2 = new StandingsV2Service();
+          await standingsV2.recalculateDivisionStandings(match.divisionId, match.seasonId);
+          logger.info(`Recalculated standings after voiding match ${matchId}`);
+        } catch (error) {
+          logger.error(`Failed to recalculate standings for match ${matchId}:`, {}, error as Error);
+        }
+      }
+    }
 
     logger.info(`Match ${matchId} voided by admin ${adminId}`);
 

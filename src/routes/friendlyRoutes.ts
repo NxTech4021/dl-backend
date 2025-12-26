@@ -4,11 +4,13 @@ import {
   createFriendlyMatch,
   getFriendlyMatches,
   getFriendlyMatchById,
+  getFriendlyMatchesSummary,
   joinFriendlyMatch,
   submitFriendlyResult,
   confirmFriendlyResult,
   acceptFriendlyMatchRequest,
   declineFriendlyMatchRequest,
+  cancelFriendlyMatch,
   getFriendlyMatchComments,
   postFriendlyMatchComment,
   updateFriendlyMatchComment,
@@ -22,6 +24,7 @@ friendlyRoutes.use(verifyAuth);
 
 // Friendly match routes
 friendlyRoutes.post("/create", createFriendlyMatch);
+friendlyRoutes.get("/summary", getFriendlyMatchesSummary); // Lightweight endpoint for change detection
 friendlyRoutes.get("/", getFriendlyMatches);
 friendlyRoutes.get("/:id", getFriendlyMatchById);
 friendlyRoutes.post("/:id/join", joinFriendlyMatch);
@@ -29,6 +32,7 @@ friendlyRoutes.post("/:id/result", submitFriendlyResult);
 friendlyRoutes.post("/:id/confirm", confirmFriendlyResult);
 friendlyRoutes.post("/:id/accept", acceptFriendlyMatchRequest);
 friendlyRoutes.post("/:id/decline", declineFriendlyMatchRequest);
+friendlyRoutes.post("/:id/cancel", cancelFriendlyMatch);
 
 // Comments
 friendlyRoutes.get("/:id/comments", getFriendlyMatchComments);

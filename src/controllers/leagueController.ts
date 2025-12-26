@@ -380,7 +380,7 @@ export const updateLeague = async (req: Request, res: Response) => {
         id,
         `Updated league: ${updatedLeague.name}`,
         undefined,
-        updateData
+        updateData as Record<string, unknown>
       );
     }
 

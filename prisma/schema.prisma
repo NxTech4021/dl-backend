@@ -22,6 +22,7 @@ model User {
   gender              String?
   area                String?
   completedOnboarding Boolean   @default(false)
+  onboardingStep      OnboardingStep?
   lastActivityCheck   DateTime?
   lastLogin           DateTime?
   status              UserStatus @default(ACTIVE)
@@ -1890,7 +1891,7 @@ model Thread {
   isGroup   Boolean @default(false)
 
   divisionId String?
-  division   Division? @relation("DivisionThreads", fields: [divisionId], references: [id])
+  division   Division? @relation("DivisionThreads", fields: [divisionId], references: [id], onDelete: SetNull)
 
   members  UserThread[]
   messages Message[]
@@ -2063,6 +2064,7 @@ model Notification {
   message   String
   category  NotificationCategory
   type      String?
+  metadata  Json?
   createdAt DateTime             @default(now())
 
   seasonId            String?
@@ -2741,4 +2743,21 @@ enum Set3Format {
 
 // =============================================
 // END BEST 6 SCORING SYSTEM ENUMS
+// =============================================
+
+// =============================================
+// ONBOARDING STEP TRACKING ENUM
+// =============================================
+
+enum OnboardingStep {
+  PERSONAL_INFO      // Step 1: Name, Gender, DOB completed
+  LOCATION           // Step 2: Location completed
+  GAME_SELECT        // Step 3: Sport selection completed
+  SKILL_ASSESSMENT   // Step 4: Questionnaire completed
+  ASSESSMENT_RESULTS // Step 5: Results viewed
+  PROFILE_PICTURE    // Step 6: Final step (profile picture uploaded/skipped)
+}
+
+// =============================================
+// END ONBOARDING STEP TRACKING ENUM
 // =============================================

@@ -85,6 +85,39 @@ export async function assignPlayerToDivision(data: AssignPlayerData) {
   // Update division counts
   await updateDivisionCounts(divisionId, true);
 
+  // Add user to division group chat (if exists)
+  const divisionThread = await prisma.thread.findFirst({
+    where: {
+      divisionId: divisionId,
+      isGroup: true
+    },
+    select: { id: true, name: true }
+  });
+
+  if (divisionThread) {
+    // Check if user is already a member
+    const existingThreadMember = await prisma.userThread.findUnique({
+      where: {
+        threadId_userId: {
+          threadId: divisionThread.id,
+          userId
+        }
+      }
+    });
+
+    if (!existingThreadMember) {
+      await prisma.userThread.create({
+        data: {
+          threadId: divisionThread.id,
+          userId: userId,
+          role: null,
+          unreadCount: 0
+        }
+      });
+      console.log(`✅ User ${userId} added to division group chat ${divisionThread.id}`);
+    }
+  }
+
   console.log(`✅ User ${userId} assigned to division ${divisionId} successfully`);
 
   return assignment;
@@ -130,6 +163,25 @@ export async function removePlayerFromDivision(
 
   // Update division counts
   await updateDivisionCounts(divisionId, false);
+
+  // Remove user from division group chat (if exists)
+  const divisionThread = await prisma.thread.findFirst({
+    where: {
+      divisionId: divisionId,
+      isGroup: true
+    },
+    select: { id: true }
+  });
+
+  if (divisionThread) {
+    await prisma.userThread.deleteMany({
+      where: {
+        threadId: divisionThread.id,
+        userId: userId
+      }
+    });
+    console.log(`✅ User ${userId} removed from division group chat ${divisionThread.id}`);
+  }
 
   console.log(`✅ User ${userId} removed from division ${divisionId}`);
 
@@ -484,6 +536,53 @@ export async function transferPlayerBetweenDivisions(
   // Update division counts (outside transaction to avoid deadlocks)
   await updateDivisionCounts(fromDivisionId, false); // Decrement source
   await updateDivisionCounts(toDivisionId, true);     // Increment target
+
+  // Transfer group chat membership from old division to new division
+  const [fromDivisionThread, toDivisionThread] = await Promise.all([
+    prisma.thread.findFirst({
+      where: { divisionId: fromDivisionId, isGroup: true },
+      select: { id: true }
+    }),
+    prisma.thread.findFirst({
+      where: { divisionId: toDivisionId, isGroup: true },
+      select: { id: true }
+    })
+  ]);
+
+  // Remove from old division chat
+  if (fromDivisionThread) {
+    await prisma.userThread.deleteMany({
+      where: {
+        threadId: fromDivisionThread.id,
+        userId: userId
+      }
+    });
+    console.log(`✅ User ${userId} removed from source division group chat`);
+  }
+
+  // Add to new division chat
+  if (toDivisionThread) {
+    const existingMember = await prisma.userThread.findUnique({
+      where: {
+        threadId_userId: {
+          threadId: toDivisionThread.id,
+          userId
+        }
+      }
+    });
+
+    if (!existingMember) {
+      await prisma.userThread.create({
+        data: {
+          threadId: toDivisionThread.id,
+          userId: userId,
+          role: null,
+          unreadCount: 0
+        }
+      });
+      console.log(`✅ User ${userId} added to target division group chat`);
+    }
+  }
 
   console.log(`✅ User ${userId} transferred successfully`);
 

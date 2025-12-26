@@ -14,6 +14,7 @@ import {
   getMatchById,
   getAvailableMatches,
   getMyMatches,
+  getMyMatchesSummary,
   joinMatch,
   respondToInvitation,
   proposeTimeSlot,
@@ -33,7 +34,6 @@ import {
   cancelMatch,
   requestReschedule,
   getCancellationRuleImpact,
-  recordWalkover,
   continueMatch
 } from "../controllers/match/matchScheduleController";
 import {
@@ -55,6 +55,7 @@ matchRoutes.use(verifyAuth);
 // Match CRUD (using new invitation service)
 matchRoutes.post("/create", createMatch);
 matchRoutes.get('/', getMatches);
+matchRoutes.get('/my/summary', getMyMatchesSummary); // Lightweight endpoint for change detection
 matchRoutes.get('/my', getMyMatches);
 matchRoutes.get('/available/:divisionId', getAvailableMatches);
 matchRoutes.get('/:id', getMatchById);
@@ -84,7 +85,8 @@ matchRoutes.get('/disputes/:id', getDisputeById);
 matchRoutes.get('/:id/cancel-impact', getCancellationRuleImpact);
 matchRoutes.post('/:id/cancel', cancelMatch);
 matchRoutes.post('/:id/reschedule', requestReschedule);
-matchRoutes.post('/:id/walkover', recordWalkover);
+// Note: walkover endpoint is defined in Results section (line 75) using submitWalkover
+// recordWalkover was a duplicate that was never reachable - removed
 matchRoutes.post('/:id/continue', continueMatch);
 
 // History and Statistics

@@ -552,7 +552,7 @@ async function processMatchWithDMR(match: any): Promise<boolean> {
       score2: s.score1,
     }));
 
-    await dmrService.processsinglesMatch({
+    await dmrService.processSinglesMatch({
       winnerId,
       loserId,
       setScores: adjustedScores,

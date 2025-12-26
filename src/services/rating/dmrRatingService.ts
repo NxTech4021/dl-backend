@@ -610,7 +610,7 @@ export class DMRRatingService {
   /**
    * Calculate and apply rating changes for a singles match
    */
-  async processsinglesMatch(input: SinglesMatchInput): Promise<MatchRatingResult> {
+  async processSinglesMatch(input: SinglesMatchInput): Promise<MatchRatingResult> {
     const {
       winnerId,
       loserId,
