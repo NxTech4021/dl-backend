@@ -11,9 +11,39 @@ import { prisma } from '../lib/prisma';
 import dayjs from 'dayjs';
 import utc from 'dayjs/plugin/utc';
 import timezone from 'dayjs/plugin/timezone';
+import { notificationService } from '../services/notificationService';
+import { matchManagementNotifications } from '../helpers/notifications/matchManagementNotifications';
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
+
+/**
+ * Helper function to format date for notifications
+ */
+const formatDate = (date: Date): string => {
+  return dayjs(date).format('MMM D, YYYY');
+};
+
+/**
+ * Helper function to format time for notifications
+ */
+const formatTime = (date: Date): string => {
+  return dayjs(date).format('h:mm A');
+};
+
+/**
+ * Helper function to get participant user IDs excluding a specific user
+ */
+const getOtherParticipants = async (matchId: string, excludeUserId?: string): Promise<string[]> => {
+  const participants = await prisma.matchParticipant.findMany({
+    where: { 
+      matchId,
+      ...(excludeUserId && { userId: { not: excludeUserId } })
+    },
+    select: { userId: true },
+  });
+  return participants.map(p => p.userId);
+};
 
 const friendlyMatchService = getFriendlyMatchService();
 
@@ -103,6 +133,45 @@ export const createFriendlyMatch = async (req: Request, res: Response) => {
       requestRecipientId
     });
 
+    // Send notification for friendly match creation
+    try {
+      if (isRequest && requestRecipientId) {
+        // Get requester name
+        const requester = await prisma.user.findUnique({
+          where: { id: userId },
+          select: { name: true }
+        });
+
+        const notification = matchManagementNotifications.friendlyMatchJoinRequest(
+          requester?.name || 'A player',
+          formatDate(parsedMatchDate),
+          formatTime(parsedMatchDate)
+        );
+        
+        await notificationService.createNotification({
+          ...notification,
+          userIds: requestRecipientId,
+          matchId: match.id,
+        });
+      } else {
+        // Regular friendly match posted notification
+        const notification = matchManagementNotifications.friendlyMatchPosted(
+          formatDate(parsedMatchDate),
+          formatTime(parsedMatchDate),
+          venue || location || 'TBD'
+        );
+        
+        await notificationService.createNotification({
+          ...notification,
+          userIds: userId,
+          matchId: match.id,
+        });
+      }
+    } catch (notifError) {
+      console.error('Failed to send match creation notification:', notifError);
+      // Don't fail the request if notification fails
+    }
+
     res.status(201).json(match);
   } catch (error) {
     console.error('Create Friendly Match Error:', error);
@@ -181,6 +250,173 @@ export const getFriendlyMatchById = async (req: Request, res: Response) => {
 };
 
 /**
+ * Get full friendly match details formatted for the match-details page
+ * Returns ALL data needed to display the match details UI
+ * GET /api/friendly/:id/details
+ */
+export const getFriendlyMatchDetails = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    if (!id) {
+      return res.status(400).json({ error: 'Match ID is required' });
+    }
+
+    const match = await prisma.match.findFirst({
+      where: { id, isFriendly: true } as any,
+      include: {
+        createdBy: {
+          select: { id: true, name: true, username: true, image: true }
+        },
+        participants: {
+          include: {
+            user: {
+              select: { id: true, name: true, username: true, image: true }
+            }
+          }
+        },
+        scores: { orderBy: { setNumber: 'asc' } },
+        pickleballScores: { orderBy: { gameNumber: 'asc' } },
+        comments: {
+          include: {
+            user: { select: { id: true, name: true, username: true, image: true } }
+          },
+          orderBy: { createdAt: 'asc' }
+        },
+        disputes: {
+          include: {
+            raisedByUser: {
+              select: { id: true, name: true, image: true }
+            }
+          }
+        }
+      }
+    }) as any;
+
+    if (!match) {
+      return res.status(404).json({ error: 'Friendly match not found' });
+    }
+
+    // Format match date and time
+    const matchDate = match.matchDate || match.scheduledStartTime;
+    const matchDateTime = matchDate ? new Date(matchDate) : null;
+    const formattedDate = matchDateTime
+      ? matchDateTime.toLocaleDateString('en-US', {
+          month: 'short',
+          day: '2-digit',
+          year: 'numeric'
+        })
+      : null;
+    const formattedTime = matchDateTime
+      ? matchDateTime.toLocaleTimeString('en-US', {
+          hour: 'numeric',
+          minute: '2-digit',
+          hour12: true
+        })
+      : null;
+
+    // Format participants for the frontend
+    // Sort by team and role for consistent display
+    const sortedParticipants = [...(match.participants || [])].sort((a: any, b: any) => {
+      // team1 before team2
+      if (a.team !== b.team) {
+        return a.team === 'team1' ? -1 : 1;
+      }
+      // CAPTAIN before PARTNER within same team
+      if (a.role !== b.role) {
+        return a.role === 'CAPTAIN' ? -1 : 1;
+      }
+      return 0;
+    });
+
+    const formattedParticipants = sortedParticipants.map((p: any) => ({
+      id: p.id,
+      odix: p.odix,
+      userId: p.userId,
+      name: p.user?.name || p.user?.username || 'Unknown Player',
+      image: p.user?.image || null,
+      role: p.role,
+      team: p.team,
+      invitationStatus: p.invitationStatus
+    }));
+
+    // Determine if match is disputed
+    const isDisputed = match.disputes && match.disputes.length > 0;
+
+    // Build the comprehensive response
+    const response = {
+      // Core identifiers
+      matchId: match.id,
+      matchType: match.matchType,
+      status: match.status,
+
+      // Date/time (formatted for display)
+      date: formattedDate,
+      time: formattedTime,
+      matchDate: matchDate, // ISO string for calculations
+      duration: match.duration || 2,
+
+      // Location
+      location: match.location || match.venue || null,
+      venue: match.venue || null,
+      description: match.notes || match.description || null,
+
+      // Sport info (friendly matches don't have league/season/division)
+      sportType: match.sport || 'PICKLEBALL',
+      leagueName: null,
+      season: null,
+      division: null,
+      divisionId: null,
+      seasonId: null,
+      leagueId: null,
+
+      // Participants
+      participants: formattedParticipants,
+
+      // Match booking details
+      courtBooked: match.courtBooked || false,
+      fee: match.fee || 'FREE',
+      feeAmount: match.feeAmount?.toString() || '0',
+
+      // Scores (if completed or submitted)
+      team1Score: match.team1Score,
+      team2Score: match.team2Score,
+      playerScore: match.playerScore,
+      opponentScore: match.opponentScore,
+      scores: match.scores || [],
+      pickleballScores: match.pickleballScores || [],
+
+      // Result submission info
+      createdById: match.createdById,
+      resultSubmittedById: match.resultSubmittedById || null,
+      resultSubmittedAt: match.resultSubmittedAt || null,
+
+      // Dispute info
+      isDisputed,
+      dispute: isDisputed ? match.disputes[0] : null,
+
+      // Friendly match specific info
+      isFriendly: true,
+      isFriendlyRequest: match.isFriendlyRequest || false,
+      requestStatus: match.requestStatus || null,
+      genderRestriction: match.genderRestriction || null,
+      skillLevels: match.skillLevels || [],
+
+      // Comments
+      comments: match.comments || [],
+
+      // Creator info
+      createdBy: match.createdBy,
+    };
+
+    res.json({ data: response });
+  } catch (error) {
+    console.error('Get Friendly Match Details Error:', error);
+    const message = error instanceof Error ? error.message : 'Failed to retrieve friendly match details';
+    res.status(500).json({ error: message });
+  }
+};
+
+/**
  * Join a friendly match
  * POST /api/friendly/:id/join
  */
@@ -199,6 +435,33 @@ export const joinFriendlyMatch = async (req: Request, res: Response) => {
     const { asPartner = false, partnerId } = req.body;
 
     const match = await friendlyMatchService.joinFriendlyMatch(id, userId, asPartner, partnerId);
+
+    // Send notification to match creator
+    try {
+      const joiner = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { name: true }
+      });
+
+      if (match.createdById && match.createdById !== userId) {
+        const notification = matchManagementNotifications.friendlyMatchPlayerJoined(
+          joiner?.name || 'A player',
+          formatDate(match.matchDate),
+          formatTime(match.matchDate),
+          match.venue || match.location || 'TBD'
+        );
+        
+        await notificationService.createNotification({
+          ...notification,
+          userIds: match.createdById,
+          matchId: match.id,
+        });
+      }
+    } catch (notifError) {
+      console.error('Failed to send join notification:', notifError);
+      // Don't fail the request if notification fails
+    }
+
     res.json(match);
   } catch (error) {
     console.error('Join Friendly Match Error:', error);
@@ -256,6 +519,31 @@ export const submitFriendlyResult = async (req: Request, res: Response) => {
       teamAssignments
     });
 
+    // Send notification to other participants
+    try {
+      const submitter = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { name: true }
+      });
+
+      const otherParticipants = await getOtherParticipants(id, userId);
+      
+      if (otherParticipants.length > 0) {
+        const notification = matchManagementNotifications.opponentSubmittedScore(
+          submitter?.name || 'Opponent'
+        );
+        
+        await notificationService.createNotification({
+          ...notification,
+          userIds: otherParticipants,
+          matchId: match.id,
+        });
+      }
+    } catch (notifError) {
+      console.error('Failed to send result submission notification:', notifError);
+      // Don't fail the request if notification fails
+    }
+
     res.json(match);
   } catch (error) {
     console.error('Submit Friendly Result Error:', error);
@@ -297,6 +585,51 @@ export const confirmFriendlyResult = async (req: Request, res: Response) => {
       disputeReason
     });
 
+    // Send notification based on confirmation status
+    try {
+      const confirmer = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { name: true }
+      });
+
+      const otherParticipants = await getOtherParticipants(id, userId);
+      
+      if (otherParticipants.length > 0) {
+        if (confirmed) {
+          // Score confirmed - calculate score display
+          let scoreDisplay = 'Final';
+          if (match.team1Score !== null && match.team2Score !== null) {
+            scoreDisplay = `${match.team1Score}-${match.team2Score}`;
+          }
+
+          const notification = matchManagementNotifications.scoreAutoConfirmed(
+            confirmer?.name || 'Opponent',
+            scoreDisplay
+          );
+          
+          await notificationService.createNotification({
+            ...notification,
+            userIds: otherParticipants,
+            matchId: match.id,
+          });
+        } else {
+          // Score disputed
+          const notification = matchManagementNotifications.scoreDisputeAlert(
+            confirmer?.name || 'Opponent'
+          );
+          
+          await notificationService.createNotification({
+            ...notification,
+            userIds: otherParticipants,
+            matchId: match.id,
+          });
+        }
+      }
+    } catch (notifError) {
+      console.error('Failed to send confirmation notification:', notifError);
+      // Don't fail the request if notification fails
+    }
+
     res.json(match);
   } catch (error) {
     console.error('Confirm Friendly Result Error:', error);
@@ -322,6 +655,33 @@ export const acceptFriendlyMatchRequest = async (req: Request, res: Response) =>
     }
 
     const match = await friendlyMatchService.acceptFriendlyMatchRequest(id, userId);
+
+    // Send notification to requester
+    try {
+      const accepter = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { name: true }
+      });
+
+      if (match.createdById && match.createdById !== userId) {
+        const notification = matchManagementNotifications.friendlyMatchRequestAccepted(
+          accepter?.name || 'Host',
+          formatDate(match.matchDate),
+          formatTime(match.matchDate),
+          match.venue || match.location || 'TBD'
+        );
+        
+        await notificationService.createNotification({
+          ...notification,
+          userIds: match.createdById,
+          matchId: match.id,
+        });
+      }
+    } catch (notifError) {
+      console.error('Failed to send accept notification:', notifError);
+      // Don't fail the request if notification fails
+    }
+
     res.json(match);
   } catch (error) {
     console.error('Accept Friendly Match Request Error:', error);
@@ -347,6 +707,30 @@ export const declineFriendlyMatchRequest = async (req: Request, res: Response) =
     }
 
     const match = await friendlyMatchService.declineFriendlyMatchRequest(id, userId);
+
+    // Send notification to requester
+    try {
+      const decliner = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { name: true }
+      });
+
+      if (match.createdById && match.createdById !== userId) {
+        const notification = matchManagementNotifications.friendlyMatchRequestDeclined(
+          decliner?.name || 'Host'
+        );
+        
+        await notificationService.createNotification({
+          ...notification,
+          userIds: match.createdById,
+          matchId: match.id,
+        });
+      }
+    } catch (notifError) {
+      console.error('Failed to send decline notification:', notifError);
+      // Don't fail the request if notification fails
+    }
+
     res.json(match);
   } catch (error) {
     console.error('Decline Friendly Match Request Error:', error);
@@ -374,6 +758,34 @@ export const cancelFriendlyMatch = async (req: Request, res: Response) => {
     const { comment } = req.body;
 
     const match = await friendlyMatchService.cancelFriendlyMatch(id, userId, comment);
+
+    // Send cancellation notification to other participants
+    try {
+      const canceller = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { name: true }
+      });
+
+      const otherParticipants = await getOtherParticipants(id, userId);
+      
+      if (otherParticipants.length > 0) {
+        const notification = matchManagementNotifications.friendlyMatchCancelled(
+          canceller?.name || 'Host',
+          formatDate(match.matchDate),
+          formatTime(match.matchDate)
+        );
+        
+        await notificationService.createNotification({
+          ...notification,
+          userIds: otherParticipants,
+          matchId: match.id,
+        });
+      }
+    } catch (notifError) {
+      console.error('Failed to send cancellation notification:', notifError);
+      // Don't fail the request if notification fails
+    }
+
     res.json(match);
   } catch (error) {
     console.error('Cancel Friendly Match Error:', error);
@@ -427,6 +839,35 @@ export const postFriendlyMatchComment = async (req: Request, res: Response) => {
       userId,
       comment,
     });
+
+    // Notify other participants about the new comment
+    try {
+      const commenter = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { name: true }
+      });
+
+      const otherParticipants = await getOtherParticipants(id, userId);
+      
+      if (otherParticipants.length > 0) {
+        await notificationService.createNotification({
+          type: 'NEW_MATCH_COMMENT',
+          category: 'MATCH',
+          title: 'New Comment',
+          message: `${commenter?.name || 'A player'} commented on your match`,
+          userIds: otherParticipants,
+          matchId: id,
+          metadata: {
+            commentId: newComment.id,
+            commenterName: commenter?.name || 'A player',
+          }
+        });
+      }
+    } catch (notifError) {
+      console.error('Failed to send comment notification:', notifError);
+      // Don't fail the request if notification fails
+    }
+
     res.status(201).json(newComment);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to post comment';

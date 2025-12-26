@@ -326,3 +326,183 @@ export const deleteMatchComment = async (req: Request, res: Response) => {
     res.status(500).json({ error: message });
   }
 };
+
+/**
+ * Get full match details formatted for the match-details page
+ * Returns ALL data needed to display the match details UI
+ * GET /api/match/:id/details
+ */
+export const getMatchDetails = async (req: Request, res: Response) => {
+  const { id } = req.params;
+  if (!id) return res.status(400).json({ error: "Match ID is required." });
+
+  try {
+    const match = await prisma.match.findUnique({
+      where: { id },
+      include: {
+        division: {
+          include: {
+            season: true,
+            league: true
+          }
+        },
+        participants: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                name: true,
+                username: true,
+                image: true
+              }
+            }
+          }
+        },
+        createdBy: {
+          select: {
+            id: true,
+            name: true,
+            username: true,
+            image: true
+          }
+        },
+        scores: {
+          orderBy: { setNumber: 'asc' }
+        },
+        disputes: {
+          include: {
+            raisedByUser: {
+              select: {
+                id: true,
+                name: true,
+                image: true,
+              }
+            }
+          }
+        },
+        comments: {
+          include: {
+            user: { select: { id: true, name: true, username: true, image: true } }
+          },
+          orderBy: { createdAt: 'asc' }
+        }
+      },
+    });
+
+    if (!match) return res.status(404).json({ error: "Match not found." });
+
+    // Format match date and time
+    const matchDate = match.matchDate ? new Date(match.matchDate) : null;
+    const formattedDate = matchDate
+      ? matchDate.toLocaleDateString('en-US', {
+          month: 'short',
+          day: '2-digit',
+          year: 'numeric'
+        })
+      : null;
+    const formattedTime = matchDate
+      ? matchDate.toLocaleTimeString('en-US', {
+          hour: 'numeric',
+          minute: '2-digit',
+          hour12: true
+        })
+      : null;
+
+    // Format participants for the frontend
+    // Sort by team and role for consistent display
+    const sortedParticipants = [...match.participants].sort((a, b) => {
+      // team1 before team2
+      if (a.team !== b.team) {
+        return a.team === 'team1' ? -1 : 1;
+      }
+      // CREATOR before others within same team
+      if (a.role !== b.role) {
+        return a.role === 'CREATOR' ? -1 : 1;
+      }
+      return 0;
+    });
+
+    const formattedParticipants = sortedParticipants.map(p => ({
+      id: p.id,
+      odix: (p as any).odix || null,
+      userId: p.userId,
+      name: p.user?.name || p.user?.username || 'Unknown Player',
+      image: p.user?.image || null,
+      role: p.role,
+      team: p.team,
+      invitationStatus: p.invitationStatus
+    }));
+
+    // Determine if match is disputed
+    const isDisputed = match.disputes && match.disputes.length > 0;
+
+    // Build the comprehensive response
+    const response = {
+      // Core identifiers
+      matchId: match.id,
+      matchType: match.matchType,
+      status: match.status,
+
+      // Date/time (formatted for display)
+      date: formattedDate,
+      time: formattedTime,
+      matchDate: match.matchDate, // ISO string for calculations
+      duration: match.duration || 2,
+
+      // Location
+      location: match.location || match.venue || null,
+      venue: match.venue || null,
+      description: match.notes || null,
+
+      // Sport and league info
+      sportType: match.division?.league?.sportType || match.sport || 'PICKLEBALL',
+      leagueName: match.division?.league?.name || null,
+      season: match.division?.season?.name || null,
+      division: match.division?.name || null,
+      divisionId: match.divisionId || null,
+      seasonId: match.division?.seasonId || null,
+      leagueId: match.division?.leagueId || null,
+
+      // Participants
+      participants: formattedParticipants,
+
+      // Match booking details
+      courtBooked: match.courtBooked || false,
+      fee: (match as any).fee || 'FREE',
+      feeAmount: (match as any).feeAmount?.toString() || '0',
+
+      // Scores (if completed or submitted)
+      team1Score: match.team1Score,
+      team2Score: match.team2Score,
+      playerScore: match.playerScore,
+      opponentScore: match.opponentScore,
+      scores: match.scores || [],
+
+      // Result submission info
+      createdById: match.createdById,
+      resultSubmittedById: match.resultSubmittedById || null,
+      resultSubmittedAt: match.resultSubmittedAt || null,
+
+      // Dispute info
+      isDisputed,
+      dispute: isDisputed ? match.disputes[0] : null,
+
+      // Friendly match info
+      isFriendly: false, // League matches are not friendly
+      genderRestriction: null,
+      skillLevels: [],
+
+      // Comments
+      comments: match.comments || [],
+
+      // Creator info
+      createdBy: match.createdBy,
+    };
+
+    res.json({ data: response });
+  } catch (err: unknown) {
+    console.error("Get Match Details Error:", err);
+    const errorMessage = err instanceof Error ? err.message : "Failed to retrieve match details.";
+    res.status(500).json({ error: errorMessage });
+  }
+};

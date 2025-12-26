@@ -14,6 +14,11 @@ export enum NotificationDeliveryType {
  * Generated from: deuce notifications masterlist.xlsx - All Notifications (V1.0).csv
  */
 export const NOTIFICATION_DELIVERY_MAP: Record<string, NotificationDeliveryType> = {
+  // Season notifications - PUSH
+  SEASON_STARTING_SOON: NotificationDeliveryType.PUSH,
+  SEASON_ENDED: NotificationDeliveryType.PUSH,
+  SEASON_CANCELLED: NotificationDeliveryType.PUSH,
+  
   // Account & System - IN_APP
   WELCOME_TO_DEUCE: NotificationDeliveryType.IN_APP,
   PROFILE_INCOMPLETE_REMINDER: NotificationDeliveryType.IN_APP,
@@ -63,6 +68,7 @@ export const NOTIFICATION_DELIVERY_MAP: Record<string, NotificationDeliveryType>
   DIVISION_REBALANCED: NotificationDeliveryType.PUSH,
   DIVISION_UPDATE_NEW_PLAYER: NotificationDeliveryType.PUSH,
   WINNING_STREAK: NotificationDeliveryType.PUSH,
+  LEAGUE_ANNOUNCEMENT: NotificationDeliveryType.PUSH,
   SCHEDULE_MATCH_SOON: NotificationDeliveryType.PUSH,
   EARLY_SEASON_NUDGE: NotificationDeliveryType.PUSH,
   MID_SEASON_UPDATE: NotificationDeliveryType.PUSH,
@@ -103,6 +109,10 @@ export const NOTIFICATION_DELIVERY_MAP: Record<string, NotificationDeliveryType>
   FRIENDLY_MATCH_REQUEST_ACCEPTED: NotificationDeliveryType.PUSH,
   FRIENDLY_MATCH_REQUEST_DECLINED: NotificationDeliveryType.PUSH,
   FRIENDLY_MATCH_CANCELLED: NotificationDeliveryType.PUSH,
+  OPPONENT_POSTED_LEAGUE_MATCH: NotificationDeliveryType.PUSH,
+  LEAGUE_MATCH_CONFIRMED_YOU_JOINED: NotificationDeliveryType.PUSH,
+  LEAGUE_MATCH_CONFIRMED_OPPONENT_JOINED: NotificationDeliveryType.PUSH,
+  LEAGUE_MATCH_CANCELLED_BY_OPPONENT: NotificationDeliveryType.PUSH,
   PLAYER_LEFT_FRIENDLY_MATCH: NotificationDeliveryType.PUSH,
   SCHEDULING_CONFLICT_DETECTED: NotificationDeliveryType.PUSH,
   FRIENDLY_MATCH_DETAILS_CHANGED: NotificationDeliveryType.PUSH,

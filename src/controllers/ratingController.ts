@@ -4,7 +4,7 @@
  */
 
 import { Request, Response } from 'express';
-import { GameType } from '@prisma/client';
+import { GameType, SportType } from '@prisma/client';
 import {
   getPlayerRating,
   getPlayerRatings,
@@ -97,7 +97,7 @@ export async function getMyRatingSummary(req: Request, res: Response) {
 export async function getMyRatingHistory(req: Request, res: Response) {
   try {
     const userId = (req as any).user?.id;
-    const { seasonId, gameType, limit } = req.query;
+    const { seasonId, gameType, limit, sport } = req.query;
 
     if (!userId) {
       return res.status(401).json({
@@ -110,7 +110,8 @@ export async function getMyRatingHistory(req: Request, res: Response) {
       userId,
       seasonId as string | undefined,
       (gameType as GameType) || GameType.SINGLES,
-      parseInt(limit as string) || 50
+      parseInt(limit as string) || 50,
+      sport ? (sport as SportType) : undefined
     );
 
     return res.status(200).json({

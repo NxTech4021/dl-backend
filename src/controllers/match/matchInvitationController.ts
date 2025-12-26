@@ -9,12 +9,27 @@ import { MatchType, MatchFormat, MatchStatus, MembershipStatus, ParticipantRole,
 import { prisma } from '../../lib/prisma';
 import { NotificationService } from '../../services/notificationService';
 import { NOTIFICATION_TYPES } from '../../types/notificationTypes';
+import { matchManagementNotifications } from '../../helpers/notifications/matchManagementNotifications';
 import dayjs from 'dayjs';
 import utc from 'dayjs/plugin/utc';
 import timezone from 'dayjs/plugin/timezone';
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
+
+/**
+ * Helper function to format date for notifications
+ */
+const formatDate = (date: Date): string => {
+  return dayjs(date).format('MMM D, YYYY');
+};
+
+/**
+ * Helper function to format time for notifications
+ */
+const formatTime = (date: Date): string => {
+  return dayjs(date).format('h:mm A');
+};
 
 const matchInvitationService = getMatchInvitationService();
 const notificationService = new NotificationService();
@@ -113,6 +128,93 @@ export const createMatch = async (req: Request, res: Response) => {
       message,
       expiresInHours
     });
+
+    console.log('🎯 [Match Creation] Match created, sending division notifications...', {
+      matchId: match.id,
+      divisionId,
+      userId
+    });
+
+    // Send notifications to all division members (group chat)
+    try {
+      if (divisionId && userId) {
+        // Get all members in the division (group chat members)
+        const divisionAssignments = await prisma.divisionAssignment.findMany({
+          where: { 
+            divisionId
+          },
+          select: { userId: true }
+        });
+        
+        // Exclude the creator from notifications
+        const divisionMembers = divisionAssignments
+          .map(a => a.userId)
+          .filter(id => id !== userId);
+        
+        console.log('🔔 [Match Creation] Division group chat notification:', {
+          matchId: match.id,
+          divisionId,
+          creatorId: userId,
+          totalDivisionMembers: divisionAssignments.length,
+          notificationRecipients: divisionMembers.length
+        });
+        
+        if (divisionMembers.length > 0) {
+          // Get creator name and full match details with date
+          const creator = await prisma.user.findUnique({
+            where: { id: userId },
+            select: { name: true }
+          });
+
+          // Get the full match with date to ensure we have the correct data
+          const fullMatch = await prisma.match.findUnique({
+            where: { id: match.id },
+            select: { 
+              matchDate: true, 
+              venue: true, 
+              location: true 
+            }
+          });
+
+          if (fullMatch && fullMatch.matchDate) {
+            const notification = matchManagementNotifications.opponentPostedLeagueMatch(
+              creator?.name || 'A player',
+              formatDate(fullMatch.matchDate),
+              formatTime(fullMatch.matchDate),
+              fullMatch.venue || fullMatch.location || 'TBD'
+            );
+            
+            console.log('📤 [Match Creation] Sending push notification to division:', {
+              type: notification.type,
+              category: notification.category,
+              recipientCount: divisionMembers.length,
+              message: notification.message
+            });
+            
+            // Don't pass divisionId - notification is linked via match->division relation
+            await notificationService.createNotification({
+              ...notification,
+              userIds: divisionMembers,
+              matchId: match.id,
+            });
+            
+            console.log('✅ [Match Creation] Push notification sent to division members');
+          } else {
+            console.log('⚠️ [Match Creation] Match date not available, skipping notification');
+          }
+        } else {
+          console.log('⚠️ [Match Creation] No other division members to notify (creator is only member)');
+        }
+      } else {
+        console.log('⚠️ [Match Creation] Missing divisionId or userId:', {
+          divisionId,
+          userId
+        });
+      }
+    } catch (notifError) {
+      console.error('❌ [Match Creation] Failed to send division notification:', notifError);
+      // Don't fail the request if notification fails
+    }
 
     
     res.status(201).json(match);

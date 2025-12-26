@@ -9,8 +9,12 @@ import {
   Prisma,
   AdminActionType,
 } from "@prisma/client";
+import { prisma } from "../lib/prisma";
 import { ApiResponse } from "../utils/ApiResponse";
 import { logLeagueAction } from "../services/admin/adminLogService";
+import { notificationService } from '../services/notificationService';
+import { leagueLifecycleNotifications } from '../helpers/notifications';
+import { NOTIFICATION_TYPES } from '../types/notificationTypes';
 
 interface CreateLeagueBody {
   name?: string;
@@ -228,6 +232,27 @@ export const createLeague = async (req: Request, res: Response) => {
     };
 
     const newLeague = await leagueService.createLeague(leagueData);
+
+    // Broadcast new league announcement to all users (push)
+    try {
+      const users = await prisma.user.findMany({ select: { id: true } });
+      if (users.length > 0) {
+        const userIds = users.map(u => u.id);
+        const notif = leagueLifecycleNotifications.newLeagueAnnouncement(
+          newLeague.location || 'your area',
+          newLeague.sportType || 'sport'
+        );
+
+        // Ensure notification type maps to push by using LEAGUE_ANNOUNCEMENT
+        await notificationService.createNotification({
+          userIds,
+          ...notif,
+          type: NOTIFICATION_TYPES.LEAGUE_ANNOUNCEMENT || notif.type,
+        });
+      }
+    } catch (err) {
+      console.error('Failed to send new league announcement notifications:', err);
+    }
 
     // Log admin action if user is authenticated
     if (req.user?.id) {
