@@ -880,10 +880,19 @@ export const getMessages = async (req: Request, res: Response) => {
               include: {
                 participants: {
                   select: {
+                    id: true,
                     userId: true,
                     role: true,
                     team: true,
                     invitationStatus: true,
+                    user: {
+                      select: {
+                        id: true,
+                        name: true,
+                        username: true,
+                        image: true,
+                      }
+                    }
                   }
                 }
               }
@@ -904,16 +913,31 @@ export const getMessages = async (req: Request, res: Response) => {
               matchData = matchData || {};
 
               const matchAny = match as any;
+
+              // Flatten user data into participants for easier frontend access
+              const enrichedParticipants = (matchAny.participants || []).map((p: any) => ({
+                id: p.id,
+                odId: p.userId,
+                userId: p.userId,
+                role: p.role,
+                team: p.team,
+                invitationStatus: p.invitationStatus,
+                // Flatten user data
+                name: p.user?.name || p.user?.username || null,
+                username: p.user?.username || null,
+                image: p.user?.image || null,
+              }));
+
               msg.matchData = {
                 ...matchData,
-                participants: matchAny.participants || [],
+                participants: enrichedParticipants,
                 // Always sync friendly request status from the actual Match record
                 requestStatus: matchAny.requestStatus || matchData.requestStatus,
                 isFriendlyRequest: matchAny.isFriendlyRequest ?? matchData.isFriendlyRequest,
                 isFriendly: matchAny.isFriendly ?? matchData.isFriendly ?? matchAny.isFriendlyRequest ?? matchData.isFriendlyRequest,
                 requestExpiresAt: matchAny.requestExpiresAt?.toISOString() || matchData.requestExpiresAt,
               };
-              console.log(`  ✅ Enriched match ${msg.matchId} with ${matchAny.participants?.length || 0} participants, requestStatus: ${matchAny.requestStatus}`);
+              console.log(`  ✅ Enriched match ${msg.matchId} with ${enrichedParticipants.length} participants, requestStatus: ${matchAny.requestStatus}`);
             }
           } catch (err) {
             console.warn(`  ⚠️ Could not enrich match data for message ${msg.id}:`, err);

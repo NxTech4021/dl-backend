@@ -171,13 +171,15 @@ export async function getPlayerRatingHistory(
   userId: string,
   seasonId?: string,
   gameType: GameType = GameType.SINGLES,
-  limit: number = 50
+  limit: number = 50,
+  sport?: SportType
 ): Promise<RatingHistoryEntry[]> {
   // First get the player's rating
   const rating = await prisma.playerRating.findFirst({
     where: {
       userId,
       ...(seasonId ? { seasonId } : {}),
+      ...(sport ? { sport } : {}),
       gameType
     }
   });
