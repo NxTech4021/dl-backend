@@ -12,6 +12,7 @@ import {
   uploadScreenshotFile,
   syncBugReport,
   initDLAApp,
+  initDLMApp,
   // Admin endpoints
   getAllBugReports,
   getAdminBugReportById,
@@ -38,6 +39,10 @@ const bugRouter = Router();
 // Initialize DLA app (auto-creates if not exists) - for DLAdmin widget
 // Public: allows bug reporting before login
 bugRouter.get("/init/dla", initDLAApp);
+
+// Initialize DLM app (auto-creates if not exists) - for DL Mobile app
+// Public: allows feedback submission before/without login
+bugRouter.get("/init/dlm", initDLMApp);
 
 // Create new bug report - Uses optional auth to capture logged-in user if available
 // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
