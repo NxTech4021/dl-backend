@@ -13,8 +13,8 @@ import {
 } from "../services/notification/matchNotificationService";
 import {
   sendSeasonStartingSoonNotifications,
-  sendLeagueStartsTomorrowNotifications,
-  sendSeasonStartedWelcomeNotifications,
+  sendSeasonStartsTomorrowNotifications,
+  sendSeasonWelcomeNotifications,
   sendFinalWeekAlertNotifications,
   sendMidSeasonUpdateNotifications,
   sendRegistrationClosing3DaysNotifications,
@@ -187,9 +187,10 @@ export function scheduleScoreSubmissionReminders(): void {
  */
 export function scheduleSeasonStartingSoonNotifications(): void {
   // Production: 
-  // cron.schedule("0 10 * * *", async () => {
+  cron.schedule("0 10 * * *", async () => {
+  
   // TESTING: every min
-  cron.schedule("* * * * *", async () => {
+  // cron.schedule("* * * * *", async () => {
     try {
       logger.info("Running Season starting soon job");
 
@@ -232,9 +233,10 @@ export function scheduleSeasonStartingSoonNotifications(): void {
  * Runs daily at 8:00 PM
  */
 export function scheduleSeasonStartsTomorrowNotifications(): void {
-  // Production: cron.schedule("0 20 * * *", async () => {
+  // Production: 
+  cron.schedule("0 20 * * *", async () => {
   // TESTING: every 5 mins
-  cron.schedule("*/2 * * * *", async () => {
+  // cron.schedule("* * * * *", async () => {
     try {
       logger.info("Running Season starts tomorrow job");
 
@@ -257,7 +259,7 @@ export function scheduleSeasonStartsTomorrowNotifications(): void {
       });
 
       for (const season of seasons) {
-        await sendLeagueStartsTomorrowNotifications(season.id);
+        await sendSeasonStartsTomorrowNotifications(season.id);
       }
 
       logger.info("League starts tomorrow notifications sent", {
@@ -276,15 +278,16 @@ export function scheduleSeasonStartsTomorrowNotifications(): void {
 }
 
 /**
- * Check and send league started welcome notifications
+ * Check and send season started welcome notifications
  * Runs daily at 8:00 AM
  */
-export function scheduleLeagueStartedNotifications(): void {
-  // Production: cron.schedule("0 8 * * *", async () => {
+export function scheduleSeasonStartedNotifications(): void {
+  // Production: 
+  // cron.schedule("0 8 * * *", async () => {
   // TESTING: every 5 mins
-  cron.schedule("*/5 * * * *", async () => {
+  cron.schedule("* * * * *", async () => {
     try {
-      logger.info("Running league started job");
+      logger.info("Running season started job");
 
       const today = new Date();
       today.setHours(0, 0, 0, 0);
@@ -304,7 +307,7 @@ export function scheduleLeagueStartedNotifications(): void {
       });
 
       for (const season of seasons) {
-        await sendSeasonStartedWelcomeNotifications(season.id);
+        await sendSeasonWelcomeNotifications(season.id);
       }
 
       logger.info("Season started notifications sent", {
@@ -732,7 +735,8 @@ export function initializeNotificationJobs(): void {
   scheduleScoreSubmissionReminders();
   scheduleSeasonStartingSoonNotifications();
   scheduleSeasonStartsTomorrowNotifications();
-  scheduleLeagueStartedNotifications();
+  scheduleSeasonStartedNotifications();
+
   scheduleFinalWeekAlerts();
   scheduleMidSeasonUpdates();
   scheduleWeeklyRankingUpdates();

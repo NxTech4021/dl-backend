@@ -82,7 +82,7 @@ export async function sendSeasonStartingSoonNotifications(seasonId: string): Pro
 /**
  * Send league starts tomorrow notification
  */
-export async function sendLeagueStartsTomorrowNotifications(seasonId: string): Promise<void> {
+export async function sendSeasonStartsTomorrowNotifications(seasonId: string): Promise<void> {
   try {
     const season = await prisma.season.findUnique({
       where: { id: seasonId },
@@ -118,7 +118,7 @@ export async function sendLeagueStartsTomorrowNotifications(seasonId: string): P
 /**
  * Send league started welcome notification
  */
-export async function sendSeasonStartedWelcomeNotifications(seasonId: string): Promise<void> {
+export async function sendSeasonWelcomeNotifications(seasonId: string): Promise<void> {
   try {
     const season = await prisma.season.findUnique({
       where: { id: seasonId },
