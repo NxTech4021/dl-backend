@@ -63,6 +63,7 @@ export const NOTIFICATION_DELIVERY_MAP: Record<string, NotificationDeliveryType>
   DIVISION_REBALANCED: NotificationDeliveryType.PUSH,
   DIVISION_UPDATE_NEW_PLAYER: NotificationDeliveryType.PUSH,
   WINNING_STREAK: NotificationDeliveryType.PUSH,
+  LEAGUE_ANNOUNCEMENT: NotificationDeliveryType.PUSH,
   SCHEDULE_MATCH_SOON: NotificationDeliveryType.PUSH,
   EARLY_SEASON_NUDGE: NotificationDeliveryType.PUSH,
   MID_SEASON_UPDATE: NotificationDeliveryType.PUSH,

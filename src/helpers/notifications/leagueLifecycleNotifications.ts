@@ -219,10 +219,10 @@ export const leagueLifecycleNotifications = {
   }),
 
   newLeagueAnnouncement: (location: string, sport: string): NotificationPayload => ({
-    type: NOTIFICATION_TYPES.SEASON_REGISTRATION_OPEN,
-    category: getCategoryForNotificationType(NOTIFICATION_TYPES.SEASON_REGISTRATION_OPEN),
+    type: NOTIFICATION_TYPES.LEAGUE_ANNOUNCEMENT,
+    category: getCategoryForNotificationType(NOTIFICATION_TYPES.LEAGUE_ANNOUNCEMENT),
     title: 'New League Opening',
-    message: `New ${location} ${sport} League is now open. Join now`,
+    message: `New ${location}  League for ${sport} is now open!`,
     metadata: { location, sport },
   }),
 
@@ -258,10 +258,10 @@ export const leagueLifecycleNotifications = {
     metadata: { leagueName },
   }),
 
-  leagueStartsTomorrow: (seasonName: string, leagueName: string): NotificationPayload => ({
+  seasonStartsTomorrow: (seasonName: string, leagueName: string): NotificationPayload => ({
     type: NOTIFICATION_TYPES.SEASON_STARTING_SOON,
     category: getCategoryForNotificationType(NOTIFICATION_TYPES.SEASON_STARTING_SOON),
-    title: 'League Starts Tomorrow',
+    title: 'Season Starts Tomorrow',
     message: `${seasonName} of the ${leagueName} starts tomorrow! Get ready for matches`,
     metadata: { seasonName, leagueName },
   }),
