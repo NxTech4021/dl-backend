@@ -34,17 +34,32 @@ export interface PlayerRatingResponse {
   gameType: GameType;
 }
 
+export interface SetScoreDetail {
+  setNumber: number;
+  userGames: number;
+  opponentGames: number;
+  userWonSet: boolean;
+  hasTiebreak: boolean;
+  userTiebreak: number | null;
+  opponentTiebreak: number | null;
+}
+
 export interface RatingHistoryEntry {
   id: string;
   matchId: string | null;
   ratingBefore: number;
   ratingAfter: number;
   delta: number;
+  rdBefore: number | null;
+  rdAfter: number | null;
   reason: RatingChangeReason;
   notes: string | null;
   createdAt: Date;
   matchDate: Date | null;
   adversary: string | null;
+  adversaryImage: string | null;
+  result: 'W' | 'L' | null;
+  setScores: SetScoreDetail[];
 }
 
 export interface CreateInitialRatingInput {
@@ -171,7 +186,7 @@ export async function getPlayerRatingHistory(
     return [];
   }
 
-  // Get history entries
+  // Get history entries with full match details
   const history = await prisma.ratingHistory.findMany({
     where: { playerRatingId: rating.id },
     include: {
@@ -179,16 +194,27 @@ export async function getPlayerRatingHistory(
         select: {
           id: true,
           matchDate: true,
+          outcome: true,
+          setScores: true, // Json fallback for scores
           participants: {
-            where: {
-              userId: { not: userId }
-            },
             select: {
+              userId: true,
+              team: true,
               user: {
-                select: { name: true }
+                select: { name: true, image: true }
               }
+            }
+          },
+          scores: {
+            select: {
+              setNumber: true,
+              player1Games: true,
+              player2Games: true,
+              hasTiebreak: true,
+              player1Tiebreak: true,
+              player2Tiebreak: true
             },
-            take: 1
+            orderBy: { setNumber: 'asc' }
           }
         }
       }
@@ -197,18 +223,106 @@ export async function getPlayerRatingHistory(
     take: limit
   });
 
-  return history.map(entry => ({
-    id: entry.id,
-    matchId: entry.matchId,
-    ratingBefore: entry.ratingBefore,
-    ratingAfter: entry.ratingAfter,
-    delta: entry.delta,
-    reason: entry.reason,
-    notes: entry.notes,
-    createdAt: entry.createdAt,
-    matchDate: entry.match?.matchDate || null,
-    adversary: entry.match?.participants[0]?.user?.name || null
-  }));
+  return history.map(entry => {
+    const match = entry.match;
+    let adversary: string | null = null;
+    let adversaryImage: string | null = null;
+    let result: 'W' | 'L' | null = null;
+    let setScores: SetScoreDetail[] = [];
+
+    if (match) {
+      // Find user's team and opponent
+      const userParticipant = match.participants.find(p => p.userId === userId);
+      const opponentParticipant = match.participants.find(p => p.userId !== userId);
+
+      adversary = opponentParticipant?.user?.name || null;
+      adversaryImage = opponentParticipant?.user?.image || null;
+
+      // Determine if user won based on outcome and team
+      if (match.outcome && userParticipant?.team) {
+        const userTeam = userParticipant.team;
+        result = match.outcome === userTeam ? 'W' : 'L';
+      } else {
+        // Fallback: use delta to determine result
+        result = entry.delta > 0 ? 'W' : 'L';
+      }
+
+      // Transform scores to user's perspective
+      // In MatchScore: player1 = team1, player2 = team2
+      const userIsTeam1 = userParticipant?.team === 'team1';
+
+      // First try MatchScore relation, fallback to setScores Json
+      let rawScores: any[] = match.scores;
+
+      if ((!rawScores || rawScores.length === 0) && match.setScores) {
+        try {
+          const parsedScores = typeof match.setScores === 'string'
+            ? JSON.parse(match.setScores)
+            : match.setScores;
+
+          // Handle both formats:
+          // 1. { sets: [...] } - nested structure from seed data
+          // 2. [...] - direct array format
+          let setsArray: any[] = [];
+          if (Array.isArray(parsedScores)) {
+            setsArray = parsedScores;
+          } else if (parsedScores?.sets && Array.isArray(parsedScores.sets)) {
+            setsArray = parsedScores.sets;
+          }
+
+          if (setsArray.length > 0) {
+            rawScores = setsArray.map((s: any, index: number) => ({
+              // setNumber: Tennis uses setNumber, Pickleball uses gameNumber, seed uses index
+              setNumber: s.setNumber ?? s.gameNumber ?? index + 1,
+              // player1Games: Tennis/Padel use team1Games, Pickleball uses team1Points, seed uses player1
+              player1Games: s.team1Games ?? s.player1Games ?? s.team1Points ?? s.player1 ?? 0,
+              player2Games: s.team2Games ?? s.player2Games ?? s.team2Points ?? s.player2 ?? 0,
+              hasTiebreak: s.hasTiebreak ?? false,
+              player1Tiebreak: s.team1Tiebreak ?? s.player1Tiebreak ?? null,
+              player2Tiebreak: s.team2Tiebreak ?? s.player2Tiebreak ?? null,
+            }));
+          }
+        } catch (e) {
+          rawScores = [];
+        }
+      }
+
+      setScores = rawScores.map(score => {
+        const userGames = userIsTeam1 ? score.player1Games : score.player2Games;
+        const opponentGames = userIsTeam1 ? score.player2Games : score.player1Games;
+        const userTiebreak = userIsTeam1 ? score.player1Tiebreak : score.player2Tiebreak;
+        const opponentTiebreak = userIsTeam1 ? score.player2Tiebreak : score.player1Tiebreak;
+
+        return {
+          setNumber: score.setNumber,
+          userGames,
+          opponentGames,
+          userWonSet: userGames > opponentGames,
+          hasTiebreak: score.hasTiebreak,
+          userTiebreak: userTiebreak ?? null,
+          opponentTiebreak: opponentTiebreak ?? null
+        };
+      });
+    }
+
+    return {
+      id: entry.id,
+      matchId: entry.matchId,
+      ratingBefore: entry.ratingBefore,
+      ratingAfter: entry.ratingAfter,
+      delta: entry.delta,
+      rdBefore: entry.rdBefore ?? null,
+      rdAfter: entry.rdAfter ?? null,
+      reason: entry.reason,
+      notes: entry.notes,
+      createdAt: entry.createdAt,
+      matchDate: match?.matchDate || null,
+      adversary,
+      adversaryImage,
+      result,
+      setScores
+    };
+  });
 }
 
 /**
