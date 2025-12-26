@@ -157,6 +157,52 @@ export const createSeason = async (req: Request, res: Response) => {
 
     const season = await createSeasonService(seasonData);
 
+    // 🆕 Send new season announcement to ALL users if season is active
+    if (isActive) {
+      try {
+        // Get season with leagues to extract location and sport information
+        const seasonWithLeagues = await prisma.season.findUnique({
+          where: { id: season.id },
+          include: {
+            leagues: {
+              select: {
+                name: true,
+                location: true,
+                sportType: true
+              }
+            }
+          }
+        });
+
+        if (seasonWithLeagues && seasonWithLeagues.leagues.length > 0) {
+          const league = seasonWithLeagues.leagues[0]; // Use first league for announcement
+          
+          // Only proceed if we have valid league data
+          if (league && league.location && league.sportType) {
+            const notificationData = leagueLifecycleNotifications.newSeasonAnnouncement(
+              season.name,
+              league.location,
+              league.sportType
+            );
+
+            // Get all users to broadcast to everyone
+            const allUsers = await prisma.user.findMany({ select: { id: true } });
+            const userIds = allUsers.map(u => u.id);
+
+            // Send to all users
+            await notificationService.createNotification({
+              ...notificationData,
+              seasonId: season.id,
+              userIds
+            });
+          }
+        }
+      } catch (notificationError) {
+        console.error("Error sending new season announcement:", notificationError);
+        // Don't fail season creation if notification fails
+      }
+    }
+
     // 🆕 Send notification if season is starting soon
     if (isActive && startDate) {
       const startDateObj = new Date(startDate);
@@ -171,7 +217,7 @@ export const createSeason = async (req: Request, res: Response) => {
         });
 
         if (registeredUsers.length > 0) {
-          const notificationData = leagueLifecycleNotifications.leagueStarting3Days(
+          const notificationData = leagueLifecycleNotifications.seasonStarting3Days(
             season.name
           );
 

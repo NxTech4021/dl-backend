@@ -9,6 +9,7 @@ import {
   Prisma,
   AdminActionType,
 } from "@prisma/client";
+import { prisma } from "../lib/prisma";
 import { ApiResponse } from "../utils/ApiResponse";
 import { logLeagueAction } from "../services/admin/adminLogService";
 import { notificationService } from '../services/notificationService';
