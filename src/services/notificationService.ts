@@ -149,11 +149,7 @@ export class NotificationService {
         }
       });
 
-      // Persist metadata to database (so it's available on page refresh)
-      if (metadata && Object.keys(metadata).length > 0) {
-        createData.metadata = metadata;
-      }
-
+     
       // Create notification in database
       const notification = await this.prisma.notification.create({
         data: createData,
