@@ -250,6 +250,173 @@ export const getFriendlyMatchById = async (req: Request, res: Response) => {
 };
 
 /**
+ * Get full friendly match details formatted for the match-details page
+ * Returns ALL data needed to display the match details UI
+ * GET /api/friendly/:id/details
+ */
+export const getFriendlyMatchDetails = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    if (!id) {
+      return res.status(400).json({ error: 'Match ID is required' });
+    }
+
+    const match = await prisma.match.findFirst({
+      where: { id, isFriendly: true } as any,
+      include: {
+        createdBy: {
+          select: { id: true, name: true, username: true, image: true }
+        },
+        participants: {
+          include: {
+            user: {
+              select: { id: true, name: true, username: true, image: true }
+            }
+          }
+        },
+        scores: { orderBy: { setNumber: 'asc' } },
+        pickleballScores: { orderBy: { gameNumber: 'asc' } },
+        comments: {
+          include: {
+            user: { select: { id: true, name: true, username: true, image: true } }
+          },
+          orderBy: { createdAt: 'asc' }
+        },
+        disputes: {
+          include: {
+            raisedByUser: {
+              select: { id: true, name: true, image: true }
+            }
+          }
+        }
+      }
+    }) as any;
+
+    if (!match) {
+      return res.status(404).json({ error: 'Friendly match not found' });
+    }
+
+    // Format match date and time
+    const matchDate = match.matchDate || match.scheduledStartTime;
+    const matchDateTime = matchDate ? new Date(matchDate) : null;
+    const formattedDate = matchDateTime
+      ? matchDateTime.toLocaleDateString('en-US', {
+          month: 'short',
+          day: '2-digit',
+          year: 'numeric'
+        })
+      : null;
+    const formattedTime = matchDateTime
+      ? matchDateTime.toLocaleTimeString('en-US', {
+          hour: 'numeric',
+          minute: '2-digit',
+          hour12: true
+        })
+      : null;
+
+    // Format participants for the frontend
+    // Sort by team and role for consistent display
+    const sortedParticipants = [...(match.participants || [])].sort((a: any, b: any) => {
+      // team1 before team2
+      if (a.team !== b.team) {
+        return a.team === 'team1' ? -1 : 1;
+      }
+      // CAPTAIN before PARTNER within same team
+      if (a.role !== b.role) {
+        return a.role === 'CAPTAIN' ? -1 : 1;
+      }
+      return 0;
+    });
+
+    const formattedParticipants = sortedParticipants.map((p: any) => ({
+      id: p.id,
+      odix: p.odix,
+      userId: p.userId,
+      name: p.user?.name || p.user?.username || 'Unknown Player',
+      image: p.user?.image || null,
+      role: p.role,
+      team: p.team,
+      invitationStatus: p.invitationStatus
+    }));
+
+    // Determine if match is disputed
+    const isDisputed = match.disputes && match.disputes.length > 0;
+
+    // Build the comprehensive response
+    const response = {
+      // Core identifiers
+      matchId: match.id,
+      matchType: match.matchType,
+      status: match.status,
+
+      // Date/time (formatted for display)
+      date: formattedDate,
+      time: formattedTime,
+      matchDate: matchDate, // ISO string for calculations
+      duration: match.duration || 2,
+
+      // Location
+      location: match.location || match.venue || null,
+      venue: match.venue || null,
+      description: match.notes || match.description || null,
+
+      // Sport info (friendly matches don't have league/season/division)
+      sportType: match.sport || 'PICKLEBALL',
+      leagueName: null,
+      season: null,
+      division: null,
+      divisionId: null,
+      seasonId: null,
+      leagueId: null,
+
+      // Participants
+      participants: formattedParticipants,
+
+      // Match booking details
+      courtBooked: match.courtBooked || false,
+      fee: match.fee || 'FREE',
+      feeAmount: match.feeAmount?.toString() || '0',
+
+      // Scores (if completed or submitted)
+      team1Score: match.team1Score,
+      team2Score: match.team2Score,
+      playerScore: match.playerScore,
+      opponentScore: match.opponentScore,
+      scores: match.scores || [],
+      pickleballScores: match.pickleballScores || [],
+
+      // Result submission info
+      createdById: match.createdById,
+      resultSubmittedById: match.resultSubmittedById || null,
+      resultSubmittedAt: match.resultSubmittedAt || null,
+
+      // Dispute info
+      isDisputed,
+      dispute: isDisputed ? match.disputes[0] : null,
+
+      // Friendly match specific info
+      isFriendly: true,
+      isFriendlyRequest: match.isFriendlyRequest || false,
+      requestStatus: match.requestStatus || null,
+      genderRestriction: match.genderRestriction || null,
+      skillLevels: match.skillLevels || [],
+
+      // Comments
+      comments: match.comments || [],
+
+      // Creator info
+      createdBy: match.createdBy,
+    };
+
+    res.json({ data: response });
+  } catch (error) {
+    console.error('Get Friendly Match Details Error:', error);
+    const message = error instanceof Error ? error.message : 'Failed to retrieve friendly match details';
+    res.status(500).json({ error: message });
+  }
+};
+
+/**
  * Join a friendly match
  * POST /api/friendly/:id/join
  */

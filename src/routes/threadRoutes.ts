@@ -2,6 +2,7 @@ import { Router } from "express";
 import {
   createThread,
   getThreads,
+  getThread,
   sendMessage,
   getMessages,
   getThreadMembers,
@@ -18,6 +19,7 @@ const chatRoutes = Router();
 // Thread management - all routes require authentication
 chatRoutes.post("/threads/", verifyAuth, createThread);
 chatRoutes.get("/threads/:userId", verifyAuth, getThreads);
+chatRoutes.get("/thread/:threadId", verifyAuth, getThread);
 chatRoutes.get("/threads/:threadId/members", verifyAuth, getThreadMembers);
 chatRoutes.get('/threads/users/available/:userId', verifyAuth, getAvailableUsers);
 

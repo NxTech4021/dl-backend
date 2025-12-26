@@ -358,6 +358,142 @@ export const getThreads = async (req: Request, res: Response) => {
   }
 };
 
+// Get a single thread by ID
+export const getThread = async (req: Request, res: Response) => {
+  try {
+    const { threadId } = req.params;
+    const userId = (req as any).user?.id;
+
+    console.log(`📋 Fetching thread: ${threadId} for user: ${userId}`);
+
+    if (!threadId) {
+      return res.status(400).json({ error: "Thread ID is required" });
+    }
+
+    const thread = await prisma.thread.findUnique({
+      where: { id: threadId },
+      include: {
+        members: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                name: true,
+                role: true,
+                username: true,
+                email: true,
+                phoneNumber: true,
+                image: true,
+              },
+            },
+          },
+        },
+        messages: {
+          orderBy: { createdAt: "desc" },
+          take: 1,
+          include: {
+            sender: {
+              select: {
+                id: true,
+                name: true,
+                username: true,
+                image: true
+              },
+            },
+          },
+        },
+        division: {
+          select: {
+            id: true,
+            name: true,
+            gameType: true,
+            genderCategory: true,
+            league: {
+              select: {
+                id: true,
+                name: true,
+                sportType: true
+              }
+            },
+            season: {
+              select: {
+                id: true,
+                name: true,
+                startDate: true,
+                endDate: true,
+                status: true
+              }
+            }
+          }
+        },
+        _count: {
+          select: { messages: true },
+        },
+      },
+    });
+
+    if (!thread) {
+      return res.status(404).json({ error: "Thread not found" });
+    }
+
+    // Check if user is a member of this thread
+    const isMember = thread.members.some(m => m.userId === userId);
+    if (!isMember) {
+      return res.status(403).json({ error: "You are not a member of this thread" });
+    }
+
+    // Get unread count for current user
+    const userThread = thread.members.find(m => m.userId === userId);
+
+    // Format division data
+    const divisionData = thread.division ? {
+      id: thread.division.id,
+      name: thread.division.name,
+      gameType: thread.division.gameType,
+      genderCategory: thread.division.genderCategory,
+      league: thread.division.league,
+      season: thread.division.season
+    } : null;
+
+    // Parse matchData in last message if it's a JSON string
+    const lastMessage = thread.messages?.[0];
+    if (lastMessage && lastMessage.matchData && typeof lastMessage.matchData === 'string') {
+      try {
+        lastMessage.matchData = JSON.parse(lastMessage.matchData);
+      } catch (e) {
+        console.warn(`  ⚠️ Failed to parse matchData for last message in thread ${thread.id}`);
+        lastMessage.matchData = null;
+      }
+    }
+
+    const threadWithData = {
+      ...thread,
+      unreadCount: userThread?.unreadCount || 0,
+      sportType: thread.division?.league?.sportType || null,
+      division: divisionData,
+      metadata: {
+        divisionId: thread.division?.id,
+        seasonId: thread.division?.season?.id,
+        leagueId: thread.division?.league?.id,
+        leagueName: thread.division?.league?.name,
+        seasonName: thread.division?.season?.name,
+        divisionName: thread.division?.name,
+        gameType: thread.division?.gameType,
+        genderCategory: thread.division?.genderCategory
+      }
+    };
+
+    console.log(`✅ Found thread ${threadId}`);
+    return res.json({
+      success: true,
+      data: threadWithData,
+    });
+  } catch (error) {
+    console.error("❌ Error fetching thread:", error);
+    return res.status(500).json({ error: "Failed to fetch thread" });
+  }
+};
+
 // Send a message in a thread
 export const sendMessage = async (req: Request, res: Response) => {
   const { threadId } = req.params;

@@ -4,6 +4,7 @@ import {
   createFriendlyMatch,
   getFriendlyMatches,
   getFriendlyMatchById,
+  getFriendlyMatchDetails,
   getFriendlyMatchesSummary,
   joinFriendlyMatch,
   submitFriendlyResult,
@@ -26,6 +27,7 @@ friendlyRoutes.use(verifyAuth);
 friendlyRoutes.post("/create", createFriendlyMatch);
 friendlyRoutes.get("/summary", getFriendlyMatchesSummary); // Lightweight endpoint for change detection
 friendlyRoutes.get("/", getFriendlyMatches);
+friendlyRoutes.get("/:id/details", getFriendlyMatchDetails); // Full match details for UI display
 friendlyRoutes.get("/:id", getFriendlyMatchById);
 friendlyRoutes.post("/:id/join", joinFriendlyMatch);
 friendlyRoutes.post("/:id/result", submitFriendlyResult);

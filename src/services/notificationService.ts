@@ -307,7 +307,14 @@ export class NotificationService {
           archive: un.archive,
           createdAt: un.notification.createdAt,
           readAt: un.readAt || undefined,
-          metadata: un.notification.metadata as Record<string, any> | undefined,
+          metadata: {
+            ...(un.notification.metadata as Record<string, any> || {}),
+            // Include entity IDs from separate DB columns for navigation
+            ...(un.notification.matchId && { matchId: un.notification.matchId }),
+            ...(un.notification.threadId && { threadId: un.notification.threadId }),
+            ...(un.notification.seasonId && { seasonId: un.notification.seasonId }),
+            ...(un.notification.divisionId && { divisionId: un.notification.divisionId }),
+          },
         })
       );
 
