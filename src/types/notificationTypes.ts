@@ -226,7 +226,7 @@ export interface CreateNotificationData extends NotificationPayload {
 
 export interface NotificationResult {
   id: string;
-  title: string | undefined; 
+  title: string | undefined;
   message: string;
   category: NotificationCategory;
   type: string | undefined;
@@ -234,7 +234,7 @@ export interface NotificationResult {
   archive: boolean;
   createdAt: Date;
   readAt: Date | undefined;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, any> | undefined;
 }
 
 export interface NotificationFilter {
