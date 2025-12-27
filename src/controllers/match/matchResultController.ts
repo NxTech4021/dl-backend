@@ -6,8 +6,43 @@
 import { Request, Response } from 'express';
 import { getMatchResultService } from '../../services/match/matchResultService';
 import { DisputeCategory, WalkoverReason } from '@prisma/client';
+import { notificationService } from '../../services/notificationService';
+import { matchManagementNotifications } from '../../helpers/notifications/matchManagementNotifications';
+import { prisma } from '../../lib/prisma';
 
 const matchResultService = getMatchResultService();
+
+/**
+ * Helper function to get opponent name from match
+ */
+const getOpponentName = async (matchId: string, currentUserId: string): Promise<string> => {
+  const participants = await prisma.matchParticipant.findMany({
+    where: { 
+      matchId,
+      userId: { not: currentUserId }
+    },
+    include: {
+      user: {
+        select: { name: true }
+      }
+    },
+  });
+  return participants[0]?.user.name || 'Opponent';
+};
+
+/**
+ * Helper function to get other participant user IDs
+ */
+const getOtherParticipants = async (matchId: string, excludeUserId: string): Promise<string[]> => {
+  const participants = await prisma.matchParticipant.findMany({
+    where: { 
+      matchId,
+      userId: { not: excludeUserId }
+    },
+    select: { userId: true },
+  });
+  return participants.map(p => p.userId);
+};
 
 /**
  * Submit match result
@@ -44,6 +79,27 @@ export const submitResult = async (req: Request, res: Response) => {
       evidence,
       isUnfinished: isUnfinished === true
     });
+
+    // Notify other participants about score submission
+    try {
+      const submitterName = req.user?.name || 'Opponent';
+      const otherParticipants = await getOtherParticipants(id, userId);
+      
+      if (otherParticipants.length > 0) {
+        const notification = matchManagementNotifications.opponentSubmittedScore(
+          submitterName
+        );
+        
+        await notificationService.createNotification({
+          ...notification,
+          userIds: otherParticipants,
+          matchId: match.id,
+        });
+      }
+    } catch (notifError) {
+      console.error('Failed to send result submission notification:', notifError);
+      // Don't fail the request if notification fails
+    }
 
     res.json(match);
   } catch (error) {
@@ -89,6 +145,47 @@ export const confirmResult = async (req: Request, res: Response) => {
       evidenceUrl
     });
 
+    // Send notification based on confirmation status
+    try {
+      const confirmerName = req.user?.name || 'Opponent';
+      const otherParticipants = await getOtherParticipants(id, userId);
+      
+      if (otherParticipants.length > 0) {
+        if (confirmed) {
+          // Score confirmed
+          let scoreDisplay = 'Final';
+          if (match.team1Score !== null && match.team2Score !== null) {
+            scoreDisplay = `${match.team1Score}-${match.team2Score}`;
+          }
+
+          const notification = matchManagementNotifications.scoreAutoConfirmed(
+            confirmerName,
+            scoreDisplay
+          );
+          
+          await notificationService.createNotification({
+            ...notification,
+            userIds: otherParticipants,
+            matchId: match.id,
+          });
+        } else {
+          // Score disputed
+          const notification = matchManagementNotifications.scoreDisputeAlert(
+            confirmerName
+          );
+          
+          await notificationService.createNotification({
+            ...notification,
+            userIds: otherParticipants,
+            matchId: match.id,
+          });
+        }
+      }
+    } catch (notifError) {
+      console.error('Failed to send confirmation notification:', notifError);
+      // Don't fail the request if notification fails
+    }
+
     res.json(match);
   } catch (error) {
     console.error('Confirm Result Error:', error);
@@ -130,6 +227,71 @@ export const submitWalkover = async (req: Request, res: Response) => {
       reason: reason as WalkoverReason,
       reasonDetail
     });
+
+    // Send walkover notifications to participants
+    try {
+      const reporter = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { name: true }
+      });
+
+      const defaulter = await prisma.user.findUnique({
+        where: { id: defaultingUserId },
+        select: { name: true }
+      });
+
+      // Notify the defaulting player about the walkover loss
+      const walkoverLostNotif = matchManagementNotifications.matchWalkoverLost(
+        reporter?.name || 'Opponent'
+      );
+      
+      await notificationService.createNotification({
+        ...walkoverLostNotif,
+        userIds: defaultingUserId,
+        matchId: match.id,
+      });
+
+      // Notify the reporting player about the walkover win (if they're not the same person)
+      if (userId !== defaultingUserId) {
+        const walkoverWonNotif = matchManagementNotifications.matchWalkoverWon(
+          defaulter?.name || 'Opponent'
+        );
+        
+        await notificationService.createNotification({
+          ...walkoverWonNotif,
+          userIds: userId,
+          matchId: match.id,
+        });
+      }
+
+      // If no-show, send additional warning notification
+      if (reason === 'NO_SHOW') {
+        const noShowWarningNotif = matchManagementNotifications.noShowStrikeWarning(
+          reporter?.name || 'Opponent'
+        );
+        
+        await notificationService.createNotification({
+          ...noShowWarningNotif,
+          userIds: defaultingUserId,
+          matchId: match.id,
+        });
+
+        // Notify reporter that opponent was claimed as no-show
+        const opponentClaimsNotif = matchManagementNotifications.opponentClaimsNoShow(
+          defaulter?.name || 'Player',
+          new Date().toLocaleDateString()
+        );
+        
+        await notificationService.createNotification({
+          ...opponentClaimsNotif,
+          userIds: defaultingUserId,
+          matchId: match.id,
+        });
+      }
+    } catch (notifError) {
+      console.error('Failed to send walkover notification:', notifError);
+      // Don't fail the request if notification fails
+    }
 
     res.json(match);
   } catch (error) {

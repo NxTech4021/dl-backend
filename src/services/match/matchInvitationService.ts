@@ -1119,10 +1119,23 @@ export class MatchInvitationService {
       const confirmedTime = match.matchDate;
       const participantIds = match.participants.map(p => p.userId);
 
+      // Format date and time for cleaner notification display
+      const formattedDate = confirmedTime.toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric'
+      });
+      const formattedTime = confirmedTime.toLocaleTimeString('en-US', {
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true
+      });
+      const venue = match.venue || match.location || 'TBD';
+
       await this.notificationService.createNotification({
         type: 'MATCH_TIME_CONFIRMED',
         title: 'Match Time Confirmed',
-        message: `Your match has been scheduled for ${confirmedTime.toLocaleString()}`,
+        message: `Your match is confirmed\n📅 ${formattedDate} • ${formattedTime}\n📍 ${venue}`,
         category: 'MATCH',
         matchId,
         userIds: participantIds

@@ -12,12 +12,15 @@ import {
   sendScoreSubmissionReminder,
 } from "../services/notification/matchNotificationService";
 import {
-  sendLeagueStartingSoonNotifications,
-  sendLeagueStartsTomorrowNotifications,
-  sendLeagueStartedWelcomeNotifications,
+  sendSeasonStartingSoonNotifications,
+  sendSeasonStartsTomorrowNotifications,
+  sendSeasonWelcomeNotifications,
   sendFinalWeekAlertNotifications,
   sendMidSeasonUpdateNotifications,
+  sendRegistrationClosing3DaysNotifications,
+  sendRegistrationClosing24hNotifications,
 } from "../services/notification/leagueNotificationService";
+import { leagueLifecycleNotifications } from '../helpers/notifications';
 import {
   sendWeeklyRankingUpdates,
   sendMonthlyDMRRecap,
@@ -179,13 +182,17 @@ export function scheduleScoreSubmissionReminders(): void {
 }
 
 /**
- * Check and send league starting soon notifications (3 days before)
+ * Check and send Season Starting soon notifications (3 days before)
  * Runs daily at 10:00 AM
  */
-export function scheduleLeagueStartingSoonNotifications(): void {
+export function scheduleSeasonStartingSoonNotifications(): void {
+  // Production: 
   cron.schedule("0 10 * * *", async () => {
+  
+  // TESTING: every min
+  // cron.schedule("* * * * *", async () => {
     try {
-      logger.info("Running league starting soon job");
+      logger.info("Running Season starting soon job");
 
       const now = new Date();
       const in3Days = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000);
@@ -203,10 +210,10 @@ export function scheduleLeagueStartingSoonNotifications(): void {
       });
 
       for (const season of seasons) {
-        await sendLeagueStartingSoonNotifications(season.id);
+        await sendSeasonStartingSoonNotifications(season.id);
       }
 
-      logger.info("League starting soon notifications sent", {
+      logger.info("Season starting soon notifications sent", {
         count: seasons.length,
       });
     } catch (error) {
@@ -218,17 +225,20 @@ export function scheduleLeagueStartingSoonNotifications(): void {
     }
   });
 
-  logger.info("League starting soon job scheduled");
+  logger.info("Season starting soon job scheduled");
 }
 
 /**
- * Check and send league starts tomorrow notifications
+ * Check and send Season starts tomorrow notifications
  * Runs daily at 8:00 PM
  */
-export function scheduleLeagueStartsTomorrowNotifications(): void {
+export function scheduleSeasonStartsTomorrowNotifications(): void {
+  // Production: 
   cron.schedule("0 20 * * *", async () => {
+  // TESTING: every 5 mins
+  // cron.schedule("* * * * *", async () => {
     try {
-      logger.info("Running league starts tomorrow job");
+      logger.info("Running Season starts tomorrow job");
 
       const tomorrow = new Date();
       tomorrow.setDate(tomorrow.getDate() + 1);
@@ -249,7 +259,7 @@ export function scheduleLeagueStartsTomorrowNotifications(): void {
       });
 
       for (const season of seasons) {
-        await sendLeagueStartsTomorrowNotifications(season.id);
+        await sendSeasonStartsTomorrowNotifications(season.id);
       }
 
       logger.info("League starts tomorrow notifications sent", {
@@ -268,13 +278,16 @@ export function scheduleLeagueStartsTomorrowNotifications(): void {
 }
 
 /**
- * Check and send league started welcome notifications
+ * Check and send season started welcome notifications
  * Runs daily at 8:00 AM
  */
-export function scheduleLeagueStartedNotifications(): void {
+export function scheduleSeasonStartedNotifications(): void {
+  // Production: 
   cron.schedule("0 8 * * *", async () => {
+  // TESTING: every 5 mins
+  // cron.schedule("* * * * *", async () => {
     try {
-      logger.info("Running league started job");
+      logger.info("Running season started job");
 
       const today = new Date();
       today.setHours(0, 0, 0, 0);
@@ -294,22 +307,22 @@ export function scheduleLeagueStartedNotifications(): void {
       });
 
       for (const season of seasons) {
-        await sendLeagueStartedWelcomeNotifications(season.id);
+        await sendSeasonWelcomeNotifications(season.id);
       }
 
-      logger.info("League started notifications sent", {
+      logger.info("Season started notifications sent", {
         count: seasons.length,
       });
     } catch (error) {
       logger.error(
-        "Failed to send league started notifications",
+        "Failed to send Season started notifications",
         {},
         error as Error
       );
     }
   });
 
-  logger.info("League started job scheduled");
+  logger.info("Season started job scheduled");
 }
 
 /**
@@ -347,6 +360,133 @@ export function scheduleFinalWeekAlerts(): void {
   });
 
   logger.info("Final week alert job scheduled");
+}
+
+/**
+ * Check and send last-match-deadline (48 hours before season end)
+ * Runs daily at 10:00 AM
+ */
+export function scheduleLastMatchDeadline48h(): void {
+  cron.schedule('0 10 * * *', async () => {
+    try {
+      logger.info('Running last-match-deadline 48h job');
+
+      const now = new Date();
+      const in48Hours = new Date(now.getTime() + 48 * 60 * 60 * 1000);
+      const in49Hours = new Date(now.getTime() + 49 * 60 * 60 * 1000);
+
+      const seasons = await prisma.season.findMany({
+        where: {
+          endDate: { gte: in48Hours, lte: in49Hours },
+          status: 'ACTIVE',
+        },
+        select: { id: true, name: true },
+      });
+
+      for (const season of seasons) {
+        try {
+          const members = await prisma.seasonMembership.findMany({
+            where: { seasonId: season.id, status: 'ACTIVE' },
+            select: { userId: true },
+          });
+
+          if (members.length === 0) continue;
+
+          const userIds = members.map(m => m.userId);
+
+          const notif = leagueLifecycleNotifications.lastMatchDeadline48h();
+
+          await notificationService.createNotification({
+            userIds,
+            ...notif,
+            seasonId: season.id,
+          });
+
+          logger.info('Last-match 48h notifications sent', { seasonId: season.id, count: userIds.length });
+        } catch (innerErr) {
+          logger.error('Failed sending last-match 48h for season', { seasonId: season.id }, innerErr as Error);
+        }
+      }
+    } catch (error) {
+      logger.error('Failed to run last-match-deadline 48h job', {}, error as Error);
+    }
+  });
+
+  logger.info('Last-match-deadline 48h job scheduled');
+}
+
+/**
+ * Check and send registration closing notifications (3 days before regiDeadline)
+ * Runs daily at 10:00 AM
+ */
+export function scheduleRegistrationClosing3Days(): void {
+  cron.schedule('0 10 * * *', async () => {
+    try {
+      logger.info('Running registration closing 3d job');
+
+      const now = new Date();
+      const in3Days = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000);
+      const in4Days = new Date(now.getTime() + 4 * 24 * 60 * 60 * 1000);
+
+      const seasons = await prisma.season.findMany({
+        where: {
+          regiDeadline: { gte: in3Days, lte: in4Days },
+          status: 'UPCOMING',
+        },
+        select: { id: true, name: true },
+      });
+
+      for (const season of seasons) {
+        try {
+          await sendRegistrationClosing3DaysNotifications(season.id);
+          logger.info('Registration closing 3d notifications processed', { seasonId: season.id });
+        } catch (innerErr) {
+          logger.error('Failed sending registration closing 3d for season', { seasonId: season.id }, innerErr as Error);
+        }
+      }
+    } catch (error) {
+      logger.error('Failed to run registration closing 3d job', {}, error as Error);
+    }
+  });
+
+  logger.info('Registration closing 3d job scheduled');
+}
+
+/**
+ * Check and send registration closing notifications (24 hours before regiDeadline)
+ * Runs daily at 10:00 AM
+ */
+export function scheduleRegistrationClosing24h(): void {
+  cron.schedule('0 10 * * *', async () => {
+    try {
+      logger.info('Running registration closing 24h job');
+
+      const now = new Date();
+      const in24Hours = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+      const in25Hours = new Date(now.getTime() + 25 * 60 * 60 * 1000);
+
+      const seasons = await prisma.season.findMany({
+        where: {
+          regiDeadline: { gte: in24Hours, lte: in25Hours },
+          status: 'UPCOMING',
+        },
+        select: { id: true, name: true },
+      });
+
+      for (const season of seasons) {
+        try {
+          await sendRegistrationClosing24hNotifications(season.id);
+          logger.info('Registration closing 24h notifications processed', { seasonId: season.id });
+        } catch (innerErr) {
+          logger.error('Failed sending registration closing 24h for season', { seasonId: season.id }, innerErr as Error);
+        }
+      }
+    } catch (error) {
+      logger.error('Failed to run registration closing 24h job', {}, error as Error);
+    }
+  });
+
+  logger.info('Registration closing 24h job scheduled');
 }
 
 /**
@@ -593,14 +733,18 @@ export function initializeNotificationJobs(): void {
   scheduleMatch24hReminders();
   scheduleMatch2hReminders();
   scheduleScoreSubmissionReminders();
-  scheduleLeagueStartingSoonNotifications();
-  scheduleLeagueStartsTomorrowNotifications();
-  scheduleLeagueStartedNotifications();
+  scheduleSeasonStartingSoonNotifications();
+  scheduleSeasonStartsTomorrowNotifications();
+  scheduleSeasonStartedNotifications();
+
   scheduleFinalWeekAlerts();
   scheduleMidSeasonUpdates();
   scheduleWeeklyRankingUpdates();
   scheduleMonthlyDMRRecaps();
   scheduleProfileReminders();
+  scheduleRegistrationClosing3Days();
+  scheduleRegistrationClosing24h();
+  scheduleLastMatchDeadline48h();
   schedulePushTokenCleanup();
 
   logger.info("✅ All notification jobs initialized successfully");

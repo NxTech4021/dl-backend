@@ -37,7 +37,7 @@ export const matchManagementNotifications = {
     type: NOTIFICATION_TYPES.FRIENDLY_MATCH_POSTED,
     category: getCategoryForNotificationType(NOTIFICATION_TYPES.FRIENDLY_MATCH_POSTED),
     title: 'Friendly Match Posted',
-    message: `Your match on ${date} at ${time} at ${venue} is now open for players to join`,
+    message: `📅 ${date} • ${time}\n📍 ${venue}`,
     metadata: { date, time, venue },
   }),
 
@@ -55,7 +55,7 @@ export const matchManagementNotifications = {
     type: NOTIFICATION_TYPES.FRIENDLY_MATCH_JOIN_REQUEST,
     category: getCategoryForNotificationType(NOTIFICATION_TYPES.FRIENDLY_MATCH_JOIN_REQUEST),
     title: 'Join Request',
-    message: `${playerName} wants to join your match on ${date} at ${time}. Accept or decline`,
+    message: `${playerName} wants to join your match\n📅 ${date} • ${time}`,
     metadata: { playerName, date, time },
   }),
 
@@ -63,7 +63,7 @@ export const matchManagementNotifications = {
     type: NOTIFICATION_TYPES.FRIENDLY_MATCH_PLAYER_JOINED,
     category: getCategoryForNotificationType(NOTIFICATION_TYPES.FRIENDLY_MATCH_PLAYER_JOINED),
     title: 'Player Joined',
-    message: `${playerName} joined your match on ${date} at ${time} at ${venue}`,
+    message: `${playerName} joined your match\n📅 ${date} • ${time}\n📍 ${venue}`,
     metadata: { playerName, date, time, venue },
   }),
 
@@ -71,7 +71,7 @@ export const matchManagementNotifications = {
     type: NOTIFICATION_TYPES.FRIENDLY_MATCH_REQUEST_ACCEPTED,
     category: getCategoryForNotificationType(NOTIFICATION_TYPES.FRIENDLY_MATCH_REQUEST_ACCEPTED),
     title: 'Request Accepted!',
-    message: `${hostName} accepted your join request. Match on ${date} at ${time} at ${venue}`,
+    message: `${hostName} accepted your match request\n📅 ${date} • ${time}\n📍 ${venue}`,
     metadata: { hostName, date, time, venue },
   }),
 
@@ -87,7 +87,7 @@ export const matchManagementNotifications = {
     type: NOTIFICATION_TYPES.FRIENDLY_MATCH_CANCELLED,
     category: getCategoryForNotificationType(NOTIFICATION_TYPES.FRIENDLY_MATCH_CANCELLED),
     title: 'Match Cancelled',
-    message: `${hostName} cancelled the match on ${date} at ${time}`,
+    message: `${hostName} cancelled the match\n📅 ${date} • ${time}`,
     metadata: { hostName, date, time },
   }),
 
@@ -95,7 +95,7 @@ export const matchManagementNotifications = {
     type: NOTIFICATION_TYPES.PLAYER_LEFT_FRIENDLY_MATCH,
     category: getCategoryForNotificationType(NOTIFICATION_TYPES.PLAYER_LEFT_FRIENDLY_MATCH),
     title: 'Player Left Match',
-    message: `${playerName} left your match on ${date} at ${time}`,
+    message: `${playerName} left your match\n📅 ${date} • ${time}`,
     metadata: { playerName, date, time },
   }),
 
@@ -111,7 +111,7 @@ export const matchManagementNotifications = {
     type: NOTIFICATION_TYPES.FRIENDLY_MATCH_DETAILS_CHANGED,
     category: getCategoryForNotificationType(NOTIFICATION_TYPES.FRIENDLY_MATCH_DETAILS_CHANGED),
     title: 'Match Details Updated',
-    message: `Match details changed. New: ${date} at ${time} at ${venue}`,
+    message: `Match details have been changed\n📅 ${date} • ${time}\n📍 ${venue}`,
     metadata: { date, time, venue },
   }),
 
@@ -119,7 +119,7 @@ export const matchManagementNotifications = {
     type: NOTIFICATION_TYPES.MATCH_REMINDER,
     category: getCategoryForNotificationType(NOTIFICATION_TYPES.MATCH_REMINDER),
     title: 'Match Tomorrow',
-    message: `Match vs ${opponentName} tomorrow at ${time} at ${venue}`,
+    message: `Match vs ${opponentName} is tomorrow\n📅 ${date} • ${time}\n📍 ${venue}`,
     metadata: { opponentName, date, time, venue },
   }),
 
@@ -127,7 +127,7 @@ export const matchManagementNotifications = {
     type: NOTIFICATION_TYPES.MATCH_REMINDER,
     category: getCategoryForNotificationType(NOTIFICATION_TYPES.MATCH_REMINDER),
     title: 'Match in 2 Hours',
-    message: `⏰ Match vs ${opponentName} at ${time} at ${venue}`,
+    message: `⏰ Match vs ${opponentName} starting soon\n🕐 ${time}\n📍 ${venue}`,
     metadata: { opponentName, time, venue },
   }),
 
@@ -135,7 +135,7 @@ export const matchManagementNotifications = {
     type: NOTIFICATION_TYPES.MATCH_RESCHEDULE_REQUEST,
     category: getCategoryForNotificationType(NOTIFICATION_TYPES.MATCH_RESCHEDULE_REQUEST),
     title: 'Match Change Request',
-    message: `${opponentName} wants to change your match to ${newDate} at ${newTime} at ${newVenue}. Accept or decline`,
+    message: `${opponentName} wants to reschedule\n📅 ${newDate} • ${newTime}\n📍 ${newVenue}`,
     metadata: { opponentName, newDate, newTime, newVenue },
   }),
 
@@ -143,7 +143,7 @@ export const matchManagementNotifications = {
     type: NOTIFICATION_TYPES.MATCH_RESCHEDULE_ACCEPTED,
     category: getCategoryForNotificationType(NOTIFICATION_TYPES.MATCH_RESCHEDULE_ACCEPTED),
     title: 'Change Accepted',
-    message: `${opponentName} accepted the change. Match now ${date} at ${time} at ${venue}`,
+    message: `${opponentName} accepted the reschedule\n📅 ${date} • ${time}\n📍 ${venue}`,
     metadata: { opponentName, date, time, venue },
   }),
 
@@ -151,7 +151,7 @@ export const matchManagementNotifications = {
     type: NOTIFICATION_TYPES.MATCH_RESCHEDULE_DECLINED,
     category: getCategoryForNotificationType(NOTIFICATION_TYPES.MATCH_RESCHEDULE_DECLINED),
     title: 'Change Declined',
-    message: `${opponentName} declined the change. Original match: ${originalDate} at ${originalTime} at ${originalVenue}`,
+    message: `${opponentName} declined the reschedule. Original:\n📅 ${originalDate} • ${originalTime}\n📍 ${originalVenue}`,
     metadata: { opponentName, originalDate, originalTime, originalVenue },
   }),
 
@@ -257,5 +257,38 @@ export const matchManagementNotifications = {
     title: 'Opponent Changed',
     message: `Your match opponent has changed from ${oldOpponentName} to ${newOpponentName}. Match on ${date} at ${time} at ${venue}`,
     metadata: { oldOpponentName, newOpponentName, date, time, venue },
+  }),
+
+  // LEAGUE MATCH NOTIFICATIONS
+  opponentPostedLeagueMatch: (opponentName: string, date: string, time: string, venue: string): NotificationPayload => ({
+    type: NOTIFICATION_TYPES.OPPONENT_POSTED_LEAGUE_MATCH,
+    category: getCategoryForNotificationType(NOTIFICATION_TYPES.OPPONENT_POSTED_LEAGUE_MATCH),
+    title: 'League Match Available',
+    message: `${opponentName} posted a league match\n📅 ${date} • ${time}\n📍 ${venue}`,
+    metadata: { opponentName, date, time, venue },
+  }),
+
+  leagueMatchConfirmedYouJoined: (date: string, time: string, venue: string): NotificationPayload => ({
+    type: NOTIFICATION_TYPES.LEAGUE_MATCH_CONFIRMED_YOU_JOINED,
+    category: getCategoryForNotificationType(NOTIFICATION_TYPES.LEAGUE_MATCH_CONFIRMED_YOU_JOINED),
+    title: 'League Match Confirmed',
+    message: `You joined a league match. Good luck!\n📅 ${date} • ${time}\n📍 ${venue}`,
+    metadata: { date, time, venue },
+  }),
+
+  leagueMatchConfirmedOpponentJoined: (opponentName: string, date: string, time: string, venue: string): NotificationPayload => ({
+    type: NOTIFICATION_TYPES.LEAGUE_MATCH_CONFIRMED_OPPONENT_JOINED,
+    category: getCategoryForNotificationType(NOTIFICATION_TYPES.LEAGUE_MATCH_CONFIRMED_OPPONENT_JOINED),
+    title: 'Opponent Joined Your Match',
+    message: `${opponentName} joined your league match\n📅 ${date} • ${time}\n📍 ${venue}`,
+    metadata: { opponentName, date, time, venue },
+  }),
+
+  leagueMatchCancelledByOpponent: (opponentName: string, date: string, time: string, venue: string): NotificationPayload => ({
+    type: NOTIFICATION_TYPES.LEAGUE_MATCH_CANCELLED_BY_OPPONENT,
+    category: getCategoryForNotificationType(NOTIFICATION_TYPES.LEAGUE_MATCH_CANCELLED_BY_OPPONENT),
+    title: 'League Match Cancelled',
+    message: `${opponentName} cancelled the league match\n📅 ${date} • ${time}\n📍 ${venue}`,
+    metadata: { opponentName, date, time, venue },
   }),
 };

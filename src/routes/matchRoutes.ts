@@ -6,7 +6,8 @@ import {
   getMatchComments,
   postMatchComment,
   updateMatchComment,
-  deleteMatchComment
+  deleteMatchComment,
+  getMatchDetails
 } from "../controllers/matchController";
 import {
   createMatch,
@@ -58,6 +59,7 @@ matchRoutes.get('/', getMatches);
 matchRoutes.get('/my/summary', getMyMatchesSummary); // Lightweight endpoint for change detection
 matchRoutes.get('/my', getMyMatches);
 matchRoutes.get('/available/:divisionId', getAvailableMatches);
+matchRoutes.get('/:id/details', getMatchDetails); // Full match details for UI display
 matchRoutes.get('/:id', getMatchById);
 
 // Legacy endpoints (kept for backwards compatibility)
