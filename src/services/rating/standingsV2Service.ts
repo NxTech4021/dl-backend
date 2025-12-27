@@ -266,7 +266,13 @@ export class StandingsV2Service {
    * Sort a 2-way tie using direct head-to-head
    */
   private sortTwoWayTie(players: PlayerMetrics[]): PlayerMetrics[] {
-    const [a, b] = players;
+    const a = players[0];
+    const b = players[1];
+
+    // Safety check - should never happen if called correctly
+    if (!a || !b) {
+      return players;
+    }
 
     const aVsB = a.metrics.headToHead[b.userId];
     const bVsA = b.metrics.headToHead[a.userId];
