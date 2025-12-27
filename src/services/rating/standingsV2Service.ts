@@ -249,7 +249,10 @@ export class StandingsV2Service {
       const group = pointGroups.get(points)!;
 
       if (group.length === 1) {
-        sortedGroups.push(group[0]);
+        const firstPlayer = group[0];
+        if (firstPlayer) {
+          sortedGroups.push(firstPlayer);
+        }
       } else if (group.length === 2) {
         // 2-way tie: use direct H2H
         sortedGroups.push(...this.sortTwoWayTie(group));
@@ -266,7 +269,13 @@ export class StandingsV2Service {
    * Sort a 2-way tie using direct head-to-head
    */
   private sortTwoWayTie(players: PlayerMetrics[]): PlayerMetrics[] {
-    const [a, b] = players;
+    const a = players[0];
+    const b = players[1];
+
+    // Safety check - should never happen if called correctly
+    if (!a || !b) {
+      return players;
+    }
 
     const aVsB = a.metrics.headToHead[b.userId];
     const bVsA = b.metrics.headToHead[a.userId];

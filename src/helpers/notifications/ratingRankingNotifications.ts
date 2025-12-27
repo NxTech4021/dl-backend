@@ -78,4 +78,12 @@ export const ratingRankingNotifications = {
     message: `You've reached ${rating} DMR in ${sport}`,
     metadata: { rating, sport },
   }),
+
+  ratingUpdate: (oldRating: number, newRating: number, changeStr: string): NotificationPayload => ({
+    type: NOTIFICATION_TYPES.DMR_INCREASED,
+    category: getCategoryForNotificationType(NOTIFICATION_TYPES.DMR_INCREASED),
+    title: 'Rating Updated',
+    message: `Your rating has changed from ${oldRating} to ${newRating} (${changeStr})`,
+    metadata: { oldRating, newRating, changeStr },
+  }),
 };

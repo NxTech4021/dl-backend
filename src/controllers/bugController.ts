@@ -1031,6 +1031,56 @@ export const getApps = async (req: Request, res: Response) => {
   }
 };
 
+// Initialize DLM app (auto-creates if not exists) - for DL Mobile
+export const initDLMApp = async (req: Request, res: Response) => {
+  try {
+    // Use upsert to handle race conditions (multiple requests on first use)
+    const app = await prisma.app.upsert({
+      where: { code: "DLM" },
+      update: {}, // No updates needed, just ensure it exists
+      create: {
+        code: "DLM",
+        name: "DeuceLeague Mobile",
+        displayName: "Deuce League Mobile App",
+        description: "Bug reports and feedback from DL Mobile app",
+        isActive: true,
+      },
+    });
+
+    // Also ensure BugReportSettings exists for this app
+    await prisma.bugReportSettings.upsert({
+      where: { appId: app.id },
+      update: {}, // No updates needed, just ensure it exists
+      create: {
+        appId: app.id,
+        // Default settings - Google Sheets sync disabled until configured
+        syncEnabled: false,
+      },
+    });
+
+    // Fetch settings to return sync status
+    const settings = await prisma.bugReportSettings.findUnique({
+      where: { appId: app.id },
+      select: {
+        syncEnabled: true,
+        googleSheetId: true,
+      },
+    });
+
+    res.json({
+      appId: app.id,
+      code: app.code,
+      displayName: app.displayName,
+      syncEnabled: settings?.syncEnabled ?? false,
+      googleSheetConfigured: !!settings?.googleSheetId,
+    });
+  } catch (err: unknown) {
+    console.error("Init DLM App Error:", err);
+    const errorMessage = err instanceof Error ? err.message : "Failed to initialize app.";
+    res.status(500).json({ error: errorMessage });
+  }
+};
+
 // Initialize DLA app (auto-creates if not exists) - simplified for DLAdmin
 export const initDLAApp = async (req: Request, res: Response) => {
   try {
