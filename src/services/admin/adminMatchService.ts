@@ -192,7 +192,19 @@ export class AdminMatchService {
           disputes: {
             select: { id: true, status: true, disputeCategory: true, priority: true }
           },
-          walkover: true,
+          walkover: {
+            include: {
+              defaultingPlayer: {
+                select: { id: true, name: true, username: true, image: true }
+              },
+              winningPlayer: {
+                select: { id: true, name: true, username: true, image: true }
+              },
+              reporter: {
+                select: { id: true, name: true, username: true }
+              }
+            }
+          },
           createdBy: {
             select: { id: true, name: true, username: true }
           }

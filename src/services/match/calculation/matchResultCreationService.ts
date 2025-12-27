@@ -50,7 +50,18 @@ export class MatchResultCreationService {
     // Parse outcome based on sport
     let outcome;
 
-    if (match.sport === 'PICKLEBALL') {
+    // Handle walkover matches - winner gets full points, loser gets 0
+    if (match.isWalkover) {
+      // For walkovers, determine winner from team1Score/team2Score
+      const team1Won = (match.team1Score ?? 0) > (match.team2Score ?? 0);
+      outcome = {
+        winner: (team1Won ? 'team1' : 'team2') as 'team1' | 'team2',
+        team1SetsWon: team1Won ? 2 : 0,
+        team2SetsWon: team1Won ? 0 : 2,
+        team1GamesWon: team1Won ? 12 : 0,
+        team2GamesWon: team1Won ? 0 : 12
+      };
+    } else if (match.sport === 'PICKLEBALL') {
       if (!match.pickleballScores || match.pickleballScores.length === 0) {
         throw new Error('Pickleball scores not found');
       }
