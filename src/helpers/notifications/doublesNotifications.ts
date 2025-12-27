@@ -113,4 +113,12 @@ export const doublesNotifications = {
     message: `${captainName} completed registration! Your doubles team is ready for ${leagueName}`,
     metadata: { captainName, leagueName },
   }),
+
+  partnerChanged: (oldPartnerName: string, newPartnerName: string, date: string, time: string, venue: string): NotificationPayload => ({
+    type: NOTIFICATION_TYPES.PARTNER_CHANGED,
+    category: getCategoryForNotificationType(NOTIFICATION_TYPES.PARTNER_CHANGED),
+    title: 'Partner Changed',
+    message: `Your doubles partner has changed from ${oldPartnerName} to ${newPartnerName}. Match on ${date} at ${time} at ${venue}`,
+    metadata: { oldPartnerName, newPartnerName, date, time, venue },
+  }),
 };
