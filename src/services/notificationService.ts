@@ -212,7 +212,7 @@ export class NotificationService {
         type,
         userCount: validUserIds.length,
         deliveryType: type ? getNotificationDeliveryType(type) : 'UNKNOWN',
-        isPush: shouldSendPush,
+        isPush: type ? shouldSendPushNotification(type) : false,
       });
 
       return validUserIds.map((userId) => ({
