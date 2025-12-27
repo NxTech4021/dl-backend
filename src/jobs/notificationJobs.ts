@@ -20,7 +20,7 @@ import {
   sendRegistrationClosing3DaysNotifications,
   sendRegistrationClosing24hNotifications,
 } from "../services/notification/leagueNotificationService";
-import { leagueLifecycleNotifications } from '../helpers/notifications';
+import { leagueLifecycleNotifications, matchManagementNotifications } from '../helpers/notifications';
 import {
   sendWeeklyRankingUpdates,
   sendMonthlyDMRRecap,
@@ -49,11 +49,50 @@ export function scheduleMatch24hReminders(): void {
           },
           status: "SCHEDULED",
         },
-        select: { id: true },
+        include: {
+          participants: {
+            include: {
+              user: {
+                select: {
+                  id: true,
+                  name: true,
+                },
+              },
+            },
+          },
+        },
       });
 
       for (const match of matches) {
-        await sendMatchReminder24h(match.id);
+        if (!match.participants || match.participants.length < 2) continue;
+        
+        const date = match.matchDate?.toLocaleDateString() || 'TBD';
+        const time = match.matchDate?.toLocaleTimeString() || 'TBD';
+        const venue = match.venue || match.location || 'TBD';
+        
+        for (const player of match.participants) {
+          // Get opponents for this player
+          const opponents = match.participants.filter(p => 
+            p.userId !== player.userId && 
+            (match.matchType === 'SINGLES' || p.team !== player.team)
+          );
+          
+          const opponentNames = opponents.map(opp => opp.user?.name || 'Player').join(' & ');
+          const opponentName = opponentNames || 'Opponent';
+          
+          const notif = matchManagementNotifications.matchReminder24h(
+            opponentName,
+            date,
+            time,
+            venue
+          );
+          
+          await notificationService.createNotification({
+            ...notif,
+            userIds: player.userId,
+            matchId: match.id,
+          });
+        }
       }
 
       logger.info("24h match reminders sent", { count: matches.length });
@@ -118,19 +157,33 @@ export function scheduleMatch2hReminders(): void {
 
       // Send notifications for each match
       for (const match of matches) {
-        const playerIds = match.participants.map((p) => p.userId);
-
-        await notificationService.createNotification({
-          userIds: playerIds,
-          type: "MATCH_REMINDER",
-          category: "MATCH",
-          title: "Match Starting Soon",
-          message: `Your match in ${
-            match.division?.name || "division"
-          } starts in 2 hours`,
-          matchId: match.id,
-          seasonId: match.season?.id || undefined,
-        });
+        if (!match.participants || match.participants.length < 2) continue;
+        
+        const time = match.matchDate?.toLocaleTimeString() || 'TBD';
+        const venue = match.venue || match.location || 'TBD';
+        
+        for (const player of match.participants) {
+          // Get opponents for this player
+          const opponents = match.participants.filter(p => 
+            p.userId !== player.userId && 
+            (match.matchType === 'SINGLES' || p.team !== player.team)
+          );
+          
+          const opponentNames = opponents.map(opp => opp.user?.name || 'Player').join(' & ');
+          const opponentName = opponentNames || 'Opponent';
+          
+          const notif = matchManagementNotifications.matchReminder2h(
+            opponentName,
+            time,
+            venue
+          );
+          
+          await notificationService.createNotification({
+            ...notif,
+            userIds: player.userId,
+            matchId: match.id,
+          });
+        }
       }
 
       logger.info("2h match reminders sent", { count: matches.length });
@@ -140,6 +193,84 @@ export function scheduleMatch2hReminders(): void {
   });
 
   logger.info("2h match reminder job scheduled");
+}
+
+
+/**
+ * Check and send match day morning reminders
+ * Runs daily at 8:00 AM
+ */
+export function scheduleMatchMorningReminders(): void {
+  cron.schedule("0 8 * * *", async () => {
+    try {
+      logger.info("Running match day morning reminder job");
+
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const tomorrow = new Date(today);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+
+      const matches = await prisma.match.findMany({
+        where: {
+          matchDate: {
+            gte: today,
+            lt: tomorrow,
+          },
+          status: "SCHEDULED",
+        },
+        include: {
+          participants: {
+            include: {
+              user: {
+                select: {
+                  id: true,
+                  name: true,
+                },
+              },
+            },
+          },
+        },
+      });
+
+      for (const match of matches) {
+        if (!match.participants || match.participants.length < 2) continue;
+        
+        const date = match.matchDate?.toLocaleDateString() || 'TBD';
+        const time = match.matchDate?.toLocaleTimeString() || 'TBD';
+        const venue = match.venue || match.location || 'TBD';
+        
+        for (const player of match.participants) {
+          // Get opponents for this player
+          const opponents = match.participants.filter(p => 
+            p.userId !== player.userId && 
+            (match.matchType === 'SINGLES' || p.team !== player.team)
+          );
+          
+          const opponentNames = opponents.map(opp => opp.user?.name || 'Player').join(' & ');
+          const opponentName = opponentNames || 'Opponent';
+          
+          const notif = matchManagementNotifications.matchMorningReminder(
+            opponentName,
+            date,
+            time,
+            venue
+          );
+          
+          await notificationService.createNotification({
+            ...notif,
+            userIds: player.userId,
+            matchId: match.id,
+          });
+        }
+      }
+
+      logger.info("Match day morning reminders sent", { count: matches.length });
+    } catch (error) {
+      logger.error("Failed to send match day morning reminders", {}, error as Error);
+    }
+  });
+
+  logger.info("Match day morning reminder job scheduled");
 }
 
 /**
@@ -732,6 +863,7 @@ export function initializeNotificationJobs(): void {
 
   scheduleMatch24hReminders();
   scheduleMatch2hReminders();
+  scheduleMatchMorningReminders();
   scheduleScoreSubmissionReminders();
   scheduleSeasonStartingSoonNotifications();
   scheduleSeasonStartsTomorrowNotifications();

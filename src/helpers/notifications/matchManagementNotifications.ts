@@ -107,6 +107,14 @@ export const matchManagementNotifications = {
     metadata: { opponentName, time, venue },
   }),
 
+    matchMorningReminder: (opponentName: string, date: string, time: string, venue: string): NotificationPayload => ({
+      type: NOTIFICATION_TYPES.MATCH_MORNING_REMINDER,
+      category: getCategoryForNotificationType(NOTIFICATION_TYPES.MATCH_MORNING_REMINDER),
+      title: 'Match Day Reminder',
+      message: `Good morning! Your match vs ${opponentName} is today\n📅 ${date} • ${time}\n📍 ${venue}`,
+      metadata: { opponentName, date, time, venue },
+    }),
+
   matchRescheduleRequest: (opponentName: string, newDate: string, newTime: string, newVenue: string): NotificationPayload => ({
     type: NOTIFICATION_TYPES.MATCH_RESCHEDULE_REQUEST,
     category: getCategoryForNotificationType(NOTIFICATION_TYPES.MATCH_RESCHEDULE_REQUEST),
@@ -259,5 +267,5 @@ export const matchManagementNotifications = {
       message: `${opponentName} cancelled the league match\n📅 ${date} • ${time}\n📍 ${venue}`,
       metadata: { opponentName, date, time, venue },
     }),
-    
+
 };

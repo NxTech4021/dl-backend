@@ -117,6 +117,7 @@ export const NOTIFICATION_DELIVERY_MAP: Record<string, NotificationDeliveryType>
   SCHEDULING_CONFLICT_DETECTED: NotificationDeliveryType.PUSH,
   FRIENDLY_MATCH_DETAILS_CHANGED: NotificationDeliveryType.PUSH,
   MATCH_REMINDER_24H: NotificationDeliveryType.PUSH,
+  MATCH_MORNING_REMINDER: NotificationDeliveryType.PUSH,
   MATCH_REMINDER_2H: NotificationDeliveryType.PUSH,
   MATCH_RESCHEDULE_REQUEST: NotificationDeliveryType.PUSH,
   MATCH_RESCHEDULE_ACCEPTED: NotificationDeliveryType.PUSH,
