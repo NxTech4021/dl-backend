@@ -26,6 +26,69 @@ export async function getAllPlayers() {
     return [];
   }
 
+  const playerIds = players.map(p => p.id);
+
+  // Batch queries for counts (run in parallel for performance)
+  const [seasonMemberships, leagueMatchCounts, friendlyMatchCounts] = await Promise.all([
+    // Get all season memberships with their seasons and leagues
+    prisma.seasonMembership.findMany({
+      where: { userId: { in: playerIds } },
+      select: {
+        userId: true,
+        seasonId: true,
+        season: {
+          select: {
+            leagues: {
+              select: { id: true }
+            }
+          }
+        }
+      }
+    }),
+    // League match counts (completed, non-friendly matches)
+    prisma.matchParticipant.groupBy({
+      by: ['userId'],
+      where: {
+        userId: { in: playerIds },
+        match: { status: 'COMPLETED', isFriendly: false }
+      },
+      _count: { matchId: true }
+    }),
+    // Friendly match counts (completed friendly matches)
+    prisma.matchParticipant.groupBy({
+      by: ['userId'],
+      where: {
+        userId: { in: playerIds },
+        match: { status: 'COMPLETED', isFriendly: true }
+      },
+      _count: { matchId: true }
+    })
+  ]);
+
+  // Process season memberships to get season and league counts per player
+  const seasonCountMap = new Map<string, number>();
+  const leagueCountMap = new Map<string, Set<string>>();
+
+  for (const membership of seasonMemberships) {
+    // Count seasons
+    seasonCountMap.set(
+      membership.userId,
+      (seasonCountMap.get(membership.userId) ?? 0) + 1
+    );
+
+    // Collect unique league IDs
+    if (!leagueCountMap.has(membership.userId)) {
+      leagueCountMap.set(membership.userId, new Set());
+    }
+    for (const league of membership.season.leagues) {
+      leagueCountMap.get(membership.userId)!.add(league.id);
+    }
+  }
+
+  // Create match count maps
+  const leagueMatchCountMap = new Map(leagueMatchCounts.map(m => [m.userId, m._count.matchId]));
+  const friendlyMatchCountMap = new Map(friendlyMatchCounts.map(m => [m.userId, m._count.matchId]));
+
   // Enrich all players with sports and skills using batch operation
   const transformedPlayers = await enrichPlayersWithSkills(players);
 
@@ -34,6 +97,10 @@ export async function getAllPlayers() {
     ...player,
     registeredDate: player.createdAt,
     lastLoginDate: player.lastLogin,
+    leagueCount: leagueCountMap.get(player.id)?.size ?? 0,
+    seasonCount: seasonCountMap.get(player.id) ?? 0,
+    leagueMatchesPlayed: leagueMatchCountMap.get(player.id) ?? 0,
+    friendlyMatchesPlayed: friendlyMatchCountMap.get(player.id) ?? 0,
   }));
 }
 
