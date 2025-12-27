@@ -140,6 +140,7 @@ app.all("/auth/{*any}", authHandler);
 
 // The JSON parser for any other routes you might add later.
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 app.use(httpLogger);
 

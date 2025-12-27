@@ -1,287 +1,605 @@
-// TODO: Implement payment controller and services
+import { Request, Response } from "express";
+import { Prisma, PaymentStatus } from "@prisma/client";
+import { prisma } from "../lib/prisma";
+import * as paymentService from "../services/paymentService";
+import { ApiResponse } from "../utils/ApiResponse";
+import { getFiuuConfig } from "../config/fiuu";
+import {
+  buildCheckoutPayload,
+  formatAmount,
+  generateOrderId,
+  resolvePaymentStatus,
+  verifyNotificationSignature,
+} from "../services/payment/fiuuGateway";
+import { registerMembershipService } from "../services/seasonService";
 
-// import { prisma } from "../lib/prisma";
-// import { Request, Response } from 'express';
-// import { PrismaClient, PaymentStatus } from '@prisma/client';
-// import * as paymentService from '../services/paymentService';
-// import { ApiResponse } from '../utils/ApiResponse';
 
+export const getPayments = async (req: Request, res: Response) => {
+  try {
+    const { status, amountMin, amountMax } = req.query;
 
-// export const getPayments = async (req: Request, res: Response) => {
-//   try {
-//     const { status, amountMin, amountMax } = req.query;
+    // Build where clause
+    const where: any = {};
+    if (status) where.status = status as PaymentStatus;
+    if (amountMin || amountMax) {
+      where.amount = {};
+      if (amountMin) where.amount.gte = parseFloat(amountMin as string);
+      if (amountMax) where.amount.lte = parseFloat(amountMax as string);
+    }
 
-//     // Build where clause
-//     const where: any = {};
-//     if (status) where.status = status as PaymentStatus;
-//     if (amountMin || amountMax) {
-//       where.amount = {};
-//       if (amountMin) where.amount.gte = parseFloat(amountMin as string);
-//       if (amountMax) where.amount.lte = parseFloat(amountMax as string);
-//     }
+    const payments = await prisma.payment.findMany({
+      where,
+      include: {
+        user: { select: { id: true, name: true, email: true } },
+        season: { select: { id: true, name: true } },
+        seasonMembership: {
+          select: {
+            id: true,
+            paymentStatus: true,
+            status: true,
+            user: { select: { id: true, name: true, email: true } },
+            season: { select: { id: true, name: true } },
+          },
+        },
+      },
+      orderBy: { createdAt: "desc" },
+    });
 
-//     const payments = await prisma.payment.findMany({
-//       where,
-//       include: {
-//         registrations: {
-//           include: {
-//             player: {
-//               select: {
-//                 name: true,
-//                 email: true
-//               }
-//             },
-//             team: {
-//               select: {
-//                 name: true
-//               }
-//             },
-//             season: {
-//               select: {
-//                 name: true,
-//                 league: {
-//                   select: {
-//                     name: true
-//                   }
-//                 }
-//               }
-//             }
-//           }
-//         }
-//       },
-//       orderBy: {
-//         createdAt: 'desc'
-//       }
-//     });
+    // Transform for frontend
+    const transformedPayments = payments.map(payment => ({
+      id: payment.id,
+      amount: payment.amount,
+      paymentMethod: payment.paymentMethod,
+      status: payment.status,
+      paidAt: payment.paidAt,
+      notes: payment.notes,
+      seasonMembership: payment.seasonMembership,
+      createdAt: payment.createdAt,
+      updatedAt: payment.updatedAt
+    }));
 
-//     // Transform for frontend
-//     const transformedPayments = payments.map(payment => ({
-//       id: payment.id,
-//       amount: payment.amount,
-//       paymentMethod: payment.paymentMethod,
-//       status: payment.status,
-//       paidAt: payment.paidAt,
-//       notes: payment.notes,
-//       registrations: payment.registrations,
-//       registrationCount: payment.registrations.length,
-//       createdAt: payment.createdAt,
-//       updatedAt: payment.updatedAt
-//     }));
+    if (transformedPayments.length === 0) {
+      return res.status(200).json(
+        new ApiResponse(true, 200, [], "No payments found")
+      );
+    }
 
-//     if (transformedPayments.length === 0) {
-//       return res.status(200).json(
-//         new ApiResponse(true, 200, [], "No payments found")
-//       );
-//     }
+    return res.status(200).json(
+      new ApiResponse(true, 200, transformedPayments, "Payments fetched successfully")
+    );
+  } catch (error) {
+    console.error("Error fetching payments:", error);
+    return res.status(500).json(
+      new ApiResponse(false, 500, null, "Error fetching payments")
+    );
+  }
+};
 
-//     return res.status(200).json(
-//       new ApiResponse(true, 200, transformedPayments, "Payments fetched successfully")
-//     );
-//   } catch (error) {
-//     console.error("Error fetching payments:", error);
-//     return res.status(500).json(
-//       new ApiResponse(false, 500, null, "Error fetching payments")
-//     );
-//   }
-// };
+export const getPaymentById = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
 
-// export const getPaymentById = async (req: Request, res: Response) => {
-//   try {
-//     const { id } = req.params;
+    const payment = await prisma.payment.findUnique({
+      where: { id },
+      include: {
+        user: { select: { id: true, name: true, email: true } },
+        season: { select: { id: true, name: true } },
+        seasonMembership: {
+          select: {
+            id: true,
+            paymentStatus: true,
+            status: true,
+            user: { select: { id: true, name: true, email: true } },
+            season: { select: { id: true, name: true } },
+          },
+        },
+      },
+    });
 
-//     const payment = await prisma.payment.findUnique({
-//       where: { id },
-//       include: {
-//         registrations: {
-//           include: {
-//             player: {
-//               select: {
-//                 id: true,
-//                 name: true,
-//                 email: true
-//               }
-//             },
-//             team: {
-//               select: {
-//                 id: true,
-//                 name: true
-//               }
-//             },
-//             season: {
-//               select: {
-//                 id: true,
-//                 name: true,
-//                 league: {
-//                   select: {
-//                     name: true,
-//                     sport: {
-//                       select: {
-//                         name: true
-//                       }
-//                     }
-//                   }
-//                 }
-//               }
-//             },
-//             division: {
-//               select: {
-//                 name: true
-//               }
-//             }
-//           }
-//         }
-//       }
-//     });
+    if (!payment) {
+      return res.status(404).json(
+        new ApiResponse(false, 404, null, 'Payment not found')
+      );
+    }
 
-//     if (!payment) {
-//       return res.status(404).json(
-//         new ApiResponse(false, 404, null, 'Payment not found')
-//       );
-//     }
+    // Transform for detailed view
+    const transformedPayment = {
+      id: payment.id,
+      amount: payment.amount,
+      paymentMethod: payment.paymentMethod,
+      status: payment.status,
+      paidAt: payment.paidAt,
+      notes: payment.notes,
+      seasonMembership: payment.seasonMembership,
+      createdAt: payment.createdAt,
+      updatedAt: payment.updatedAt
+    };
 
-//     // Transform for detailed view
-//     const transformedPayment = {
-//       id: payment.id,
-//       amount: payment.amount,
-//       paymentMethod: payment.paymentMethod,
-//       status: payment.status,
-//       paidAt: payment.paidAt,
-//       notes: payment.notes,
-//       registrations: payment.registrations,
-//       registrationCount: payment.registrations.length,
-//       createdAt: payment.createdAt,
-//       updatedAt: payment.updatedAt
-//     };
+    return res.status(200).json(
+      new ApiResponse(true, 200, transformedPayment, "Payment details fetched successfully")
+    );
+  } catch (error: any) {
+    console.error("Error fetching payment:", error);
+    return res.status(500).json(
+      new ApiResponse(false, 500, null, "Error fetching payment")
+    );
+  }
+};
 
-//     return res.status(200).json(
-//       new ApiResponse(true, 200, transformedPayment, "Payment details fetched successfully")
-//     );
-//   } catch (error: any) {
-//     console.error("Error fetching payment:", error);
-//     return res.status(500).json(
-//       new ApiResponse(false, 500, null, "Error fetching payment")
-//     );
-//   }
-// };
+export const createPayment = async (req: Request, res: Response) => {
+  try {
+    const { amount, paymentMethod, status, notes } = req.body;
 
-// export const createPayment = async (req: Request, res: Response) => {
-//   try {
-//     const { amount, paymentMethod, status, notes } = req.body;
+    if (!amount) {
+      return res.status(400).json(
+        new ApiResponse(false, 400, null, 'Missing required field: amount')
+      );
+    }
 
-//     if (!amount) {
-//       return res.status(400).json(
-//         new ApiResponse(false, 400, null, 'Missing required field: amount')
-//       );
-//     }
+    if (status && !Object.values(PaymentStatus).includes(status)) {
+      return res.status(400).json(
+        new ApiResponse(false, 400, null, `Invalid status provided. Must be one of: ${Object.values(PaymentStatus).join(', ')}`)
+      );
+    }
 
-//     if (status && !Object.values(PaymentStatus).includes(status)) {
-//       return res.status(400).json(
-//         new ApiResponse(false, 400, null, `Invalid status provided. Must be one of: ${Object.values(PaymentStatus).join(', ')}`)
-//       );
-//     }
+    // Use service for business logic
+    const newPayment = await paymentService.createPayment({
+      amount: parseFloat(amount),
+      paymentMethod,
+      status,
+      notes,
+    });
 
-//     // Use service for business logic
-//     const newPayment = await paymentService.createPayment({
-//       amount: parseFloat(amount),
-//       paymentMethod,
-//       status,
-//       notes,
-//     });
+    return res.status(201).json(
+      new ApiResponse(true, 201, newPayment, "Payment created successfully")
+    );
+  } catch (error: any) {
+    console.error("Create payment error:", error);
+    return res.status(500).json(
+      new ApiResponse(false, 500, null, "Error creating payment")
+    );
+  }
+};
 
-//     return res.status(201).json(
-//       new ApiResponse(true, 201, newPayment, "Payment created successfully")
-//     );
-//   } catch (error: any) {
-//     console.error("Create payment error:", error);
-//     return res.status(500).json(
-//       new ApiResponse(false, 500, null, "Error creating payment")
-//     );
-//   }
-// };
-
-// export const updatePayment = async (req: Request, res: Response) => {
-//   try {
-//     const { id } = req.params;
-//     const updateData = { ...req.body };
+export const updatePayment = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const updateData = { ...req.body };
     
-//     // Convert amount to number if provided
-//     if (updateData.amount) {
-//       updateData.amount = parseFloat(updateData.amount);
-//     }
+    // Convert amount to number if provided
+    if (updateData.amount) {
+      updateData.amount = parseFloat(updateData.amount);
+    }
 
-//     // Validate status if provided
-//     if (updateData.status && !Object.values(PaymentStatus).includes(updateData.status)) {
-//       return res.status(400).json(
-//         new ApiResponse(false, 400, null, `Invalid status provided. Must be one of: ${Object.values(PaymentStatus).join(', ')}`)
-//       );
-//     }
+    // Validate status if provided
+    if (updateData.status && !Object.values(PaymentStatus).includes(updateData.status)) {
+      return res.status(400).json(
+        new ApiResponse(false, 400, null, `Invalid status provided. Must be one of: ${Object.values(PaymentStatus).join(', ')}`)
+      );
+    }
 
-//     // Use service for business logic
-//     const updatedPayment = await paymentService.updatePayment(id, updateData);
+    // Use service for business logic
+    const updatedPayment = await paymentService.updatePayment(id, updateData);
     
-//     return res.status(200).json(
-//       new ApiResponse(true, 200, updatedPayment, "Payment updated successfully")
-//     );
-//   } catch (error: any) {
-//     console.error("Error updating payment:", error);
-//     if (error.message.includes('not found')) {
-//       return res.status(404).json(
-//         new ApiResponse(false, 404, null, error.message)
-//       );
-//     }
-//     return res.status(500).json(
-//       new ApiResponse(false, 500, null, "Error updating payment")
-//     );
-//   }
-// };
+    return res.status(200).json(
+      new ApiResponse(true, 200, updatedPayment, "Payment updated successfully")
+    );
+  } catch (error: any) {
+    console.error("Error updating payment:", error);
+    if (error.message.includes('not found')) {
+      return res.status(404).json(
+        new ApiResponse(false, 404, null, error.message)
+      );
+    }
+    return res.status(500).json(
+      new ApiResponse(false, 500, null, "Error updating payment")
+    );
+  }
+};
 
-// export const markPaymentAsPaid = async (req: Request, res: Response) => {
-//   try {
-//     const { id } = req.params;
+export const markPaymentAsPaid = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
 
-//     // Use service for business logic
-//     const updatedPayment = await paymentService.markPaymentAsPaid(id);
+    // Use service for business logic
+    const updatedPayment = await paymentService.markPaymentAsPaid(id);
     
-//     return res.status(200).json(
-//       new ApiResponse(true, 200, updatedPayment, "Payment marked as paid successfully")
-//     );
-//   } catch (error: any) {
-//     console.error("Error marking payment as paid:", error);
-//     if (error.message.includes('not found') || error.message.includes('already marked')) {
-//       return res.status(400).json(
-//         new ApiResponse(false, 400, null, error.message)
-//       );
-//     }
-//     return res.status(500).json(
-//       new ApiResponse(false, 500, null, "Error marking payment as paid")
-//     );
-//   }
-// };
+    return res.status(200).json(
+      new ApiResponse(true, 200, updatedPayment, "Payment marked as paid successfully")
+    );
+  } catch (error: any) {
+    console.error("Error marking payment as paid:", error);
+    if (error.message.includes('not found') || error.message.includes('already marked')) {
+      return res.status(400).json(
+        new ApiResponse(false, 400, null, error.message)
+      );
+    }
+    return res.status(500).json(
+      new ApiResponse(false, 500, null, "Error marking payment as paid")
+    );
+  }
+};
 
-// export const deletePayment = async (req: Request, res: Response) => {
-//   try {
-//     const { id } = req.params;
+export const deletePayment = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
 
-//     // Use service for business logic
-//     await paymentService.deletePayment(id);
+    // Use service for business logic
+    await paymentService.deletePayment(id);
     
-//     return res.status(200).json(
-//       new ApiResponse(true, 200, null, "Payment deleted successfully")
-//     );
-//   } catch (error: any) {
-//     console.error("Error deleting payment:", error);
-//     if (error.message.includes('Cannot delete')) {
-//       return res.status(400).json(
-//         new ApiResponse(false, 400, null, error.message)
-//       );
-//     } else if (error.message.includes('not found')) {
-//       return res.status(404).json(
-//         new ApiResponse(false, 404, null, error.message)
-//       );
-//     } else {
-//       return res.status(500).json(
-//         new ApiResponse(false, 500, null, "Error deleting payment")
-//       );
-//     }
-//   }
-// };
+    return res.status(200).json(
+      new ApiResponse(true, 200, null, "Payment deleted successfully")
+    );
+  } catch (error: any) {
+    console.error("Error deleting payment:", error);
+    if (error.message.includes('Cannot delete')) {
+      return res.status(400).json(
+        new ApiResponse(false, 400, null, error.message)
+      );
+    } else if (error.message.includes('not found')) {
+      return res.status(404).json(
+        new ApiResponse(false, 404, null, error.message)
+      );
+    } else {
+      return res.status(500).json(
+        new ApiResponse(false, 500, null, "Error deleting payment")
+      );
+    }
+  }
+};
+
+export const createFiuuCheckout = async (req: Request, res: Response) => {
+  const { userId, seasonId } = req.body as {
+    userId?: string;
+    seasonId?: string;
+  };
+
+  if (!userId || !seasonId) {
+    return res
+      .status(400)
+      .json(new ApiResponse(false, 400, null, "userId and seasonId are required."));
+  }
+
+  try {
+    const config = getFiuuConfig(req.get("x-forwarded-host") || req.get("host"));
+
+    const [user, season, existingMembership] = await Promise.all([
+      prisma.user.findUnique({
+        where: { id: userId },
+        select: { id: true, name: true, email: true, phoneNumber: true },
+      }),
+      prisma.season.findUnique({
+        where: { id: seasonId },
+        select: {
+          id: true,
+          name: true,
+          entryFee: true,
+          paymentRequired: true,
+          isActive: true,
+          startDate: true,
+          regiDeadline: true,
+          status: true,
+        },
+      }),
+      prisma.seasonMembership.findFirst({
+        where: { userId, seasonId },
+      }),
+    ]);
+
+    if (!user) {
+      return res
+        .status(404)
+        .json(new ApiResponse(false, 404, null, "User not found."));
+    }
+
+    if (!season) {
+      return res
+        .status(404)
+        .json(new ApiResponse(false, 404, null, "Season not found."));
+    }
+
+    if (!season.paymentRequired) {
+      return res
+        .status(400)
+        .json(new ApiResponse(false, 400, null, "This season does not require payment."));
+    }
+
+    if (!season.entryFee) {
+      return res
+        .status(400)
+        .json(new ApiResponse(false, 400, null, "Season entry fee is not configured."));
+    }
+
+    // Block if already fully paid/active
+    if (existingMembership?.paymentStatus === PaymentStatus.COMPLETED) {
+      return res
+        .status(400)
+        .json(
+          new ApiResponse(false, 400, null, "Payment already completed for this season."),
+        );
+    }
+
+    // Do not auto-register; only create payment intent. Membership will be created on successful payment.
+    const membershipId = existingMembership?.id;
+
+    const amount = formatAmount(season.entryFee);
+    const existingPayment = await prisma.payment.findFirst({
+      where: {
+        userId,
+        seasonId,
+        paymentMethod: "FIUU",
+        status: PaymentStatus.PENDING,
+      },
+    });
+
+    const orderId = existingPayment?.orderId ?? generateOrderId("DL");
+    const callbackBase = config.callbackBaseUrl.replace(/\/$/, "");
+
+    const checkout = buildCheckoutPayload({
+      config,
+      amount,
+      orderId,
+      description: `${season.name} Entry Fee`,
+      customer: {
+        name: user.name,
+        email: user.email,
+        phone: user.phoneNumber,
+      },
+      returnUrl: `${callbackBase}/api/payments/fiuu/return`,
+      notificationUrl: `${callbackBase}/api/payments/fiuu/ipn`,
+      callbackUrl: `${callbackBase}/api/payments/fiuu/ipn`,
+    });
+
+    const sharedMetadata: Prisma.JsonObject = {
+      ...(existingPayment?.metadata as Prisma.JsonObject | undefined),
+      checkout: checkout.params,
+      lastGeneratedAt: new Date().toISOString(),
+    };
+
+    const paymentRecord = existingPayment
+      ? await prisma.payment.update({
+          where: { id: existingPayment.id },
+          data: {
+            amount: new Prisma.Decimal(amount),
+            currency: "MYR",
+            status: PaymentStatus.PENDING,
+            paymentMethod: "FIUU",
+            metadata: sharedMetadata,
+          },
+        })
+      : await prisma.payment.create({
+          data: {
+            orderId,
+            amount: new Prisma.Decimal(amount),
+            currency: "MYR",
+            status: PaymentStatus.PENDING,
+            paymentMethod: "FIUU",
+            user: { connect: { id: user.id } },
+            season: { connect: { id: season.id } },
+            metadata: sharedMetadata,
+          },
+        });
+
+    return res.status(201).json(
+      new ApiResponse(
+        true,
+        201,
+        {
+          paymentId: paymentRecord.id,
+          orderId: paymentRecord.orderId,
+          amount,
+          currency: "MYR",
+          membershipId,
+          checkout,
+        },
+        "FIUU checkout generated successfully.",
+      ),
+    );
+  } catch (error) {
+    console.error("Error creating FIUU checkout:", error);
+    return res
+      .status(500)
+      .json(new ApiResponse(false, 500, null, "Failed to start FIUU payment."));
+  }
+};
+
+export const handleFiuuReturn = async (req: Request, res: Response) => {
+  const payload = { ...req.query, ...req.body };
+  const config = getFiuuConfig(req.get("x-forwarded-host") || req.get("host"));
+  const orderId = (payload.orderid || payload.order_id) as string | undefined;
+
+  if (!orderId) {
+    return res
+      .status(400)
+      .send(renderReturnPage(PaymentStatus.FAILED, "Missing order reference."));
+  }
+
+  try {
+    const payment = await prisma.payment.findUnique({ where: { orderId } });
+
+    if (!payment) {
+      return res
+        .status(404)
+        .send(renderReturnPage(PaymentStatus.FAILED, "Payment not found."));
+    }
+
+    const verified = verifyNotificationSignature(payload, config);
+    const status = resolvePaymentStatus(payload);
+
+    await updatePaymentFromGateway(payment.id, status, payload, verified);
+
+    const message =
+      status === PaymentStatus.COMPLETED
+        ? "Payment successful! You can return to the Deuce League app."
+        : status === PaymentStatus.PENDING
+        ? "Payment is pending confirmation. Please check back later."
+        : "Payment was not completed. You can retry from the app.";
+
+    return res
+      .status(200)
+      .send(renderReturnPage(status, message, payment.orderId));
+  } catch (error) {
+    console.error("Error handling FIUU return:", error);
+    return res
+      .status(500)
+      .send(renderReturnPage(PaymentStatus.FAILED, "Internal server error."));
+  }
+};
+
+export const handleFiuuNotification = async (req: Request, res: Response) => {
+  const payload = { ...req.body, ...req.query };
+  const config = getFiuuConfig(req.get("x-forwarded-host") || req.get("host"));
+  const orderId = (payload.orderid || payload.order_id) as string | undefined;
+
+  if (!orderId) {
+    return res.status(400).send("Missing order reference.");
+  }
+
+  try {
+    const payment = await prisma.payment.findUnique({ where: { orderId } });
+
+    if (!payment) {
+      return res.status(404).send("Payment not found.");
+    }
+
+    const verified = verifyNotificationSignature(payload, config);
+    const status = resolvePaymentStatus(payload);
+
+    await updatePaymentFromGateway(payment.id, status, payload, verified);
+
+    return res.status(200).send("OK");
+  } catch (error) {
+    console.error("Error processing FIUU notification:", error);
+    return res.status(500).send("ERROR");
+  }
+};
+
+function renderReturnPage(
+  status: PaymentStatus,
+  message: string,
+  orderId?: string,
+): string {
+  const statusText = status === PaymentStatus.COMPLETED ? "success" : status.toLowerCase();
+  const payload = JSON.stringify({ status, message, orderId });
+
+  return `<!DOCTYPE html>
+  <html lang="en">
+    <head>
+      <meta charset="utf-8" />
+      <meta name="viewport" content="width=device-width, initial-scale=1" />
+      <title>Payment ${statusText}</title>
+      <style>
+        body { font-family: "Inter", system-ui, -apple-system, sans-serif; background: #f9fafb; color: #111827; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; padding: 0 16px; }
+        .card { background: #fff; border-radius: 16px; padding: 32px 28px; text-align: center; max-width: 420px; width: 100%; box-shadow: 0 20px 60px rgba(15, 23, 42, 0.12); }
+        .card h1 { margin: 0 0 12px; font-size: 24px; color: ${status === PaymentStatus.COMPLETED ? "#059669" : "#b91c1c"}; }
+        .card p { margin: 0 0 24px; font-size: 16px; line-height: 1.5; color: #374151; }
+        .card button { appearance: none; border: none; border-radius: 999px; padding: 12px 24px; font-weight: 600; font-size: 15px; cursor: pointer; background: #4f46e5; color: #fff; transition: background 0.2s ease; }
+        .card button:hover { background: #4338ca; }
+        .order { font-size: 13px; color: #6b7280; margin-bottom: 20px; }
+      </style>
+    </head>
+    <body>
+      <div class="card">
+        <h1>${status === PaymentStatus.COMPLETED ? "Payment Successful" : "Payment Update"}</h1>
+        ${orderId ? `<div class="order">Reference: ${orderId}</div>` : ""}
+        <p>${message}</p>
+        <button onclick="closeWindow()">Back to App</button>
+      </div>
+      <script>
+        function closeWindow() {
+          if (window.ReactNativeWebView) {
+            window.ReactNativeWebView.postMessage('${payload}');
+          }
+          window.location.href = 'https://expo.dev';
+        }
+        closeWindow();
+      </script>
+    </body>
+  </html>`;
+}
+
+async function updatePaymentFromGateway(
+  paymentId: string,
+  status: PaymentStatus,
+  payload: Record<string, any>,
+  verified: boolean,
+) {
+  const payment = await prisma.payment.findUnique({ where: { id: paymentId } });
+  if (!payment) {
+    return;
+  }
+
+  const existingMetadata = (payment.metadata as Prisma.JsonObject | undefined) || {};
+  const metadata: Prisma.JsonObject = {
+    ...existingMetadata,
+    lastNotification: payload,
+    verified,
+    lastUpdatedAt: new Date().toISOString(),
+  };
+
+  const updateData: Prisma.PaymentUpdateInput = {
+    status,
+    fiuuTransactionId:
+      (payload.tranID as string) ||
+      (payload.transaction_id as string) ||
+      payment.fiuuTransactionId ||
+      undefined,
+    fiuuChannel: (payload.channel as string) || payment.fiuuChannel || undefined,
+    fiuuStatusCode:
+      (payload.status as string) || (payload.stat as string) || payment.fiuuStatusCode || undefined,
+    fiuuMessage:
+      (payload.errdesc as string) ||
+      (payload.error_desc as string) ||
+      payment.fiuuMessage ||
+      undefined,
+    verificationHash: verified ? "VERIFIED" : "UNVERIFIED",
+    metadata,
+  };
+
+  if (status === PaymentStatus.COMPLETED && !payment.paidAt) {
+    updateData.paidAt = new Date();
+  }
+
+  await prisma.payment.update({
+    where: { id: paymentId },
+    data: updateData,
+  });
+
+  // If membership is not yet linked and payment is completed, create it now.
+  let membershipId = payment.seasonMembershipId;
+  if (!membershipId && status === PaymentStatus.COMPLETED && payment.userId && payment.seasonId) {
+    const membership = await registerMembershipService({
+      userId: payment.userId,
+      seasonId: payment.seasonId,
+      payLater: true, // mark as paid/active
+    });
+
+    // Link payment to the newly created membership
+    await prisma.payment.update({
+      where: { id: paymentId },
+      data: { seasonMembershipId: membership.id },
+    });
+
+    membershipId = membership.id;
+  }
+
+  if (!membershipId) return;
+
+  const membershipUpdate: Prisma.SeasonMembershipUpdateInput = {
+    paymentStatus:
+      status === PaymentStatus.CANCELLED
+        ? PaymentStatus.PENDING
+        : status,
+  };
+
+  if (status === PaymentStatus.COMPLETED) {
+    membershipUpdate.status = "ACTIVE";
+  } else if (status === PaymentStatus.FAILED || status === PaymentStatus.CANCELLED) {
+    membershipUpdate.status = "PENDING";
+  }
+
+  await prisma.seasonMembership.update({
+    where: { id: membershipId },
+    data: membershipUpdate,
+  });
+}
