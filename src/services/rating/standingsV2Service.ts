@@ -249,7 +249,10 @@ export class StandingsV2Service {
       const group = pointGroups.get(points)!;
 
       if (group.length === 1) {
-        sortedGroups.push(group[0]);
+        const firstPlayer = group[0];
+        if (firstPlayer) {
+          sortedGroups.push(firstPlayer);
+        }
       } else if (group.length === 2) {
         // 2-way tie: use direct H2H
         sortedGroups.push(...this.sortTwoWayTie(group));
