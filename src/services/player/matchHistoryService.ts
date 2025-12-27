@@ -393,7 +393,7 @@ export async function getPlayerMatchHistoryAdmin(playerId: string) {
 
       // Timestamps
       createdAt: match.createdAt,
-      completedAt: match.completedAt,
+      updatedAt: match.updatedAt,
     };
   });
 
