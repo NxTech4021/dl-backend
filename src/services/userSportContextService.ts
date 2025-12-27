@@ -114,6 +114,15 @@ export async function getRecentSportContext(
 
   const recentMatch = recentMatches[0];
 
+  // Safety check - should never happen after length check above
+  if (!recentMatch) {
+    return {
+      sportType: null,
+      lastInteractionAt: null,
+      isValid: false
+    };
+  }
+
   // Determine the most recent interaction date
   const lastInteractionAt = getEffectiveDate(recentMatch);
 
