@@ -102,7 +102,11 @@ export const createThread = async (req: Request, res: Response) => {
         console.log(`✅ DM already exists: ${result.thread.id}`);
         return res.status(200).json({
           success: true,
-          data: result.thread,
+          data: {
+            ...result.thread,
+            messages: [],
+            _count: { messages: 0 },
+          },
           message: "Thread already exists",
           isExisting: true
         });
@@ -110,16 +114,23 @@ export const createThread = async (req: Request, res: Response) => {
 
       console.log(`✅ DM thread created: ${result.thread.id}`);
 
+      // Prepare complete thread data with all required fields
+      const completeThreadData = {
+        ...result.thread,
+        messages: [],
+        _count: { messages: 0 },
+      };
+
       // Socket notification for DM
       if (req.io) {
         userIds.forEach((userId) => {
-          req.io.to(userId).emit('thread_created', { thread: result.thread });
+          req.io.to(userId).emit('thread_created', { thread: completeThreadData });
         });
       }
 
       return res.status(201).json({
         success: true,
-        data: result.thread,
+        data: completeThreadData,
         message: "Thread created successfully"
       });
     }
@@ -169,11 +180,19 @@ export const createThread = async (req: Request, res: Response) => {
 
     console.log(`✅ Thread created: ${thread.id}`);
 
+    // Prepare complete thread data with all required fields
+    const completeGroupThreadData = {
+      ...thread,
+      messages: [],
+      _count: { messages: 0 },
+      sportType: thread.division?.league?.sportType || null
+    };
+
     // 💡 SOCKET INTEGRATION: Notify users about new thread
     if (req.io) {
       userIds.forEach((userId) => {
         req.io.to(userId).emit("thread_created", {
-          ...thread,
+          ...completeGroupThreadData,
           timestamp: new Date().toISOString(),
         });
         console.log(`📤 Sent thread_created event to user ${userId}`);
@@ -182,10 +201,7 @@ export const createThread = async (req: Request, res: Response) => {
 
     return res.status(201).json({
       success: true,
-      data: {
-        ...thread,
-        sportType: thread.division?.league?.sportType || null
-      },
+      data: completeGroupThreadData,
       message: "Thread created successfully",
     });
   } catch (error) {
