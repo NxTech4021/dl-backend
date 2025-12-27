@@ -41,6 +41,8 @@ export const getAdminMatches = async (req: Request, res: Response) => {
       search,
       isDisputed,
       hasLateCancellation,
+      isWalkover,
+      requiresAdminReview,
       matchContext, // 'league' | 'friendly' | 'all'
       showHidden,
       showReported,
@@ -62,6 +64,8 @@ export const getAdminMatches = async (req: Request, res: Response) => {
     if (search) filters.search = search as string;
     if (isDisputed !== undefined) filters.isDisputed = isDisputed === 'true';
     if (hasLateCancellation !== undefined) filters.hasLateCancellation = hasLateCancellation === 'true';
+    if (isWalkover !== undefined) filters.isWalkover = isWalkover === 'true';
+    if (requiresAdminReview !== undefined) filters.requiresAdminReview = requiresAdminReview === 'true';
     if (matchContext) filters.matchContext = matchContext as 'league' | 'friendly' | 'all';
     if (showHidden !== undefined) filters.showHidden = showHidden === 'true';
     if (showReported !== undefined) filters.showReported = showReported === 'true';

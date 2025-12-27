@@ -4,6 +4,7 @@ import cors from "cors";
 import { createServer } from "http";
 import cookieParser from "cookie-parser";
 import { socketHandler } from "./utils/socketconnection";
+import { notificationService } from "./services/notificationService";
 import { toNodeHandler } from "better-auth/node";
 import { auth } from "./lib/auth";
 import { socketMiddleware } from "./middlewares/socketmiddleware";
@@ -77,6 +78,9 @@ app.set("trust proxy", 1);
 
 const httpServer = createServer(app);
 const io = socketHandler(httpServer);
+
+// Initialize notification service with socket.io for real-time notifications
+notificationService.setSocketIO(io);
 
 // Apply security middlewares first
 app.use(securityHeaders);

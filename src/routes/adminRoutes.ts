@@ -17,6 +17,7 @@ import bracketRoutes from "./admin/bracketRoutes";
 import adminPlayerRoutes from "./admin/adminPlayerRoutes";
 import adminLogRoutes from "./admin/adminLogRoutes";
 import adminReportRoutes from "./admin/adminReportRoutes";
+import adminPaymentRoutes from "./admin/adminPaymentRoutes";
 import adminRatingRoutes from "./adminRatingRoutes";
 import adminInactivityRoutes from "./adminInactivityRoutes";
 import adminBest6Routes from "./admin/adminBest6Routes";
@@ -67,5 +68,8 @@ adminRouter.use("/logs", adminLogRoutes);
 
 // Admin Reports Routes
 adminRouter.use("/reports", adminReportRoutes);
+
+// Admin Payment Management Routes
+adminRouter.use("/payments", adminPaymentRoutes);
 
 export default adminRouter;

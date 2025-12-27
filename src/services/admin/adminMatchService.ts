@@ -32,6 +32,8 @@ export interface AdminMatchFilters {
   search?: string;
   isDisputed?: boolean;
   hasLateCancellation?: boolean;
+  isWalkover?: boolean;
+  requiresAdminReview?: boolean;
   matchContext?: 'league' | 'friendly' | 'all';
   showHidden?: boolean;
   showReported?: boolean;
@@ -107,6 +109,8 @@ export class AdminMatchService {
       search,
       isDisputed,
       hasLateCancellation,
+      isWalkover,
+      requiresAdminReview,
       matchContext,
       showHidden,
       showReported,
@@ -122,6 +126,8 @@ export class AdminMatchService {
     if (status && status.length > 0) where.status = { in: status };
     if (isDisputed !== undefined) where.isDisputed = isDisputed;
     if (hasLateCancellation) where.isLateCancellation = true;
+    if (isWalkover !== undefined) where.isWalkover = isWalkover;
+    if (requiresAdminReview !== undefined) where.requiresAdminReview = requiresAdminReview;
 
     // Match context filter: league vs friendly matches
     if (matchContext === 'league') {
