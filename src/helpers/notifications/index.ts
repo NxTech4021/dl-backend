@@ -1,7 +1,7 @@
 /**
  * Notification Templates - Category-Based Organization
  * Based on DEUCE Notifications Masterlist V1.0
- * 
+ *
  * Categories:
  * - Account & System
  * - Doubles League
@@ -13,41 +13,41 @@
  * - Special Circumstances
  */
 
-import { accountNotifications } from './accountNotifications';
-import { divisionNotifications } from './divisionNotifications';
-import { doublesNotifications } from './doublesNotifications';
-import { leagueLifecycleNotifications } from './leagueLifecycleNotifications';
-import { matchManagementNotifications } from './matchManagementNotifications';
-import { ratingRankingNotifications } from './ratingRankingNotifications';
-import { socialCommunityNotifications } from './socialCommunityNotifications';
-import { promotionalNotifications } from './promotionalNotifications';
-import { specialCircumstancesNotifications } from './specialCircumstancesNotifications';
+import { accountNotifications } from "./accountNotifications";
+import { divisionNotifications } from "./divisionNotifications";
+import { doublesNotifications } from "./doublesNotifications";
+import { leagueLifecycleNotifications } from "./leagueLifecycleNotifications";
+import { matchManagementNotifications } from "./matchManagementNotifications";
+import { ratingRankingNotifications } from "./ratingRankingNotifications";
+import { socialCommunityNotifications } from "./socialCommunityNotifications";
+import { promotionalNotifications } from "./promotionalNotifications";
+import { specialCircumstancesNotifications } from "./specialCircumstancesNotifications";
 
 // Individual category exports
-export { accountNotifications } from './accountNotifications';
-export { divisionNotifications } from './divisionNotifications';
-export { doublesNotifications } from './doublesNotifications';
-export { leagueLifecycleNotifications } from './leagueLifecycleNotifications';
-export { matchManagementNotifications } from './matchManagementNotifications';
-export { ratingRankingNotifications } from './ratingRankingNotifications';
-export { socialCommunityNotifications } from './socialCommunityNotifications';
-export { promotionalNotifications } from './promotionalNotifications';
-export { specialCircumstancesNotifications } from './specialCircumstancesNotifications';
+export { accountNotifications } from "./accountNotifications";
+export { divisionNotifications } from "./divisionNotifications";
+export { doublesNotifications } from "./doublesNotifications";
+export { leagueLifecycleNotifications } from "./leagueLifecycleNotifications";
+export { matchManagementNotifications } from "./matchManagementNotifications";
+export { ratingRankingNotifications } from "./ratingRankingNotifications";
+export { socialCommunityNotifications } from "./socialCommunityNotifications";
+export { promotionalNotifications } from "./promotionalNotifications";
+export { specialCircumstancesNotifications } from "./specialCircumstancesNotifications";
 
 /**
  * Unified notification templates object
  * Access notifications by category
- * 
+ *
  * @example
  * ```typescript
  * import { notificationTemplates } from '@/helpers/notifications';
- * 
+ *
  * // Account notifications
  * const welcome = notificationTemplates.account.welcomeToDeuce();
- * 
+ *
  * // Match notifications
  * const reminder = notificationTemplates.match.scoreSubmissionReminder('John');
- * 
+ *
  * // League notifications
  * const winner = notificationTemplates.leagueLifecycle.leagueWinner('Summer 2024');
  * ```

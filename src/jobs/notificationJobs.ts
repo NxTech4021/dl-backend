@@ -20,7 +20,7 @@ import {
   sendRegistrationClosing3DaysNotifications,
   sendRegistrationClosing24hNotifications,
 } from "../services/notification/leagueNotificationService";
-import { leagueLifecycleNotifications } from '../helpers/notifications';
+import { leagueLifecycleNotifications, matchManagementNotifications, doublesNotifications } from '../helpers/notifications';
 import {
   sendWeeklyRankingUpdates,
   sendMonthlyDMRRecap,
@@ -49,11 +49,50 @@ export function scheduleMatch24hReminders(): void {
           },
           status: "SCHEDULED",
         },
-        select: { id: true },
+        include: {
+          participants: {
+            include: {
+              user: {
+                select: {
+                  id: true,
+                  name: true,
+                },
+              },
+            },
+          },
+        },
       });
 
       for (const match of matches) {
-        await sendMatchReminder24h(match.id);
+        if (!match.participants || match.participants.length < 2) continue;
+        
+        const date = match.matchDate?.toLocaleDateString() || 'TBD';
+        const time = match.matchDate?.toLocaleTimeString() || 'TBD';
+        const venue = match.venue || match.location || 'TBD';
+        
+        for (const player of match.participants) {
+          // Get opponents for this player
+          const opponents = match.participants.filter(p => 
+            p.userId !== player.userId && 
+            (match.matchType === 'SINGLES' || p.team !== player.team)
+          );
+          
+          const opponentNames = opponents.map(opp => opp.user?.name || 'Player').join(' & ');
+          const opponentName = opponentNames || 'Opponent';
+          
+          const notif = matchManagementNotifications.matchReminder24h(
+            opponentName,
+            date,
+            time,
+            venue
+          );
+          
+          await notificationService.createNotification({
+            ...notif,
+            userIds: player.userId,
+            matchId: match.id,
+          });
+        }
       }
 
       logger.info("24h match reminders sent", { count: matches.length });
@@ -118,19 +157,33 @@ export function scheduleMatch2hReminders(): void {
 
       // Send notifications for each match
       for (const match of matches) {
-        const playerIds = match.participants.map((p) => p.userId);
-
-        await notificationService.createNotification({
-          userIds: playerIds,
-          type: "MATCH_REMINDER",
-          category: "MATCH",
-          title: "Match Starting Soon",
-          message: `Your match in ${
-            match.division?.name || "division"
-          } starts in 2 hours`,
-          matchId: match.id,
-          seasonId: match.season?.id || undefined,
-        });
+        if (!match.participants || match.participants.length < 2) continue;
+        
+        const time = match.matchDate?.toLocaleTimeString() || 'TBD';
+        const venue = match.venue || match.location || 'TBD';
+        
+        for (const player of match.participants) {
+          // Get opponents for this player
+          const opponents = match.participants.filter(p => 
+            p.userId !== player.userId && 
+            (match.matchType === 'SINGLES' || p.team !== player.team)
+          );
+          
+          const opponentNames = opponents.map(opp => opp.user?.name || 'Player').join(' & ');
+          const opponentName = opponentNames || 'Opponent';
+          
+          const notif = matchManagementNotifications.matchReminder2h(
+            opponentName,
+            time,
+            venue
+          );
+          
+          await notificationService.createNotification({
+            ...notif,
+            userIds: player.userId,
+            matchId: match.id,
+          });
+        }
       }
 
       logger.info("2h match reminders sent", { count: matches.length });
@@ -140,6 +193,84 @@ export function scheduleMatch2hReminders(): void {
   });
 
   logger.info("2h match reminder job scheduled");
+}
+
+
+/**
+ * Check and send match day morning reminders
+ * Runs daily at 8:00 AM
+ */
+export function scheduleMatchMorningReminders(): void {
+  cron.schedule("0 8 * * *", async () => {
+    try {
+      logger.info("Running match day morning reminder job");
+
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const tomorrow = new Date(today);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+
+      const matches = await prisma.match.findMany({
+        where: {
+          matchDate: {
+            gte: today,
+            lt: tomorrow,
+          },
+          status: "SCHEDULED",
+        },
+        include: {
+          participants: {
+            include: {
+              user: {
+                select: {
+                  id: true,
+                  name: true,
+                },
+              },
+            },
+          },
+        },
+      });
+
+      for (const match of matches) {
+        if (!match.participants || match.participants.length < 2) continue;
+        
+        const date = match.matchDate?.toLocaleDateString() || 'TBD';
+        const time = match.matchDate?.toLocaleTimeString() || 'TBD';
+        const venue = match.venue || match.location || 'TBD';
+        
+        for (const player of match.participants) {
+          // Get opponents for this player
+          const opponents = match.participants.filter(p => 
+            p.userId !== player.userId && 
+            (match.matchType === 'SINGLES' || p.team !== player.team)
+          );
+          
+          const opponentNames = opponents.map(opp => opp.user?.name || 'Player').join(' & ');
+          const opponentName = opponentNames || 'Opponent';
+          
+          const notif = matchManagementNotifications.matchMorningReminder(
+            opponentName,
+            date,
+            time,
+            venue
+          );
+          
+          await notificationService.createNotification({
+            ...notif,
+            userIds: player.userId,
+            matchId: match.id,
+          });
+        }
+      }
+
+      logger.info("Match day morning reminders sent", { count: matches.length });
+    } catch (error) {
+      logger.error("Failed to send match day morning reminders", {}, error as Error);
+    }
+  });
+
+  logger.info("Match day morning reminder job scheduled");
 }
 
 /**
@@ -619,6 +750,287 @@ export function scheduleMonthlyDMRRecaps(): void {
 }
 
 /**
+ * Check and send team registration reminders (2 hours before deadline)
+ * Runs every 30 minutes
+ */
+export function scheduleTeamRegistrationReminder2h(): void {
+  cron.schedule('*/30 * * * *', async () => {
+    try {
+      logger.info('Running team registration 2h reminder job');
+
+      const now = new Date();
+      const in2Hours = new Date(now.getTime() + 2 * 60 * 60 * 1000);
+      const in2Hours15Min = new Date(now.getTime() + 2 * 60 * 60 * 1000 + 15 * 60 * 1000);
+
+      // Find partnerships that have been accepted but not yet registered
+      // and the season registration deadline is in ~2 hours
+      const seasons = await prisma.season.findMany({
+        where: {
+          regiDeadline: {
+            gte: in2Hours,
+            lte: in2Hours15Min,
+          },
+          status: 'UPCOMING',
+        },
+        select: {
+          id: true,
+          name: true,
+          regiDeadline: true,
+        },
+      });
+
+      for (const season of seasons) {
+        try {
+          // Find partnerships for this season that don't have active memberships
+          const partnerships = await prisma.partnership.findMany({
+            where: {
+              seasonId: season.id,
+              status: 'ACTIVE',
+            },
+            include: {
+              captain: {
+                select: {
+                  id: true,
+                  name: true,
+                  username: true,
+                },
+              },
+              partner: {
+                select: {
+                  id: true,
+                  name: true,
+                  username: true,
+                },
+              },
+            },
+          });
+
+          for (const partnership of partnerships) {
+            // Check if captain has already registered
+            const captainMembership = await prisma.seasonMembership.findFirst({
+              where: {
+                userId: partnership.captainId,
+                seasonId: season.id,
+                status: 'ACTIVE',
+              },
+            });
+
+            // Only send reminder if not registered
+            if (!captainMembership) {
+              const partnerName = partnership.partner.name || partnership.partner.username || 'your partner';
+              
+              const notif = doublesNotifications.teamRegistrationReminder2h(
+                season.name || 'this league',
+                partnerName
+              );
+
+              await notificationService.createNotification({
+                userIds: partnership.captainId,
+                ...notif,
+                seasonId: season.id,
+                partnershipId: partnership.id,
+              });
+            }
+          }
+
+          logger.info('Team registration 2h reminders sent', { seasonId: season.id, count: partnerships.length });
+        } catch (innerErr) {
+          logger.error('Failed sending team registration 2h reminders for season', { seasonId: season.id }, innerErr as Error);
+        }
+      }
+    } catch (error) {
+      logger.error('Failed to run team registration 2h reminder job', {}, error as Error);
+    }
+  });
+
+  logger.info('Team registration 2h reminder job scheduled');
+}
+
+/**
+ * Check and send team registration reminders (24 hours before deadline)
+ * Runs daily at 10:00 AM
+ */
+export function scheduleTeamRegistrationReminder24h(): void {
+  cron.schedule('0 10 * * *', async () => {
+    try {
+      logger.info('Running team registration 24h reminder job');
+
+      const now = new Date();
+      const in24Hours = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+      const in25Hours = new Date(now.getTime() + 25 * 60 * 60 * 1000);
+
+      // Find seasons with registration deadline in ~24 hours
+      const seasons = await prisma.season.findMany({
+        where: {
+          regiDeadline: {
+            gte: in24Hours,
+            lte: in25Hours,
+          },
+          status: 'UPCOMING',
+        },
+        select: {
+          id: true,
+          name: true,
+          regiDeadline: true,
+        },
+      });
+
+      for (const season of seasons) {
+        try {
+          // Find partnerships for this season
+          const partnerships = await prisma.partnership.findMany({
+            where: {
+              seasonId: season.id,
+              status: 'ACTIVE',
+            },
+            include: {
+              captain: {
+                select: {
+                  id: true,
+                  name: true,
+                  username: true,
+                },
+              },
+            },
+          });
+
+          for (const partnership of partnerships) {
+            // Check if captain has already registered
+            const captainMembership = await prisma.seasonMembership.findFirst({
+              where: {
+                userId: partnership.captainId,
+                seasonId: season.id,
+                status: 'ACTIVE',
+              },
+            });
+
+            // Only send reminder if not registered
+            if (!captainMembership) {
+              const notif = doublesNotifications.teamRegistrationReminder24h(
+                season.name || 'this league'
+              );
+
+              await notificationService.createNotification({
+                userIds: partnership.captainId,
+                ...notif,
+                seasonId: season.id,
+                partnershipId: partnership.id,
+              });
+            }
+          }
+
+          logger.info('Team registration 24h reminders sent', { seasonId: season.id, count: partnerships.length });
+        } catch (innerErr) {
+          logger.error('Failed sending team registration 24h reminders for season', { seasonId: season.id }, innerErr as Error);
+        }
+      }
+    } catch (error) {
+      logger.error('Failed to run team registration 24h reminder job', {}, error as Error);
+    }
+  });
+
+  logger.info('Team registration 24h reminder job scheduled');
+}
+
+/**
+ * Check and send registration deadline notifications to captains
+ * Runs daily at 8:00 PM (evening before deadline day)
+ */
+export function scheduleRegistrationDeadlineCaptain(): void {
+  cron.schedule('0 20 * * *', async () => {
+    try {
+      logger.info('Running registration deadline captain reminder job');
+
+      const tomorrow = new Date();
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      tomorrow.setHours(0, 0, 0, 0);
+
+      const dayAfterTomorrow = new Date(tomorrow);
+      dayAfterTomorrow.setDate(dayAfterTomorrow.getDate() + 1);
+
+      // Find seasons with registration deadline tomorrow
+      const seasons = await prisma.season.findMany({
+        where: {
+          regiDeadline: {
+            gte: tomorrow,
+            lt: dayAfterTomorrow,
+          },
+          status: 'UPCOMING',
+        },
+        select: {
+          id: true,
+          name: true,
+        },
+      });
+
+      for (const season of seasons) {
+        try {
+          // Find partnerships for this season
+          const partnerships = await prisma.partnership.findMany({
+            where: {
+              seasonId: season.id,
+              status: 'ACTIVE',
+            },
+            include: {
+              captain: {
+                select: {
+                  id: true,
+                  name: true,
+                  username: true,
+                },
+              },
+              partner: {
+                select: {
+                  id: true,
+                  name: true,
+                  username: true,
+                },
+              },
+            },
+          });
+
+          for (const partnership of partnerships) {
+            // Check if captain has already registered
+            const captainMembership = await prisma.seasonMembership.findFirst({
+              where: {
+                userId: partnership.captainId,
+                seasonId: season.id,
+                status: 'ACTIVE',
+              },
+            });
+
+            // Only send reminder if not registered
+            if (!captainMembership) {
+              const partnerName = partnership.partner.name || partnership.partner.username || 'your partner';
+              
+              const notif = doublesNotifications.registrationDeadlineCaptain(
+                season.name || 'this league',
+                partnerName
+              );
+
+              await notificationService.createNotification({
+                userIds: partnership.captainId,
+                ...notif,
+                seasonId: season.id,
+                partnershipId: partnership.id,
+              });
+            }
+          }
+
+          logger.info('Registration deadline captain reminders sent', { seasonId: season.id, count: partnerships.length });
+        } catch (innerErr) {
+          logger.error('Failed sending registration deadline captain reminders for season', { seasonId: season.id }, innerErr as Error);
+        }
+      }
+    } catch (error) {
+      logger.error('Failed to run registration deadline captain reminder job', {}, error as Error);
+    }
+  });
+
+  logger.info('Registration deadline captain reminder job scheduled');
+}
+
+/**
  * Check incomplete profiles and send reminders
  * Runs daily at 6:00 PM for users created today
  */
@@ -732,6 +1144,7 @@ export function initializeNotificationJobs(): void {
 
   scheduleMatch24hReminders();
   scheduleMatch2hReminders();
+  scheduleMatchMorningReminders();
   scheduleScoreSubmissionReminders();
   scheduleSeasonStartingSoonNotifications();
   scheduleSeasonStartsTomorrowNotifications();
@@ -746,6 +1159,11 @@ export function initializeNotificationJobs(): void {
   scheduleRegistrationClosing24h();
   scheduleLastMatchDeadline48h();
   schedulePushTokenCleanup();
+  
+  // Doubles team registration reminders
+  scheduleTeamRegistrationReminder2h();
+  scheduleTeamRegistrationReminder24h();
+  scheduleRegistrationDeadlineCaptain();
 
   logger.info("✅ All notification jobs initialized successfully");
 }
