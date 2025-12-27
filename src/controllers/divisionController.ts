@@ -779,8 +779,7 @@ export const assignPlayerToDivision = async (req: Request, res: Response) => {
 
       // 🆕 Send group chat notification
       const chatNotif = notificationTemplates.chat.groupAdded(
-        divisionThread.name || `${division.name} Chat`,
-        division.name
+        divisionThread.name || `${division.name} Chat`
       );
 
       await notificationService.createNotification({
