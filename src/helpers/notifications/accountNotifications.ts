@@ -145,4 +145,12 @@ export const accountNotifications = {
     message: 'DEUCE is back online! Thanks for your patience',
     metadata: {},
   }),
+
+  withdrawalRequestSubmitted: (leagueName: string, seasonName?: string): NotificationPayload => ({
+    type: NOTIFICATION_TYPES.WITHDRAWAL_REQUEST_RECEIVED,
+    category: getCategoryForNotificationType(NOTIFICATION_TYPES.WITHDRAWAL_REQUEST_RECEIVED),
+    title: 'Withdrawal Request Received',
+    message: `Your withdrawal request from ${leagueName}${seasonName ? ` (${seasonName})` : ''} has been submitted and is pending review`,
+    metadata: { leagueName, seasonName },
+  }),
 };
