@@ -12,6 +12,7 @@ import {
   PlayerActivityStatus
 } from '../config/inactivity.config';
 import { getEffectiveThreshold } from './admin/adminInactivityService';
+import { leagueLifecycleNotifications } from '../helpers/notifications/leagueLifecycleNotifications';
 import { logger } from '../utils/logger';
 import { getCurrentMalaysiaTime } from '../utils/timezone';
 
@@ -87,12 +88,31 @@ export class InactivityService {
   ): Promise<void> {
     // Get days since last match
     const daysSinceLastMatch = await this.getDaysSinceLastMatch(userId);
+    const daysSinceRegistration = this.calculateDaysSince(createdAt);
 
-    // Handle users who have never played
+    // --- 1. 7 days since last match (Inactive Player Warning - 7 Days)
+    if (daysSinceLastMatch === 7) {
+      const notif = leagueLifecycleNotifications.inactivePlayerWarning7Days();
+      await this.notificationService.createNotification({ ...notif, userIds: userId });
+      results.warnings++;
+    }
+
+    // --- 2. 14 days since registration, no match played (Inactivity During League Season - No match)
+    if (daysSinceLastMatch === null && daysSinceRegistration === 14) {
+      const notif = leagueLifecycleNotifications.inactivityDuringLeagueSeasonNoMatch();
+      await this.notificationService.createNotification({ ...notif, userIds: userId });
+      results.warnings++;
+      return;
+    }
+
+    // --- 3. 14 days since last match, but user has played at least one (Inactivity During League Season - Inactive 2 weeks)
+    if (daysSinceLastMatch === 14) {
+      const notif = leagueLifecycleNotifications.inactivityDuringLeagueSeason2Weeks();
+      await this.notificationService.createNotification({ ...notif, userIds: userId });
+      results.warnings++;
+    }
+
     if (daysSinceLastMatch === null) {
-      // Only mark as inactive if user has been registered long enough
-      const daysSinceRegistration = this.calculateDaysSince(createdAt);
-
       if (daysSinceRegistration >= thresholds.inactivityDays) {
         await this.markAsInactive(userId, 'Never played a match');
         results.markedInactive++;
@@ -100,15 +120,11 @@ export class InactivityService {
       return;
     }
 
-    // Check thresholds
     if (daysSinceLastMatch >= thresholds.inactivityDays) {
       await this.markAsInactive(userId, `${daysSinceLastMatch} days since last match`);
       results.markedInactive++;
     } else if (daysSinceLastMatch >= thresholds.warningDays) {
-      // Prevent duplicate warnings: Only send if no warning sent in the last 24 hours
-      const shouldSendWarning = !lastActivityCheck ||
-        this.calculateDaysSince(lastActivityCheck) >= 1;
-
+      const shouldSendWarning = !lastActivityCheck || this.calculateDaysSince(lastActivityCheck) >= 1;
       if (shouldSendWarning) {
         await this.sendWarningNotificationWithThreshold(userId, daysSinceLastMatch, thresholds.inactivityDays);
         results.warnings++;

@@ -99,24 +99,24 @@ export const leagueLifecycleNotifications = {
   }),
 
   inactivePlayerWarning7Days: (): NotificationPayload => ({
-    type: NOTIFICATION_TYPES.INACTIVITY_WARNING,
-    category: getCategoryForNotificationType(NOTIFICATION_TYPES.INACTIVITY_WARNING),
+    type: NOTIFICATION_TYPES.INACTIVE_PLAYER_WARNING_7_DAYS,
+    category: getCategoryForNotificationType(NOTIFICATION_TYPES.INACTIVE_PLAYER_WARNING_7_DAYS),
     title: 'Get Back in',
     message: 'You haven\'t played in a week. Schedule your league matches to stay competitive!',
     metadata: {},
   }),
 
   inactivityDuringLeagueSeasonNoMatch: (): NotificationPayload => ({
-    type: NOTIFICATION_TYPES.INACTIVITY_WARNING,
-    category: getCategoryForNotificationType(NOTIFICATION_TYPES.INACTIVITY_WARNING),
+    type: NOTIFICATION_TYPES.INACTIVITY_DURING_LEAGUE_SEASON_NO_MATCH,
+    category: getCategoryForNotificationType(NOTIFICATION_TYPES.INACTIVITY_DURING_LEAGUE_SEASON_NO_MATCH),
     title: 'The League Is Heating Up',
     message: 'Players in your league are already competing. Join in and play your first match',
     metadata: {},
   }),
 
   inactivityDuringLeagueSeason2Weeks: (): NotificationPayload => ({
-    type: NOTIFICATION_TYPES.INACTIVITY_WARNING,
-    category: getCategoryForNotificationType(NOTIFICATION_TYPES.INACTIVITY_WARNING),
+    type: NOTIFICATION_TYPES.INACTIVITY_DURING_LEAGUE_SEASON_2_WEEKS,
+    category: getCategoryForNotificationType(NOTIFICATION_TYPES.INACTIVITY_DURING_LEAGUE_SEASON_2_WEEKS),
     title: 'Keep It Going',
     message: 'Your season\'s still on. Play your next match and stay in the mix',
     metadata: {},

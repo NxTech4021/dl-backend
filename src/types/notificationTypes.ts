@@ -5,6 +5,10 @@ export type NotificationType = string;
 
 // Common notification types as constants for consistency
 export const NOTIFICATION_TYPES = {
+  // League Lifecycle - Inactivity
+  INACTIVE_PLAYER_WARNING_7_DAYS: 'INACTIVE_PLAYER_WARNING_7_DAYS',
+  INACTIVITY_DURING_LEAGUE_SEASON_NO_MATCH: 'INACTIVITY_DURING_LEAGUE_SEASON_NO_MATCH',
+  INACTIVITY_DURING_LEAGUE_SEASON_2_WEEKS: 'INACTIVITY_DURING_LEAGUE_SEASON_2_WEEKS',
   
   // Division notifications
   DIVISION_ASSIGNED: 'DIVISION_ASSIGNED',
