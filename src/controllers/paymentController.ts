@@ -263,14 +263,26 @@ export const createFiuuCheckout = async (req: Request, res: Response) => {
   try {
     const config = getFiuuConfig(req.get("x-forwarded-host") || req.get("host"));
 
-    const [user, season] = await Promise.all([
+    const [user, season, existingMembership] = await Promise.all([
       prisma.user.findUnique({
         where: { id: userId },
         select: { id: true, name: true, email: true, phoneNumber: true },
       }),
       prisma.season.findUnique({
         where: { id: seasonId },
-        select: { id: true, name: true, entryFee: true, paymentRequired: true },
+        select: {
+          id: true,
+          name: true,
+          entryFee: true,
+          paymentRequired: true,
+          isActive: true,
+          startDate: true,
+          regiDeadline: true,
+          status: true,
+        },
+      }),
+      prisma.seasonMembership.findFirst({
+        where: { userId, seasonId },
       }),
     ]);
 
@@ -298,17 +310,8 @@ export const createFiuuCheckout = async (req: Request, res: Response) => {
         .json(new ApiResponse(false, 400, null, "Season entry fee is not configured."));
     }
 
-    let membership = await prisma.seasonMembership.findFirst({
-      where: { userId, seasonId },
-    });
-
-    if (!membership) {
-      membership = await registerMembershipService({
-        userId,
-        seasonId,
-        payLater: false,
-      });
-    } else if (membership.paymentStatus === PaymentStatus.COMPLETED) {
+    // Block if already fully paid/active
+    if (existingMembership?.paymentStatus === PaymentStatus.COMPLETED) {
       return res
         .status(400)
         .json(
@@ -316,10 +319,14 @@ export const createFiuuCheckout = async (req: Request, res: Response) => {
         );
     }
 
+    // Do not auto-register; only create payment intent. Membership will be created on successful payment.
+    const membershipId = existingMembership?.id;
+
     const amount = formatAmount(season.entryFee);
     const existingPayment = await prisma.payment.findFirst({
       where: {
-        seasonMembershipId: membership.id,
+        userId,
+        seasonId,
         paymentMethod: "FIUU",
         status: PaymentStatus.PENDING,
       },
@@ -369,7 +376,6 @@ export const createFiuuCheckout = async (req: Request, res: Response) => {
             paymentMethod: "FIUU",
             user: { connect: { id: user.id } },
             season: { connect: { id: season.id } },
-            seasonMembership: { connect: { id: membership.id } },
             metadata: sharedMetadata,
           },
         });
@@ -383,7 +389,7 @@ export const createFiuuCheckout = async (req: Request, res: Response) => {
           orderId: paymentRecord.orderId,
           amount,
           currency: "MYR",
-          membershipId: membership.id,
+          membershipId,
           checkout,
         },
         "FIUU checkout generated successfully.",
@@ -559,9 +565,25 @@ async function updatePaymentFromGateway(
     data: updateData,
   });
 
-  if (!payment.seasonMembershipId) {
-    return;
+  // If membership is not yet linked and payment is completed, create it now.
+  let membershipId = payment.seasonMembershipId;
+  if (!membershipId && status === PaymentStatus.COMPLETED && payment.userId && payment.seasonId) {
+    const membership = await registerMembershipService({
+      userId: payment.userId,
+      seasonId: payment.seasonId,
+      payLater: true, // mark as paid/active
+    });
+
+    // Link payment to the newly created membership
+    await prisma.payment.update({
+      where: { id: paymentId },
+      data: { seasonMembershipId: membership.id },
+    });
+
+    membershipId = membership.id;
   }
+
+  if (!membershipId) return;
 
   const membershipUpdate: Prisma.SeasonMembershipUpdateInput = {
     paymentStatus:
@@ -577,7 +599,7 @@ async function updatePaymentFromGateway(
   }
 
   await prisma.seasonMembership.update({
-    where: { id: payment.seasonMembershipId },
+    where: { id: membershipId },
     data: membershipUpdate,
   });
 }
