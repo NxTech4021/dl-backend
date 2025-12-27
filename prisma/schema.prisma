@@ -2404,7 +2404,10 @@ enum TeamChangeRequestStatus {
 
 enum DivisionLevel {
   BEGINNER
+  IMPROVER
   INTERMEDIATE
+  UPPER_INTERMEDIATE
+  EXPERT
   ADVANCED
 }
 

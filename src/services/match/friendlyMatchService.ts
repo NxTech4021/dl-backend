@@ -134,12 +134,12 @@ export class FriendlyMatchService {
     } = input;
 
     // Validate skill levels
-    const validSkillLevels = ['BEGINNER', 'IMPROVER', 'INTERMEDIATE', 'UPPER_INTERMEDIATE', 'EXPERT'];
+    const validSkillLevels = ['BEGINNER', 'IMPROVER', 'INTERMEDIATE', 'UPPER_INTERMEDIATE', 'EXPERT', 'ADVANCED'];
     if (!skillLevels || skillLevels.length === 0) {
       throw new Error('At least one skill level is required');
     }
     if (!skillLevels.every(level => validSkillLevels.includes(level))) {
-      throw new Error('Invalid skill level. Must be one of: BEGINNER, IMPROVER, INTERMEDIATE, UPPER_INTERMEDIATE, EXPERT');
+      throw new Error('Invalid skill level. Must be one of: BEGINNER, IMPROVER, INTERMEDIATE, UPPER_INTERMEDIATE, EXPERT, ADVANCED');
     }
 
     // Calculate expiration date for requests (24 hours from now)
