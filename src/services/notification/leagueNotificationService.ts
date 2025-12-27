@@ -541,7 +541,7 @@ export async function notifyDivisionReassignment(userId: string, divisionId: str
       metadata: { divisionId },
     });
   } catch (error) {
-    logger.error("Failed to send division reassignment notification", { userId, divisionId } );
+    logger.error("Failed to send division reassignment notification", { userId, divisionId }, error as Error);
   }
 }
 
@@ -567,7 +567,7 @@ export async function notifyNewPlayerInDivision(userId: string, divisionId: stri
       metadata: { divisionId },
     });
   } catch (error) {
-    logger.error("Failed to send new player in division notification", { userId, divisionId, newPlayerName });
+    logger.error("Failed to send new player in division notification", { userId, divisionId, newPlayerName }, error as Error);
   }
 }
 
@@ -578,14 +578,15 @@ export async function notifyMidSeasonUpdate(userId: string, seasonId: string, po
   try {
     const season = await prisma.season.findUnique({
       where: { id: seasonId },
-      select: { name: true, league: { select: { name: true } } },
+      select: { name: true, leagues: { select: { name: true }, take: 1 } },
     });
 
     if (!season) {
       throw new Error("Season not found");
     }
 
-    const notification = divisionNotifications.midSeasonUpdate(position, season.league.name);
+    const leagueName = season.leagues[0]?.name || 'League';
+    const notification = divisionNotifications.midSeasonUpdate(position, leagueName);
 
     await notificationService.createNotification({
       ...notification,
@@ -593,7 +594,7 @@ export async function notifyMidSeasonUpdate(userId: string, seasonId: string, po
       metadata: { seasonId },
     });
   } catch (error) {
-    logger.error("Failed to send mid-season update notification", { userId, seasonId, position });
+    logger.error("Failed to send mid-season update notification", { userId, seasonId, position }, error as Error);
   }
 }
 
@@ -604,7 +605,7 @@ export async function notifyLateSeasonNudge(userId: string, seasonId: string): P
   try {
     const season = await prisma.season.findUnique({
       where: { id: seasonId },
-      select: { name: true, league: { select: { name: true } } },
+      select: { name: true },
     });
 
     if (!season) {
@@ -619,7 +620,7 @@ export async function notifyLateSeasonNudge(userId: string, seasonId: string): P
       metadata: { seasonId },
     });
   } catch (error) {
-    logger.error("Failed to send late-season nudge notification", { userId, seasonId }, error);
+    logger.error("Failed to send late-season nudge notification", { userId, seasonId }, error as Error);
   }
 }
 

@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+import { Prisma, PrismaClient } from '@prisma/client';
 
 // Singleton pattern for Prisma Client to prevent multiple connections
 class PrismaService {
@@ -6,8 +6,10 @@ class PrismaService {
   private prisma: PrismaClient;
 
   private constructor() {
-    const logLevels = process.env.PRISMA_LOG
-      ? (process.env.PRISMA_LOG.split(',').filter(Boolean) as ('query' | 'info' | 'warn' | 'error')[])
+    const validLogLevels: Prisma.LogLevel[] = ['query', 'info', 'warn', 'error'];
+    const logLevels: Prisma.LogLevel[] = process.env.PRISMA_LOG
+      ? process.env.PRISMA_LOG.split(',')
+          .filter((level): level is Prisma.LogLevel => validLogLevels.includes(level as Prisma.LogLevel))
       : ['warn', 'error'];
 
     const basePrisma = new PrismaClient({

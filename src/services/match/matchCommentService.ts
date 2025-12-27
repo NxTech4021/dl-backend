@@ -121,7 +121,13 @@ export class MatchCommentService {
         userId,
         comment: comment.trim(),
       },
-      include: {
+      select: {
+        id: true,
+        matchId: true,
+        userId: true,
+        comment: true,
+        createdAt: true,
+        updatedAt: true,
         user: {
           select: {
             id: true,
@@ -156,7 +162,13 @@ export class MatchCommentService {
 
     const comments = await prisma.matchComment.findMany({
       where: { matchId },
-      include: {
+      select: {
+        id: true,
+        matchId: true,
+        userId: true,
+        comment: true,
+        createdAt: true,
+        updatedAt: true,
         user: {
           select: {
             id: true,
@@ -204,7 +216,13 @@ export class MatchCommentService {
       data: {
         comment: comment.trim(),
       },
-      include: {
+      select: {
+        id: true,
+        matchId: true,
+        userId: true,
+        comment: true,
+        createdAt: true,
+        updatedAt: true,
         user: {
           select: {
             id: true,

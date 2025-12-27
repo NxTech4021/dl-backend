@@ -629,7 +629,7 @@ export class MatchHistoryService {
           image: p.user.image
         })),
         isWalkover: match.isWalkover,
-        resultComment: match.resultComment,
+        notes: match.notes,
         comments: match.comments.map(c => ({
           id: c.id,
           userId: c.userId,

@@ -117,6 +117,7 @@ export class MatchReminderService {
 
       const reminderNotif = notificationTemplates.match.matchReminder24h(
         opponents,
+        dateStr,
         timeStr,
         venue
       );

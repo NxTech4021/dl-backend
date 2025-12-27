@@ -145,4 +145,12 @@ export const accountNotifications = {
     message: 'DEUCE is back online! Thanks for your patience',
     metadata: {},
   }),
+
+  withdrawalRequestSubmitted: (playerName: string, seasonName: string, reason?: string): NotificationPayload => ({
+    type: NOTIFICATION_TYPES.WITHDRAWAL_REQUEST_RECEIVED,
+    category: getCategoryForNotificationType(NOTIFICATION_TYPES.WITHDRAWAL_REQUEST_RECEIVED),
+    title: 'Withdrawal Request',
+    message: `${playerName} has requested to withdraw from ${seasonName}${reason ? `. Reason: ${reason}` : ''}`,
+    metadata: { playerName, seasonName, reason },
+  }),
 };
