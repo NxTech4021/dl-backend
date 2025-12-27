@@ -6,6 +6,31 @@
 import { NotificationPayload, NOTIFICATION_TYPES, getCategoryForNotificationType } from '../../types/notificationTypes';
 
 export const matchManagementNotifications = {
+  // League match notifications
+  matchScheduled: (opponentName: string, date: string, time: string, venue: string): NotificationPayload => ({
+    type: NOTIFICATION_TYPES.MATCH_SCHEDULED,
+    category: getCategoryForNotificationType(NOTIFICATION_TYPES.MATCH_SCHEDULED),
+    title: 'Match Scheduled',
+    message: `Your match vs ${opponentName} is scheduled for ${date} at ${time} at ${venue}`,
+    metadata: { opponentName, date, time, venue },
+  }),
+
+  matchCancelled: (opponentName: string, reason?: string): NotificationPayload => ({
+    type: NOTIFICATION_TYPES.MATCH_CANCELLED,
+    category: getCategoryForNotificationType(NOTIFICATION_TYPES.MATCH_CANCELLED),
+    title: 'Match Cancelled',
+    message: `Your match vs ${opponentName} has been cancelled${reason ? `: ${reason}` : ''}`,
+    metadata: { opponentName, reason },
+  }),
+
+  winningStreak: (streakCount: number, sportName?: string): NotificationPayload => ({
+    type: NOTIFICATION_TYPES.WINNING_STREAK,
+    category: getCategoryForNotificationType(NOTIFICATION_TYPES.WINNING_STREAK),
+    title: 'Winning Streak!',
+    message: `You're on fire! ${streakCount} wins in a row${sportName ? ` in ${sportName}` : ''}. Keep it up!`,
+    metadata: { streakCount, sportName },
+  }),
+
   // IN-APP NOTIFICATIONS
 
   friendlyMatchPosted: (date: string, time: string, venue: string): NotificationPayload => ({
@@ -224,5 +249,13 @@ export const matchManagementNotifications = {
     title: 'Match Forfeited',
     message: `Match vs ${opponentName} has been forfeited. Reason: ${reason}`,
     metadata: { opponentName, reason },
+  }),
+
+  opponentChanged: (oldOpponentName: string, newOpponentName: string, date: string, time: string, venue: string): NotificationPayload => ({
+    type: NOTIFICATION_TYPES.OPPONENT_CHANGED,
+    category: getCategoryForNotificationType(NOTIFICATION_TYPES.OPPONENT_CHANGED),
+    title: 'Opponent Changed',
+    message: `Your match opponent has changed from ${oldOpponentName} to ${newOpponentName}. Match on ${date} at ${time} at ${venue}`,
+    metadata: { oldOpponentName, newOpponentName, date, time, venue },
   }),
 };
