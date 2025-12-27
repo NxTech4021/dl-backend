@@ -1779,22 +1779,28 @@ export class MatchInvitationService {
         include: {
           match: {
             include: {
-              division: { select: { id: true, name: true } },
+              division: {
+                select: {
+                  id: true,
+                  name: true,
+                  season: { select: { id: true, name: true } }
+                }
+              },
               participants: {
                 include: {
                   user: {
                     select: { id: true, name: true, username: true, image: true }
+                  }
+                }
+              }
             }
+          },
+          inviter: {
+            select: { id: true, name: true, username: true, image: true }
           }
-        }
-      }
-    },
-    inviter: {
-      select: { id: true, name: true, username: true, image: true }
-    }
-  },
-  orderBy: { sentAt: 'desc' }
-});      // Add partner status for doubles matches
+        },
+        orderBy: { sentAt: 'desc' }
+      });      // Add partner status for doubles matches
       const invitationsWithStatus = invitations.map(inv => {
         let partnerStatus = null;
         if (inv.match.matchType === MatchType.DOUBLES) {
