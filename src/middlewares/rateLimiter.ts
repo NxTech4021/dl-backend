@@ -91,3 +91,22 @@ export const uploadLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false
 });
+
+// Rate limiter for push token registration
+// More lenient since tokens refresh occasionally
+export const pushTokenLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 10, // Limit each IP to 10 token registrations per hour
+  message: 'Too many push token registrations, please try again later.',
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: (req: Request, res: Response) => {
+    res.status(429).json({
+      error: 'Too many push token registrations',
+      code: 'PUSH_TOKEN_RATE_LIMIT_EXCEEDED',
+      message: 'Too many push token registrations. Please try again later.',
+      retryAfter: req.rateLimit?.resetTime,
+      success: false
+    });
+  }
+});

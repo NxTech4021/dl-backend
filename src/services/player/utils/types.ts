@@ -55,6 +55,12 @@ export interface PublicProfile extends PlayerWithSkills {
 }
 
 export interface PlayerStats {
+  // Frontend-friendly fields
+  total: number;
+  active: number;
+  inactive: number;
+  verified: number;
+  // Legacy fields for backward compatibility
   totalPlayers: number;
   activePlayers: number;
   inactivePlayers: number;

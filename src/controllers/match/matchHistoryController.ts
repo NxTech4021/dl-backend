@@ -153,3 +153,79 @@ export const getRecentResults = async (req: Request, res: Response) => {
     res.status(500).json({ error: 'Failed to retrieve recent results' });
   }
 };
+
+/**
+ * Get matches pending confirmation
+ * GET /api/matches/pending-confirmation
+ */
+export const getPendingConfirmationMatches = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+
+    const { limit = '20' } = req.query;
+
+    const matches = await matchHistoryService.getPendingConfirmationMatches(
+      userId,
+      parseInt(limit as string)
+    );
+
+    res.json(matches);
+  } catch (error) {
+    console.error('Get Pending Confirmation Matches Error:', error);
+    res.status(500).json({ error: 'Failed to retrieve pending confirmation matches' });
+  }
+};
+
+/**
+ * Get disputed matches
+ * GET /api/matches/disputed
+ */
+export const getDisputedMatches = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+
+    const { limit = '20' } = req.query;
+
+    const matches = await matchHistoryService.getDisputedMatches(
+      userId,
+      parseInt(limit as string)
+    );
+
+    res.json(matches);
+  } catch (error) {
+    console.error('Get Disputed Matches Error:', error);
+    res.status(500).json({ error: 'Failed to retrieve disputed matches' });
+  }
+};
+
+/**
+ * Get completed matches for a division (all matches, not user-specific)
+ * GET /api/match/division/:divisionId/results
+ */
+export const getDivisionResults = async (req: Request, res: Response) => {
+  try {
+    const { divisionId } = req.params;
+    const { limit = '3', seasonId } = req.query;
+
+    if (!divisionId) {
+      return res.status(400).json({ error: 'divisionId is required' });
+    }
+
+    const matches = await matchHistoryService.getDivisionResults(
+      divisionId,
+      seasonId as string | undefined,
+      parseInt(limit as string)
+    );
+
+    res.json({ matches });
+  } catch (error) {
+    console.error('Get Division Results Error:', error);
+    res.status(500).json({ error: 'Failed to retrieve division results' });
+  }
+};

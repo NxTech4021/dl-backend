@@ -5,6 +5,7 @@
 
 import { prisma } from '../../lib/prisma';
 import { NotificationService } from '../notificationService';
+import { notificationTemplates } from '../../helpers/notifications';
 import { filterUsersByPreference } from './notificationPreferenceService';
 import { logger } from '../../utils/logger';
 
@@ -31,7 +32,7 @@ export class MatchReminderService {
     // This ensures we only send one reminder per match
     const upcomingMatches = await prisma.match.findMany({
       where: {
-        scheduledTime: {
+        matchDate: {
           gte: in23Hours,
           lt: in24Hours
         },
@@ -93,7 +94,7 @@ export class MatchReminderService {
     }
 
     // Format match time
-    const matchTime = new Date(match.scheduledTime);
+    const matchTime = new Date(match.matchDate);
     const timeStr = matchTime.toLocaleTimeString('en-US', {
       hour: 'numeric',
       minute: '2-digit',
@@ -112,16 +113,18 @@ export class MatchReminderService {
         .map((p: any) => p.user.name)
         .join(' & ');
 
-      const locationInfo = match.venue || match.location
-        ? `at ${match.venue || match.location}`
-        : 'Location TBD';
+      const venue = match.venue || match.location || 'TBD';
+
+      const reminderNotif = notificationTemplates.match.matchReminder24h(
+        opponents,
+        dateStr,
+        timeStr,
+        venue
+      );
 
       await this.notificationService.createNotification({
+        ...reminderNotif,
         userIds: recipientId,
-        type: 'MATCH_REMINDER',
-        category: 'MATCH',
-        title: 'Match Reminder - 24 Hours',
-        message: `Your match vs ${opponents} is tomorrow ${dateStr} at ${timeStr} ${locationInfo}.`,
         matchId: match.id
       });
     }

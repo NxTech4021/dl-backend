@@ -22,6 +22,7 @@ model User {
   gender              String?
   area                String?
   completedOnboarding Boolean   @default(false)
+  onboardingStep      OnboardingStep?
   lastActivityCheck   DateTime?
   lastLogin           DateTime?
   status              UserStatus @default(ACTIVE)
@@ -35,7 +36,9 @@ model User {
   seasonMemberships SeasonMembership[]
   payments          Payment[]
   matchParticipants MatchParticipant[]
-  processedRequests WithdrawalRequest[] @relation("ProcessedByAdmin")
+  processedRequests    WithdrawalRequest[] @relation("ProcessedByAdmin")
+  withdrawalRequests   WithdrawalRequest[] @relation("WithdrawalRequester")
+  teamChangeRequests   TeamChangeRequest[] @relation("TeamChangeRequester")
 
   divisionAssignments DivisionAssignment[] @relation("DivisionAssignments")
 
@@ -48,6 +51,7 @@ model User {
   partnerPartnerships       Partnership[]      @relation("PartnershipPartner")
   sentSeasonInvitations     SeasonInvitation[] @relation("SentSeasonInvitations")
   receivedSeasonInvitations SeasonInvitation[] @relation("ReceivedSeasonInvitations")
+  matchComments MatchComment[] 
 
   // Favorite relations
   favoritesMade     Favorite[] @relation("UserFavorites")
@@ -64,6 +68,7 @@ model User {
   notifications           Notification[]
   userNotifications       UserNotification[]
   notificationPreferences NotificationPreference?
+  pushTokens              UserPushToken[]
 
   // Admin-focused match management relations
   raisedDisputes     MatchDispute[]   @relation("RaisedDisputes")
@@ -98,11 +103,14 @@ model User {
   matchWalkoversRecorded Match[]          @relation("MatchWalkoverRecorder")
   matchInvitationsSent      MatchInvitation[] @relation("MatchInvitationsSent")
   matchInvitationsReceived  MatchInvitation[] @relation("MatchInvitationsReceived")
-  matchTimeSlotsProposed    MatchTimeSlot[]   @relation("MatchTimeSlotsProposed")
 
   // Bracket system relations
   bracketPlayer1        BracketMatch[]    @relation("BracketPlayer1")
   bracketPlayer2        BracketMatch[]    @relation("BracketPlayer2")
+
+  // NEW: Match result relations (Best 6 system)
+  matchResults          MatchResult[]     @relation("PlayerMatchResults")
+  opponentMatchResults  MatchResult[]     @relation("OpponentMatchResults")
 
   @@index([email])
   @@index([lastMatchDate])
@@ -157,6 +165,15 @@ model Admin {
 
   // Bracket system relations
   bracketsPublished         Bracket[]             @relation("BracketPublisher")
+
+  // Team change request relations
+  reviewedTeamChangeRequests TeamChangeRequest[]  @relation("TeamChangeReviewer")
+
+  // Message audit log
+  messageLogs               AdminMessageLog[]
+
+  // General admin action logging
+  adminLogs                 AdminLog[]        @relation("AdminLogs")
 }
 
 model AdminInviteToken {
@@ -168,6 +185,28 @@ model AdminInviteToken {
   createdAt DateTime @default(now())
   expiresAt DateTime
   admin     Admin    @relation(fields: [adminId], references: [id])
+}
+
+// General admin action log for tracking all admin activities
+model AdminLog {
+  id             String           @id @default(cuid())
+  adminId        String
+  actionType     AdminActionType
+  targetType     AdminTargetType
+  targetId       String?          // ID of the affected entity (player, league, match, etc.)
+  description    String           // Human-readable description of the action
+  oldValue       Json?            // Previous state (for edit operations)
+  newValue       Json?            // New state (for edit operations)
+  metadata       Json?            // Additional context (IP address, user agent, etc.)
+  createdAt      DateTime         @default(now())
+
+  admin Admin @relation("AdminLogs", fields: [adminId], references: [id])
+
+  @@index([adminId, createdAt(sort: Desc)])
+  @@index([actionType, createdAt(sort: Desc)])
+  @@index([targetType, targetId])
+  @@index([createdAt(sort: Desc)])
+  @@map("admin_log")
 }
 
 model Account {
@@ -342,6 +381,7 @@ model Season {
   payments           Payment[]
   promoCodes         PromoCode[]         @relation("SeasonPromoCodes")
   withdrawalRequests WithdrawalRequest[]
+  teamChangeRequests TeamChangeRequest[]
 
   // Pairing Relations
   pairRequests      PairRequest[]
@@ -431,6 +471,7 @@ model WithdrawalRequest {
   processedByAdminId String?
   partnershipId      String? // For partner change requests
 
+  user             User           @relation("WithdrawalRequester", fields: [userId], references: [id])
   processedByAdmin User?          @relation("ProcessedByAdmin", fields: [processedByAdminId], references: [id])
   seasonId         String
   season           Season         @relation(fields: [seasonId], references: [id])
@@ -439,6 +480,34 @@ model WithdrawalRequest {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+model TeamChangeRequest {
+  id                  String                  @id @default(cuid())
+  userId              String
+  currentDivisionId   String
+  requestedDivisionId String
+  seasonId            String
+  reason              String?
+  status              TeamChangeRequestStatus @default(PENDING)
+  reviewedByAdminId   String?
+  reviewedAt          DateTime?
+  adminNotes          String?
+
+  user              User      @relation("TeamChangeRequester", fields: [userId], references: [id])
+  currentDivision   Division  @relation("CurrentDivisionRequests", fields: [currentDivisionId], references: [id])
+  requestedDivision Division  @relation("RequestedDivisionRequests", fields: [requestedDivisionId], references: [id])
+  season            Season    @relation(fields: [seasonId], references: [id])
+  reviewedByAdmin   Admin?    @relation("TeamChangeReviewer", fields: [reviewedByAdminId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([seasonId])
+  @@index([status])
+  @@index([currentDivisionId])
+  @@index([requestedDivisionId])
 }
 
 model Division {
@@ -493,6 +562,10 @@ model Division {
 
   // Bracket system relations
   brackets          Bracket[]
+
+  // Team change request relations
+  currentDivisionRequests   TeamChangeRequest[] @relation("CurrentDivisionRequests")
+  requestedDivisionRequests TeamChangeRequest[] @relation("RequestedDivisionRequests")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -566,6 +639,11 @@ model Match {
   venue         String?    // Specific venue name
   notes         String?
   duration      Int?
+  courtBooked   Boolean?
+
+  // Fee fields
+  fee           MatchFeeType? @default(FREE)
+  feeAmount     Decimal?      @db.Decimal(10, 2)
 
   // Match format
   format        MatchFormat @default(STANDARD)
@@ -580,12 +658,6 @@ model Match {
   isDisputed     Boolean     @default(false)
   adminNotes     String?
 
-  // Scheduling fields
-  proposedTimes         Json?       // Array of proposed times
-  scheduledTime         DateTime?   // Final agreed time
-  scheduledStartTime    DateTime?
-  actualStartTime       DateTime?
-
   // Team-based scoring (for doubles)
   team1Score            Int?
   team2Score            Int?
@@ -596,7 +668,7 @@ model Match {
   resultSubmittedAt     DateTime?
   resultConfirmedById   String?
   resultConfirmedAt     DateTime?
-  resultComment         String?
+ 
   resultEvidence        String?
   isAutoApproved        Boolean     @default(false)
 
@@ -622,6 +694,31 @@ model Match {
   // Admin review
   requiresAdminReview     Boolean   @default(false)
 
+  // Friendly match moderation (for admin visibility)
+  isHiddenFromPublic      Boolean   @default(false)
+  hiddenAt                DateTime?
+  hiddenByAdminId         String?
+  hiddenReason            String?
+  isReportedForAbuse      Boolean   @default(false)
+  reportedAt              DateTime?
+  reportedByAdminId       String?
+  reportReason            String?
+  reportCategory          MatchReportCategory?
+
+  // NEW: Set 3 format toggle
+  set3Format      Set3Format?  // MATCH_TIEBREAK, FULL_SET
+
+  // Friendly match fields
+  isFriendly      Boolean   @default(false)
+  genderRestriction GenderRestriction?  // MALE, FEMALE, OPEN (null = OPEN/All)
+  skillLevels     String[]  // Array: ["BEGINNER", "IMPROVER", "INTERMEDIATE", "UPPER_INTERMEDIATE", "EXPERT"]
+
+  // Friendly match request fields
+  isFriendlyRequest Boolean   @default(false)
+  requestExpiresAt  DateTime?
+  requestStatus     InvitationStatus?  // PENDING, ACCEPTED, DECLINED, EXPIRED
+  requestRecipientId String?
+
   // Relations
   division      Division?          @relation(fields: [divisionId], references: [id], onDelete: Cascade)
   league        League?            @relation("LeagueMatches", fields: [leagueId], references: [id], onDelete: SetNull)
@@ -632,10 +729,9 @@ model Match {
   cancelledBy        User?         @relation("MatchCanceller", fields: [cancelledById], references: [id], onDelete: SetNull)
   walkoverRecordedBy User?         @relation("MatchWalkoverRecorder", fields: [walkoverRecordedById], references: [id], onDelete: SetNull)
 
+  comments      MatchComment[] 
   participants  MatchParticipant[]
   invitations   MatchInvitation[]
-  timeSlots     MatchTimeSlot[]
-  stats         MatchStats?
   notifications Notification[]
 
   // Admin-focused relations
@@ -648,6 +744,10 @@ model Match {
   scores        MatchScore[]
   ratingHistory RatingHistory[]
 
+  // NEW: Best 6 system relations
+  matchResults    MatchResult[]
+  pickleballScores PickleballGameScore[]
+
   // Inactivity system relations
   statusChanges PlayerStatusChange[]
 
@@ -657,6 +757,12 @@ model Match {
 
   // Bracket relation
   bracketMatch    BracketMatch?
+  
+  // Chat messages relation
+  messages        Message[]
+
+  // Admin message audit logs
+  adminMessageLogs AdminMessageLog[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -669,11 +775,17 @@ model Match {
   @@index([status])
   @@index([isDisputed])
   @@index([matchType])
-  @@index([scheduledStartTime])
   @@index([isLateCancellation])
   @@index([createdById])
   @@index([format])
   @@index([requiresAdminReview])
+  @@index([isHiddenFromPublic])
+  @@index([isReportedForAbuse])
+  @@index([isFriendly])
+  @@index([genderRestriction])
+  @@index([isFriendlyRequest])
+  @@index([requestStatus])
+  @@index([requestExpiresAt])
 }
 
 model MatchParticipant {
@@ -705,32 +817,12 @@ model MatchParticipant {
   @@index([invitationStatus])
 }
 
-model MatchStats {
-  id                     String   @id @default(cuid())
-  matchId                String   @unique
-  playerAces             Int?
-  playerUnforcedErrors   Int?
-  playerWinners          Int?
-  playerDoubleFaults     Int?
-  opponentAces           Int?
-  opponentUnforcedErrors Int?
-  opponentWinners        Int?
-  opponentDoubleFaults   Int?
-  rallyCount             Int?
-  longestRally           Int?
-  breakPointsConverted   Int?
-  breakPointsTotal       Int?
-  createdAt              DateTime @default(now())
-  updatedAt              DateTime @updatedAt
-  match                  Match    @relation(fields: [matchId], references: [id], onDelete: Cascade)
-}
 
 model MatchInvitation {
   id              String           @id @default(cuid())
   matchId         String
   inviterId       String
   inviteeId       String
-
   // Invitation details
   status          InvitationStatus @default(PENDING)
   message         String?
@@ -759,36 +851,21 @@ model MatchInvitation {
   @@map("match_invitation")
 }
 
-model MatchTimeSlot {
-  id              String         @id @default(cuid())
-  matchId         String
-  proposedById    String
 
-  // Time slot details
-  proposedTime    DateTime
-  status          TimeSlotStatus @default(PROPOSED)
-  location        String?
-  notes           String?
+model MatchComment {
+  id        String   @id @default(cuid())
+  matchId   String
+  userId    String
+  comment   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  // Voting
-  votes           Json?          // Array of user IDs who voted for this slot
-  voteCount       Int            @default(0)
-
-  // Confirmation
-  confirmedAt     DateTime?
-
-  createdAt       DateTime       @default(now())
-  updatedAt       DateTime       @updatedAt
-
-  // Relations
-  match           Match          @relation(fields: [matchId], references: [id], onDelete: Cascade)
-  proposedBy      User           @relation("MatchTimeSlotsProposed", fields: [proposedById], references: [id], onDelete: Cascade)
+  match     Match    @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([matchId])
-  @@index([proposedById])
-  @@index([status])
-  @@index([proposedTime])
-  @@map("match_time_slot")
+  @@index([userId])
+  @@index([createdAt])
 }
 
 // =============================================
@@ -1152,6 +1229,7 @@ model RatingHistory {
   @@map("rating_history")
 }
 
+// FOR SINGLES ?
 model MatchScore {
   id              String   @id @default(cuid())
   matchId         String
@@ -1166,6 +1244,9 @@ model MatchScore {
   player1Tiebreak Int?
   player2Tiebreak Int?
 
+  // NEW: Distinguish tiebreak types
+  tiebreakType    TiebreakType?  // STANDARD_7PT, MATCH_10PT
+
   createdAt       DateTime @default(now())
 
   match           Match    @relation(fields: [matchId], references: [id], onDelete: Cascade)
@@ -1173,6 +1254,78 @@ model MatchScore {
   @@unique([matchId, setNumber])
   @@index([matchId])
   @@map("match_score")
+}
+
+// =============================================
+// MATCH RESULT TRACKING (Best 6 System)
+// =============================================
+
+model MatchResult {
+  id              String    @id @default(cuid())
+  matchId         String
+  playerId        String
+  opponentId      String
+
+  // Sport and match info
+  sportType       SportType
+  gameType        GameType
+  isWin           Boolean
+
+  // Points and metrics (SPEC-COMPLIANT)
+  matchPoints     Int       // 1-5 points per match
+  participationPoints Int   @default(1)
+  setsWonPoints   Int       // 0-2 for sets/games won
+  winBonusPoints  Int       @default(0) // 0 or 2
+
+  // Margin for tiebreaking
+  margin          Int       // Games/points differential
+
+  // Match details
+  setsWon         Int
+  setsLost        Int
+  gamesWon        Int       // Tennis/Padel: game count, Pickleball: point count
+  gamesLost       Int
+
+  // Timestamps
+  datePlayed      DateTime
+  createdAt       DateTime  @default(now())
+
+  // CRITICAL: Best 6 System Fields
+  countsForStandings Boolean  @default(false)
+  resultSequence     Int?     // 1-6 if counted, null otherwise
+
+  // Relations
+  match           Match     @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  player          User      @relation("PlayerMatchResults", fields: [playerId], references: [id], onDelete: Cascade)
+  opponent        User      @relation("OpponentMatchResults", fields: [opponentId], references: [id], onDelete: Cascade)
+
+  @@unique([matchId, playerId])
+  @@index([playerId, datePlayed])
+  @@index([playerId, countsForStandings])
+  @@index([playerId, resultSequence])
+  @@index([matchId])
+  @@map("match_result")
+}
+
+// =============================================
+// PICKLEBALL SCORING
+// =============================================
+
+model PickleballGameScore {
+  id              String   @id @default(cuid())
+  matchId         String
+  gameNumber      Int      // 1, 2, or 3
+
+  player1Points   Int
+  player2Points   Int
+
+  createdAt       DateTime @default(now())
+
+  match           Match    @relation(fields: [matchId], references: [id], onDelete: Cascade)
+
+  @@unique([matchId, gameNumber])
+  @@index([matchId])
+  @@map("pickleball_game_score")
 }
 
 model DivisionStanding {
@@ -1191,25 +1344,37 @@ model DivisionStanding {
   matchesPlayed       Int      @default(0)
   matchesScheduled    Int      @default(9)
 
-  // Points calculation
-  winPoints           Int      @default(0)
-  setPoints           Int      @default(0)
+  // NEW: Spec-compliant points (from Best 6 only)
+  totalPoints         Int      @default(0)  // Max 30
+
+  // NEW: Best 6 tracking
+  countedWins         Int      @default(0)  // Wins in Best 6
+  countedLosses       Int      @default(0)  // Losses in Best 6
+
+  // Match record breakdown (all matches)
   setsWon             Int      @default(0)
   setsLost            Int      @default(0)
+  gamesWon            Int      @default(0)  // Games for Tennis/Padel, Points for Pickleball
+  gamesLost           Int      @default(0)
 
-  // Completion bonus
-  completionBonus     Int      @default(0)
+  // NEW: Best 6 specific metrics (for tiebreakers)
+  best6SetsWon        Int      @default(0)
+  best6SetsTotal      Int      @default(0)
+  best6GamesWon       Int      @default(0)
+  best6GamesTotal     Int      @default(0)
 
-  // Total
-  totalPoints         Int      @default(0)
-
-  // Tie-breaker data
-  setDifferential     Int      @default(0)
+  // Tie-breaker data (H2H uses ALL matches)
   headToHead          Json?
 
   // Tracking
   lastCalculatedAt    DateTime @default(now())
   isLocked            Boolean  @default(false)
+
+  // DEPRECATED (keep for migration, remove later)
+  winPoints           Int      @default(0)
+  setPoints           Int      @default(0)
+  completionBonus     Int      @default(0)
+  setDifferential     Int      @default(0)
 
   // Relations
   division            Division    @relation(fields: [divisionId], references: [id], onDelete: Cascade)
@@ -1526,8 +1691,11 @@ model BugReport {
   networkRequests     Json?
   localStorageData    Json?
 
-  // Reporter info
-  reporterId          String
+  // Reporter info (optional - for anonymous reports)
+  reporterId          String?
+  // Anonymous reporter info (when not logged in)
+  anonymousEmail      String?
+  anonymousName       String?
 
   // Resolution
   resolvedById        String?
@@ -1552,7 +1720,7 @@ model BugReport {
   // Relations
   app                 App             @relation(fields: [appId], references: [id])
   module              BugModule       @relation(fields: [moduleId], references: [id])
-  reporter            User            @relation("BugReporter", fields: [reporterId], references: [id])
+  reporter            User?           @relation("BugReporter", fields: [reporterId], references: [id])
   assignedTo          Admin?          @relation("BugAssignee", fields: [assignedToId], references: [id])
   resolvedBy          Admin?          @relation("BugResolver", fields: [resolvedById], references: [id])
   duplicateOf         BugReport?      @relation("BugDuplicates", fields: [duplicateOfId], references: [id], onDelete: SetNull)
@@ -1629,14 +1797,14 @@ model BugStatusChange {
   newStatus        BugStatus
   previousPriority BugPriority?
   newPriority      BugPriority?
-  changedById      String
+  changedById      String?
   notes            String?
 
   createdAt        DateTime     @default(now())
 
   // Relations
   bugReport        BugReport    @relation(fields: [bugReportId], references: [id], onDelete: Cascade)
-  changedBy        User         @relation("BugStatusChanger", fields: [changedById], references: [id])
+  changedBy        User?        @relation("BugStatusChanger", fields: [changedById], references: [id])
 
   @@index([bugReportId, createdAt(sort: Desc)])
   @@map("bug_status_change")
@@ -1726,7 +1894,7 @@ model Thread {
   isGroup   Boolean @default(false)
 
   divisionId String?
-  division   Division? @relation("DivisionThreads", fields: [divisionId], references: [id])
+  division   Division? @relation("DivisionThreads", fields: [divisionId], references: [id], onDelete: SetNull)
 
   members  UserThread[]
   messages Message[]
@@ -1760,6 +1928,14 @@ model Message {
 
   content String?
 
+  // Message Type (for different message types)
+  messageType MessageType @default(TEXT)
+
+  // For match posts in division chat
+  matchId     String?
+  matchData   Json?       // Store match details (type, format, location, etc.)
+  match       Match?      @relation(fields: [matchId], references: [id], onDelete: SetNull)
+
   // Reply/Quote/Forwarding
   repliesToId String?
   repliesTo   Message?  @relation("Replies", fields: [repliesToId], references: [id], onDelete: SetNull)
@@ -1773,6 +1949,7 @@ model Message {
   updatedAt DateTime @updatedAt
 
   @@index([threadId, createdAt])
+  @@index([matchId])
 }
 
 model Friendship {
@@ -1890,6 +2067,7 @@ model Notification {
   message   String
   category  NotificationCategory
   type      String?
+  metadata  Json?
   createdAt DateTime             @default(now())
 
   seasonId            String?
@@ -1977,6 +2155,58 @@ model NotificationPreference {
   @@map("notification_preference")
 }
 
+model UserPushToken {
+  id           String    @id @default(cuid())
+  userId       String
+  token        String    @unique
+  platform     String    // "ios", "android", "web"
+  deviceId     String?   // Optional device identifier for multi-device support
+  isActive     Boolean   @default(true)
+  failureCount Int       @default(0) // Track consecutive failures for cleanup
+  lastUsedAt   DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([platform])
+  @@index([isActive])
+  @@map("user_push_token")
+}
+
+// Audit log for admin messages to participants
+model AdminMessageLog {
+  id           String   @id @default(cuid())
+  adminId      String
+  matchId      String?
+  seasonId     String?
+  subject      String
+  message      String   @db.Text
+  recipientIds String[] // Array of user IDs who received the message
+
+  // Delivery options
+  sendEmail    Boolean  @default(false)
+  sendPush     Boolean  @default(false)
+
+  // Delivery results
+  inAppCount   Int      @default(0)
+  emailCount   Int      @default(0)
+  emailSkipped Int      @default(0)
+  pushCount    Int      @default(0)
+  pushSkipped  Int      @default(0)
+
+  createdAt    DateTime @default(now())
+
+  admin Admin  @relation(fields: [adminId], references: [id])
+  match Match? @relation(fields: [matchId], references: [id])
+
+  @@index([adminId])
+  @@index([matchId])
+  @@index([createdAt])
+  @@map("admin_message_log")
+}
+
 enum NotificationCategory {
   DIVISION
   LEAGUE
@@ -2059,6 +2289,66 @@ enum UserStatus {
   ACTIVE
   INACTIVE
   SUSPENDED
+  BANNED
+  DELETED
+}
+
+// Admin action types for general admin logging
+enum AdminActionType {
+  // Player management
+  PLAYER_BAN
+  PLAYER_UNBAN
+  PLAYER_DELETE
+  PLAYER_UPDATE
+  PLAYER_STATUS_CHANGE
+  // League management
+  LEAGUE_CREATE
+  LEAGUE_UPDATE
+  LEAGUE_DELETE
+  LEAGUE_STATUS_CHANGE
+  // Season management
+  SEASON_CREATE
+  SEASON_UPDATE
+  SEASON_DELETE
+  SEASON_STATUS_CHANGE
+  // Division management
+  DIVISION_CREATE
+  DIVISION_UPDATE
+  DIVISION_DELETE
+  // Match management
+  MATCH_VOID
+  MATCH_EDIT_RESULT
+  MATCH_EDIT_SCHEDULE
+  MATCH_WALKOVER
+  // Dispute management
+  DISPUTE_RESOLVE
+  DISPUTE_OVERRIDE
+  // System settings
+  SETTINGS_UPDATE
+  // Bug reports
+  BUG_ASSIGN
+  BUG_RESOLVE
+  BUG_UPDATE
+  // Admin management
+  ADMIN_CREATE
+  ADMIN_UPDATE
+  ADMIN_DELETE
+  // Other
+  OTHER
+}
+
+// Target types for admin logging
+enum AdminTargetType {
+  PLAYER
+  LEAGUE
+  SEASON
+  DIVISION
+  MATCH
+  DISPUTE
+  SETTINGS
+  BUG_REPORT
+  ADMIN
+  OTHER
 }
 
 enum SeasonStatus {
@@ -2105,6 +2395,13 @@ enum WithdrawalStatus {
   REJECTED
 }
 
+enum TeamChangeRequestStatus {
+  PENDING
+  APPROVED
+  DENIED
+  CANCELLED
+}
+
 enum DivisionLevel {
   BEGINNER
   INTERMEDIATE
@@ -2149,12 +2446,22 @@ enum SeasonInvitationStatus {
 // =============================================
 
 enum MatchStatus {
+  DRAFT        // Match created but invitations expired/declined - can be edited
   SCHEDULED
   ONGOING
   COMPLETED
   UNFINISHED
   CANCELLED
   VOID
+}
+
+enum MatchReportCategory {
+  FAKE_MATCH           // Match appears to be fabricated
+  RATING_MANIPULATION  // Match used to manipulate ratings
+  INAPPROPRIATE_CONTENT
+  HARASSMENT
+  SPAM
+  OTHER
 }
 
 enum DisputeCategory {
@@ -2185,6 +2492,7 @@ enum DisputeResolutionAction {
   VOID_MATCH
   AWARD_WALKOVER
   REQUEST_MORE_INFO
+  REJECT            // Dismiss dispute as invalid/spam/insufficient evidence
 }
 
 enum WalkoverReason {
@@ -2228,6 +2536,11 @@ enum MatchAdminActionType {
   APPROVE_LATE_CANCELLATION
   DENY_LATE_CANCELLATION
   EDIT_SCHEDULE
+  // Friendly match moderation
+  HIDE_MATCH
+  UNHIDE_MATCH
+  REPORT_ABUSE
+  CLEAR_REPORT
 }
 
 // =============================================
@@ -2288,6 +2601,9 @@ enum StatusChangeReason {
   INACTIVITY_WARNING
   MATCH_PLAYED
   ADMIN_MANUAL
+  ADMIN_BAN
+  ADMIN_UNBAN
+  ADMIN_DELETE
   SEASON_START
   SEASON_END
   REGISTRATION
@@ -2387,6 +2703,27 @@ enum TimeSlotStatus {
   REJECTED
 }
 
+enum JoinRequestStatus {
+  PENDING
+  APPROVED
+  DENIED
+  CANCELLED    // Requester cancelled
+  EXPIRED      // Match filled or cancelled
+}
+
+enum MessageType {
+  TEXT          // Regular text message
+  MATCH         // Match Events posted to division chat
+  SYSTEM        // System messages (user joined, etc.)
+  JOIN_REQUEST  // Join request notification
+}
+
+enum MatchFeeType {
+  FREE          // No fee required
+  SPLIT         // Cost is split among participants
+  FIXED         // Fixed fee per participant
+}
+
 // =============================================
 // END MATCH INVITATION SYSTEM ENUMS
 // =============================================
@@ -2425,4 +2762,39 @@ enum BracketMatchStatus {
 
 // =============================================
 // END FINALS BRACKET SYSTEM ENUMS
+// =============================================
+
+// =============================================
+// BEST 6 SCORING SYSTEM ENUMS
+// =============================================
+
+enum TiebreakType {
+  STANDARD_7PT    // Standard 7-point tiebreak (Sets 1 & 2)
+  MATCH_10PT      // Match tiebreak (Set 3 default, or Set 3 at 6-6)
+}
+
+enum Set3Format {
+  MATCH_TIEBREAK  // Default: 10-point match tiebreak
+  FULL_SET        // Optional: Full standard set (6-6 → match tiebreak)
+}
+
+// =============================================
+// END BEST 6 SCORING SYSTEM ENUMS
+// =============================================
+
+// =============================================
+// ONBOARDING STEP TRACKING ENUM
+// =============================================
+
+enum OnboardingStep {
+  PERSONAL_INFO      // Step 1: Name, Gender, DOB completed
+  LOCATION           // Step 2: Location completed
+  GAME_SELECT        // Step 3: Sport selection completed
+  SKILL_ASSESSMENT   // Step 4: Questionnaire completed
+  ASSESSMENT_RESULTS // Step 5: Results viewed
+  PROFILE_PICTURE    // Step 6: Final step (profile picture uploaded/skipped)
+}
+
+// =============================================
+// END ONBOARDING STEP TRACKING ENUM
 // =============================================

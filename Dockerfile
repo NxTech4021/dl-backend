@@ -1,4 +1,4 @@
-FROM node:20-alpine3.17 AS base
+FROM node:24-alpine3.21 AS base
 WORKDIR /app
 COPY package.json ./
 COPY package-lock.json ./
@@ -13,7 +13,6 @@ COPY . .
 RUN npm install -D tsx
 RUN npm install -g prisma
 RUN npx prisma generate
-
 
 EXPOSE 3001
 

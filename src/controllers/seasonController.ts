@@ -39,7 +39,7 @@ import {
 
 import { notificationService } from '../services/notificationService';
 
-import { seasonNotifications, paymentNotifications } from '../helpers/notification';
+import { leagueLifecycleNotifications } from '../helpers/notifications';
 import { NOTIFICATION_TYPES } from '../types/notificationTypes';
 import { notifyAdminsWithdrawalRequest } from '../services/notification/adminNotificationService';
 
@@ -157,6 +157,52 @@ export const createSeason = async (req: Request, res: Response) => {
 
     const season = await createSeasonService(seasonData);
 
+    // 🆕 Send new season announcement to ALL users if season is active
+    if (isActive) {
+      try {
+        // Get season with leagues to extract location and sport information
+        const seasonWithLeagues = await prisma.season.findUnique({
+          where: { id: season.id },
+          include: {
+            leagues: {
+              select: {
+                name: true,
+                location: true,
+                sportType: true
+              }
+            }
+          }
+        });
+
+        if (seasonWithLeagues && seasonWithLeagues.leagues.length > 0) {
+          const league = seasonWithLeagues.leagues[0]; // needs to be updated 
+          
+          // Only proceed if we have valid league data
+          if (league && league.location && league.sportType) {
+            const notificationData = leagueLifecycleNotifications.newSeasonAnnouncement(
+              season.name,
+              league.location,
+              league.sportType
+            );
+
+            // Get all users to broadcast to everyone
+            const allUsers = await prisma.user.findMany({ select: { id: true } });
+            const userIds = allUsers.map(u => u.id);
+
+            // Send to all users
+            await notificationService.createNotification({
+              ...notificationData,
+              seasonId: season.id,
+              userIds
+            });
+          }
+        }
+      } catch (notificationError) {
+        console.error("Error sending new season announcement:", notificationError);
+        // Don't fail season creation if notification fails
+      }
+    }
+
     // 🆕 Send notification if season is starting soon
     if (isActive && startDate) {
       const startDateObj = new Date(startDate);
@@ -171,9 +217,8 @@ export const createSeason = async (req: Request, res: Response) => {
         });
 
         if (registeredUsers.length > 0) {
-          const notificationData = seasonNotifications.startingSoon(
-            season.name,
-            startDateObj.toLocaleDateString()
+          const notificationData = leagueLifecycleNotifications.seasonStarting3Days(
+            season.name
           );
 
           await notificationService.createNotification({
@@ -341,15 +386,12 @@ export const updateSeason = async (req: Request, res: Response) => {
         let notificationData;
 
         if (status === 'FINISHED') {
-          notificationData = seasonNotifications.ended(
-            season.name,
-            undefined,
-            undefined 
+          notificationData = leagueLifecycleNotifications.leagueEndedFinalResults(
+            season.name
           );
         } else if (status === 'CANCELLED') {
-          notificationData = seasonNotifications.cancelled(
-            season.name,
-            'Season has been cancelled by administration'
+          notificationData = leagueLifecycleNotifications.leagueCancelled(
+            season.name
           );
         }
 
@@ -725,16 +767,21 @@ export const registerPlayerToSeason = async (req: Request, res: Response) => {
       // 🆕 Send registration confirmation notifications for both players
       const season = result.memberships[0]?.season;
       if (season) {
-        const notificationData = seasonNotifications.registrationConfirmed(
-          season.name,
-          `$${season.entryFee}`
-        );
+        try {
+          const notificationData = leagueLifecycleNotifications.registrationConfirmed(
+            season.name,
+            `$${season.entryFee}`
+          );
 
-        await notificationService.createNotification({
-          userIds: [captainId, partnerId],
-          ...notificationData,
-          seasonId: seasonId
-        });
+          await notificationService.createNotification({
+            userIds: [captainId, partnerId],
+            ...notificationData,
+            seasonId: seasonId
+          });
+        } catch (notificationError) {
+          console.error('Error sending registration notification for doubles:', notificationError);
+          // Don't fail the registration if notification fails
+        }
       }
 
       // ✅ Emit Socket.IO events to notify both captain and partner about team registration completion
@@ -783,16 +830,21 @@ export const registerPlayerToSeason = async (req: Request, res: Response) => {
       });
 
       if (season) {
-        const notificationData = seasonNotifications.registrationConfirmed(
-          season.name,
-          `$${season.entryFee}`
-        );
+        try {
+          const notificationData = leagueLifecycleNotifications.registrationConfirmed(
+            season.name,
+            `$${season.entryFee}`
+          );
 
-        await notificationService.createNotification({
-          userIds: userId,
-          ...notificationData,
-          seasonId: seasonId
-        });
+          await notificationService.createNotification({
+            userIds: userId,
+            ...notificationData,
+            seasonId: seasonId
+          });
+        } catch (notificationError) {
+          console.error('Error sending registration notification for singles:', notificationError);
+          // Don't fail the registration if notification fails
+        }
       }
 
       const result = {
@@ -883,22 +935,20 @@ export const updatePaymentStatus = async (req: Request, res: Response) => {
       let notificationData;
 
       if (paymentStatus === 'COMPLETED') {
-        notificationData = paymentNotifications.confirmed(
+        notificationData = leagueLifecycleNotifications.paymentConfirmed(
           membershipWithSeason.season.name,
-          `$${membershipWithSeason.season.entryFee}`,
-          'Credit Card' 
+          `$${membershipWithSeason.season.entryFee}`
         );
       } else if (paymentStatus === 'FAILED') {
-        notificationData = paymentNotifications.failed(
+        notificationData = leagueLifecycleNotifications.paymentFailed(
           membershipWithSeason.season.name,
-          `$${membershipWithSeason.season.entryFee}`,
-          'Payment processing failed'
+          `$${membershipWithSeason.season.entryFee}`
         );
       } else if (paymentStatus === 'PENDING') {
-        notificationData = paymentNotifications.reminder(
+        // Use payment confirmed notification for pending status
+        notificationData = leagueLifecycleNotifications.paymentConfirmed(
           membershipWithSeason.season.name,
-          `$${membershipWithSeason.season.entryFee}`,
-          'Please complete your payment soon'
+          `$${membershipWithSeason.season.entryFee}`
         );
       }
 

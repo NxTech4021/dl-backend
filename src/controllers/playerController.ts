@@ -137,6 +137,42 @@ export const getPlayerProfile = async (req: AuthenticatedRequest, res: Response)
 };
 
 /**
+ * Get player rating history for graph display
+ * GET /api/player/profile/rating-history
+ * Query params: sport, gameType (singles/doubles), limit
+ */
+export const getPlayerRatingHistory = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const userId = req.user?.id;
+
+    if (!userId) {
+      return res
+        .status(401)
+        .json(new ApiResponse(false, 401, null, "Authentication required"));
+    }
+
+    const { sport, gameType, limit } = req.query;
+
+    const history = await profileService.getPlayerRatingHistory(
+      userId,
+      sport as string | undefined,
+      gameType as string | undefined,
+      limit ? Number(limit) : 20
+    );
+
+    return res
+      .status(200)
+      .json(new ApiResponse(true, 200, history, "Rating history fetched successfully"));
+  } catch (error: unknown) {
+    console.error("❌ getPlayerRatingHistory: Error fetching rating history:", error);
+    const errorMessage = error instanceof Error ? error.message : "Failed to fetch rating history";
+    return res
+      .status(500)
+      .json(new ApiResponse(false, 500, null, errorMessage));
+  }
+};
+
+/**
  * Get player match history with pagination
  * GET /api/player/matches
  */
@@ -466,7 +502,7 @@ export const searchPlayers = async (req: AuthenticatedRequest, res: Response) =>
 export const getAvailablePlayersForSeason = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { seasonId } = req.params;
-    const { q: searchQuery } = req.query; // Get search query from query params
+    const { q: searchQuery } = req.query;
     const currentUserId = req.user?.id;
 
     if (!seasonId) {

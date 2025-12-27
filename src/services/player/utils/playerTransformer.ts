@@ -225,14 +225,14 @@ export async function checkPlayerActivityStatus(userId: string): Promise<string>
     await prisma.user.update({
       where: { id: userId },
       data: {
-        status: isActive ? 'active' : 'inactive',
+        status: isActive ? 'ACTIVE' : 'INACTIVE',
         lastActivityCheck: new Date(),
       },
     });
 
-    return isActive ? 'active' : 'inactive';
+    return isActive ? 'ACTIVE' : 'INACTIVE';
   } catch (error) {
     console.error("Error checking activity status:", error);
-    return 'active'; // Default to active on error
+    return 'ACTIVE'; // Default to active on error
   }
 }

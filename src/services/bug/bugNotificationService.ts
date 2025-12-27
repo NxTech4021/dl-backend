@@ -138,8 +138,8 @@ export async function notifyNewBugReport(bugReportId: string): Promise<void> {
     if (!settings?.notifyOnNew) return;
 
     // Send email notifications
-    const notifyEmails = settings.notifyEmails || [];
-    if (notifyEmails.length > 0) {
+    const notifyEmails = (settings.notifyEmails || []) as string[];
+    if (Array.isArray(notifyEmails) && notifyEmails.length > 0) {
       const subject = `[${report.severity}] New Bug: ${report.reportNumber} - ${report.title}`;
       const html = newBugReportTemplate(report);
 
@@ -167,7 +167,7 @@ export async function notifyNewBugReport(bugReportId: string): Promise<void> {
             fields: [
               { type: "mrkdwn", text: `*Severity:*\n${report.severity}` },
               { type: "mrkdwn", text: `*Module:*\n${report.module.name}` },
-              { type: "mrkdwn", text: `*Reporter:*\n${report.reporter.name}` },
+              { type: "mrkdwn", text: `*Reporter:*\n${report.reporter?.name || report.anonymousName || "Anonymous"}` },
               { type: "mrkdwn", text: `*App:*\n${report.app.displayName}` },
             ]
           },
@@ -189,7 +189,7 @@ export async function notifyNewBugReport(bugReportId: string): Promise<void> {
           fields: [
             { name: "Severity", value: report.severity, inline: true },
             { name: "Module", value: report.module.name, inline: true },
-            { name: "Reporter", value: report.reporter.name || "Unknown", inline: true },
+            { name: "Reporter", value: report.reporter?.name || report.anonymousName || "Anonymous", inline: true },
           ],
         }]
       });
@@ -225,14 +225,15 @@ export async function notifyStatusChange(
 
     if (!settings?.notifyOnStatusChange) return;
 
-    // Notify reporter
-    if (report.reporter.email) {
+    // Notify reporter (either authenticated user or anonymous email)
+    const reporterEmail = report.reporter?.email || report.anonymousEmail;
+    if (reporterEmail) {
       const subject = `Bug ${report.reportNumber} status updated to ${newStatus}`;
       const html = statusChangeTemplate(report, oldStatus, newStatus);
 
       try {
-        await sendEmail(report.reporter.email, subject, html);
-        console.log(`Sent status change notification to reporter ${report.reporter.email}`);
+        await sendEmail(reporterEmail, subject, html);
+        console.log(`Sent status change notification to reporter ${reporterEmail}`);
       } catch (err) {
         console.error(`Failed to send email to reporter:`, err);
       }
@@ -240,14 +241,16 @@ export async function notifyStatusChange(
 
     // Notify admins for critical status changes
     if (['RESOLVED', 'CLOSED', 'WONT_FIX'].includes(newStatus)) {
-      const notifyEmails = settings.notifyEmails || [];
-      for (const email of notifyEmails) {
-        try {
-          const subject = `Bug ${report.reportNumber} ${newStatus.toLowerCase()}`;
-          const html = statusChangeTemplate(report, oldStatus, newStatus);
-          await sendEmail(email, subject, html);
-        } catch (err) {
-          console.error(`Failed to send email to ${email}:`, err);
+      const notifyEmails = (settings.notifyEmails || []) as string[];
+      if (Array.isArray(notifyEmails)) {
+        for (const email of notifyEmails) {
+          try {
+            const subject = `Bug ${report.reportNumber} ${newStatus.toLowerCase()}`;
+            const html = statusChangeTemplate(report, oldStatus, newStatus);
+            await sendEmail(email, subject, html);
+          } catch (err) {
+            console.error(`Failed to send email to ${email}:`, err);
+          }
         }
       }
     }

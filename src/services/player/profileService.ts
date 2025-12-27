@@ -4,7 +4,7 @@
  */
 
 import { prisma } from '../../lib/prisma';
-import { Role } from "@prisma/client";
+import { Role, GameType, SportType } from "@prisma/client";
 import { auth } from '../../lib/auth';
 import * as bcrypt from "bcryptjs";
 import {
@@ -19,8 +19,193 @@ import {
 } from './utils/playerTransformer';
 
 /**
+ * DMR Rating data structure for profile
+ */
+interface DMRRating {
+  singles: number | null;
+  doubles: number | null;
+  singlesRD: number | null;
+  doublesRD: number | null;
+  singlesMatches: number;
+  doublesMatches: number;
+  singlesProvisional: boolean;
+  doublesProvisional: boolean;
+  lastUpdated: Date | null;
+}
+
+/**
+ * Rating history entry for graphs
+ */
+interface RatingHistoryEntry {
+  date: string;
+  rating: number;
+  ratingChange: number;
+  matchId: string;
+  opponent: string | null;
+  opponentImage: string | null;
+  result: 'W' | 'L';
+  score: string;
+  gameType: string;
+}
+
+/**
+ * Fetch actual DMR ratings from PlayerRating table
+ */
+async function fetchDMRRatings(userId: string): Promise<Record<string, DMRRating>> {
+  const ratings = await prisma.playerRating.findMany({
+    where: { userId },
+    orderBy: { lastUpdatedAt: 'desc' },
+  });
+
+  // Group by sport
+  const dmrRatings: Record<string, DMRRating> = {};
+
+  for (const rating of ratings) {
+    const sport = rating.sport.toLowerCase();
+    if (!dmrRatings[sport]) {
+      dmrRatings[sport] = {
+        singles: null,
+        doubles: null,
+        singlesRD: null,
+        doublesRD: null,
+        singlesMatches: 0,
+        doublesMatches: 0,
+        singlesProvisional: true,
+        doublesProvisional: true,
+        lastUpdated: null,
+      };
+    }
+
+    if (rating.gameType === GameType.SINGLES) {
+      dmrRatings[sport].singles = rating.currentRating;
+      dmrRatings[sport].singlesRD = rating.ratingDeviation;
+      dmrRatings[sport].singlesMatches = rating.matchesPlayed;
+      dmrRatings[sport].singlesProvisional = rating.isProvisional;
+      if (!dmrRatings[sport].lastUpdated || rating.lastUpdatedAt > dmrRatings[sport].lastUpdated!) {
+        dmrRatings[sport].lastUpdated = rating.lastUpdatedAt;
+      }
+    } else if (rating.gameType === GameType.DOUBLES) {
+      dmrRatings[sport].doubles = rating.currentRating;
+      dmrRatings[sport].doublesRD = rating.ratingDeviation;
+      dmrRatings[sport].doublesMatches = rating.matchesPlayed;
+      dmrRatings[sport].doublesProvisional = rating.isProvisional;
+      if (!dmrRatings[sport].lastUpdated || rating.lastUpdatedAt > dmrRatings[sport].lastUpdated!) {
+        dmrRatings[sport].lastUpdated = rating.lastUpdatedAt;
+      }
+    }
+  }
+
+  return dmrRatings;
+}
+
+/**
+ * Fetch rating history for graph display
+ */
+async function fetchRatingHistory(
+  userId: string,
+  sport?: string,
+  gameType?: GameType,
+  limit: number = 20
+): Promise<RatingHistoryEntry[]> {
+  // Find relevant PlayerRating records
+  const whereClause: any = { userId };
+  if (sport) {
+    whereClause.sport = sport.toUpperCase() as SportType;
+  }
+  if (gameType) {
+    whereClause.gameType = gameType;
+  }
+
+  const playerRatings = await prisma.playerRating.findMany({
+    where: whereClause,
+    select: { id: true },
+  });
+
+  if (playerRatings.length === 0) {
+    return [];
+  }
+
+  const playerRatingIds = playerRatings.map(pr => pr.id);
+
+  // Fetch rating history with match details
+  const history = await prisma.ratingHistory.findMany({
+    where: {
+      playerRatingId: { in: playerRatingIds },
+      matchId: { not: null }, // Only entries from matches
+      reason: 'MATCH_RESULT' as any, // RatingChangeReason enum
+    },
+    orderBy: { createdAt: 'desc' },
+    take: limit,
+  });
+
+  // Fetch match details for each history entry
+  const matchIds = history.map(h => h.matchId).filter(Boolean) as string[];
+  const matches = matchIds.length > 0
+    ? await prisma.match.findMany({
+        where: { id: { in: matchIds } },
+        include: {
+          participants: {
+            include: {
+              user: {
+                select: { id: true, name: true, image: true },
+              },
+            },
+          },
+          pickleballScores: true,
+          scores: true,
+        },
+      })
+    : [];
+
+  const matchMap = new Map(matches.map(m => [m.id, m]));
+
+  // Fetch player rating game types
+  const playerRatingMap = new Map<string, GameType>();
+  const prIds = [...new Set(history.map(h => h.playerRatingId))];
+  if (prIds.length > 0) {
+    const prs = await prisma.playerRating.findMany({
+      where: { id: { in: prIds } },
+      select: { id: true, gameType: true },
+    });
+    prs.forEach(pr => playerRatingMap.set(pr.id, pr.gameType));
+  }
+
+  return history.map(h => {
+    const match = h.matchId ? matchMap.get(h.matchId) : null;
+    const opponent = match?.participants.find((p: any) => p.userId !== userId)?.user;
+
+    // Determine result (positive delta = win)
+    const result: 'W' | 'L' = h.delta >= 0 ? 'W' : 'L';
+
+    // Build score string
+    let score = '-';
+    if (match?.pickleballScores && match.pickleballScores.length > 0) {
+      score = match.pickleballScores
+        .map((s: any) => `${s.player1Points}-${s.player2Points}`)
+        .join(', ');
+    } else if (match?.scores && match.scores.length > 0) {
+      score = match.scores
+        .map((s: any) => `${s.player1Games}-${s.player2Games}`)
+        .join(', ');
+    }
+
+    return {
+      date: h.createdAt.toISOString(),
+      rating: h.ratingAfter,
+      ratingChange: h.delta,
+      matchId: h.matchId || '',
+      opponent: opponent?.name || null,
+      opponentImage: opponent?.image || null,
+      result,
+      score,
+      gameType: playerRatingMap.get(h.playerRatingId) || 'SINGLES',
+    };
+  }).reverse(); // Oldest first for graph
+}
+
+/**
  * Get authenticated user's full profile (Pattern B with questionnaireStatus)
- * Original: playerController.ts lines 269-438
+ * Now includes actual DMR ratings from PlayerRating table
  */
 export async function getPlayerProfile(userId: string) {
   const player = await prisma.user.findUnique({
@@ -40,7 +225,7 @@ export async function getPlayerProfile(userId: string) {
     ],
   });
 
-  // Get results for completed responses
+  // Get results for completed responses (initial ratings from questionnaire)
   const completedResponseIds = responses
     .filter(r => r.completedAt)
     .map(r => r.id);
@@ -56,9 +241,6 @@ export async function getPlayerProfile(userId: string) {
   // Create a map of responseId to result
   const resultMap = new Map(results.map(r => [r.responseId, r]));
 
-  // Get recent match history (commented out until schema is fixed)
-  const recentMatches: any[] = [];
-
   // Extract all sports (including those from placeholder entries)
   const allSports = Array.from(new Set(responses.map(r => r.sport.toLowerCase())));
 
@@ -72,8 +254,8 @@ export async function getPlayerProfile(userId: string) {
     return acc;
   }, {} as Record<string, { isCompleted: boolean; startedAt: Date; completedAt: Date | null }>);
 
-  // Process ratings (only from completed questionnaires)
-  const skillRatings = responses.reduce((acc, res) => {
+  // Get initial ratings from questionnaire (for reference/fallback)
+  const initialRatings = responses.reduce((acc, res) => {
     const result = resultMap.get(res.id);
     if (result && res.completedAt) {
       acc[res.sport.toLowerCase()] = {
@@ -88,10 +270,79 @@ export async function getPlayerProfile(userId: string) {
     return acc;
   }, {} as Record<string, { singles: number | null; doubles: number | null; rating: number; confidence: string; rd: number; lastUpdated: Date | null }>);
 
+  // Fetch actual DMR ratings from PlayerRating table
+  const dmrRatings = await fetchDMRRatings(userId);
+
+  // Merge DMR ratings with initial ratings (DMR takes precedence)
+  // Format for frontend: ratings in whole numbers (e.g., 1500, not 1.5)
+  const skillRatings: Record<string, any> = {};
+
+  for (const sport of allSports) {
+    const initial = initialRatings[sport];
+    const dmr = dmrRatings[sport];
+
+    if (dmr) {
+      // Use actual DMR ratings
+      skillRatings[sport] = {
+        // Divide by 1000 for frontend compatibility (frontend multiplies by 1000)
+        singles: dmr.singles ? dmr.singles / 1000 : (initial?.singles || null),
+        doubles: dmr.doubles ? dmr.doubles / 1000 : (initial?.doubles || null),
+        rating: (dmr.doubles || dmr.singles || initial?.rating || 0) / 1000,
+        // Additional DMR-specific data
+        singlesRD: dmr.singlesRD,
+        doublesRD: dmr.doublesRD,
+        singlesMatches: dmr.singlesMatches,
+        doublesMatches: dmr.doublesMatches,
+        singlesProvisional: dmr.singlesProvisional,
+        doublesProvisional: dmr.doublesProvisional,
+        confidence: initial?.confidence || 'N/A',
+        lastUpdated: dmr.lastUpdated || initial?.lastUpdated,
+      };
+    } else if (initial) {
+      // Fall back to initial questionnaire ratings
+      skillRatings[sport] = {
+        ...initial,
+        singlesRD: initial.rd,
+        doublesRD: initial.rd,
+        singlesMatches: 0,
+        doublesMatches: 0,
+        singlesProvisional: true,
+        doublesProvisional: true,
+      };
+    }
+  }
+
+  // Get recent matches count
+  const totalMatches = await prisma.match.count({
+    where: {
+      participants: { some: { userId } },
+      status: 'COMPLETED',
+    },
+  });
+
+  // Get recent completed matches for profile display
+  const recentMatches = await prisma.match.findMany({
+    where: {
+      participants: { some: { userId } },
+      status: 'COMPLETED',
+    },
+    include: {
+      participants: {
+        include: {
+          user: {
+            select: { id: true, name: true, username: true, image: true },
+          },
+        },
+      },
+    },
+    orderBy: { matchDate: 'desc' },
+    take: 5,
+  });
+
   // Process recent matches
   const processedMatches = recentMatches.map(match => {
-    const currentUserParticipant = match.participants.find((p: { userId: string }) => p.userId === userId);
-    const opponentParticipant = match.participants.find((p: { userId: string }) => p.userId !== userId);
+    const currentUserParticipant = match.participants.find((p) => p.userId === userId);
+    const opponentParticipant = match.participants.find((p) => p.userId !== userId);
 
     return {
       id: match.id,
@@ -132,8 +383,23 @@ export async function getPlayerProfile(userId: string) {
     skillRatings: Object.keys(skillRatings).length > 0 ? skillRatings : null,
     questionnaireStatus: questionnaireStatus,
     recentMatches: processedMatches,
-    totalMatches: 0, // TODO: Fix match count query
+    totalMatches,
   };
+}
+
+/**
+ * Get rating history for a player (for graph display)
+ * Exported for use by controller
+ */
+export async function getPlayerRatingHistory(
+  userId: string,
+  sport?: string,
+  gameType?: string,
+  limit: number = 20
+): Promise<RatingHistoryEntry[]> {
+  const gt = gameType === 'doubles' ? GameType.DOUBLES :
+             gameType === 'singles' ? GameType.SINGLES : undefined;
+  return fetchRatingHistory(userId, sport, gt, limit);
 }
 
 /**
@@ -431,8 +697,6 @@ export async function changePlayerPassword(
     throw new Error('New password must be at least 8 characters long');
   }
 
-  console.log(`🔑 Attempting to change password via better-auth API...`);
-
   try {
     // Use better-auth's built-in password change functionality
     const result = await auth.api.changePassword({
@@ -443,7 +707,7 @@ export async function changePlayerPassword(
       headers: requestHeaders,
     });
 
-    console.log(`🔑 Better-auth result:`, result);
+    // console.log(`🔑 Better-auth result:`, result);
 
     // Check if result indicates failure (better-auth may return error differently)
     if (!result || !result.user) {

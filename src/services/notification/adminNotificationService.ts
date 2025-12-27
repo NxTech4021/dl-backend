@@ -4,6 +4,7 @@
  */
 
 import { NotificationService } from '../notificationService';
+import { notificationTemplates } from '../../helpers/notifications';
 import {
   getAdminsWithPreference,
   NotificationPreferenceKey
@@ -59,13 +60,16 @@ export async function notifyAdminsWithdrawalRequest(
     withdrawalRequestId: string;
   }
 ): Promise<void> {
+  const withdrawalNotif = notificationTemplates.account.withdrawalRequestSubmitted(
+    data.playerName,
+    data.seasonName,
+    data.reason
+  );
+
   await notifyAdmins(
     notificationService,
     {
-      type: 'ADMIN_WITHDRAWAL_REQUEST',
-      category: 'ADMIN',
-      title: 'New Withdrawal Request',
-      message: `${data.playerName} has requested to withdraw from ${data.seasonName}. Reason: ${data.reason}`,
+      ...withdrawalNotif,
       seasonId: data.seasonId,
       withdrawalRequestId: data.withdrawalRequestId
     },
@@ -107,6 +111,7 @@ export async function notifyAdminsTeamChange(
     currentTeam: string;
     requestedTeam: string;
     seasonId?: string;
+    requestId?: string;
   }
 ): Promise<void> {
   await notifyAdmins(

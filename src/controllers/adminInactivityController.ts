@@ -83,12 +83,13 @@ export async function getAllSettings(req: Request, res: Response) {
  */
 export async function updateSettings(req: Request, res: Response) {
   try {
-    const adminId = (req as any).user?.id;
+    // Use adminId (Admin table) not user.id (User table)
+    const adminId = (req as any).user?.adminId;
 
     if (!adminId) {
       return res.status(401).json({
         success: false,
-        message: 'Admin not authenticated'
+        message: 'Admin not authenticated or no admin record found'
       });
     }
 
@@ -152,13 +153,14 @@ export async function updateSettings(req: Request, res: Response) {
  */
 export async function removeSettings(req: Request, res: Response) {
   try {
-    const adminId = (req as any).user?.id;
+    // Use adminId (Admin table) not user.id (User table)
+    const adminId = (req as any).user?.adminId;
     const { settingsId } = req.params;
 
     if (!adminId) {
       return res.status(401).json({
         success: false,
-        message: 'Admin not authenticated'
+        message: 'Admin not authenticated or no admin record found'
       });
     }
 
@@ -187,7 +189,8 @@ export async function removeSettings(req: Request, res: Response) {
  */
 export async function triggerInactivityCheck(req: Request, res: Response) {
   try {
-    const adminId = (req as any).user?.id;
+    // Use adminId (Admin table) for logging, fall back to user.id if needed
+    const adminId = (req as any).user?.adminId || (req as any).user?.id;
 
     if (!adminId) {
       return res.status(401).json({

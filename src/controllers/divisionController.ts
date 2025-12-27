@@ -28,7 +28,8 @@ import {
 
 import {
   checkDivisionCapacity,
-  getDivisionCapacityInfo
+  getDivisionCapacityInfo,
+  updateDivisionCounts
 } from '../services/division/divisionCapacityService';
 
 import {
@@ -38,27 +39,13 @@ import {
   getAdminIdFromUserId
 } from '../services/division/divisionValidationService';
 
+// Standings service for rank recalculation
+import { recalculateDivisionRanks } from '../services/rating/standingsCalculationService';
+
 // 🆕 Notification imports
 import { notificationService } from '../services/notificationService';
-import { notificationTemplates } from '../helpers/notification';
+import { notificationTemplates } from '../helpers/notifications';
 import { logger } from '../utils/logger';
-
-const updateDivisionCounts = async (divisionId: string, increment: boolean) => {
-  try {
-    const count = await prisma.divisionAssignment.count({
-      where: { divisionId }
-    });
-    
-    await prisma.division.update({
-      where: { id: divisionId },
-      data: { currentSinglesCount: count }
-    });
-
-    logger.databaseOperation('update', 'division', 0, { divisionId, newCount: count });
-  } catch (error) {
-    logger.databaseError('update', 'division', error as Error, { divisionId });
-  }
-};
 
 interface CreateDivisionBody {
   seasonId?: string;
@@ -338,9 +325,7 @@ export const createDivision = async (req: Request, res: Response) => {
         divisionId: result.division.id,
       });
     }
-
-
-    // 7️⃣ Respond to the frontend
+    
     return res.status(201).json({
       success: true,
       data: {
@@ -351,6 +336,7 @@ export const createDivision = async (req: Request, res: Response) => {
           isGroup: result.thread.isGroup,
           divisionId: result.thread.divisionId,
           members: result.thread.members,
+          sportType: result.division.league?.sportType,
         },
         notificationsSent: recipientUserIds.length,
       },
@@ -718,6 +704,44 @@ export const assignPlayerToDivision = async (req: Request, res: Response) => {
         logger.info('Added user to division group chat', { userId, threadId: divisionThread.id });
       }
 
+      // 🆕 Create or update division standing with initial zero stats
+      // This ensures players appear in standings as soon as they join
+      const existingStanding = await tx.divisionStanding.findFirst({
+        where: { userId, divisionId }
+      });
+
+      if (!existingStanding) {
+        await tx.divisionStanding.create({
+          data: {
+            divisionId,
+            seasonId,
+            userId,
+            rank: 0, // Will be recalculated
+            wins: 0,
+            losses: 0,
+            matchesPlayed: 0,
+            matchesScheduled: 9, // Default scheduled matches
+            totalPoints: 0,
+            countedWins: 0,
+            countedLosses: 0,
+            setsWon: 0,
+            setsLost: 0,
+            gamesWon: 0,
+            gamesLost: 0,
+            best6SetsWon: 0,
+            best6SetsTotal: 0,
+            best6GamesWon: 0,
+            best6GamesTotal: 0,
+            winPoints: 0,
+            setPoints: 0,
+            completionBonus: 0,
+            setDifferential: 0,
+            headToHead: {},
+          }
+        });
+        logger.info('Created initial standing for user in division', { userId, divisionId });
+      }
+
       return { assignment, divisionThread };
     });
 
@@ -727,6 +751,9 @@ export const assignPlayerToDivision = async (req: Request, res: Response) => {
     if (isReassignment && previousDivisionId) {
       await updateDivisionCounts(previousDivisionId, false);
     }
+
+    // 🆕 Recalculate division ranks to include new player
+    await recalculateDivisionRanks(divisionId);
 
     // Get season info for notifications
     const season = await prisma.season.findUnique({
@@ -752,8 +779,7 @@ export const assignPlayerToDivision = async (req: Request, res: Response) => {
 
       // 🆕 Send group chat notification
       const chatNotif = notificationTemplates.chat.groupAdded(
-        divisionThread.name || `${division.name} Chat`,
-        division.name
+        divisionThread.name || `${division.name} Chat`
       );
 
       await notificationService.createNotification({
@@ -819,7 +845,8 @@ export const assignPlayerToDivision = async (req: Request, res: Response) => {
         assignment: result.assignment,
         groupChat: {
           threadId: result.divisionThread.id,
-          threadName: result.divisionThread.name
+          threadName: result.divisionThread.name,
+          sportType: division.league?.sportType
         }
       }
     });
@@ -1498,6 +1525,249 @@ export const getDivisionSummaryBySeasonId = async (req: Request, res: Response) 
     return res.status(500).json({
       success: false,
       error: summaryError.message || "Failed to fetch division summary"
+    });
+  }
+};
+
+/**
+ * Backfill standings for all players who are in divisions but don't have standing records yet.
+ * This is a utility function to fix existing data where players joined before standings were auto-created.
+ */
+export const backfillDivisionStandings = async (req: Request, res: Response) => {
+  try {
+    const { seasonId, divisionId } = req.body;
+    
+    logger.info('Starting standings backfill', { seasonId, divisionId });
+
+    // Build the query filter
+    const assignmentFilter: any = {};
+    if (divisionId) {
+      assignmentFilter.divisionId = divisionId;
+    }
+    if (seasonId) {
+      assignmentFilter.division = { seasonId };
+    }
+
+    // Get all division assignments
+    const assignments = await prisma.divisionAssignment.findMany({
+      where: assignmentFilter,
+      include: {
+        division: {
+          select: {
+            id: true,
+            name: true,
+            seasonId: true,
+          }
+        },
+        user: {
+          select: {
+            id: true,
+            name: true,
+          }
+        }
+      }
+    });
+
+    logger.info(`Found ${assignments.length} division assignments to check`);
+
+    let created = 0;
+    let skipped = 0;
+    const errors: Array<{ userId: string; divisionId: string; error: string }> = [];
+    const createdStandings: Array<{ userId: string; userName: string; divisionId: string; divisionName: string }> = [];
+
+    // Process each assignment
+    for (const assignment of assignments) {
+      try {
+        // Check if standing already exists
+        const existingStanding = await prisma.divisionStanding.findFirst({
+          where: {
+            userId: assignment.userId,
+            divisionId: assignment.divisionId,
+          }
+        });
+
+        if (existingStanding) {
+          skipped++;
+          continue;
+        }
+
+        // Create the standing with zero stats
+        await prisma.divisionStanding.create({
+          data: {
+            divisionId: assignment.divisionId,
+            seasonId: assignment.division.seasonId,
+            userId: assignment.userId,
+            rank: 0, // Will be recalculated
+            wins: 0,
+            losses: 0,
+            matchesPlayed: 0,
+            matchesScheduled: 9,
+            totalPoints: 0,
+            countedWins: 0,
+            countedLosses: 0,
+            setsWon: 0,
+            setsLost: 0,
+            gamesWon: 0,
+            gamesLost: 0,
+            best6SetsWon: 0,
+            best6SetsTotal: 0,
+            best6GamesWon: 0,
+            best6GamesTotal: 0,
+            winPoints: 0,
+            setPoints: 0,
+            completionBonus: 0,
+            setDifferential: 0,
+            headToHead: {},
+          }
+        });
+
+        created++;
+        createdStandings.push({
+          userId: assignment.userId,
+          userName: assignment.user?.name || 'Unknown',
+          divisionId: assignment.divisionId,
+          divisionName: assignment.division.name,
+        });
+
+        logger.info(`Created standing for user ${assignment.userId} in division ${assignment.division.name}`);
+
+      } catch (err) {
+        const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+        errors.push({
+          userId: assignment.userId,
+          divisionId: assignment.divisionId,
+          error: errorMessage,
+        });
+        logger.error('Error creating standing', { userId: assignment.userId, divisionId: assignment.divisionId }, err as Error);
+      }
+    }
+
+    // Recalculate ranks for affected divisions
+    const affectedDivisionIds = [...new Set(createdStandings.map(s => s.divisionId))];
+    logger.info(`Recalculating ranks for ${affectedDivisionIds.length} divisions`);
+
+    for (const divId of affectedDivisionIds) {
+      try {
+        await recalculateDivisionRanks(divId);
+        logger.info(`Recalculated ranks for division ${divId}`);
+      } catch (err) {
+        logger.error('Error recalculating ranks', { divisionId: divId }, err as Error);
+      }
+    }
+
+    const result = {
+      success: true,
+      message: `Backfill completed. Created ${created} standings, skipped ${skipped} existing.`,
+      summary: {
+        totalAssignments: assignments.length,
+        created,
+        skipped,
+        errors: errors.length,
+        divisionsUpdated: affectedDivisionIds.length,
+      },
+      createdStandings,
+      errors: errors.length > 0 ? errors : undefined,
+    };
+
+    logger.info('Standings backfill completed', result.summary);
+
+    return res.json(result);
+
+  } catch (error) {
+    logger.error('Error in backfill standings', {}, error as Error);
+    return res.status(500).json({
+      success: false,
+      error: "Failed to backfill standings"
+    });
+  }
+};
+
+/**
+ * Sync division counts based on actual DivisionAssignments.
+ * This fixes any inconsistencies between currentSinglesCount/currentDoublesCount and actual assignments.
+ * POST /api/division/sync-counts
+ */
+export const syncDivisionCounts = async (req: Request, res: Response) => {
+  try {
+    const { seasonId, divisionId } = req.body;
+    
+    logger.info('Starting division counts sync', { seasonId, divisionId });
+
+    // Build where clause
+    const whereClause: any = {};
+    if (seasonId) whereClause.seasonId = seasonId;
+    if (divisionId) whereClause.id = divisionId;
+
+    // Get all divisions (or filtered by season/divisionId)
+    const divisions = await prisma.division.findMany({
+      where: whereClause,
+      select: {
+        id: true,
+        name: true,
+        gameType: true,
+        currentSinglesCount: true,
+        currentDoublesCount: true,
+        _count: {
+          select: {
+            assignments: true
+          }
+        }
+      }
+    });
+
+    const updates: Array<{
+      divisionId: string;
+      divisionName: string;
+      gameType: string;
+      oldCount: number;
+      newCount: number;
+    }> = [];
+
+    for (const division of divisions) {
+      const actualCount = division._count.assignments;
+      const isSingles = division.gameType === 'SINGLES';
+      const currentCount = isSingles 
+        ? division.currentSinglesCount 
+        : division.currentDoublesCount;
+
+      if (currentCount !== actualCount) {
+        // Update the count
+        await prisma.division.update({
+          where: { id: division.id },
+          data: isSingles 
+            ? { currentSinglesCount: actualCount }
+            : { currentDoublesCount: actualCount }
+        });
+
+        updates.push({
+          divisionId: division.id,
+          divisionName: division.name,
+          gameType: division.gameType,
+          oldCount: currentCount || 0,
+          newCount: actualCount
+        });
+      }
+    }
+
+    const result = {
+      success: true,
+      message: `Synced ${updates.length} divisions`,
+      summary: {
+        totalDivisions: divisions.length,
+        updatedDivisions: updates.length,
+      },
+      updates: updates.length > 0 ? updates : undefined,
+    };
+
+    logger.info('Division counts sync completed', result.summary);
+
+    return res.json(result);
+
+  } catch (error) {
+    logger.error('Error syncing division counts', {}, error as Error);
+    return res.status(500).json({
+      success: false,
+      error: "Failed to sync division counts"
     });
   }
 };

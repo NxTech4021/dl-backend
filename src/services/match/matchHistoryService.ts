@@ -141,7 +141,6 @@ export class MatchHistoryService {
         format: match.format,
         status: match.status,
         matchDate: match.matchDate,
-        scheduledTime: match.scheduledTime,
         location: match.location,
         venue: match.venue,
         division: match.division ? {
@@ -366,10 +365,7 @@ export class MatchHistoryService {
           some: { userId }
         },
         status: MatchStatus.SCHEDULED,
-        OR: [
-          { scheduledTime: { gte: new Date() } },
-          { scheduledTime: null }
-        ]
+        matchDate: { gte: new Date() }
       },
       include: {
         division: true,
@@ -379,14 +375,10 @@ export class MatchHistoryService {
               select: { id: true, name: true, username: true, image: true }
             }
           }
-        },
-        timeSlots: {
-          where: { status: 'CONFIRMED' },
-          take: 1
         }
       },
       orderBy: [
-        { scheduledTime: 'asc' },
+        { matchDate: 'asc' },
         { createdAt: 'desc' }
       ],
       take: limit
@@ -394,10 +386,10 @@ export class MatchHistoryService {
   }
 
   /**
-   * Get recent results for user
+   * Get recent results for user with rating changes
    */
   async getRecentResults(userId: string, limit = 5) {
-    return prisma.match.findMany({
+    const matches = await prisma.match.findMany({
       where: {
         participants: {
           some: { userId }
@@ -405,7 +397,14 @@ export class MatchHistoryService {
         status: MatchStatus.COMPLETED
       },
       include: {
-        division: true,
+        division: {
+          include: {
+            playerRatings: {
+              where: { userId },
+              take: 1
+            }
+          }
+        },
         participants: {
           include: {
             user: {
@@ -417,6 +416,237 @@ export class MatchHistoryService {
       },
       orderBy: { matchDate: 'desc' },
       take: limit
+    });
+
+    // Fetch rating changes for each match
+    const matchesWithRatingChanges = await Promise.all(
+      matches.map(async (match) => {
+        // Get rating change for this specific match and user
+        const ratingChange = await prisma.ratingHistory.findFirst({
+          where: {
+            matchId: match.id,
+            playerRating: {
+              userId,
+              divisionId: match.divisionId
+            }
+          },
+          select: {
+            id: true,
+            ratingBefore: true,
+            ratingAfter: true,
+            delta: true,
+            rdBefore: true,
+            rdAfter: true
+          }
+        });
+
+        return {
+          ...match,
+          ratingChange: ratingChange || null
+        };
+      })
+    );
+
+    return matchesWithRatingChanges;
+  }
+
+  /**
+   * Get matches pending confirmation for user
+   * These are completed matches where result is submitted but not confirmed/disputed
+   */
+  async getPendingConfirmationMatches(userId: string, limit = 20) {
+    return prisma.match.findMany({
+      where: {
+        participants: {
+          some: { userId }
+        },
+        status: MatchStatus.COMPLETED,
+        resultSubmittedAt: { not: null },
+        resultConfirmedAt: null,
+        isDisputed: false,
+        isAutoApproved: false
+      },
+      include: {
+        division: true,
+        participants: {
+          include: {
+            user: {
+              select: { id: true, name: true, username: true, image: true }
+            }
+          }
+        },
+        scores: { orderBy: { setNumber: 'asc' } },
+        resultSubmittedBy: {
+          select: { id: true, name: true, username: true }
+        }
+      },
+      orderBy: { resultSubmittedAt: 'desc' },
+      take: limit
+    });
+  }
+
+  /**
+   * Get disputed matches for user
+   */
+  async getDisputedMatches(userId: string, limit = 20) {
+    return prisma.match.findMany({
+      where: {
+        participants: {
+          some: { userId }
+        },
+        isDisputed: true
+      },
+      include: {
+        division: true,
+        participants: {
+          include: {
+            user: {
+              select: { id: true, name: true, username: true, image: true }
+            }
+          }
+        },
+        scores: { orderBy: { setNumber: 'asc' } },
+        disputes: {
+          orderBy: { submittedAt: 'desc' },
+          take: 1,
+          include: {
+            raisedByUser: {
+              select: { id: true, name: true, username: true }
+            }
+          }
+        }
+      },
+      orderBy: { updatedAt: 'desc' },
+      take: limit
+    });
+  }
+
+  /**
+   * Get completed matches for a division (all matches, not user-specific)
+   * Used for displaying recent results in standings view
+   */
+  async getDivisionResults(divisionId: string, seasonId?: string, limit = 3) {
+    const where: any = {
+      divisionId,
+      status: MatchStatus.COMPLETED
+    };
+
+    if (seasonId) {
+      where.seasonId = seasonId;
+    }
+
+    const matches = await prisma.match.findMany({
+      where,
+      include: {
+        division: {
+          include: { season: true }
+        },
+        participants: {
+          include: {
+            user: {
+              select: { id: true, name: true, username: true, image: true }
+            }
+          }
+        },
+        scores: { orderBy: { setNumber: 'asc' } },
+        pickleballScores: { orderBy: { gameNumber: 'asc' } },
+        comments: {
+          include: {
+            user: {
+              select: { id: true, name: true, image: true }
+            }
+          },
+          orderBy: { createdAt: 'asc' }
+        },
+        createdBy: {
+          select: { id: true, name: true, username: true }
+        },
+        resultSubmittedBy: {
+          select: { id: true, name: true, username: true }
+        }
+      },
+      orderBy: { matchDate: 'desc' },
+      take: limit
+    });
+
+    // Process matches to include formatted data
+    return matches.map(match => {
+      // Separate players by team
+      const team1Players = match.participants.filter(p => p.team === 'team1' || p.team === 'TEAM_A');
+      const team2Players = match.participants.filter(p => p.team === 'team2' || p.team === 'TEAM_B');
+
+      // If no team info, split evenly (first half team1, second half team2)
+      if (team1Players.length === 0 && team2Players.length === 0) {
+        const half = Math.ceil(match.participants.length / 2);
+        match.participants.forEach((p, index) => {
+          if (index < half) {
+            team1Players.push(p);
+          } else {
+            team2Players.push(p);
+          }
+        });
+      }
+
+      return {
+        id: match.id,
+        matchType: match.matchType,
+        format: match.format,
+        status: match.status,
+        matchDate: match.matchDate,
+        location: match.location,
+        venue: match.venue,
+        division: match.division ? {
+          id: match.division.id,
+          name: match.division.name,
+          season: match.division.season?.name
+        } : null,
+        team1Score: match.team1Score,
+        team2Score: match.team2Score,
+        outcome: match.outcome,
+        setScores: match.scores.map(s => ({
+          setNumber: s.setNumber,
+          team1Games: s.player1Games,
+          team2Games: s.player2Games,
+          team1Tiebreak: s.player1Tiebreak,
+          team2Tiebreak: s.player2Tiebreak,
+          hasTiebreak: s.hasTiebreak
+        })),
+        gameScores: match.pickleballScores.map(g => ({
+          gameNumber: g.gameNumber,
+          team1Points: g.player1Points,
+          team2Points: g.player2Points
+        })),
+        team1Players: team1Players.map(p => ({
+          id: p.user.id,
+          name: p.user.name,
+          username: p.user.username,
+          image: p.user.image
+        })),
+        team2Players: team2Players.map(p => ({
+          id: p.user.id,
+          name: p.user.name,
+          username: p.user.username,
+          image: p.user.image
+        })),
+        isWalkover: match.isWalkover,
+        notes: match.notes,
+        comments: match.comments.map(c => ({
+          id: c.id,
+          userId: c.userId,
+          comment: c.comment,
+          createdAt: c.createdAt,
+          user: {
+            id: c.user.id,
+            name: c.user.name,
+            image: c.user.image
+          }
+        })),
+        resultSubmittedBy: match.resultSubmittedBy ? {
+          id: match.resultSubmittedBy.id,
+          name: match.resultSubmittedBy.name
+        } : null,
+        createdAt: match.createdAt
+      };
     });
   }
 }

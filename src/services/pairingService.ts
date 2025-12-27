@@ -1,6 +1,8 @@
 import { prisma } from '../lib/prisma';
 import { PairRequestStatus } from '@prisma/client';
 import { enrichPlayerWithSkills } from './player/utils/playerTransformer';
+import { notificationTemplates } from '../helpers/notifications';
+import { notificationService } from './notificationService';
 
 /**
  * Pairing Service
@@ -33,9 +35,7 @@ export const calculatePairRating = async (
     const season = await prisma.season.findUnique({
       where: { id: seasonId },
       select: {
-        category: {
-          select: { game_type: true }
-        }
+        categoryId: true
       },
     });
 
@@ -43,7 +43,13 @@ export const calculatePairRating = async (
       throw new Error('Season not found');
     }
 
-    const sport = season.category?.game_type?.toLowerCase() || '';
+    // Get category to find game type
+    const category = season.categoryId ? await prisma.category.findUnique({
+      where: { id: season.categoryId },
+      select: { gameType: true }
+    }) : null;
+
+    const sport = category?.gameType?.toLowerCase() || '';
 
     // Get questionnaire responses for both players for this sport
     const [player1Response, player2Response] = await Promise.all([
@@ -110,9 +116,7 @@ export const sendPairRequest = async (
         startDate: true,
         regiDeadline: true,
         status: true,
-        category: {
-          select: { game_type: true }
-        }
+        categoryId: true
       },
     });
 
@@ -242,7 +246,37 @@ export const sendPairRequest = async (
       },
     });
 
-    // TODO: Send notification to recipient (email/push notification)
+    // Send notifications: recipient (PUSH) and sender (IN-APP)
+    try {
+      const recipientNotif = notificationTemplates.doubles.partnerRequestReceived(
+        pairRequest.requester.name || pairRequest.requester.username || 'Someone',
+        pairRequest.season.name || 'this season'
+      );
+
+      await notificationService.createNotification({
+        userIds: pairRequest.recipientId,
+        ...recipientNotif,
+        seasonId: pairRequest.season.id,
+        pairRequestId: pairRequest.id,
+      });
+
+      const senderNotif = notificationTemplates.doubles.partnerRequestSent(
+        pairRequest.recipient.name || pairRequest.recipient.username || 'Someone',
+        pairRequest.season.name || 'this season'
+      );
+
+      await notificationService.createNotification({
+        userIds: pairRequest.requesterId,
+        ...senderNotif,
+        seasonId: pairRequest.season.id,
+        pairRequestId: pairRequest.id,
+      });
+
+      console.log('🔔 Pairing: created recipient PUSH and sender IN-APP notifications');
+    } catch (notifErr) {
+      console.error('❌ Failed to create pair request notifications:', notifErr);
+    }
+
     console.log(`Pair request sent from ${requesterId} to ${recipientId} for season ${seasonId}`);
 
     return {
@@ -386,8 +420,40 @@ export const acceptPairRequest = async (
       return { updatedRequest, partnership };
     });
 
-    // TODO: Send notification to requester
-    console.log(`Pair request ${requestId} accepted, partnership created`);
+      // Send notifications for partnership creation (both users) - PUSH
+      try {
+        const leagueName = result.partnership.season?.name || 'this season';
+
+        const captainNotif = notificationTemplates.doubles.partnerRequestAcceptedCaptain(
+          result.partnership.partner.name || result.partnership.partner.username || 'Partner',
+          leagueName
+        );
+
+        await notificationService.createNotification({
+          userIds: result.partnership.captain.id,
+          ...captainNotif,
+          seasonId: result.partnership.season.id,
+          partnershipId: result.partnership.id,
+        });
+
+        const partnerNotif = notificationTemplates.doubles.partnerRequestAcceptedPartner(
+          result.partnership.captain.name || result.partnership.captain.username || 'Captain',
+          leagueName
+        );
+
+        await notificationService.createNotification({
+          userIds: result.partnership.partner.id,
+          ...partnerNotif,
+          seasonId: result.partnership.season.id,
+          partnershipId: result.partnership.id,
+        });
+
+        console.log('🔔 Pairing: partnership accepted notifications sent (captain + partner)');
+      } catch (notifErr) {
+        console.error('❌ Failed to create partnership notifications:', notifErr);
+      }
+
+      console.log(`Pair request ${requestId} accepted, partnership created`);
 
     return {
       success: true,
@@ -411,9 +477,14 @@ export const denyPairRequest = async (
   userId: string
 ): Promise<PairRequestResponse> => {
   try {
-    // Find the pair request
+    // Find the pair request (include related users and season for notifications)
     const pairRequest = await prisma.pairRequest.findUnique({
       where: { id: requestId },
+      include: {
+        requester: { select: { id: true, name: true, username: true } },
+        recipient: { select: { id: true, name: true, username: true } },
+        season: { select: { id: true, name: true } },
+      },
     });
 
     if (!pairRequest) {
@@ -448,8 +519,27 @@ export const denyPairRequest = async (
       },
     });
 
-    // Note: Do NOT notify requester (per requirements)
-    console.log(`Pair request ${requestId} denied`);
+    // Send PUSH notification to requester informing them their request was declined
+    try {
+      const leagueName = pairRequest.season?.name || 'this season';
+      const partnerName = pairRequest.recipient?.name || pairRequest.recipient?.username || 'Someone';
+
+      const declineNotif = notificationTemplates.doubles.partnerRequestDeclinedCaptain(
+        partnerName,
+        leagueName
+      );
+
+      await notificationService.createNotification({
+        userIds: pairRequest.requesterId,
+        ...declineNotif,
+        seasonId: pairRequest.season?.id,
+        pairRequestId: pairRequest.id,
+      });
+
+      console.log('🔔 Pairing: sent decline PUSH notification to requester');
+    } catch (notifErr) {
+      console.error('❌ Failed to send decline notification to requester:', notifErr);
+    }
 
     return {
       success: true,
@@ -721,7 +811,7 @@ export const dissolvePartnership = async (
             seasonId: partnership.seasonId,
           },
           data: {
-            status: 'WITHDRAWN',
+            status: 'REMOVED',
           },
         });
       }

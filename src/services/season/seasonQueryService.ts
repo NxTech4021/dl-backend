@@ -99,7 +99,19 @@ export async function getSeasonById(id: string): Promise<any | null> {
       promoCodes: true,
       withdrawalRequests: {
         include: {
-          processedByAdmin: true,
+          user: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+            },
+          },
+          processedByAdmin: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
         },
       },
       waitlist: {

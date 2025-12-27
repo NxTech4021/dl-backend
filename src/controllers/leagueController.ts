@@ -7,8 +7,14 @@ import {
   TierType,
   PrismaClient,
   Prisma,
+  AdminActionType,
 } from "@prisma/client";
+import { prisma } from "../lib/prisma";
 import { ApiResponse } from "../utils/ApiResponse";
+import { logLeagueAction } from "../services/admin/adminLogService";
+import { notificationService } from '../services/notificationService';
+import { leagueLifecycleNotifications } from '../helpers/notifications';
+import { NOTIFICATION_TYPES } from '../types/notificationTypes';
 
 interface CreateLeagueBody {
   name?: string;
@@ -227,6 +233,39 @@ export const createLeague = async (req: Request, res: Response) => {
 
     const newLeague = await leagueService.createLeague(leagueData);
 
+    // Broadcast new league announcement to all users (push)
+    try {
+      const users = await prisma.user.findMany({ select: { id: true } });
+      if (users.length > 0) {
+        const userIds = users.map(u => u.id);
+        const notif = leagueLifecycleNotifications.newLeagueAnnouncement(
+          newLeague.location || 'your area',
+          newLeague.sportType || 'sport'
+        );
+
+        // Ensure notification type maps to push by using LEAGUE_ANNOUNCEMENT
+        await notificationService.createNotification({
+          userIds,
+          ...notif,
+          type: NOTIFICATION_TYPES.LEAGUE_ANNOUNCEMENT || notif.type,
+        });
+      }
+    } catch (err) {
+      console.error('Failed to send new league announcement notifications:', err);
+    }
+
+    // Log admin action if user is authenticated
+    if (req.user?.id) {
+      await logLeagueAction(
+        req.user.id,
+        AdminActionType.LEAGUE_CREATE,
+        newLeague.id,
+        `Created league: ${name}`,
+        undefined,
+        { name, location, description, sportType, gameType }
+      );
+    }
+
     return res
       .status(201)
       .json(
@@ -333,6 +372,18 @@ export const updateLeague = async (req: Request, res: Response) => {
 
     const updatedLeague = await leagueService.updateLeague(id, updateData);
 
+    // Log admin action if user is authenticated
+    if (req.user?.id) {
+      await logLeagueAction(
+        req.user.id,
+        AdminActionType.LEAGUE_UPDATE,
+        id,
+        `Updated league: ${updatedLeague.name}`,
+        undefined,
+        updateData as Record<string, unknown>
+      );
+    }
+
     return res
       .status(200)
       .json(
@@ -378,6 +429,18 @@ export const deleteLeague = async (req: Request, res: Response) => {
     }
 
     await leagueService.deleteLeague(id);
+
+    // Log admin action if user is authenticated
+    if (req.user?.id) {
+      await logLeagueAction(
+        req.user.id,
+        AdminActionType.LEAGUE_DELETE,
+        id,
+        `Deleted league`,
+        undefined,
+        undefined
+      );
+    }
 
     return res
       .status(200)

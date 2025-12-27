@@ -266,16 +266,35 @@ export function socketHandler(httpServer: HttpServer) {
     });
 
     // Thread room management
-    socket.on('join_thread', (data: string | { threadId: string }) => {
+    socket.on('join_thread', async (data: string | { threadId: string }) => {
       const threadId = typeof data === 'string' ? data : data.threadId;
       if (!threadId) return;
-      
-      socket.join(threadId);
-      socket.emit('thread_joined', { 
-        threadId, 
-        socketId: socket.id,
-        timestamp: new Date().toISOString() 
-      });
+
+      // Security check: Verify user is a member of this thread
+      try {
+        const membership = await prisma.userThread.findUnique({
+          where: { threadId_userId: { threadId, userId } }
+        });
+
+        if (!membership) {
+          console.log(`❌ Socket: User ${userId} denied access to thread ${threadId} - not a member`);
+          socket.emit('thread_join_error', {
+            threadId,
+            error: 'Access denied: You are not a member of this thread'
+          });
+          return;
+        }
+
+        socket.join(threadId);
+        socket.emit('thread_joined', {
+          threadId,
+          socketId: socket.id,
+          timestamp: new Date().toISOString()
+        });
+      } catch (error) {
+        console.error('❌ Socket: Error checking thread membership:', error);
+        socket.emit('thread_join_error', { threadId, error: 'Failed to verify thread access' });
+      }
     });
 
     socket.on('leave_thread', (data: string | { threadId: string }) => {
@@ -296,6 +315,28 @@ export function socketHandler(httpServer: HttpServer) {
       } else {
         socket.emit('error', { message: 'Admin access required' });
       }
+    });
+
+    // Match room management (for real-time match updates and comments)
+    socket.on('join_match', (data: { matchId: string }) => {
+      if (!data.matchId) return;
+
+      const matchRoom = `match:${data.matchId}`;
+      socket.join(matchRoom);
+      console.log(`🎾 User ${userId} joined match room: ${matchRoom}`);
+      socket.emit('match_joined', {
+        matchId: data.matchId,
+        socketId: socket.id,
+        timestamp: new Date().toISOString()
+      });
+    });
+
+    socket.on('leave_match', (data: { matchId: string }) => {
+      if (!data.matchId) return;
+
+      const matchRoom = `match:${data.matchId}`;
+      socket.leave(matchRoom);
+      console.log(`🎾 User ${userId} left match room: ${matchRoom}`);
     });
   });
   

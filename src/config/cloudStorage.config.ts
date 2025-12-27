@@ -65,6 +65,64 @@ export const uploadProfileImage = async (
   }
 };
 
+// Mapping from mimetype to safe file extension
+const MIME_TO_EXTENSION: { [key: string]: string } = {
+  'image/jpeg': '.jpg',
+  'image/png': '.png',
+  'image/gif': '.gif',
+  'image/webp': '.webp',
+};
+
+export const uploadBugScreenshot = async (
+  buffer: Buffer,
+  bugReportId: string,
+  _originalName: string, // Kept for API compatibility, but we use mimetype for safe extension
+  mimetype: string
+): Promise<{ imageUrl: string; thumbnailUrl: string }> => {
+  try {
+    const bucketName = process.env.BUCKET_NAME as string;
+    if (!bucketName) {
+      throw new Error('BUCKET_NAME environment variable is not set');
+    }
+
+    // Security: Use extension based on validated mimetype, not user-provided filename
+    const safeExtension = MIME_TO_EXTENSION[mimetype] || '.png';
+
+    // Generate unique filename with timestamp
+    const timestamp = dayjs().format('YYYY-MM-DD-HH-mm-ss');
+    const fileName = `bug-${bugReportId}-${timestamp}-${Math.random().toString(36).substring(7)}${safeExtension}`;
+    const destination = `bug-screenshots/${fileName}`;
+
+    // Use the provided mimetype directly (already validated by controller)
+    const contentType = mimetype || 'image/png';
+
+    const bucket = storage.bucket(bucketName);
+    const file = bucket.file(destination);
+
+    // Upload the buffer directly to Google Cloud Storage
+    await file.save(buffer, {
+      metadata: {
+        cacheControl: 'public, max-age=31536000',
+        contentType: contentType,
+      },
+    });
+
+    // Make the file public
+    await file.makePublic();
+
+    // Return the public URL (same URL for both, no thumbnail generation)
+    const publicUrl = `https://storage.googleapis.com/${bucketName}/${destination}`;
+    return {
+      imageUrl: publicUrl,
+      thumbnailUrl: publicUrl, // Could generate a thumbnail later if needed
+    };
+  } catch (err: unknown) {
+    console.error('Error uploading bug screenshot:', err);
+    const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+    throw new Error(`Error uploading bug screenshot: ${errorMessage}`);
+  }
+};
+
 export const deleteProfileImage = async (imageUrl: string): Promise<void> => {
   try {
     const bucketName = process.env.BUCKET_NAME as string;

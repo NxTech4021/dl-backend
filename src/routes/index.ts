@@ -3,6 +3,7 @@ import adminRouter from "./adminRoutes";
 import playerRouter from "./playerRoutes";
 import seasonRouter from "./seasonRoutes";
 import divisionRoutes from "./divisionRoutes";
+import teamChangeRequestRoutes from "./teamChangeRequestRoutes";
 import leagueRoutes from "./leagueRoutes";
 import sponsorRoutes from "./sponsorRoutes";
 import categoryRoutes from "./categoryRoutes";
@@ -13,6 +14,7 @@ import notificationRouter from "./notificationRoutes";
 import notificationPreferenceRouter from "./notificationPreferenceRoutes";
 import matchRoutes from "./matchRoutes";
 import paymentRoutes from "./paymentRoutes";
+import friendlyRoutes from "./friendlyRoutes";
 import bugRouter from "./bugRoutes";
 import ratingRoutes from "./ratingRoutes";
 import standingsRoutes from "./standingsRoutes";
@@ -30,6 +32,7 @@ router.use("/onboarding", onboardingRouter);
 
 router.use("/league", leagueRoutes);
 router.use("/division", divisionRoutes);
+router.use("/team-change-requests", teamChangeRequestRoutes);
 router.use("/season", seasonRouter);
 router.use("/sponsor", sponsorRoutes);
 router.use("/category", categoryRoutes);
@@ -37,6 +40,7 @@ router.use("/pairing", pairingRouter);
 router.use("/payments", paymentRoutes);
 
 router.use("/match", matchRoutes);
+router.use("/friendly", friendlyRoutes);
 
 // Ratings & Standings
 router.use("/ratings", ratingRoutes);

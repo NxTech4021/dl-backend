@@ -1,5 +1,6 @@
 import { Router } from "express";
-import { verifyAuth } from "../middlewares/auth.middleware";
+import { verifyAuth, optionalAuth } from "../middlewares/auth.middleware";
+import { upload } from "../services/player/utils/multerConfig";
 import {
   // Public endpoints (Widget)
   getModulesByApp,
@@ -8,6 +9,10 @@ import {
   getBugReportById,
   addComment,
   uploadScreenshot,
+  uploadScreenshotFile,
+  syncBugReport,
+  initDLAApp,
+  initDLMApp,
   // Admin endpoints
   getAllBugReports,
   getAdminBugReportById,
@@ -27,14 +32,28 @@ import {
 const bugRouter = Router();
 
 // =============================================
-// PUBLIC ENDPOINTS (Widget - requires auth)
+// PUBLIC ENDPOINTS (No auth - for bug widget)
+// These endpoints allow reporting bugs even from login page
 // =============================================
 
-// Get modules for a specific app (for dropdown)
-bugRouter.get("/apps/:appId/modules", verifyAuth, getModulesByApp);
+// Initialize DLA app (auto-creates if not exists) - for DLAdmin widget
+// Public: allows bug reporting before login
+bugRouter.get("/init/dla", initDLAApp);
 
-// Create new bug report
-bugRouter.post("/reports", verifyAuth, createBugReport);
+// Initialize DLM app (auto-creates if not exists) - for DL Mobile app
+// Public: allows feedback submission before/without login
+bugRouter.get("/init/dlm", initDLMApp);
+
+// Create new bug report - Uses optional auth to capture logged-in user if available
+// eslint-disable-next-line @typescript-eslint/no-unsafe-argument
+bugRouter.post("/reports", optionalAuth, createBugReport);
+
+// Get modules for a specific app (for dropdown) - Public
+bugRouter.get("/apps/:appId/modules", getModulesByApp);
+
+// =============================================
+// AUTHENTICATED USER ENDPOINTS
+// =============================================
 
 // Get current user's bug reports
 bugRouter.get("/reports/my", verifyAuth, getMyBugReports);
@@ -47,6 +66,14 @@ bugRouter.post("/reports/:id/comments", verifyAuth, addComment);
 
 // Upload screenshot (expects pre-uploaded URL from cloud storage)
 bugRouter.post("/screenshots", verifyAuth, uploadScreenshot);
+
+// Upload screenshot file (handles actual file upload) - Public for anonymous reports
+// eslint-disable-next-line @typescript-eslint/no-unsafe-argument
+bugRouter.post("/screenshots/upload", upload.single("screenshot"), uploadScreenshotFile);
+
+// Sync bug report to Google Sheets - Public (called after screenshots uploaded)
+// eslint-disable-next-line @typescript-eslint/no-unsafe-argument
+bugRouter.post("/reports/:id/sync", syncBugReport);
 
 // Get all apps (for app selector)
 bugRouter.get("/apps", verifyAuth, getApps);

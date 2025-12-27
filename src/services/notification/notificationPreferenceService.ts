@@ -141,8 +141,8 @@ export async function filterUsersByPreference(
     select: { userId: true, [preferenceKey]: true }
   });
 
-  const preferencesMap = new Map(
-    preferences.map(p => [p.userId, (p as Record<string, any>)[preferenceKey]])
+  const preferencesMap = new Map<string, boolean>(
+    preferences.map((p: any) => [p.userId, p[preferenceKey]])
   );
 
   // Filter users - include if preference is true or not set (default true)
