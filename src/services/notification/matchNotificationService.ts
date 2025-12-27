@@ -102,6 +102,7 @@ export async function sendMatchReminder24h(matchId: string): Promise<void> {
 
     if (!match || match.participants.length < 2) return;
 
+    const date = match.matchDate?.toLocaleDateString() || 'TBD';
     const time = match.matchDate?.toLocaleTimeString() || 'TBD';
     const venue = match.venue || match.location || 'TBD';
 
@@ -112,11 +113,13 @@ export async function sendMatchReminder24h(matchId: string): Promise<void> {
 
     const reminderP1 = notificationTemplates.match.matchReminder24h(
       player2.user?.name || 'Opponent',
+      date,
       time,
       venue
     );
     const reminderP2 = notificationTemplates.match.matchReminder24h(
       player1.user?.name || 'Opponent',
+      date,
       time,
       venue
     );
@@ -148,6 +151,7 @@ export async function sendMatchReminder2h(matchId: string): Promise<void> {
     const match = await prisma.match.findUnique({
       where: { id: matchId },
       select: {
+        matchDate: true,
         venue: true,
         location: true,
         participants: {
@@ -162,6 +166,7 @@ export async function sendMatchReminder2h(matchId: string): Promise<void> {
 
     if (!match || match.participants.length < 2) return;
 
+    const time = match.matchDate?.toLocaleTimeString() || 'TBD';
     const venue = match.venue || match.location || 'TBD';
     const player1 = match.participants[0];
     const player2 = match.participants[1];
@@ -170,10 +175,12 @@ export async function sendMatchReminder2h(matchId: string): Promise<void> {
 
     const reminder2hP1 = notificationTemplates.match.matchReminder2h(
       player2.user?.name || 'Opponent',
+      time,
       venue
     );
     const reminder2hP2 = notificationTemplates.match.matchReminder2h(
       player1.user?.name || 'Opponent',
+      time,
       venue
     );
 
@@ -314,19 +321,13 @@ export async function sendMatchCancelledNotification(
   opponentId: string
 ): Promise<void> {
   try {
-    const [canceller, match] = await Promise.all([
-      prisma.user.findUnique({ where: { id: cancelledById }, select: { name: true } }),
-      prisma.match.findUnique({
-        where: { id: matchId },
-        select: { matchDate: true },
-      }),
-    ]);
-
-    const date = match?.matchDate?.toLocaleDateString() || 'TBD';
+    const canceller = await prisma.user.findUnique({
+      where: { id: cancelledById },
+      select: { name: true }
+    });
 
     const cancelledNotif = notificationTemplates.match.matchCancelled(
-      canceller?.name || 'Opponent',
-      date
+      canceller?.name || 'Opponent'
     );
 
     await notificationService.createNotification({
