@@ -146,11 +146,11 @@ export const accountNotifications = {
     metadata: {},
   }),
 
-  withdrawalRequestSubmitted: (leagueName: string, seasonName?: string): NotificationPayload => ({
+  withdrawalRequestSubmitted: (playerName: string, seasonName: string, reason?: string): NotificationPayload => ({
     type: NOTIFICATION_TYPES.WITHDRAWAL_REQUEST_RECEIVED,
     category: getCategoryForNotificationType(NOTIFICATION_TYPES.WITHDRAWAL_REQUEST_RECEIVED),
-    title: 'Withdrawal Request Received',
-    message: `Your withdrawal request from ${leagueName}${seasonName ? ` (${seasonName})` : ''} has been submitted and is pending review`,
-    metadata: { leagueName, seasonName },
+    title: 'Withdrawal Request',
+    message: `${playerName} has requested to withdraw from ${seasonName}${reason ? `. Reason: ${reason}` : ''}`,
+    metadata: { playerName, seasonName, reason },
   }),
 };
