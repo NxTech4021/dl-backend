@@ -4,37 +4,59 @@
  * All notifications in this category are PUSH notifications
  */
 
-import { NotificationPayload, NOTIFICATION_TYPES, getCategoryForNotificationType } from '../../types/notificationTypes';
+import {
+  NotificationPayload,
+  NOTIFICATION_TYPES,
+  getCategoryForNotificationType,
+} from "../../types/notificationTypes";
 
 export const socialCommunityNotifications = {
-  friendActivityScorecard: (friendName: string, achievement: string): NotificationPayload => ({
+  friendActivityScorecard: (
+    friendName: string,
+    achievement: string
+  ): NotificationPayload => ({
     type: NOTIFICATION_TYPES.FRIEND_ACTIVITY_SCORECARD,
-    category: getCategoryForNotificationType(NOTIFICATION_TYPES.FRIEND_ACTIVITY_SCORECARD),
-    title: 'Friend Activity',
+    category: getCategoryForNotificationType(
+      NOTIFICATION_TYPES.FRIEND_ACTIVITY_SCORECARD
+    ),
+    title: "Friend Activity",
     message: `${friendName} ${achievement}`,
     metadata: { friendName, achievement },
   }),
 
-  friendActivityPost: (friendName: string, activity: string): NotificationPayload => ({
+  friendActivityPost: (
+    friendName: string,
+    activity: string
+  ): NotificationPayload => ({
     type: NOTIFICATION_TYPES.FRIEND_ACTIVITY_POST,
-    category: getCategoryForNotificationType(NOTIFICATION_TYPES.FRIEND_ACTIVITY_POST),
-    title: 'Friend Update',
+    category: getCategoryForNotificationType(
+      NOTIFICATION_TYPES.FRIEND_ACTIVITY_POST
+    ),
+    title: "Friend Update",
     message: `${friendName} ${activity}`,
     metadata: { friendName, activity },
   }),
 
-  similarSkillPlayerNearby: (playerName: string, rating: number, distance: string): NotificationPayload => ({
+  similarSkillPlayerNearby: (
+    playerName: string,
+    rating: number,
+    distance: string
+  ): NotificationPayload => ({
     type: NOTIFICATION_TYPES.SIMILAR_SKILL_PLAYER_NEARBY,
-    category: getCategoryForNotificationType(NOTIFICATION_TYPES.SIMILAR_SKILL_PLAYER_NEARBY),
-    title: 'Player Nearby',
+    category: getCategoryForNotificationType(
+      NOTIFICATION_TYPES.SIMILAR_SKILL_PLAYER_NEARBY
+    ),
+    title: "Player Nearby",
     message: `${playerName} (DMR ${rating}) is ${distance} away. Connect and play!`,
     metadata: { playerName, rating, distance },
   }),
 
   shareScorecardPrompt: (matchDetails: string): NotificationPayload => ({
     type: NOTIFICATION_TYPES.SHARE_SCORECARD_PROMPT,
-    category: getCategoryForNotificationType(NOTIFICATION_TYPES.SHARE_SCORECARD_PROMPT),
-    title: 'Share Your Win!',
+    category: getCategoryForNotificationType(
+      NOTIFICATION_TYPES.SHARE_SCORECARD_PROMPT
+    ),
+    title: "Share Your Win!",
     message: `Great match! Share your scorecard: ${matchDetails}`,
     metadata: { matchDetails },
   }),
@@ -42,13 +64,17 @@ export const socialCommunityNotifications = {
   friendRequest: (playerName: string): NotificationPayload => ({
     type: NOTIFICATION_TYPES.FRIEND_REQUEST,
     category: getCategoryForNotificationType(NOTIFICATION_TYPES.FRIEND_REQUEST),
-    title: 'Friend Request',
+    title: "Friend Request",
     message: `${playerName} wants to connect with you`,
     metadata: { playerName },
   }),
 
   // Chat notifications
-  newMessage: (senderName: string, chatName: string, messagePreview: string): NotificationPayload => ({
+  newMessage: (
+    senderName: string,
+    chatName: string,
+    messagePreview: string
+  ): NotificationPayload => ({
     type: NOTIFICATION_TYPES.NEW_MESSAGE,
     category: getCategoryForNotificationType(NOTIFICATION_TYPES.NEW_MESSAGE),
     title: `${senderName} in ${chatName}`,
@@ -58,8 +84,10 @@ export const socialCommunityNotifications = {
 
   groupAdded: (groupName: string): NotificationPayload => ({
     type: NOTIFICATION_TYPES.GROUP_CHAT_ADDED,
-    category: getCategoryForNotificationType(NOTIFICATION_TYPES.GROUP_CHAT_ADDED),
-    title: 'Added to Group Chat',
+    category: getCategoryForNotificationType(
+      NOTIFICATION_TYPES.GROUP_CHAT_ADDED
+    ),
+    title: "Added to Group Chat",
     message: `You've been added to ${groupName}`,
     metadata: { groupName },
   }),
