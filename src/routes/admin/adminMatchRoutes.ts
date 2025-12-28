@@ -7,6 +7,7 @@ import { Router } from 'express';
 import {
   getAdminMatches,
   getMatchStats,
+  getMatchById,
   getDisputes,
   getDisputeById,
   startDisputeReview,
@@ -34,6 +35,7 @@ const router = Router();
 // AS6: Matches Dashboard
 router.get('/matches', getAdminMatches);
 router.get('/matches/stats', getMatchStats);
+router.get('/matches/:id', getMatchById);
 router.post('/matches/:id/message', messageParticipants);
 
 // AS4: Edit Match Results

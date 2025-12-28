@@ -101,6 +101,29 @@ export const getMatchStats = async (req: Request, res: Response) => {
 };
 
 /**
+ * Get a single match by ID
+ * GET /api/admin/matches/:id
+ */
+export const getMatchById = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    if (!id) {
+      return res.status(400).json({ error: 'Match ID is required' });
+    }
+
+    const match = await adminMatchService.getMatchById(id);
+    if (!match) {
+      return res.status(404).json({ error: 'Match not found' });
+    }
+
+    res.json({ data: match });
+  } catch (error) {
+    console.error('Get Match By ID Error:', error);
+    res.status(500).json({ error: 'Failed to retrieve match' });
+  }
+};
+
+/**
  * Get all disputes (AS5)
  * GET /api/admin/disputes
  */

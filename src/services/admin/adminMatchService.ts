@@ -316,6 +316,66 @@ export class AdminMatchService {
   }
 
   /**
+   * Get a single match by ID with full details
+   */
+  async getMatchById(matchId: string) {
+    const match = await prisma.match.findUnique({
+      where: { id: matchId },
+      include: {
+        division: {
+          include: { season: true, league: true }
+        },
+        participants: {
+          include: {
+            user: {
+              select: { id: true, name: true, username: true, image: true }
+            }
+          }
+        },
+        scores: { orderBy: { setNumber: 'asc' } },
+        disputes: {
+          select: {
+            id: true,
+            status: true,
+            disputeCategory: true,
+            disputeComment: true,
+            disputerScore: true,
+            evidenceUrl: true,
+            priority: true,
+            submittedAt: true,
+            raisedByUser: {
+              select: {
+                id: true,
+                name: true,
+                username: true,
+                image: true
+              }
+            }
+          }
+        },
+        walkover: {
+          include: {
+            defaultingPlayer: {
+              select: { id: true, name: true, username: true, image: true }
+            },
+            winningPlayer: {
+              select: { id: true, name: true, username: true, image: true }
+            },
+            reporter: {
+              select: { id: true, name: true, username: true }
+            }
+          }
+        },
+        createdBy: {
+          select: { id: true, name: true, username: true }
+        }
+      }
+    });
+
+    return match;
+  }
+
+  /**
    * Get all disputes for admin review (AS5)
    */
   async getDisputes(filters: {
