@@ -298,10 +298,10 @@ export const updatePlayerProfile = async (req: AuthenticatedRequest, res: Respon
         .json(new ApiResponse(false, 401, null, "Authentication required"));
     }
 
-    const { name, username, email, location, image, phoneNumber, bio } = req.body as UpdatePlayerProfileBody;
+    const { name, username, email, location, image, phoneNumber, bio, dateOfBirth } = req.body as UpdatePlayerProfileBody;
 
     const updateData: Parameters<typeof profileService.updatePlayerProfile>[1] = {};
-    
+
     if (name !== undefined) updateData.name = name;
     if (username !== undefined) updateData.username = username;
     if (email !== undefined) updateData.email = email;
@@ -309,6 +309,7 @@ export const updatePlayerProfile = async (req: AuthenticatedRequest, res: Respon
     if (image !== undefined) updateData.image = image;
     if (phoneNumber !== undefined) updateData.phoneNumber = phoneNumber;
     if (bio !== undefined) updateData.bio = bio;
+    if (dateOfBirth !== undefined) updateData.dateOfBirth = dateOfBirth;
 
     const updatedUser = await profileService.updatePlayerProfile(userId, updateData);
 
