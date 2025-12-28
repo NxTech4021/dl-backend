@@ -863,6 +863,7 @@ export const getActivePartnership = async (
         captain: true,
         partner: true,
         season: true,
+        division: true,
       },
     });
 
