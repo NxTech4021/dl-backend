@@ -112,6 +112,9 @@ model User {
   matchResults          MatchResult[]     @relation("PlayerMatchResults")
   opponentMatchResults  MatchResult[]     @relation("OpponentMatchResults")
 
+  // User settings relation
+  settings              UserSettings?
+
   @@index([email])
   @@index([lastMatchDate])
   @@index([username])
@@ -119,6 +122,21 @@ model User {
   @@index([completedOnboarding])
   @@index([createdAt])
   @@map("user")
+}
+
+model UserSettings {
+  id               String   @id @default(cuid())
+  userId           String   @unique
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  notifications    Boolean  @default(true)
+  matchReminders   Boolean  @default(true)
+  locationServices Boolean  @default(false)
+  hapticFeedback   Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([userId])
+  @@map("user_settings")
 }
 
 model Admin {
