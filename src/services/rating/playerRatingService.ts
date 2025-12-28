@@ -44,6 +44,11 @@ export interface SetScoreDetail {
   opponentTiebreak: number | null;
 }
 
+export interface ParticipantInfo {
+  name: string;
+  image: string | null;
+}
+
 export interface RatingHistoryEntry {
   id: string;
   matchId: string | null;
@@ -56,8 +61,13 @@ export interface RatingHistoryEntry {
   notes: string | null;
   createdAt: Date;
   matchDate: Date | null;
+  matchType: 'singles' | 'doubles';
+  // For backwards compatibility
   adversary: string | null;
   adversaryImage: string | null;
+  // New fields for doubles support
+  partner: ParticipantInfo | null;
+  opponents: ParticipantInfo[];
   result: 'W' | 'L' | null;
   setScores: SetScoreDetail[];
 }
@@ -225,24 +235,63 @@ export async function getPlayerRatingHistory(
     take: limit
   });
 
+  // Determine match type from gameType parameter
+  const matchType: 'singles' | 'doubles' = gameType === GameType.DOUBLES ? 'doubles' : 'singles';
+
   return history.map(entry => {
     const match = entry.match;
     let adversary: string | null = null;
     let adversaryImage: string | null = null;
+    let partner: ParticipantInfo | null = null;
+    let opponents: ParticipantInfo[] = [];
     let result: 'W' | 'L' | null = null;
     let setScores: SetScoreDetail[] = [];
 
     if (match) {
-      // Find user's team and opponent
+      // Find user's participant record
       const userParticipant = match.participants.find(p => p.userId === userId);
-      const opponentParticipant = match.participants.find(p => p.userId !== userId);
+      const userTeam = userParticipant?.team;
 
-      adversary = opponentParticipant?.user?.name || null;
-      adversaryImage = opponentParticipant?.user?.image || null;
+      // For doubles: find partner (same team, different user)
+      if (matchType === 'doubles' && userTeam) {
+        const partnerParticipant = match.participants.find(
+          p => p.team === userTeam && p.userId !== userId
+        );
+        if (partnerParticipant?.user) {
+          partner = {
+            name: partnerParticipant.user.name || 'Unknown',
+            image: partnerParticipant.user.image || null
+          };
+        }
+      }
+
+      // Find all opponents (different team or different user for singles)
+      const opponentParticipants = match.participants.filter(p => {
+        if (matchType === 'doubles' && userTeam) {
+          return p.team !== userTeam;
+        }
+        return p.userId !== userId;
+      });
+
+      opponents = opponentParticipants.map(p => ({
+        name: p.user?.name || 'Unknown',
+        image: p.user?.image || null
+      }));
+
+      // For backwards compatibility: set adversary to first opponent or combined names
+      if (opponents.length > 0) {
+        if (opponents.length === 1) {
+          adversary = opponents[0].name;
+          adversaryImage = opponents[0].image;
+        } else {
+          // Combine opponent names for doubles
+          adversary = opponents.map(o => o.name).join(' & ');
+          adversaryImage = null; // Can't show single image for multiple opponents
+        }
+      }
 
       // Determine if user won based on outcome and team
       if (match.outcome && userParticipant?.team) {
-        const userTeam = userParticipant.team;
         result = match.outcome === userTeam ? 'W' : 'L';
       } else {
         // Fallback: use delta to determine result
@@ -319,8 +368,11 @@ export async function getPlayerRatingHistory(
       notes: entry.notes,
       createdAt: entry.createdAt,
       matchDate: match?.matchDate || null,
+      matchType,
       adversary,
       adversaryImage,
+      partner,
+      opponents,
       result,
       setScores
     };

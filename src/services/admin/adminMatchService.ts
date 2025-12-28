@@ -196,7 +196,24 @@ export class AdminMatchService {
           },
           scores: { orderBy: { setNumber: 'asc' } },
           disputes: {
-            select: { id: true, status: true, disputeCategory: true, priority: true }
+            select: {
+              id: true,
+              status: true,
+              disputeCategory: true,
+              disputeComment: true,
+              disputerScore: true,
+              evidenceUrl: true,
+              priority: true,
+              submittedAt: true,
+              raisedByUser: {
+                select: {
+                  id: true,
+                  name: true,
+                  username: true,
+                  image: true
+                }
+              }
+            }
           },
           walkover: {
             include: {

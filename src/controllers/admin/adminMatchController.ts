@@ -199,7 +199,7 @@ export const resolveDispute = async (req: Request, res: Response) => {
 
     const validActions = [
       'UPHOLD_ORIGINAL', 'UPHOLD_DISPUTER', 'CUSTOM_SCORE',
-      'VOID_MATCH', 'AWARD_WALKOVER', 'REQUEST_MORE_INFO'
+      'VOID_MATCH', 'AWARD_WALKOVER', 'REQUEST_MORE_INFO', 'REJECT'
     ];
 
     if (!validActions.includes(action)) {
