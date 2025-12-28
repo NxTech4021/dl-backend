@@ -28,6 +28,7 @@ import {
   getPlayerDivisionHistory,
   getPlayerMatchHistoryAdmin,
 } from '../controllers/playerController';
+import { getSettings, updateSettings } from '../controllers/settingsController';
 
 const playerRouter = Router();
 
@@ -50,6 +51,10 @@ playerRouter.get('/profile/achievements', verifyAuth, getPlayerAchievements as a
 playerRouter.get('/profile/rating-history', verifyAuth, getPlayerRatingHistory as any);
 playerRouter.post('/profile/upload-image', verifyAuth, upload.single('image'), uploadProfileImage as any);
 playerRouter.get('/matches/:matchId', verifyAuth, getMatchDetails as any);
+
+// Settings routes
+playerRouter.get('/settings', verifyAuth, getSettings as any);
+playerRouter.put('/settings', verifyAuth, updateSettings as any);
 
 // Track login activity (for regular users)
 playerRouter.put('/track-login', verifyAuth, async (req, res) => {

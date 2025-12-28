@@ -288,12 +288,12 @@ export function formatWithdrawalRequest(request: any): FormattedWithdrawalReques
     partnership: request.partnership ? {
       id: request.partnership.id,
       player1: {
-        id: request.partnership.player1.id,
-        name: request.partnership.player1.name ?? null
+        id: request.partnership.captain.id,
+        name: request.partnership.captain.name ?? null
       },
       player2: {
-        id: request.partnership.player2.id,
-        name: request.partnership.player2.name ?? null
+        id: request.partnership.partner.id,
+        name: request.partnership.partner.name ?? null
       }
     } : null,
     processedByAdmin: request.processedByAdmin ? {

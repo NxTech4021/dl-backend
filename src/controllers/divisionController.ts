@@ -52,7 +52,7 @@ interface CreateDivisionBody {
   name?: string;
   description?: string;
   threshold?: number;
-  divisionLevel?: number;
+  divisionLevel?: string;
   gameType?: string;
   genderCategory?: string;
   maxSinglesPlayers?: number;
@@ -184,7 +184,7 @@ export const createDivision = async (req: Request, res: Response) => {
     const divisionData: Parameters<typeof createDivisionWithThread>[0] = {
       seasonId,
       name,
-      divisionLevel: typeof divisionLevel === 'number' ? String(divisionLevel) : divisionLevel,
+      divisionLevel,
       gameType,
       ...(description !== undefined && { description }),
       ...(threshold !== undefined && { threshold }),

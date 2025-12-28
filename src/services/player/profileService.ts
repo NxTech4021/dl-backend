@@ -507,9 +507,10 @@ export async function updatePlayerProfile(
     image?: string | null;
     phoneNumber?: string;
     bio?: string;
+    dateOfBirth?: string;
   }
 ) {
-  const { name, username, email, location, image, phoneNumber, bio } = data;
+  const { name, username, email, location, image, phoneNumber, bio, dateOfBirth } = data;
 
   // Validate fields only if they are being updated (not undefined)
   // This allows partial updates without requiring all fields
@@ -562,6 +563,7 @@ export async function updatePlayerProfile(
     image?: string | null;
     phoneNumber?: string;
     bio?: string;
+    dateOfBirth?: Date;
     updatedAt: Date;
   } = {
     updatedAt: new Date()
@@ -605,6 +607,9 @@ export async function updatePlayerProfile(
   if (bio !== undefined) {
     updateData.bio = bio.trim();
   }
+  if (dateOfBirth !== undefined) {
+    updateData.dateOfBirth = new Date(dateOfBirth);
+  }
 
   // Update user profile
   const updatedUser = await prisma.user.update({
@@ -619,6 +624,7 @@ export async function updatePlayerProfile(
       area: true,
       phoneNumber: true,
       bio: true,
+      dateOfBirth: true,
       updatedAt: true
     }
   });
