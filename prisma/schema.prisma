@@ -2193,6 +2193,45 @@ model UserPushToken {
   @@map("user_push_token")
 }
 
+// System Maintenance Schedule
+model SystemMaintenance {
+  id               String               @id @default(cuid())
+  title            String
+  description      String?              @db.Text
+  startDateTime    DateTime
+  endDateTime      DateTime
+  status           MaintenanceStatus    @default(SCHEDULED)
+  affectedServices String[]             // Array of services that will be affected
+  notificationSent Boolean              @default(false)
+  completionSent   Boolean              @default(false)
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+
+  @@index([startDateTime])
+  @@index([endDateTime])
+  @@index([status])
+  @@map("system_maintenance")
+}
+
+// Feature Announcements
+model FeatureAnnouncement {
+  id               String                    @id @default(cuid())
+  title            String
+  description      String                    @db.Text
+  featureDetails   Json?                     // Additional details about the feature
+  releaseDate      DateTime?
+  announcementDate DateTime                  @default(now())
+  status           FeatureAnnouncementStatus @default(DRAFT)
+  targetAudience   String[]                  // Array of user roles or "ALL"
+  notificationSent Boolean                   @default(false)
+  createdAt        DateTime                  @default(now())
+  updatedAt        DateTime                  @updatedAt
+
+  @@index([status])
+  @@index([announcementDate])
+  @@map("feature_announcement")
+}
+
 // Audit log for admin messages to participants
 model AdminMessageLog {
   id           String   @id @default(cuid())
@@ -2783,6 +2822,27 @@ enum BracketMatchStatus {
 
 // =============================================
 // END FINALS BRACKET SYSTEM ENUMS
+// =============================================
+
+// =============================================
+// SYSTEM NOTIFICATIONS ENUMS
+// =============================================
+
+enum MaintenanceStatus {
+  SCHEDULED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum FeatureAnnouncementStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+// =============================================
+// END SYSTEM NOTIFICATIONS ENUMS
 // =============================================
 
 // =============================================

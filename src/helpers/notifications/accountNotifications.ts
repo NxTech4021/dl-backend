@@ -171,8 +171,8 @@ export const accountNotifications = {
     category: getCategoryForNotificationType(
       NOTIFICATION_TYPES.SYSTEM_MAINTENANCE
     ),
-    title: "Maintenance Tomorrow",
-    message: `DEUCE will be down tomorrow ${maintenanceTime} for ${duration}`,
+    title: "Upcoming Maintenance",
+    message: `DEUCE will be scheduled for maintenance on ${maintenanceTime} for ${duration}`,
     metadata: { maintenanceTime, duration },
   }),
 

@@ -744,7 +744,7 @@ export const sendMessage = async (req: Request, res: Response) => {
           }
         };
 
-        console.log('🔔 [ThreadController] Push notification:', pushNotif);
+        // console.log('🔔 [ThreadController] Push notification:', pushNotif);
 
         await notificationService.createNotification({
           userIds: otherMembers,
