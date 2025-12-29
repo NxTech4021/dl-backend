@@ -4,16 +4,17 @@
  */
 
 import { prisma } from '../lib/prisma';
-import { FeatureAnnouncementStatus } from '@prisma/client';
+import { Prisma, $Enums } from '@prisma/client';
 import { NotificationService } from './notificationService';
 import { logger } from '../utils/logger';
+import { accountNotifications } from '../helpers/notifications/accountNotifications';
 
 export interface CreateFeatureAnnouncementInput {
   title: string;
   description: string;
   featureDetails?: Record<string, any> | undefined;
   releaseDate?: Date | undefined;
-  targetAudience?: string[] | undefined; // e.g., ["ALL"], ["ADMIN"], ["USER"], etc.
+  targetAudience?: string[] | undefined;
 }
 
 export interface UpdateFeatureAnnouncementInput {
@@ -22,7 +23,7 @@ export interface UpdateFeatureAnnouncementInput {
   description?: string;
   featureDetails?: Record<string, any>;
   releaseDate?: Date;
-  status?: FeatureAnnouncementStatus;
+  status?: $Enums.FeatureAnnouncementStatus;
   targetAudience?: string[];
 }
 
@@ -41,10 +42,10 @@ export class FeatureAnnouncementService {
       data: {
         title: input.title,
         description: input.description,
-        featureDetails: input.featureDetails || {},
-        releaseDate: input.releaseDate,
+        featureDetails: input.featureDetails ?? Prisma.JsonNull,
+        releaseDate: input.releaseDate ?? null,
         targetAudience: input.targetAudience || ['ALL'],
-        status: FeatureAnnouncementStatus.DRAFT
+        status: $Enums.FeatureAnnouncementStatus.DRAFT
       }
     });
 
@@ -79,7 +80,7 @@ export class FeatureAnnouncementService {
       throw new Error('Announcement not found');
     }
 
-    if (announcement.status === FeatureAnnouncementStatus.PUBLISHED) {
+    if (announcement.status === $Enums.FeatureAnnouncementStatus.PUBLISHED) {
       throw new Error('Announcement already published');
     }
 
@@ -115,7 +116,7 @@ export class FeatureAnnouncementService {
       const updatedAnnouncement = await prisma.featureAnnouncement.update({
         where: { id: announcementId },
         data: {
-          status: FeatureAnnouncementStatus.PUBLISHED,
+          status: $Enums.FeatureAnnouncementStatus.PUBLISHED,
           notificationSent: true,
           announcementDate: new Date()
         }
@@ -145,13 +146,14 @@ export class FeatureAnnouncementService {
     }
 
     try {
+      // Use the notification template
+      const notificationPayload = accountNotifications.appUpdateAvailable();
+
       await this.notificationService.createNotification({
-        type: 'APP_UPDATE_AVAILABLE',
-        category: 'GENERAL',
-        title: 'Update Available',
-        message: 'DEUCE update available! New features and improvements',
+        ...notificationPayload,
         userIds: targetUserIds,
         metadata: {
+          ...notificationPayload.metadata,
           updateType: 'app_update'
         }
       });
@@ -168,7 +170,7 @@ export class FeatureAnnouncementService {
    */
   async getPublishedAnnouncements(limit: number = 10) {
     return await prisma.featureAnnouncement.findMany({
-      where: { status: FeatureAnnouncementStatus.PUBLISHED },
+      where: { status: $Enums.FeatureAnnouncementStatus.PUBLISHED },
       orderBy: { announcementDate: 'desc' },
       take: limit
     });
@@ -180,7 +182,7 @@ export class FeatureAnnouncementService {
   async archiveAnnouncement(announcementId: string) {
     const announcement = await prisma.featureAnnouncement.update({
       where: { id: announcementId },
-      data: { status: FeatureAnnouncementStatus.ARCHIVED }
+      data: { status: $Enums.FeatureAnnouncementStatus.ARCHIVED }
     });
 
     logger.info('Feature announcement archived', { announcementId });

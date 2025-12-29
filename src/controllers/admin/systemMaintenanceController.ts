@@ -98,6 +98,10 @@ export const sendMaintenanceNotification = async (req: Request, res: Response) =
   try {
     const { id } = req.params;
 
+    if (!id) {
+      return res.status(400).json({ error: 'Maintenance ID is required' });
+    }
+
     await maintenanceService.sendMaintenanceNotification(id);
 
     res.json({ message: 'Maintenance notification sent successfully' });
@@ -116,8 +120,13 @@ export const completeMaintenanceNotification = async (req: Request, res: Respons
   try {
     const { id } = req.params;
 
+    if (!id) {
+      return res.status(400).json({ error: 'Maintenance ID is required' });
+    }
+
     await maintenanceService.sendMaintenanceCompleteNotification(id);
 
+    
     res.json({ message: 'Maintenance completion notification sent successfully' });
   } catch (error) {
     console.error('Send Completion Notification Error:', error);
@@ -149,6 +158,10 @@ export const startMaintenance = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
 
+      if (!id) {
+      return res.status(400).json({ error: 'Maintenance ID is required' });
+    }
+
     const maintenance = await maintenanceService.startMaintenance(id);
     res.json(maintenance);
   } catch (error) {
@@ -166,6 +179,10 @@ export const cancelMaintenance = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const { reason } = req.body;
+
+      if (!id) {
+      return res.status(400).json({ error: 'Maintenance ID is required' });
+    }
 
     const maintenance = await maintenanceService.cancelMaintenance(id, reason);
     res.json(maintenance);

@@ -4,7 +4,7 @@
  */
 
 import { prisma } from '../lib/prisma';
-import { MaintenanceStatus } from '@prisma/client';
+import { $Enums } from '@prisma/client';
 import { NotificationService } from './notificationService';
 import { logger } from '../utils/logger';
 import { accountNotifications } from '../helpers/notifications/accountNotifications';
@@ -23,7 +23,7 @@ export interface UpdateMaintenanceInput {
   description?: string;
   startDateTime?: Date;
   endDateTime?: Date;
-  status?: MaintenanceStatus;
+  status?: $Enums.MaintenanceStatus;
   affectedServices?: string[];
 }
 
@@ -41,11 +41,11 @@ export class SystemMaintenanceService {
     const maintenance = await prisma.systemMaintenance.create({
       data: {
         title: input.title,
-        description: input.description,
+        description: input.description ?? null,
         startDateTime: input.startDateTime,
         endDateTime: input.endDateTime,
         affectedServices: input.affectedServices || [],
-        status: MaintenanceStatus.SCHEDULED
+        status: $Enums.MaintenanceStatus.SCHEDULED
       }
     });
 
@@ -66,7 +66,6 @@ export class SystemMaintenanceService {
         const duration = this.calculateDuration(maintenance.startDateTime, maintenance.endDateTime);
         const maintenanceTime = this.formatDateTime(maintenance.startDateTime);
 
-        // Create notification payload using the template for advance notice
         const notificationPayload = accountNotifications.scheduledMaintenance(maintenanceTime, duration);
 
         await this.notificationService.createNotification({
@@ -105,10 +104,15 @@ export class SystemMaintenanceService {
    */
   async updateMaintenance(input: UpdateMaintenanceInput) {
     const { id, ...data } = input;
-
+    const updateData: any = { ...data };
+    if ('description' in data) {
+      updateData.description = data.description ?? null;
+    } else {
+      delete updateData.description;
+    }
     const maintenance = await prisma.systemMaintenance.update({
       where: { id },
-      data
+      data: updateData,
     });
 
     logger.info('System maintenance updated', { maintenanceId: maintenance.id });
@@ -220,7 +224,7 @@ export class SystemMaintenanceService {
         where: { id: maintenanceId },
         data: { 
           completionSent: true,
-          status: MaintenanceStatus.COMPLETED
+          status: $Enums.MaintenanceStatus.COMPLETED
         }
       });
 
@@ -240,7 +244,7 @@ export class SystemMaintenanceService {
   async getUpcomingMaintenance() {
     return await prisma.systemMaintenance.findMany({
       where: {
-        status: MaintenanceStatus.SCHEDULED,
+        status: $Enums.MaintenanceStatus.SCHEDULED,
         startDateTime: {
           gte: new Date()
         }
@@ -264,7 +268,7 @@ export class SystemMaintenanceService {
     // Update status to IN_PROGRESS
     const updatedMaintenance = await prisma.systemMaintenance.update({
       where: { id: maintenanceId },
-      data: { status: MaintenanceStatus.IN_PROGRESS }
+      data: { status: $Enums.MaintenanceStatus.IN_PROGRESS }
     });
 
     // Get all active users
@@ -313,18 +317,23 @@ export class SystemMaintenanceService {
    * Cancel maintenance
    */
   async cancelMaintenance(maintenanceId: string, reason?: string) {
-    const maintenance = await prisma.systemMaintenance.update({
+    const current = await prisma.systemMaintenance.findUnique({
+      where: { id: maintenanceId }
+    });
+    if (!current) {
+      throw new Error('Maintenance schedule not found');
+    }
+    const updated = await prisma.systemMaintenance.update({
       where: { id: maintenanceId },
-      data: { 
-        status: MaintenanceStatus.CANCELLED,
-        description: reason 
-          ? `${maintenance.description || ''}\n\nCancellation reason: ${reason}`
-          : maintenance.description
+      data: {
+        status: $Enums.MaintenanceStatus.CANCELLED,
+        description: reason
+          ? `${current.description || ''}\n\nCancellation reason: ${reason}`
+          : current.description ?? null
       }
     });
-
     logger.info('Maintenance cancelled', { maintenanceId });
-    return maintenance;
+    return updated;
   }
 
   /**
