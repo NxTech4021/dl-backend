@@ -39,7 +39,9 @@ export const NOTIFICATION_DELIVERY_MAP: Record<string, NotificationDeliveryType>
   STREAK_AT_RISK: NotificationDeliveryType.PUSH,
   APP_UPDATE_AVAILABLE: NotificationDeliveryType.PUSH,
   SCHEDULED_MAINTENANCE: NotificationDeliveryType.PUSH,
+  SYSTEM_MAINTENANCE: NotificationDeliveryType.PUSH,
   MAINTENANCE_COMPLETE: NotificationDeliveryType.PUSH,
+  NEW_FEATURE: NotificationDeliveryType.IN_APP,
   
   // Doubles League - IN_APP
   PARTNER_REQUEST_SENT: NotificationDeliveryType.IN_APP,
