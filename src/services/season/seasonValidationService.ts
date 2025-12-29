@@ -230,3 +230,49 @@ export async function validateDivisionExists(divisionId: string): Promise<Valida
     data: division
   };
 }
+
+/**
+ * Validate no pending withdrawal request exists from partner
+ * Prevents user from submitting a request when partner already has one pending
+ *
+ * @param partnershipId - Partnership ID to check
+ * @param userId - Current user ID requesting action
+ * @returns Validation result
+ */
+export async function validateNoPartnerPendingRequest(
+  partnershipId: string,
+  userId: string
+): Promise<ValidationResult> {
+  // Get partnership to find partner
+  const partnership = await prisma.partnership.findUnique({
+    where: { id: partnershipId },
+    select: { captainId: true, partnerId: true }
+  });
+
+  if (!partnership) {
+    return { isValid: true }; // If no partnership, no partner request possible
+  }
+
+  const partnerId = partnership.captainId === userId
+    ? partnership.partnerId
+    : partnership.captainId;
+
+  // Check for partner's pending withdrawal request
+  const partnerPendingRequest = await prisma.withdrawalRequest.findFirst({
+    where: {
+      partnershipId,
+      userId: partnerId,
+      status: 'PENDING',
+    },
+  });
+
+  if (partnerPendingRequest) {
+    return {
+      isValid: false,
+      error: "Your partner has already submitted a pending partner change request. Please wait for admin review before taking action.",
+      code: "PARTNER_HAS_PENDING_REQUEST"
+    };
+  }
+
+  return { isValid: true };
+}

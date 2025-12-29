@@ -287,6 +287,12 @@ export interface FormattedWithdrawalRequest {
     name: string | null;
     role: string;
   } | null;
+  user?: {
+    id: string;
+    name: string | null;
+    email: string;
+    image: string | null;
+  } | null;
 }
 
 // ============================================================================

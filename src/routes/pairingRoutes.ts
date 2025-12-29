@@ -9,6 +9,7 @@ import {
   getUserPartnerships,
   dissolvePartnership,
   getActivePartnership,
+  getPartnershipStatus,
 } from '../controllers/pairingController';
 import {
   sendFriendRequestHandler,
@@ -45,6 +46,7 @@ pairingRouter.delete('/request/:requestId', cancelPairRequest);
 pairingRouter.get('/partnerships', getUserPartnerships);
 pairingRouter.post('/partnership/:partnershipId/dissolve', dissolvePartnership);
 pairingRouter.get('/partnership/active/:seasonId', getActivePartnership);
+pairingRouter.get('/partnership/:partnershipId/status', getPartnershipStatus);
 
 // ==========================================
 // FRIENDSHIP ROUTES (NEW)

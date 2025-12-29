@@ -775,6 +775,21 @@ export const dissolvePartnership = async (
       };
     }
 
+    // Validate: Cannot leave if there's a pending withdrawal request
+    const pendingRequest = await prisma.withdrawalRequest.findFirst({
+      where: {
+        partnershipId,
+        status: 'PENDING',
+      },
+    });
+
+    if (pendingRequest) {
+      return {
+        success: false,
+        message: 'Cannot leave partnership while there is a pending partner change request. Please wait for admin review.',
+      };
+    }
+
     // Validate: Cannot dissolve if season is completed
     if (partnership.season.status === 'FINISHED') {
       return {
@@ -862,7 +877,21 @@ export const getActivePartnership = async (
       include: {
         captain: true,
         partner: true,
-        season: true,
+        season: {
+          include: {
+            category: {
+              select: {
+                gameType: true,
+              },
+            },
+            leagues: {
+              select: {
+                sportType: true,
+              },
+              take: 1,
+            },
+          },
+        },
         division: true,
       },
     });
@@ -968,5 +997,85 @@ export const expireOldRequests = async () => {
   } catch (error) {
     console.error('Error expiring old requests:', error);
     throw error;
+  }
+};
+
+/**
+ * Get partnership status including pending withdrawal requests from both partners
+ * Returns information about pending change requests from both the current user and their partner
+ */
+export const getPartnershipStatus = async (
+  partnershipId: string,
+  currentUserId: string
+): Promise<PairRequestResponse> => {
+  try {
+    // Find the partnership to validate access and get partner info
+    const partnership = await prisma.partnership.findUnique({
+      where: { id: partnershipId },
+      select: {
+        id: true,
+        captainId: true,
+        partnerId: true,
+        status: true,
+      },
+    });
+
+    if (!partnership) {
+      return {
+        success: false,
+        message: 'Partnership not found',
+      };
+    }
+
+    // Validate: Only partners can view status
+    if (partnership.captainId !== currentUserId && partnership.partnerId !== currentUserId) {
+      return {
+        success: false,
+        message: 'You are not authorized to view this partnership status',
+      };
+    }
+
+    // Check if partnership is already dissolved
+    const partnerHasLeft = partnership.status === 'DISSOLVED';
+
+    // Get the partner's ID (the other person in the partnership)
+    const partnerId = partnership.captainId === currentUserId
+      ? partnership.partnerId
+      : partnership.captainId;
+
+    // Find all pending withdrawal requests for this partnership
+    const pendingRequests = await prisma.withdrawalRequest.findMany({
+      where: {
+        partnershipId: partnershipId,
+        status: 'PENDING',
+      },
+      select: {
+        id: true,
+        userId: true,
+        createdAt: true,
+      },
+    });
+
+    // Determine which user made each request
+    const myRequest = pendingRequests.find(r => r.userId === currentUserId);
+    const partnerRequest = pendingRequests.find(r => r.userId === partnerId);
+
+    return {
+      success: true,
+      message: 'Partnership status retrieved successfully',
+      data: {
+        hasMyPendingRequest: !!myRequest,
+        hasPartnerPendingRequest: !!partnerRequest,
+        partnerHasLeft,
+        myRequestedAt: myRequest?.createdAt?.toISOString() || null,
+        partnerRequestedAt: partnerRequest?.createdAt?.toISOString() || null,
+      },
+    };
+  } catch (error) {
+    console.error('Error getting partnership status:', error);
+    return {
+      success: false,
+      message: 'Failed to get partnership status',
+    };
   }
 };

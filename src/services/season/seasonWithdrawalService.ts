@@ -12,7 +12,8 @@ import {
 } from './utils/types';
 import {
   validatePartnershipForWithdrawal,
-  validateWithdrawalRequestForProcessing
+  validateWithdrawalRequestForProcessing,
+  validateNoPartnerPendingRequest
 } from './seasonValidationService';
 import { formatWithdrawalRequest } from './utils/formatters';
 
@@ -43,6 +44,16 @@ export async function submitWithdrawalRequest(
 
     if (!partnershipValidation.isValid) {
       throw new Error(partnershipValidation.error || "Partnership validation failed");
+    }
+
+    // Check if partner already has a pending request
+    const partnerPendingCheck = await validateNoPartnerPendingRequest(
+      partnershipId,
+      userId
+    );
+
+    if (!partnerPendingCheck.isValid) {
+      throw new Error(partnerPendingCheck.error || "Partner has pending request");
     }
   }
 

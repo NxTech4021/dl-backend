@@ -236,7 +236,7 @@ export function formatSeasonWithRelations(season: any): FormattedSeason {
     memberships: formatMembershipsList(season.memberships, []),
     divisions: season.divisions,
     promoCodes: season.promoCodes,
-    withdrawalRequests: season.withdrawalRequests,
+    withdrawalRequests: season.withdrawalRequests?.map(formatWithdrawalRequest) || [],
     waitlist: season.waitlist,
     partnerships: season.partnerships || []
   };
@@ -299,6 +299,12 @@ export function formatWithdrawalRequest(request: any): FormattedWithdrawalReques
     processedByAdmin: request.processedByAdmin ? {
       name: request.processedByAdmin.name ?? null,
       role: request.processedByAdmin.role
+    } : null,
+    user: request.user ? {
+      id: request.user.id,
+      name: request.user.name ?? null,
+      email: request.user.email,
+      image: request.user.image ?? null
     } : null
   };
 

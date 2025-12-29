@@ -104,6 +104,7 @@ export async function getSeasonById(id: string): Promise<any | null> {
               id: true,
               name: true,
               email: true,
+              image: true,
             },
           },
           processedByAdmin: {

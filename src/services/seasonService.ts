@@ -174,7 +174,20 @@ export class SeasonService {
         promoCodes: true,
         withdrawalRequests: {
           include: {
-            processedByAdmin: true,
+            user: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+                image: true,
+              },
+            },
+            processedByAdmin: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
           },
         },
         waitlist: {

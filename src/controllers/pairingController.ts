@@ -9,6 +9,7 @@ import {
   getUserPartnerships as getUserPartnershipsService,
   dissolvePartnership as dissolvePartnershipService,
   getActivePartnership as getActivePartnershipService,
+  getPartnershipStatus as getPartnershipStatusService,
 } from '../services/pairingService';
 
 /**
@@ -267,6 +268,51 @@ export const dissolvePartnership = async (req: Request, res: Response) => {
     console.error('Error in dissolvePartnership controller:', error);
     return res.status(500).json(
       new ApiResponse(false, 500, null, 'Failed to dissolve partnership')
+    );
+  }
+};
+
+/**
+ * Get partnership status (pending requests from both partners)
+ * GET /api/pairing/partnership/:partnershipId/status
+ */
+export const getPartnershipStatus = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    const { partnershipId } = req.params;
+
+    if (!userId) {
+      return res.status(401).json(
+        new ApiResponse(false, 401, null, 'Unauthorized')
+      );
+    }
+
+    if (!partnershipId) {
+      return res.status(400).json(
+        new ApiResponse(false, 400, null, 'partnershipId is required')
+      );
+    }
+
+    const result = await getPartnershipStatusService(partnershipId, userId);
+
+    if (!result.success) {
+      return res.status(400).json(
+        new ApiResponse(false, 400, null, result.message)
+      );
+    }
+
+    // Disable caching to ensure fresh status data
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+
+    return res.status(200).json(
+      new ApiResponse(true, 200, result.data, 'Partnership status retrieved successfully')
+    );
+  } catch (error) {
+    console.error('Error in getPartnershipStatus controller:', error);
+    return res.status(500).json(
+      new ApiResponse(false, 500, null, 'Failed to get partnership status')
     );
   }
 };
