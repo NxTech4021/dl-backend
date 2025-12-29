@@ -59,6 +59,17 @@ matchRoutes.get('/', getMatches);
 matchRoutes.get('/my/summary', getMyMatchesSummary); // Lightweight endpoint for change detection
 matchRoutes.get('/my', getMyMatches);
 matchRoutes.get('/available/:divisionId', getAvailableMatches);
+
+// History and Statistics - MUST be before /:id routes to avoid being caught by wildcard
+matchRoutes.get('/history', getMatchHistory);
+matchRoutes.get('/stats', getMatchStats);
+matchRoutes.get('/upcoming', getUpcomingMatches);
+matchRoutes.get('/recent', getRecentResults);
+matchRoutes.get('/pending-confirmation', getPendingConfirmationMatches);
+matchRoutes.get('/disputed', getDisputedMatches);
+matchRoutes.get('/head-to-head/:opponentId', getHeadToHead);
+matchRoutes.get('/division/:divisionId/results', getDivisionResults);
+
 matchRoutes.get('/:id/details', getMatchDetails); // Full match details for UI display
 matchRoutes.get('/:id', getMatchById);
 
@@ -90,16 +101,6 @@ matchRoutes.post('/:id/reschedule', requestReschedule);
 // Note: walkover endpoint is defined in Results section (line 75) using submitWalkover
 // recordWalkover was a duplicate that was never reachable - removed
 matchRoutes.post('/:id/continue', continueMatch);
-
-// History and Statistics
-matchRoutes.get('/history', getMatchHistory);
-matchRoutes.get('/stats', getMatchStats);
-matchRoutes.get('/upcoming', getUpcomingMatches);
-matchRoutes.get('/recent', getRecentResults);
-matchRoutes.get('/pending-confirmation', getPendingConfirmationMatches);
-matchRoutes.get('/disputed', getDisputedMatches);
-matchRoutes.get('/head-to-head/:opponentId', getHeadToHead);
-matchRoutes.get('/division/:divisionId/results', getDivisionResults);
 
 // Comments
 matchRoutes.get('/:id/comments', getMatchComments);

@@ -4,7 +4,7 @@
  */
 
 import { prisma } from '../../lib/prisma';
-import { MatchStatus, MatchType } from '@prisma/client';
+import { MatchStatus, MatchType, SportType } from '@prisma/client';
 
 // Types
 export interface MatchHistoryFilters {
@@ -13,6 +13,7 @@ export interface MatchHistoryFilters {
   seasonId?: string;
   status?: MatchStatus;
   matchType?: MatchType;
+  sportType?: SportType;
   fromDate?: Date;
   toDate?: Date;
   outcome?: 'win' | 'loss' | 'all';
@@ -44,6 +45,7 @@ export class MatchHistoryService {
       seasonId,
       status,
       matchType,
+      sportType,
       fromDate,
       toDate,
       outcome,
@@ -62,6 +64,15 @@ export class MatchHistoryService {
     if (status) where.status = status;
     if (matchType) where.matchType = matchType;
 
+    // Filter by sport type through division -> league relationship
+    if (sportType) {
+      where.division = {
+        league: {
+          sportType: sportType
+        }
+      };
+    }
+
     if (fromDate || toDate) {
       where.matchDate = {};
       if (fromDate) where.matchDate.gte = fromDate;
@@ -73,7 +84,10 @@ export class MatchHistoryService {
         where,
         include: {
           division: {
-            include: { season: true }
+            include: {
+              season: true,
+              league: true
+            }
           },
           participants: {
             include: {
@@ -148,18 +162,65 @@ export class MatchHistoryService {
           name: match.division.name,
           season: match.division.season?.name
         } : null,
+        // Include league info from division or directly from match
+        league: match.division?.league ? {
+          id: match.division.league.id,
+          name: match.division.league.name
+        } : null,
+        // Include season info separately for clarity
+        season: match.division?.season ? {
+          id: match.division.season.id,
+          name: match.division.season.name
+        } : null,
         userOutcome,
         team1Score: match.team1Score,
         team2Score: match.team2Score,
-        setScores: match.scores.map(s => ({
-          setNumber: s.setNumber,
-          player1Games: s.player1Games,
-          player2Games: s.player2Games,
-          tiebreak: s.hasTiebreak ? {
-            player1: s.player1Tiebreak,
-            player2: s.player2Tiebreak
-          } : null
-        })),
+        // Use scores relation if available, otherwise fall back to JSON setScores field
+        setScores: match.scores.length > 0
+          ? match.scores.map(s => ({
+              setNumber: s.setNumber,
+              player1Games: s.player1Games,
+              player2Games: s.player2Games,
+              tiebreak: s.hasTiebreak ? {
+                player1: s.player1Tiebreak,
+                player2: s.player2Tiebreak
+              } : null
+            }))
+          : (() => {
+              // Parse JSON setScores - can be string, object with sets, or array
+              if (!match.setScores) return [];
+              try {
+                const parsedScores = typeof match.setScores === 'string'
+                  ? JSON.parse(match.setScores)
+                  : match.setScores;
+
+                // Handle both formats:
+                // 1. { sets: [...] } - nested structure from seed data
+                // 2. [...] - direct array format
+                let setsArray: any[] = [];
+                if (Array.isArray(parsedScores)) {
+                  setsArray = parsedScores;
+                } else if (parsedScores?.sets && Array.isArray(parsedScores.sets)) {
+                  setsArray = parsedScores.sets;
+                }
+
+                return setsArray.map((s: any, index: number) => ({
+                  setNumber: s.setNumber ?? s.gameNumber ?? index + 1,
+                  // Handle multiple field naming conventions:
+                  // Tennis/Padel: player1Games, team1Games
+                  // Pickleball: team1Points, player1Points
+                  // Seed data: player1
+                  player1Games: s.player1Games ?? s.team1Games ?? s.team1Points ?? s.player1Points ?? s.player1 ?? 0,
+                  player2Games: s.player2Games ?? s.team2Games ?? s.team2Points ?? s.player2Points ?? s.player2 ?? 0,
+                  tiebreak: (s.hasTiebreak || s.tiebreak) ? {
+                    player1: s.tiebreak?.player1 ?? s.team1Tiebreak ?? s.player1Tiebreak ?? null,
+                    player2: s.tiebreak?.player2 ?? s.team2Tiebreak ?? s.player2Tiebreak ?? null
+                  } : null
+                }));
+              } catch (e) {
+                return [];
+              }
+            })(),
         opponents: opponents.map(p => ({
           id: p.user.id,
           name: p.user.name,
@@ -174,6 +235,8 @@ export class MatchHistoryService {
         } : null,
         isWalkover: match.isWalkover,
         isDisputed: match.isDisputed,
+        isFriendly: match.isFriendly,
+        sportType: match.division?.league?.sportType || null,
         createdAt: match.createdAt
       };
     });

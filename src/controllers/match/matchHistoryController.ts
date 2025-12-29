@@ -5,7 +5,7 @@
 
 import { Request, Response } from 'express';
 import { getMatchHistoryService } from '../../services/match/matchHistoryService';
-import { MatchStatus, MatchType } from '@prisma/client';
+import { MatchStatus, MatchType, SportType } from '@prisma/client';
 
 const matchHistoryService = getMatchHistoryService();
 
@@ -25,6 +25,7 @@ export const getMatchHistory = async (req: Request, res: Response) => {
       seasonId,
       status,
       matchType,
+      sportType,
       fromDate,
       toDate,
       outcome,
@@ -42,6 +43,7 @@ export const getMatchHistory = async (req: Request, res: Response) => {
     if (seasonId) filters.seasonId = seasonId as string;
     if (status) filters.status = status as MatchStatus;
     if (matchType) filters.matchType = matchType as MatchType;
+    if (sportType) filters.sportType = sportType as SportType;
     if (fromDate) filters.fromDate = new Date(fromDate as string);
     if (toDate) filters.toDate = new Date(toDate as string);
 
