@@ -10,6 +10,9 @@ import {
   dissolvePartnership as dissolvePartnershipService,
   getActivePartnership as getActivePartnershipService,
   getPartnershipStatus as getPartnershipStatusService,
+  inviteReplacementPartner as inviteReplacementPartnerService,
+  acceptReplacementInvite as acceptReplacementInviteService,
+  getEligibleReplacementPartners as getEligibleReplacementPartnersService,
 } from '../services/pairingService';
 
 /**
@@ -352,6 +355,148 @@ export const getActivePartnership = async (req: Request, res: Response) => {
     console.error('Error in getActivePartnership controller:', error);
     return res.status(500).json(
       new ApiResponse(false, 500, null, 'Failed to get active partnership')
+    );
+  }
+};
+
+// ==========================================
+// PARTNER REPLACEMENT CONTROLLERS
+// ==========================================
+
+/**
+ * Invite a replacement partner for INCOMPLETE partnership
+ * POST /api/pairing/partnership/:partnershipId/invite-replacement
+ * Body: { recipientId: string, message?: string }
+ */
+export const inviteReplacementPartner = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    const { partnershipId } = req.params;
+    const { recipientId, message } = req.body;
+
+    if (!userId) {
+      return res.status(401).json(
+        new ApiResponse(false, 401, null, 'Unauthorized')
+      );
+    }
+
+    if (!partnershipId) {
+      return res.status(400).json(
+        new ApiResponse(false, 400, null, 'partnershipId is required')
+      );
+    }
+
+    if (!recipientId) {
+      return res.status(400).json(
+        new ApiResponse(false, 400, null, 'recipientId is required')
+      );
+    }
+
+    const result = await inviteReplacementPartnerService(
+      partnershipId,
+      userId,
+      recipientId,
+      message
+    );
+
+    if (!result.success) {
+      return res.status(400).json(
+        new ApiResponse(false, 400, null, result.message)
+      );
+    }
+
+    return res.status(201).json(
+      new ApiResponse(true, 201, result.data, result.message)
+    );
+  } catch (error) {
+    console.error('Error in inviteReplacementPartner controller:', error);
+    return res.status(500).json(
+      new ApiResponse(false, 500, null, 'Failed to invite replacement partner')
+    );
+  }
+};
+
+/**
+ * Accept a replacement partner invitation
+ * POST /api/pairing/partnership/:partnershipId/accept-replacement/:requestId
+ */
+export const acceptReplacementInvite = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    const { requestId } = req.params;
+
+    if (!userId) {
+      return res.status(401).json(
+        new ApiResponse(false, 401, null, 'Unauthorized')
+      );
+    }
+
+    if (!requestId) {
+      return res.status(400).json(
+        new ApiResponse(false, 400, null, 'requestId is required')
+      );
+    }
+
+    const result = await acceptReplacementInviteService(requestId, userId);
+
+    if (!result.success) {
+      return res.status(400).json(
+        new ApiResponse(false, 400, null, result.message)
+      );
+    }
+
+    return res.status(200).json(
+      new ApiResponse(true, 200, result.data, result.message)
+    );
+  } catch (error) {
+    console.error('Error in acceptReplacementInvite controller:', error);
+    return res.status(500).json(
+      new ApiResponse(false, 500, null, 'Failed to accept replacement invitation')
+    );
+  }
+};
+
+/**
+ * Get eligible replacement partners for INCOMPLETE partnership
+ * GET /api/pairing/partnership/:partnershipId/eligible-partners?q=searchQuery
+ */
+export const getEligibleReplacementPartners = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    const { partnershipId } = req.params;
+    const searchQuery = req.query.q as string | undefined;
+
+    if (!userId) {
+      return res.status(401).json(
+        new ApiResponse(false, 401, null, 'Unauthorized')
+      );
+    }
+
+    if (!partnershipId) {
+      return res.status(400).json(
+        new ApiResponse(false, 400, null, 'partnershipId is required')
+      );
+    }
+
+    const result = await getEligibleReplacementPartnersService(
+      userId,
+      partnershipId,
+      searchQuery
+    );
+
+    if (!result.success) {
+      return res.status(400).json(
+        new ApiResponse(false, 400, null, result.message)
+      );
+    }
+
+    return res.status(200).json(
+      new ApiResponse(true, 200, result.data, result.message)
+    );
+  } catch (error) {
+    console.error('Error in getEligibleReplacementPartners controller:', error);
+    return res.status(500).json(
+      new ApiResponse(false, 500, null, 'Failed to get eligible partners')
     );
   }
 };

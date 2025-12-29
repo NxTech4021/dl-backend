@@ -2027,20 +2027,23 @@ model PairRequest {
 }
 
 model Partnership {
-  id          String            @id @default(cuid())
-  captainId   String // Requester = Captain
-  partnerId   String // Recipient = Partner
-  seasonId    String
-  divisionId  String?
-  pairRating  Int?
-  status      PartnershipStatus @default(ACTIVE)
-  createdAt   DateTime          @default(now())
-  dissolvedAt DateTime?
+  id            String            @id @default(cuid())
+  captainId     String // Requester = Captain (or remaining player for INCOMPLETE)
+  partnerId     String? // Recipient = Partner (nullable for INCOMPLETE partnerships)
+  seasonId      String
+  divisionId    String?
+  pairRating    Int?
+  status        PartnershipStatus @default(ACTIVE)
+  createdAt     DateTime          @default(now())
+  dissolvedAt   DateTime?
+  predecessorId String? // Links to dissolved partnership for standings inheritance
 
   captain           User                @relation("PartnershipCaptain", fields: [captainId], references: [id], onDelete: Cascade)
-  partner           User                @relation("PartnershipPartner", fields: [partnerId], references: [id], onDelete: Cascade)
+  partner           User?               @relation("PartnershipPartner", fields: [partnerId], references: [id], onDelete: Cascade)
   season            Season              @relation(fields: [seasonId], references: [id], onDelete: Cascade)
   division          Division?           @relation(fields: [divisionId], references: [id], onDelete: SetNull)
+  predecessor       Partnership?        @relation("PartnershipLineage", fields: [predecessorId], references: [id])
+  successors        Partnership[]       @relation("PartnershipLineage")
   withdrawalRequest WithdrawalRequest[]
   notifications     Notification[]
 
@@ -2053,6 +2056,7 @@ model Partnership {
   @@index([partnerId])
   @@index([captainId, seasonId, status])
   @@index([partnerId, seasonId, status])
+  @@index([predecessorId])
   @@map("partnership")
 }
 
@@ -2286,6 +2290,7 @@ enum PairRequestStatus {
 
 enum PartnershipStatus {
   ACTIVE
+  INCOMPLETE  // Partnership missing a partner, awaiting replacement
   DISSOLVED
   EXPIRED
 }

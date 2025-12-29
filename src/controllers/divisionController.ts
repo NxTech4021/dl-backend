@@ -742,6 +742,71 @@ export const assignPlayerToDivision = async (req: Request, res: Response) => {
         logger.info('Created initial standing for user in division', { userId, divisionId });
       }
 
+      // 🆕 For doubles: Also update Partnership.divisionId and create partnership standing
+      const activePartnership = await tx.partnership.findFirst({
+        where: {
+          seasonId,
+          status: { in: ['ACTIVE', 'INCOMPLETE'] },
+          OR: [
+            { captainId: userId },
+            { partnerId: userId },
+          ],
+        },
+      });
+
+      if (activePartnership) {
+        // Update partnership's divisionId
+        await tx.partnership.update({
+          where: { id: activePartnership.id },
+          data: { divisionId },
+        });
+        logger.info('Updated partnership divisionId for doubles assignment', {
+          userId,
+          partnershipId: activePartnership.id,
+          divisionId,
+        });
+
+        // Create or update division standing for the partnership
+        const existingPartnershipStanding = await tx.divisionStanding.findFirst({
+          where: { partnershipId: activePartnership.id, divisionId }
+        });
+
+        if (!existingPartnershipStanding) {
+          await tx.divisionStanding.create({
+            data: {
+              divisionId,
+              seasonId,
+              partnershipId: activePartnership.id,
+              rank: 0, // Will be recalculated
+              wins: 0,
+              losses: 0,
+              matchesPlayed: 0,
+              matchesScheduled: 9, // Default scheduled matches
+              totalPoints: 0,
+              countedWins: 0,
+              countedLosses: 0,
+              setsWon: 0,
+              setsLost: 0,
+              gamesWon: 0,
+              gamesLost: 0,
+              best6SetsWon: 0,
+              best6SetsTotal: 0,
+              best6GamesWon: 0,
+              best6GamesTotal: 0,
+              winPoints: 0,
+              setPoints: 0,
+              completionBonus: 0,
+              setDifferential: 0,
+              headToHead: {},
+            }
+          });
+          logger.info('Created initial standing for partnership in division', {
+            partnershipId: activePartnership.id,
+            divisionId,
+          });
+        }
+      }
+
       return { assignment, divisionThread };
     });
 

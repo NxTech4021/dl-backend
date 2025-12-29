@@ -192,4 +192,58 @@ export const doublesNotifications = {
     message: `Your doubles partner has changed from ${oldPartnerName} to ${newPartnerName}. Match on ${date} at ${time} at ${venue}`,
     metadata: { oldPartnerName, newPartnerName, date, time, venue },
   }),
+
+  // Partner Replacement Notifications
+
+  partnerLeftPartnership: (
+    partnerName: string,
+    leagueName: string
+  ): NotificationPayload => ({
+    type: NOTIFICATION_TYPES.PARTNERSHIP_DISSOLVED,
+    category: getCategoryForNotificationType(
+      NOTIFICATION_TYPES.PARTNERSHIP_DISSOLVED
+    ),
+    title: "Partner Left",
+    message: `${partnerName} has left your doubles partnership for ${leagueName}. Find a new partner to continue playing.`,
+    metadata: { partnerName, leagueName },
+  }),
+
+  replacementInviteSent: (
+    recipientName: string,
+    leagueName: string
+  ): NotificationPayload => ({
+    type: NOTIFICATION_TYPES.PARTNER_REQUEST_SENT,
+    category: getCategoryForNotificationType(
+      NOTIFICATION_TYPES.PARTNER_REQUEST_SENT
+    ),
+    title: "Partner Invite Sent",
+    message: `Waiting for ${recipientName} to join your team for ${leagueName}`,
+    metadata: { recipientName, leagueName },
+  }),
+
+  replacementInviteReceived: (
+    captainName: string,
+    leagueName: string
+  ): NotificationPayload => ({
+    type: NOTIFICATION_TYPES.PAIR_REQUEST_RECEIVED,
+    category: getCategoryForNotificationType(
+      NOTIFICATION_TYPES.PAIR_REQUEST_RECEIVED
+    ),
+    title: "Join Doubles Team",
+    message: `${captainName} invited you to join their doubles team for ${leagueName}. They're looking for a new partner!`,
+    metadata: { captainName, leagueName },
+  }),
+
+  newPartnerJoined: (
+    newPartnerName: string,
+    leagueName: string
+  ): NotificationPayload => ({
+    type: NOTIFICATION_TYPES.PAIR_REQUEST_ACCEPTED,
+    category: getCategoryForNotificationType(
+      NOTIFICATION_TYPES.PAIR_REQUEST_ACCEPTED
+    ),
+    title: "Partner Joined!",
+    message: `${newPartnerName} has joined your team for ${leagueName}. You're ready to play matches again!`,
+    metadata: { newPartnerName, leagueName },
+  }),
 };

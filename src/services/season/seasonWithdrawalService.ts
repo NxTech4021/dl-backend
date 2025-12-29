@@ -156,17 +156,67 @@ export async function processWithdrawalRequest(
       }
     });
 
-    // Step 2: If approved and has partnership, dissolve it
+    // Step 2: If approved and has partnership, create INCOMPLETE partnership for remaining player
     if (status === "APPROVED" && withdrawalRequest.partnershipId) {
-      await tx.partnership.update({
+      // Fetch the partnership to identify remaining player
+      const partnership = await tx.partnership.findUnique({
         where: { id: withdrawalRequest.partnershipId },
-        data: {
-          status: "DISSOLVED",
-          dissolvedAt: new Date()
-        }
+        include: { division: true }
       });
 
-      console.log(`✅ Partnership ${withdrawalRequest.partnershipId} dissolved due to approved withdrawal`);
+      if (partnership) {
+        // 1. Mark old partnership as DISSOLVED
+        await tx.partnership.update({
+          where: { id: withdrawalRequest.partnershipId },
+          data: {
+            status: "DISSOLVED",
+            dissolvedAt: new Date()
+          }
+        });
+
+        console.log(`✅ Partnership ${withdrawalRequest.partnershipId} dissolved due to approved withdrawal`);
+
+        // 2. Determine remaining player (not the withdrawing user)
+        const remainingPlayerId = partnership.captainId === withdrawalRequest.userId
+          ? partnership.partnerId
+          : partnership.captainId;
+
+        if (remainingPlayerId) {
+          // 3. Create new INCOMPLETE partnership for remaining player
+          const incompletePartnership = await tx.partnership.create({
+            data: {
+              captainId: remainingPlayerId,
+              partnerId: null,
+              seasonId: partnership.seasonId,
+              divisionId: partnership.divisionId,
+              predecessorId: withdrawalRequest.partnershipId,
+              status: 'INCOMPLETE',
+              pairRating: null,
+            }
+          });
+
+          console.log(`✅ Created INCOMPLETE partnership ${incompletePartnership.id} for remaining player ${remainingPlayerId}`);
+
+          // 4. Transfer divisionStandings from old to new partnership
+          await tx.divisionStanding.updateMany({
+            where: { partnershipId: withdrawalRequest.partnershipId },
+            data: { partnershipId: incompletePartnership.id }
+          });
+
+          console.log(`✅ Transferred division standings to new partnership`);
+
+          // 5. Only remove withdrawing player's membership
+          await tx.seasonMembership.updateMany({
+            where: {
+              userId: withdrawalRequest.userId,
+              seasonId: partnership.seasonId
+            },
+            data: { status: 'REMOVED' }
+          });
+
+          console.log(`✅ Removed withdrawing player's membership`);
+        }
+      }
     }
 
     return updatedRequest;

@@ -168,40 +168,64 @@ export const sendPairRequest = async (
       };
     }
 
-    // Check if either player is already in a partnership for this season
-    const existingPartnership = await prisma.partnership.findFirst({
+    // Check if REQUESTER is already in an ACTIVE or INCOMPLETE partnership for this season
+    // (they cannot send pair requests if they're already in a partnership)
+    const requesterPartnership = await prisma.partnership.findFirst({
       where: {
         seasonId,
+        status: { in: ['ACTIVE', 'INCOMPLETE'] },
         OR: [
           { captainId: requesterId },
           { partnerId: requesterId },
+        ],
+      },
+    });
+
+    if (requesterPartnership) {
+      return {
+        success: false,
+        message: 'You are already in a partnership for this season',
+      };
+    }
+
+    // Check if RECIPIENT has an ACTIVE partnership (block) or INCOMPLETE (allow)
+    // Players with INCOMPLETE partnerships can receive pair requests
+    const recipientPartnership = await prisma.partnership.findFirst({
+      where: {
+        seasonId,
+        OR: [
           { captainId: recipientId },
           { partnerId: recipientId },
         ],
       },
     });
 
-    if (existingPartnership) {
+    if (recipientPartnership && recipientPartnership.status === 'ACTIVE') {
       return {
         success: false,
-        message: 'One or both players are already paired for this season',
+        message: 'This player already has an active partnership for this season',
       };
     }
+    // INCOMPLETE partnerships are allowed - recipient can receive pair requests
+    const recipientHasIncompletePartnership = recipientPartnership && recipientPartnership.status === 'INCOMPLETE';
 
     // Check if either player is already registered individually
-    const existingMembership = await prisma.seasonMembership.findFirst({
-      where: {
-        seasonId: seasonId.toString(),
-        userId: { in: [requesterId, recipientId] },
-        status: 'ACTIVE',
-      },
-    });
+    // BUT skip this check if recipient has an INCOMPLETE partnership (they need a partner)
+    if (!recipientHasIncompletePartnership) {
+      const existingMembership = await prisma.seasonMembership.findFirst({
+        where: {
+          seasonId: seasonId.toString(),
+          userId: { in: [requesterId, recipientId] },
+          status: 'ACTIVE',
+        },
+      });
 
-    if (existingMembership) {
-      return {
-        success: false,
-        message: 'One or both players are already registered individually for this season',
-      };
+      if (existingMembership) {
+        return {
+          success: false,
+          message: 'One or both players are already registered individually for this season',
+        };
+      }
     }
 
     // Set expiration date (7 days from now)
@@ -348,7 +372,33 @@ export const acceptPairRequest = async (
       };
     }
 
-    // Calculate pair rating
+    // Check if recipient (the one accepting) has an INCOMPLETE partnership
+    // If so, use special flow that updates their partnership instead of creating new
+    const recipientIncompletePartnership = await prisma.partnership.findFirst({
+      where: {
+        seasonId: pairRequest.seasonId,
+        captainId: pairRequest.recipientId, // Recipient is captain of INCOMPLETE partnership
+        status: 'INCOMPLETE',
+      },
+      include: {
+        captain: { select: { id: true, name: true, username: true } },
+        season: { select: { id: true, name: true } },
+        division: { select: { id: true, name: true } },
+      },
+    });
+
+    if (recipientIncompletePartnership) {
+      // Route to special handler that updates INCOMPLETE partnership
+      // instead of creating a new one
+      return await acceptPairRequestIntoIncomplete(
+        requestId,
+        userId,
+        pairRequest,
+        recipientIncompletePartnership
+      );
+    }
+
+    // Normal flow: Calculate pair rating and create new partnership
     const pairRating = await calculatePairRating(
       pairRequest.requesterId,
       pairRequest.recipientId,
@@ -425,7 +475,7 @@ export const acceptPairRequest = async (
         const leagueName = result.partnership.season?.name || 'this season';
 
         const captainNotif = notificationTemplates.doubles.partnerRequestAcceptedCaptain(
-          result.partnership.partner.name || result.partnership.partner.username || 'Partner',
+          result.partnership.partner?.name || result.partnership.partner?.username || 'Partner',
           leagueName
         );
 
@@ -441,12 +491,14 @@ export const acceptPairRequest = async (
           leagueName
         );
 
-        await notificationService.createNotification({
-          userIds: result.partnership.partner.id,
-          ...partnerNotif,
-          seasonId: result.partnership.season.id,
-          partnershipId: result.partnership.id,
-        });
+        if (result.partnership.partner) {
+          await notificationService.createNotification({
+            userIds: result.partnership.partner.id,
+            ...partnerNotif,
+            seasonId: result.partnership.season.id,
+            partnershipId: result.partnership.id,
+          });
+        }
 
         console.log('🔔 Pairing: partnership accepted notifications sent (captain + partner)');
       } catch (notifErr) {
@@ -468,6 +520,161 @@ export const acceptPairRequest = async (
     };
   }
 };
+
+/**
+ * Accept a pair request where the recipient has an INCOMPLETE partnership
+ * This updates the INCOMPLETE partnership instead of creating a new one
+ * The recipient stays as captain, the requester (sender) becomes partner
+ *
+ * @param requestId - The pair request ID being accepted
+ * @param acceptingUserId - The user accepting (recipient of the request)
+ * @param pairRequest - The pair request with season data
+ * @param incompletePartnership - The recipient's INCOMPLETE partnership
+ */
+async function acceptPairRequestIntoIncomplete(
+  requestId: string,
+  acceptingUserId: string,
+  pairRequest: any,
+  incompletePartnership: any
+): Promise<PairRequestResponse> {
+  try {
+    // The requester (person who sent the pair request) becomes the new partner
+    const newPartnerId = pairRequest.requesterId;
+
+    // Calculate new pair rating based on both players
+    const pairRating = await calculatePairRating(
+      incompletePartnership.captainId,
+      newPartnerId,
+      pairRequest.seasonId
+    );
+
+    const result = await prisma.$transaction(async (tx) => {
+      // 1. Update the pair request to ACCEPTED
+      await tx.pairRequest.update({
+        where: { id: requestId },
+        data: {
+          status: PairRequestStatus.ACCEPTED,
+          respondedAt: new Date(),
+        },
+      });
+
+      // 2. Update INCOMPLETE partnership: add partner, change status to ACTIVE
+      const updatedPartnership = await tx.partnership.update({
+        where: { id: incompletePartnership.id },
+        data: {
+          partnerId: newPartnerId,
+          status: 'ACTIVE',
+          pairRating,
+        },
+        include: {
+          captain: { select: { id: true, name: true, username: true, image: true } },
+          partner: { select: { id: true, name: true, username: true, image: true } },
+          season: { select: { id: true, name: true } },
+          division: { select: { id: true, name: true } },
+        },
+      });
+
+      // 3. Create/update season membership for new partner
+      const existingMembership = await tx.seasonMembership.findFirst({
+        where: {
+          userId: newPartnerId,
+          seasonId: pairRequest.seasonId,
+        },
+      });
+
+      if (!existingMembership) {
+        await tx.seasonMembership.create({
+          data: {
+            userId: newPartnerId,
+            seasonId: pairRequest.seasonId,
+            divisionId: incompletePartnership.divisionId,
+            status: 'ACTIVE',
+          },
+        });
+      } else if (existingMembership.status !== 'ACTIVE') {
+        // Reactivate membership if it was REMOVED or other status
+        await tx.seasonMembership.update({
+          where: { id: existingMembership.id },
+          data: { status: 'ACTIVE' },
+        });
+      }
+
+      // 4. Auto-decline other pending pair requests:
+      // - Other requests TO the captain (the recipient who accepted)
+      // - All pending requests FROM the new partner (requester)
+      // - All pending requests TO the new partner
+      await tx.pairRequest.updateMany({
+        where: {
+          seasonId: pairRequest.seasonId,
+          status: PairRequestStatus.PENDING,
+          id: { not: requestId },
+          OR: [
+            { recipientId: acceptingUserId },  // Other requests to captain
+            { requesterId: newPartnerId },     // Requests from new partner
+            { recipientId: newPartnerId },     // Requests to new partner
+          ],
+        },
+        data: {
+          status: PairRequestStatus.AUTO_DENIED,
+          respondedAt: new Date(),
+        },
+      });
+
+      return updatedPartnership;
+    });
+
+    // Send notifications
+    try {
+      const leagueName = pairRequest.season?.name || 'this season';
+      const captainName = result.captain?.name || result.captain?.username || 'Captain';
+      const partnerName = result.partner?.name || result.partner?.username || 'Partner';
+
+      // Notification to captain (the one who accepted) that partner joined
+      const captainNotif = notificationTemplates.doubles.newPartnerJoined(
+        partnerName,
+        leagueName
+      );
+      await notificationService.createNotification({
+        userIds: result.captain.id,
+        ...captainNotif,
+        seasonId: pairRequest.seasonId,
+        partnershipId: result.id,
+      });
+
+      // Notification to new partner (the requester) that they joined the team
+      const partnerNotif = notificationTemplates.doubles.partnerRequestAcceptedPartner(
+        captainName,
+        leagueName
+      );
+      if (result.partner) {
+        await notificationService.createNotification({
+          userIds: result.partner.id,
+          ...partnerNotif,
+          seasonId: pairRequest.seasonId,
+          partnershipId: result.id,
+        });
+      }
+
+      console.log(`🔔 Pair request ${requestId} accepted into INCOMPLETE partnership ${result.id}`);
+    } catch (notifErr) {
+      console.error('❌ Failed to send notifications for INCOMPLETE partnership acceptance:', notifErr);
+    }
+
+    console.log(`✅ Partnership ${result.id} transitioned from INCOMPLETE to ACTIVE. New partner: ${newPartnerId}`);
+
+    return {
+      success: true,
+      message: 'Partner joined your team successfully!',
+      data: result,
+    };
+  } catch (error) {
+    console.error('Error accepting pair request into incomplete partnership:', error);
+    return {
+      success: false,
+      message: 'Failed to accept pair request',
+    };
+  }
+}
 
 /**
  * Deny a pair request
@@ -743,7 +950,8 @@ export const getUserPartnerships = async (userId: string) => {
 
 /**
  * Dissolve a partnership
- * This marks a partnership as dissolved and allows partners to find new matches
+ * This marks a partnership as dissolved and creates an INCOMPLETE partnership
+ * for the remaining player, preserving their standings
  */
 export const dissolvePartnership = async (
   partnershipId: string,
@@ -754,8 +962,8 @@ export const dissolvePartnership = async (
     const partnership = await prisma.partnership.findUnique({
       where: { id: partnershipId },
       include: {
-        captain: { select: { id: true, name: true } },
-        partner: { select: { id: true, name: true } },
+        captain: { select: { id: true, name: true, username: true } },
+        partner: { select: { id: true, name: true, username: true } },
         season: { select: { id: true, name: true, status: true } },
       },
     });
@@ -798,9 +1006,30 @@ export const dissolvePartnership = async (
       };
     }
 
-    // Update partnership status to DISSOLVED and handle memberships in a transaction
-    const updatedPartnership = await prisma.$transaction(async (tx) => {
-      // Update partnership status
+    // Determine remaining player (the one who is NOT dissolving)
+    const remainingPlayerId = partnership.captainId === dissolvingUserId
+      ? partnership.partnerId
+      : partnership.captainId;
+
+    const remainingPlayer = partnership.captainId === dissolvingUserId
+      ? partnership.partner
+      : partnership.captain;
+
+    const leavingPlayer = partnership.captainId === dissolvingUserId
+      ? partnership.captain
+      : partnership.partner;
+
+    // Check if remaining player exists (handle nullable partnerId)
+    if (!remainingPlayerId || !remainingPlayer) {
+      return {
+        success: false,
+        message: 'Cannot dissolve partnership - no remaining player found',
+      };
+    }
+
+    // Update partnership status to DISSOLVED and create INCOMPLETE partnership for remaining player
+    const result = await prisma.$transaction(async (tx) => {
+      // 1. Mark old partnership as DISSOLVED
       const dissolved = await tx.partnership.update({
         where: { id: partnershipId },
         data: {
@@ -809,42 +1038,76 @@ export const dissolvePartnership = async (
         },
       });
 
-      // Update associated season memberships to WITHDRAWN status (if they exist)
-      // Note: Memberships may not exist if the team was never registered
-      const existingMemberships = await tx.seasonMembership.findMany({
-        where: {
-          userId: { in: [partnership.captainId, partnership.partnerId] },
+      // 2. Create new INCOMPLETE partnership for remaining player
+      const incompletePartnership = await tx.partnership.create({
+        data: {
+          captainId: remainingPlayerId,  // Remaining player becomes captain
+          partnerId: null,                // No partner yet
           seasonId: partnership.seasonId,
+          divisionId: partnership.divisionId,
+          predecessorId: partnershipId,   // Link to dissolved partnership
+          status: 'INCOMPLETE',
+          pairRating: null,               // Will be recalculated when new partner joins
+        },
+        include: {
+          captain: { select: { id: true, name: true, username: true } },
+          season: { select: { id: true, name: true } },
+          division: { select: { id: true, name: true } },
         },
       });
 
-      // Only update if memberships exist
-      if (existingMemberships.length > 0) {
-        await tx.seasonMembership.updateMany({
-          where: {
-            userId: { in: [partnership.captainId, partnership.partnerId] },
-            seasonId: partnership.seasonId,
-          },
-          data: {
-            status: 'REMOVED',
-          },
-        });
-      }
+      // 3. Transfer divisionStandings from old partnership to new incomplete partnership
+      await tx.divisionStanding.updateMany({
+        where: { partnershipId: partnershipId },
+        data: { partnershipId: incompletePartnership.id },
+      });
 
-      return dissolved;
+      // 4. Handle season memberships
+      // Only remove the departing player's membership
+      await tx.seasonMembership.updateMany({
+        where: {
+          userId: dissolvingUserId,
+          seasonId: partnership.seasonId,
+        },
+        data: {
+          status: 'REMOVED',
+        },
+      });
+
+      // Keep remaining player's membership ACTIVE (if it exists)
+      // No need to update since it should already be ACTIVE
+
+      return { dissolved, incompletePartnership };
     });
 
-    // TODO: Send notification to other partner
-    const otherPartnerId = partnership.captainId === dissolvingUserId
-      ? partnership.partnerId
-      : partnership.captainId;
+    // Send notification to remaining player about partner leaving
+    try {
+      const leagueName = partnership.season?.name || 'this season';
+      const leavingPlayerName = leavingPlayer?.name || leavingPlayer?.username || 'Your partner';
 
-    console.log(`Partnership ${partnershipId} dissolved by ${dissolvingUserId}. Notify partner ${otherPartnerId}`);
+      const notification = notificationTemplates.doubles.partnerLeftPartnership(
+        leavingPlayerName,
+        leagueName
+      );
+
+      await notificationService.createNotification({
+        userIds: remainingPlayerId,
+        ...notification,
+        seasonId: partnership.seasonId,
+        partnershipId: result.incompletePartnership.id,
+      });
+
+      console.log(`🔔 Partner left notification sent to ${remainingPlayerId}`);
+    } catch (notifErr) {
+      console.error('❌ Failed to send partner left notification:', notifErr);
+    }
+
+    console.log(`Partnership ${partnershipId} dissolved by ${dissolvingUserId}. INCOMPLETE partnership ${result.incompletePartnership.id} created for ${remainingPlayerId}`);
 
     return {
       success: true,
-      message: 'Partnership dissolved successfully',
-      data: updatedPartnership,
+      message: 'Partnership dissolved successfully. Your partner can now find a new teammate.',
+      data: result.incompletePartnership,
     };
   } catch (error) {
     console.error('Error dissolving partnership:', error);
@@ -859,6 +1122,7 @@ export const dissolvePartnership = async (
  * Get active partnership for a user in a specific season
  * Returns null if no active partnership exists
  * Now returns captain and partner with transformed skillRatings for consistency with profile API
+ * Includes both ACTIVE and INCOMPLETE partnerships
  */
 export const getActivePartnership = async (
   userId: string,
@@ -868,7 +1132,7 @@ export const getActivePartnership = async (
     const partnership = await prisma.partnership.findFirst({
       where: {
         seasonId,
-        status: 'ACTIVE',
+        status: { in: ['ACTIVE', 'INCOMPLETE'] },  // Include INCOMPLETE partnerships
         OR: [
           { captainId: userId },
           { partnerId: userId },
@@ -893,6 +1157,17 @@ export const getActivePartnership = async (
           },
         },
         division: true,
+        divisionStandings: {
+          include: {
+            division: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+          },
+          take: 1,
+        },
       },
     });
 
@@ -901,12 +1176,14 @@ export const getActivePartnership = async (
     }
 
     // Transform captain and partner to include skillRatings (same structure as profile API)
+    // Handle nullable partner for INCOMPLETE partnerships
     let enrichedCaptain, enrichedPartner;
     try {
-      [enrichedCaptain, enrichedPartner] = await Promise.all([
-        enrichPlayerWithSkills(partnership.captain),
-        enrichPlayerWithSkills(partnership.partner),
-      ]);
+      enrichedCaptain = await enrichPlayerWithSkills(partnership.captain);
+      // Only enrich partner if they exist (not null for INCOMPLETE partnerships)
+      enrichedPartner = partnership.partner
+        ? await enrichPlayerWithSkills(partnership.partner)
+        : null;
     } catch (enrichError) {
       console.error('Error enriching players with skills:', enrichError);
       // Fallback: return players without enrichment if enrichment fails
@@ -924,14 +1201,18 @@ export const getActivePartnership = async (
       captainKeys: Object.keys(enrichedCaptain),
     });
 
-    console.log('🔍 getActivePartnership - Partner skillRatings:', {
-      partnerId: enrichedPartner.id,
-      partnerName: enrichedPartner.name,
-      hasSkillRatings: !!enrichedPartner.skillRatings,
-      skillRatingsKeys: enrichedPartner.skillRatings ? Object.keys(enrichedPartner.skillRatings) : [],
-      skillRatings: enrichedPartner.skillRatings,
-      partnerKeys: Object.keys(enrichedPartner),
-    });
+    if (enrichedPartner) {
+      console.log('🔍 getActivePartnership - Partner skillRatings:', {
+        partnerId: enrichedPartner.id,
+        partnerName: enrichedPartner.name,
+        hasSkillRatings: !!enrichedPartner.skillRatings,
+        skillRatingsKeys: enrichedPartner.skillRatings ? Object.keys(enrichedPartner.skillRatings) : [],
+        skillRatings: enrichedPartner.skillRatings,
+        partnerKeys: Object.keys(enrichedPartner),
+      });
+    } else {
+      console.log('🔍 getActivePartnership - No partner (INCOMPLETE partnership)');
+    }
 
     // Ensure skillRatings is always an object (not null) for consistency
     // If empty, return empty object instead of null
@@ -943,25 +1224,33 @@ export const getActivePartnership = async (
       questionnaireResponses: undefined,
     };
     delete captainWithSkillRatings.questionnaireResponses;
-    
-    const partnerWithSkillRatings = {
+
+    // Handle nullable partner for INCOMPLETE partnerships
+    const partnerWithSkillRatings = enrichedPartner ? {
       ...enrichedPartner,
       skillRatings: enrichedPartner.skillRatings || {},
       // Explicitly remove questionnaireResponses to avoid confusion
       questionnaireResponses: undefined,
-    };
-    delete partnerWithSkillRatings.questionnaireResponses;
+    } : null;
+    if (partnerWithSkillRatings) {
+      delete partnerWithSkillRatings.questionnaireResponses;
+    }
+
+    // Use division from divisionStandings if partnership.division is null
+    const resolvedDivision = partnership.division || partnership.divisionStandings?.[0]?.division || null;
 
     const result = {
       ...partnership,
       captain: captainWithSkillRatings,
       partner: partnerWithSkillRatings,
+      division: resolvedDivision,
     };
 
     // Final debug log before returning
     console.log('🔍 getActivePartnership - Final result:', {
       hasCaptain: !!result.captain,
       hasPartner: !!result.partner,
+      status: partnership.status,
       captainHasSkillRatings: !!result.captain?.skillRatings,
       partnerHasSkillRatings: !!result.partner?.skillRatings,
       captainSkillRatingsKeys: result.captain?.skillRatings ? Object.keys(result.captain.skillRatings) : [],
@@ -1076,6 +1365,517 @@ export const getPartnershipStatus = async (
     return {
       success: false,
       message: 'Failed to get partnership status',
+    };
+  }
+};
+
+// ============================================
+// PARTNER REPLACEMENT FUNCTIONS
+// ============================================
+
+/**
+ * Invite a replacement partner for an INCOMPLETE partnership
+ * Used when a partner has left and the remaining player needs to find a new partner
+ */
+export const inviteReplacementPartner = async (
+  partnershipId: string,
+  captainId: string,
+  recipientId: string,
+  message?: string
+): Promise<PairRequestResponse> => {
+  try {
+    // Find the INCOMPLETE partnership
+    const partnership = await prisma.partnership.findUnique({
+      where: { id: partnershipId },
+      include: {
+        captain: { select: { id: true, name: true, username: true } },
+        season: { select: { id: true, name: true, status: true } },
+      },
+    });
+
+    if (!partnership) {
+      return {
+        success: false,
+        message: 'Partnership not found',
+      };
+    }
+
+    // Validate: Partnership must be INCOMPLETE
+    if (partnership.status !== 'INCOMPLETE') {
+      return {
+        success: false,
+        message: 'Can only invite replacement partners for INCOMPLETE partnerships',
+      };
+    }
+
+    // Validate: Only the captain can invite
+    if (partnership.captainId !== captainId) {
+      return {
+        success: false,
+        message: 'Only the team captain can invite a replacement partner',
+      };
+    }
+
+    // Validate: Cannot invite yourself
+    if (captainId === recipientId) {
+      return {
+        success: false,
+        message: 'Cannot invite yourself as a partner',
+      };
+    }
+
+    // Validate: Season must still allow changes (not finished)
+    if (partnership.season.status === 'FINISHED') {
+      return {
+        success: false,
+        message: 'Cannot invite partners after the season has finished',
+      };
+    }
+
+    // Check if recipient already has an active partnership in this season
+    const existingPartnership = await prisma.partnership.findFirst({
+      where: {
+        seasonId: partnership.seasonId,
+        status: 'ACTIVE',
+        OR: [
+          { captainId: recipientId },
+          { partnerId: recipientId },
+        ],
+      },
+    });
+
+    if (existingPartnership) {
+      return {
+        success: false,
+        message: 'This player already has an active partnership in this season',
+      };
+    }
+
+    // Check if there's already a pending invite to this recipient for this partnership
+    const existingRequest = await prisma.pairRequest.findFirst({
+      where: {
+        requesterId: captainId,
+        recipientId: recipientId,
+        seasonId: partnership.seasonId,
+        status: PairRequestStatus.PENDING,
+      },
+    });
+
+    if (existingRequest) {
+      return {
+        success: false,
+        message: 'You already have a pending invitation to this player',
+      };
+    }
+
+    // Create the pair request with 7-day expiration
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + 7);
+
+    const pairRequest = await prisma.pairRequest.create({
+      data: {
+        requesterId: captainId,
+        recipientId: recipientId,
+        seasonId: partnership.seasonId,
+        message: message || null,
+        status: PairRequestStatus.PENDING,
+        expiresAt,
+      },
+      include: {
+        requester: { select: { id: true, name: true, username: true } },
+        recipient: { select: { id: true, name: true, username: true } },
+        season: { select: { id: true, name: true } },
+      },
+    });
+
+    // Send notifications
+    try {
+      const leagueName = partnership.season?.name || 'this season';
+      const captainName = partnership.captain?.name || partnership.captain?.username || 'A player';
+      const recipientName = pairRequest.recipient?.name || pairRequest.recipient?.username || 'Partner';
+
+      // Notification to recipient (push)
+      const recipientNotif = notificationTemplates.doubles.replacementInviteReceived(
+        captainName,
+        leagueName
+      );
+      await notificationService.createNotification({
+        userIds: recipientId,
+        ...recipientNotif,
+        seasonId: partnership.seasonId,
+        pairRequestId: pairRequest.id,
+      });
+
+      // Notification to captain (in-app confirmation)
+      const captainNotif = notificationTemplates.doubles.replacementInviteSent(
+        recipientName,
+        leagueName
+      );
+      await notificationService.createNotification({
+        userIds: captainId,
+        ...captainNotif,
+        seasonId: partnership.seasonId,
+        pairRequestId: pairRequest.id,
+      });
+
+      console.log(`🔔 Replacement partner invitation sent from ${captainId} to ${recipientId}`);
+    } catch (notifErr) {
+      console.error('❌ Failed to send replacement invite notifications:', notifErr);
+    }
+
+    return {
+      success: true,
+      message: 'Partner invitation sent successfully',
+      data: {
+        ...pairRequest,
+        partnershipId: partnership.id,
+      },
+    };
+  } catch (error) {
+    console.error('Error inviting replacement partner:', error);
+    return {
+      success: false,
+      message: 'Failed to send partner invitation',
+    };
+  }
+};
+
+/**
+ * Accept a replacement partner invitation
+ * Transitions the partnership from INCOMPLETE to ACTIVE
+ */
+export const acceptReplacementInvite = async (
+  requestId: string,
+  acceptingUserId: string
+): Promise<PairRequestResponse> => {
+  try {
+    // Find the pair request
+    const pairRequest = await prisma.pairRequest.findUnique({
+      where: { id: requestId },
+      include: {
+        requester: { select: { id: true, name: true, username: true } },
+        recipient: { select: { id: true, name: true, username: true } },
+        season: { select: { id: true, name: true } },
+      },
+    });
+
+    if (!pairRequest) {
+      return {
+        success: false,
+        message: 'Invitation not found',
+      };
+    }
+
+    // Validate: Only recipient can accept
+    if (pairRequest.recipientId !== acceptingUserId) {
+      return {
+        success: false,
+        message: 'You are not authorized to accept this invitation',
+      };
+    }
+
+    // Validate: Request must be pending
+    if (pairRequest.status !== PairRequestStatus.PENDING) {
+      return {
+        success: false,
+        message: 'This invitation is no longer pending',
+      };
+    }
+
+    // Validate: Request not expired
+    if (pairRequest.expiresAt < new Date()) {
+      await prisma.pairRequest.update({
+        where: { id: requestId },
+        data: { status: PairRequestStatus.EXPIRED },
+      });
+      return {
+        success: false,
+        message: 'This invitation has expired',
+      };
+    }
+
+    // Find the INCOMPLETE partnership for the requester
+    const incompletePartnership = await prisma.partnership.findFirst({
+      where: {
+        captainId: pairRequest.requesterId,
+        seasonId: pairRequest.seasonId,
+        status: 'INCOMPLETE',
+      },
+      include: {
+        captain: { select: { id: true, name: true, username: true } },
+        season: { select: { id: true, name: true } },
+        division: { select: { id: true, name: true } },
+      },
+    });
+
+    if (!incompletePartnership) {
+      return {
+        success: false,
+        message: 'No incomplete partnership found for this invitation',
+      };
+    }
+
+    // Calculate new pair rating
+    const pairRating = await calculatePairRating(
+      pairRequest.requesterId,
+      pairRequest.recipientId,
+      pairRequest.seasonId
+    );
+
+    // Use a transaction to update everything atomically
+    const result = await prisma.$transaction(async (tx) => {
+      // 1. Update the pair request to ACCEPTED
+      await tx.pairRequest.update({
+        where: { id: requestId },
+        data: {
+          status: PairRequestStatus.ACCEPTED,
+          respondedAt: new Date(),
+        },
+      });
+
+      // 2. Update partnership: set partnerId, status to ACTIVE, recalculate pairRating
+      const updatedPartnership = await tx.partnership.update({
+        where: { id: incompletePartnership.id },
+        data: {
+          partnerId: acceptingUserId,
+          status: 'ACTIVE',
+          pairRating,
+        },
+        include: {
+          captain: { select: { id: true, name: true, username: true, image: true } },
+          partner: { select: { id: true, name: true, username: true, image: true } },
+          season: { select: { id: true, name: true } },
+          division: { select: { id: true, name: true } },
+        },
+      });
+
+      // 3. Create season membership for new partner (if not exists)
+      const existingMembership = await tx.seasonMembership.findFirst({
+        where: {
+          userId: acceptingUserId,
+          seasonId: pairRequest.seasonId,
+        },
+      });
+
+      if (!existingMembership) {
+        await tx.seasonMembership.create({
+          data: {
+            userId: acceptingUserId,
+            seasonId: pairRequest.seasonId,
+            divisionId: incompletePartnership.divisionId,
+            status: 'ACTIVE',
+          },
+        });
+      } else if (existingMembership.status !== 'ACTIVE') {
+        await tx.seasonMembership.update({
+          where: { id: existingMembership.id },
+          data: { status: 'ACTIVE' },
+        });
+      }
+
+      // 4. Auto-decline all other pending pair requests for this partnership's captain
+      await tx.pairRequest.updateMany({
+        where: {
+          requesterId: pairRequest.requesterId,
+          seasonId: pairRequest.seasonId,
+          status: PairRequestStatus.PENDING,
+          id: { not: requestId },
+        },
+        data: {
+          status: PairRequestStatus.AUTO_DENIED,
+          respondedAt: new Date(),
+        },
+      });
+
+      return updatedPartnership;
+    });
+
+    // Send notifications
+    try {
+      const leagueName = pairRequest.season?.name || 'this season';
+      const newPartnerName = pairRequest.recipient?.name || pairRequest.recipient?.username || 'Your new partner';
+
+      // Notification to captain that new partner joined
+      const captainNotif = notificationTemplates.doubles.newPartnerJoined(
+        newPartnerName,
+        leagueName
+      );
+      await notificationService.createNotification({
+        userIds: pairRequest.requesterId,
+        ...captainNotif,
+        seasonId: pairRequest.seasonId,
+        partnershipId: result.id,
+      });
+
+      console.log(`🔔 New partner joined notification sent to captain ${pairRequest.requesterId}`);
+    } catch (notifErr) {
+      console.error('❌ Failed to send new partner joined notification:', notifErr);
+    }
+
+    console.log(`Partnership ${result.id} transitioned from INCOMPLETE to ACTIVE. New partner: ${acceptingUserId}`);
+
+    return {
+      success: true,
+      message: 'You have joined the team successfully!',
+      data: result,
+    };
+  } catch (error) {
+    console.error('Error accepting replacement invite:', error);
+    return {
+      success: false,
+      message: 'Failed to accept invitation',
+    };
+  }
+};
+
+/**
+ * Get eligible replacement partners for an INCOMPLETE partnership
+ * Returns friends first, then other eligible players via search
+ */
+export const getEligibleReplacementPartners = async (
+  userId: string,
+  partnershipId: string,
+  searchQuery?: string
+): Promise<PairRequestResponse> => {
+  try {
+    // Find the INCOMPLETE partnership
+    const partnership = await prisma.partnership.findUnique({
+      where: { id: partnershipId },
+      include: {
+        season: { select: { id: true, name: true } },
+      },
+    });
+
+    if (!partnership) {
+      return {
+        success: false,
+        message: 'Partnership not found',
+      };
+    }
+
+    // Validate: Only captain can get eligible partners
+    if (partnership.captainId !== userId) {
+      return {
+        success: false,
+        message: 'Only the team captain can view eligible partners',
+      };
+    }
+
+    // Get user IDs who already have active partnerships in this season
+    const usersWithPartnerships = await prisma.partnership.findMany({
+      where: {
+        seasonId: partnership.seasonId,
+        status: 'ACTIVE',
+      },
+      select: {
+        captainId: true,
+        partnerId: true,
+      },
+    });
+
+    const excludedUserIds = new Set<string>();
+    excludedUserIds.add(userId); // Exclude self
+    usersWithPartnerships.forEach(p => {
+      excludedUserIds.add(p.captainId);
+      if (p.partnerId) excludedUserIds.add(p.partnerId);
+    });
+
+    // Get friends first
+    const friendships = await prisma.friendship.findMany({
+      where: {
+        status: 'ACCEPTED',
+        OR: [
+          { requesterId: userId },
+          { recipientId: userId },
+        ],
+      },
+      include: {
+        requester: {
+          select: {
+            id: true,
+            name: true,
+            username: true,
+            displayUsername: true,
+            image: true,
+            area: true,
+            gender: true,
+          },
+        },
+        recipient: {
+          select: {
+            id: true,
+            name: true,
+            username: true,
+            displayUsername: true,
+            image: true,
+            area: true,
+            gender: true,
+          },
+        },
+      },
+    });
+
+    // Extract friend users (the other person in each friendship)
+    const friendUsers = friendships.map(f =>
+      f.requesterId === userId ? f.recipient : f.requester
+    ).filter(friend => !excludedUserIds.has(friend.id));
+
+    // If search query provided, search all users
+    let searchResults: any[] = [];
+    if (searchQuery && searchQuery.trim()) {
+      const searchUsers = await prisma.user.findMany({
+        where: {
+          id: { notIn: Array.from(excludedUserIds) },
+          OR: [
+            { name: { contains: searchQuery, mode: 'insensitive' } },
+            { username: { contains: searchQuery, mode: 'insensitive' } },
+            { displayUsername: { contains: searchQuery, mode: 'insensitive' } },
+          ],
+        },
+        select: {
+          id: true,
+          name: true,
+          username: true,
+          displayUsername: true,
+          image: true,
+          area: true,
+          gender: true,
+        },
+        take: 20,
+      });
+      searchResults = searchUsers;
+    }
+
+    // Enrich players with skill ratings
+    const enrichedFriends = await Promise.all(
+      friendUsers.map(friend => enrichPlayerWithSkills(friend))
+    );
+    const enrichedSearchResults = await Promise.all(
+      searchResults.map(user => enrichPlayerWithSkills(user))
+    );
+
+    // Combine: friends first, then search results (excluding duplicates)
+    const friendIds = new Set(enrichedFriends.map(f => f.id));
+    const combinedPlayers = [
+      ...enrichedFriends,
+      ...enrichedSearchResults.filter(u => !friendIds.has(u.id)),
+    ];
+
+    return {
+      success: true,
+      message: 'Eligible partners retrieved successfully',
+      data: {
+        players: combinedPlayers,
+        friendsCount: enrichedFriends.length,
+        totalCount: combinedPlayers.length,
+        usedFallback: enrichedFriends.length === 0 && combinedPlayers.length > 0,
+      },
+    };
+  } catch (error) {
+    console.error('Error getting eligible replacement partners:', error);
+    return {
+      success: false,
+      message: 'Failed to get eligible partners',
     };
   }
 };

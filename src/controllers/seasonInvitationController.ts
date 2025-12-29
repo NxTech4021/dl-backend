@@ -72,6 +72,7 @@ export const acceptSeasonInvitationHandler = async (req: Request, res: Response)
     }
 
     return res.status(200).json({
+      success: true,
       message: result.message,
       data: result.data
     });
@@ -104,7 +105,7 @@ export const denySeasonInvitationHandler = async (req: Request, res: Response) =
       return res.status(400).json({ error: result.message });
     }
 
-    return res.status(200).json({ message: result.message });
+    return res.status(200).json({ success: true, message: result.message });
   } catch (error) {
     console.error('Error in denySeasonInvitationHandler:', error);
     return res.status(500).json({ error: 'Internal server error' });

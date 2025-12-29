@@ -246,6 +246,17 @@ export async function getAvailablePlayersForSeason(
   ];
   console.log(`🔍 ${activelyPairedPlayerIds.length} players already in active partnerships`);
 
+  // Get players with INCOMPLETE partnerships for this season (to mark them in results)
+  const incompletePairs = await prisma.partnership.findMany({
+    where: {
+      seasonId,
+      status: 'INCOMPLETE',
+    },
+    select: { captainId: true },
+  });
+  const incompletePartnershipCaptainIds = incompletePairs.map((p) => p.captainId);
+  console.log(`🔍 ${incompletePartnershipCaptainIds.length} players with INCOMPLETE partnerships`);
+
   // Build gender filter based on category
   // Note: User gender is stored as lowercase ('male', 'female') in the database
   // Category gender is stored as uppercase ('MALE', 'FEMALE', 'MIXED') as enum values
@@ -379,7 +390,7 @@ export async function getAvailablePlayersForSeason(
     });
   });
 
-  // Add isFriend flag and questionnaire status to each player
+  // Add isFriend flag, questionnaire status, and INCOMPLETE partnership flag to each player
   const playersWithFriendship = playersWithDetails.map(player => {
     const questionnaireStatus = questionnaireStatusMap.get(player.id);
     return {
@@ -391,7 +402,8 @@ export async function getAvailablePlayersForSeason(
         startedAt: null,
         completedAt: null
       },
-      seasonSport: seasonSport // Include season sport for frontend use
+      seasonSport: seasonSport, // Include season sport for frontend use
+      hasIncompletePartnership: incompletePartnershipCaptainIds.includes(player.id), // Flag for players with INCOMPLETE partnership
     };
   });
 

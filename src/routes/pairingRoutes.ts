@@ -10,6 +10,9 @@ import {
   dissolvePartnership,
   getActivePartnership,
   getPartnershipStatus,
+  inviteReplacementPartner,
+  acceptReplacementInvite,
+  getEligibleReplacementPartners,
 } from '../controllers/pairingController';
 import {
   sendFriendRequestHandler,
@@ -47,6 +50,13 @@ pairingRouter.get('/partnerships', getUserPartnerships);
 pairingRouter.post('/partnership/:partnershipId/dissolve', dissolvePartnership);
 pairingRouter.get('/partnership/active/:seasonId', getActivePartnership);
 pairingRouter.get('/partnership/:partnershipId/status', getPartnershipStatus);
+
+// ==========================================
+// PARTNER REPLACEMENT ROUTES (NEW)
+// ==========================================
+pairingRouter.post('/partnership/:partnershipId/invite-replacement', inviteReplacementPartner);
+pairingRouter.post('/partnership/:partnershipId/accept-replacement/:requestId', acceptReplacementInvite);
+pairingRouter.get('/partnership/:partnershipId/eligible-partners', getEligibleReplacementPartners);
 
 // ==========================================
 // FRIENDSHIP ROUTES (NEW)

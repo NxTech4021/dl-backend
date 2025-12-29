@@ -246,6 +246,10 @@ export const sendSeasonInvitation = async (data: {
 
 /**
  * Accept a season invitation and create season-specific partnership + memberships
+ *
+ * IMPORTANT: If the recipient (accepting user) has an INCOMPLETE partnership,
+ * we complete that partnership instead of creating a new one.
+ * This preserves the recipient's captain status and standings.
  */
 export const acceptSeasonInvitation = async (
   invitationId: string,
@@ -268,7 +272,7 @@ export const acceptSeasonInvitation = async (
       return { success: false, message: 'Invitation is not pending' };
     }
 
-      // Transaction with Serializable isolation: Update invitation + Create partnership
+      // Transaction with Serializable isolation: Update invitation + Create/Complete partnership
       // Note: Season memberships are NOT created here - they are created when the team captain registers the team
       const result = await prisma.$transaction(async (tx) => {
         // Check expiry inside transaction
@@ -287,7 +291,7 @@ export const acceptSeasonInvitation = async (
               { captainId: invitation.senderId, seasonId: invitation.seasonId },
               { partnerId: invitation.senderId, seasonId: invitation.seasonId }
             ],
-            status: 'ACTIVE'
+            status: { in: ['ACTIVE', 'INCOMPLETE'] }
           }
         });
 
@@ -295,7 +299,114 @@ export const acceptSeasonInvitation = async (
           throw new Error('Sender already has a partnership in this season');
         }
 
-        // Check if recipient doesn't have a partnership (INSIDE transaction to prevent race condition)
+        // Check if recipient has an INCOMPLETE partnership (they need a new partner)
+        const recipientIncompletePartnership = await tx.partnership.findFirst({
+          where: {
+            captainId: userId,  // Recipient must be captain of INCOMPLETE partnership
+            seasonId: invitation.seasonId,
+            status: 'INCOMPLETE'
+          },
+          include: {
+            captain: {
+              select: {
+                id: true,
+                name: true,
+                username: true,
+                displayUsername: true,
+                image: true,
+                area: true,
+                gender: true,
+              }
+            },
+            season: {
+              select: {
+                id: true,
+                name: true
+              }
+            }
+          }
+        });
+
+        if (recipientIncompletePartnership) {
+          // Complete the existing INCOMPLETE partnership
+          // Recipient stays captain, sender becomes their partner
+          console.log(`🔄 Completing INCOMPLETE partnership ${recipientIncompletePartnership.id} with sender as partner`);
+
+          const updatedPartnership = await tx.partnership.update({
+            where: { id: recipientIncompletePartnership.id },
+            data: {
+              partnerId: invitation.senderId,
+              status: 'ACTIVE'
+            },
+            include: {
+              captain: {
+                select: {
+                  id: true,
+                  name: true,
+                  username: true,
+                  displayUsername: true,
+                  image: true,
+                  area: true,
+                  gender: true,
+                }
+              },
+              partner: {
+                select: {
+                  id: true,
+                  name: true,
+                  username: true,
+                  displayUsername: true,
+                  image: true,
+                  area: true,
+                  gender: true,
+                }
+              },
+              season: {
+                select: {
+                  id: true,
+                  name: true
+                }
+              }
+            }
+          });
+
+          // Create or update season membership for the new partner (sender)
+          // Note: SeasonMembership unique constraint is (userId, seasonId, divisionId)
+          const existingMembership = await tx.seasonMembership.findFirst({
+            where: {
+              userId: invitation.senderId,
+              seasonId: invitation.seasonId
+            }
+          });
+
+          if (existingMembership) {
+            await tx.seasonMembership.update({
+              where: { id: existingMembership.id },
+              data: { status: 'ACTIVE' }
+            });
+          } else {
+            await tx.seasonMembership.create({
+              data: {
+                userId: invitation.senderId,
+                seasonId: invitation.seasonId,
+                status: 'ACTIVE'
+              }
+            });
+          }
+
+          // Update invitation status
+          await tx.seasonInvitation.update({
+            where: { id: invitationId },
+            data: {
+              status: 'ACCEPTED',
+              respondedAt: new Date()
+            }
+          });
+
+          return updatedPartnership;
+        }
+
+        // Check if recipient has an ACTIVE partnership
         const recipientExistingPartnership = await tx.partnership.findFirst({
           where: {
             OR: [
@@ -323,7 +434,7 @@ export const acceptSeasonInvitation = async (
           }
         });
 
-        // Create partnership
+        // Create partnership (sender becomes captain, recipient becomes partner)
         const partnership = await tx.partnership.create({
           data: {
             captainId: invitation.senderId,
