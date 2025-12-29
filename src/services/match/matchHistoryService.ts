@@ -157,6 +157,7 @@ export class MatchHistoryService {
         matchDate: match.matchDate,
         location: match.location,
         venue: match.venue,
+        divisionId: match.divisionId, // Keep raw divisionId for rating lookup
         division: match.division ? {
           id: match.division.id,
           name: match.division.name,
@@ -247,8 +248,60 @@ export class MatchHistoryService {
       filteredMatches = processedMatches.filter(m => m.userOutcome === outcome);
     }
 
+    // Fetch rating changes for each match
+    const matchesWithRatingChanges = await Promise.all(
+      filteredMatches.map(async (match) => {
+        // Get rating change for this specific match and user
+        // Only query if match has a divisionId (league matches, not friendly)
+        let ratingChange = null;
+        if (match.divisionId) {
+          // First try to find any rating history for this match and user
+          ratingChange = await prisma.ratingHistory.findFirst({
+            where: {
+              matchId: match.id,
+              playerRating: {
+                userId,
+                divisionId: match.divisionId
+              }
+            },
+            select: {
+              ratingBefore: true,
+              ratingAfter: true,
+              delta: true
+            }
+          });
+
+          // If not found with division filter, try without it (for legacy data)
+          if (!ratingChange) {
+            ratingChange = await prisma.ratingHistory.findFirst({
+              where: {
+                matchId: match.id,
+                playerRating: {
+                  userId
+                }
+              },
+              select: {
+                ratingBefore: true,
+                ratingAfter: true,
+                delta: true
+              }
+            });
+          }
+
+          console.log(`[MatchHistory] Match ${match.id} - userId: ${userId}, divisionId: ${match.divisionId}, ratingChange:`, ratingChange);
+        } else {
+          console.log(`[MatchHistory] Match ${match.id} - No divisionId (friendly match)`);
+        }
+
+        return {
+          ...match,
+          ratingChange: ratingChange || null
+        };
+      })
+    );
+
     return {
-      matches: filteredMatches,
+      matches: matchesWithRatingChanges,
       total,
       page,
       limit,

@@ -274,6 +274,8 @@ export async function getUserDivisionAssignments(userId: string) {
           level: true,
           gameType: true,
           genderCategory: true,
+          seasonId: true,
+          leagueId: true,
           season: {
             select: {
               id: true,
@@ -281,6 +283,13 @@ export async function getUserDivisionAssignments(userId: string) {
               isActive: true,
               startDate: true,
               endDate: true
+            }
+          },
+          league: {
+            select: {
+              id: true,
+              name: true,
+              sportType: true
             }
           }
         }
