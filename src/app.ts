@@ -13,6 +13,8 @@ import { getApiPrefix } from "./config/network";
 import pinoHttp from "pino-http";
 import pino from "pino";
 
+console.log("RUNNINGGGG on PORT");
+
 // Configure pino for clean, concise logging
 const pinoLogger = pino({
   level: process.env.LOG_LEVEL || "info",
