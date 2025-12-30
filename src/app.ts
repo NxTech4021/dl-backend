@@ -12,8 +12,12 @@ import router from "./routes/index";
 import { getApiPrefix } from "./config/network";
 import pinoHttp from "pino-http";
 import pino from "pino";
-
-console.log("RUNNINGGGG on PORT");
+import {
+  securityHeaders,
+  sanitizeInput,
+  preventSQLInjection,
+  ipBlocker,
+} from "./middlewares/security";
 
 // Configure pino for clean, concise logging
 const pinoLogger = pino({
@@ -63,24 +67,18 @@ const httpLogger = pinoHttp({
     },
   },
 });
-import {
-  securityHeaders,
-  sanitizeInput,
-  preventSQLInjection,
-  ipBlocker,
-} from "./middlewares/security";
-// Rate limiters are commented out for development
-// import {
-//   generalLimiter,
-//   authLimiter,
-//   onboardingLimiter,
-// } from "./middlewares/rateLimiter";
 
 const app = express();
 
+console.log("1");
+
 app.set("trust proxy", 1);
 
+console.log("2");
+
 const httpServer = createServer(app);
+
+console.log("3");
 
 const io = socketHandler(httpServer);
 
