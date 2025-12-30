@@ -33,8 +33,6 @@ export function socketHandler(httpServer: HttpServer) {
     transports: ["websocket", "polling"],
   });
 
-  console.log("IO", io);
-
   console.log("🚀 Socket.IO server initialized");
 
   // Dual authentication middleware: Better Auth (web) OR x-user-id header (mobile)
