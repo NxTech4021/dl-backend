@@ -26,66 +26,66 @@ console.log("1");
 
 app.set("trust proxy", true);
 
-// Configure pino for clean, concise logging
-const pinoLogger = pino({
-  level: process.env.LOG_LEVEL || "info",
-  ...(process.env.NODE_ENV === "development" && {
-    transport: {
-      target: "pino-pretty",
-      options: {
-        colorize: true,
-        translateTime: "HH:MM:ss",
-        ignore: "pid,hostname",
-        singleLine: true,
-      },
-    },
-  }),
-});
+// // Configure pino for clean, concise logging
+// const pinoLogger = pino({
+//   level: process.env.LOG_LEVEL || "info",
+//   ...(process.env.NODE_ENV === "development" && {
+//     transport: {
+//       target: "pino-pretty",
+//       options: {
+//         colorize: true,
+//         translateTime: "HH:MM:ss",
+//         ignore: "pid,hostname",
+//         singleLine: true,
+//       },
+//     },
+//   }),
+// });
 
-// Configure pino-http middleware
-const httpLogger = pinoHttp({
-  logger: pinoLogger,
-  // Customize serializers to reduce log noise
-  serializers: {
-    req: (req) => ({
-      method: req.method,
-      url: req.url,
-    }),
-    res: (res) => ({
-      statusCode: res.statusCode,
-    }),
-  },
-  // Custom log level based on status code
-  customLogLevel: (_req, res, err) => {
-    if (res.statusCode >= 500 || err) return "error";
-    if (res.statusCode >= 400) return "warn";
-    if (res.statusCode >= 300) return "silent"; // Don't log redirects/304s
-    return "info";
-  },
-  // Skip logging for noisy endpoints
-  autoLogging: {
-    ignore: (req) => {
-      const url = req.url || "";
-      return (
-        url === "/health" ||
-        url === "/favicon.ico" ||
-        url.startsWith("/socket.io")
-      );
-    },
-  },
-});
+// // Configure pino-http middleware
+// const httpLogger = pinoHttp({
+//   logger: pinoLogger,
+//   // Customize serializers to reduce log noise
+//   serializers: {
+//     req: (req) => ({
+//       method: req.method,
+//       url: req.url,
+//     }),
+//     res: (res) => ({
+//       statusCode: res.statusCode,
+//     }),
+//   },
+//   // Custom log level based on status code
+//   customLogLevel: (_req, res, err) => {
+//     if (res.statusCode >= 500 || err) return "error";
+//     if (res.statusCode >= 400) return "warn";
+//     if (res.statusCode >= 300) return "silent"; // Don't log redirects/304s
+//     return "info";
+//   },
+//   // Skip logging for noisy endpoints
+//   autoLogging: {
+//     ignore: (req) => {
+//       const url = req.url || "";
+//       return (
+//         url === "/health" ||
+//         url === "/favicon.ico" ||
+//         url.startsWith("/socket.io")
+//       );
+//     },
+//   },
+// });
 
 // Initialize notification service with socket.io for real-time notifications
 
 // Apply security middlewares first
-console.log("DONE1");
+
 app.use(securityHeaders);
-console.log("DONE2");
+
 app.use(ipBlocker);
-console.log("DONE3");
+
 // app.use(generalLimiter); // Commented out for development
 app.use(sanitizeInput);
-console.log("DONE4");
+
 app.use(preventSQLInjection);
 // Request logging is now handled by pino-http with clean, concise output
 
@@ -148,7 +148,7 @@ app.all("/auth/{*any}", authHandler);
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
-app.use(httpLogger);
+// app.use(httpLogger);
 
 // NOW create server + socket
 const httpServer = createServer(app);
@@ -162,7 +162,7 @@ notificationService.setSocketIO(io);
 // Mount API routes with configurable prefix
 // Development: /api, Production: "" (nginx handles /api prefix)
 const apiPrefix = getApiPrefix();
-pinoLogger.info({ apiPrefix: apiPrefix || "/" }, "API routes mounted");
+// pinoLogger.info({ apiPrefix: apiPrefix || "/" }, "API routes mounted");
 // Mount router with the API prefix
 app.use(router);
 
