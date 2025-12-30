@@ -80,16 +80,20 @@ export const submitResult = async (req: Request, res: Response) => {
       isUnfinished: isUnfinished === true
     });
 
+    if (!match) {
+      return res.status(500).json({ error: 'Failed to submit result' });
+    }
+
     // Notify other participants about score submission
     try {
       const submitterName = req.user?.name || 'Opponent';
       const otherParticipants = await getOtherParticipants(id, userId);
-      
+
       if (otherParticipants.length > 0) {
         const notification = matchManagementNotifications.opponentSubmittedScore(
           submitterName
         );
-        
+
         await notificationService.createNotification({
           ...notification,
           userIds: otherParticipants,
@@ -145,11 +149,15 @@ export const confirmResult = async (req: Request, res: Response) => {
       evidenceUrl
     });
 
+    if (!match) {
+      return res.status(500).json({ error: 'Failed to confirm result' });
+    }
+
     // Send notification based on confirmation status
     try {
       const confirmerName = req.user?.name || 'Opponent';
       const otherParticipants = await getOtherParticipants(id, userId);
-      
+
       if (otherParticipants.length > 0) {
         if (confirmed) {
           // Score confirmed
@@ -227,6 +235,10 @@ export const submitWalkover = async (req: Request, res: Response) => {
       reason: reason as WalkoverReason,
       reasonDetail
     });
+
+    if (!match) {
+      return res.status(500).json({ error: 'Failed to submit walkover' });
+    }
 
     // Send walkover notifications to participants
     try {

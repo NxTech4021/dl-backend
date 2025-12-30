@@ -31,9 +31,8 @@ export {
 // League lifecycle notifications
 export {
   sendSeasonRegistrationConfirmed,
-  sendLeagueStartingSoonNotifications,
-  sendLeagueStartsTomorrowNotifications,
-  sendLeagueStartedWelcomeNotifications,
+  sendSeasonStartingSoonNotifications,
+  sendSeasonStartsTomorrowNotifications,
   sendFinalWeekAlertNotifications,
   sendLeagueEndedNotifications,
   sendLeagueWinnerAnnouncement,

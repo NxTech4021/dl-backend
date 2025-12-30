@@ -440,6 +440,14 @@ export class MatchScheduleService {
   }
 
   /**
+   * Request to reschedule a match
+   * STUB - Time slot feature not yet implemented
+   */
+  async requestReschedule(input: RequestRescheduleInput) {
+    throw new Error('Reschedule feature not yet implemented');
+  }
+
+  /**
    * Continue an unfinished match (reschedule for completion)
    * COMMENTED OUT - matchTimeSlot model doesn't exist in schema
    */

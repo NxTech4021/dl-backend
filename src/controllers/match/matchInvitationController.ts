@@ -129,6 +129,10 @@ export const createMatch = async (req: Request, res: Response) => {
       expiresInHours
     });
 
+    if (!match) {
+      return res.status(500).json({ error: 'Failed to create match' });
+    }
+
     console.log('🎯 [Match Creation] Match created, sending division notifications...', {
       matchId: match.id,
       divisionId,

@@ -674,6 +674,12 @@ export const registerPlayerToSeason = async (req: Request, res: Response) => {
       const captainId = partnership.captainId;
       const partnerId = partnership.partnerId;
 
+      if (!partnerId) {
+        return res.status(400).json(
+          new ApiResponse(false, 400, null, 'Partnership has no partner assigned')
+        );
+      }
+
       // If payLater is true (development only), set payment status to COMPLETED
       const paymentStatus = payLater === true ? PaymentStatus.COMPLETED : undefined;
 
@@ -765,12 +771,12 @@ export const registerPlayerToSeason = async (req: Request, res: Response) => {
       });
 
       // 🆕 Send registration confirmation notifications for both players
-      const season = result.memberships[0]?.season;
-      if (season) {
+      const seasonData = (result.memberships[0] as any)?.season;
+      if (seasonData) {
         try {
           const notificationData = leagueLifecycleNotifications.registrationConfirmed(
-            season.name,
-            `$${season.entryFee}`
+            seasonData.name,
+            `$${seasonData.entryFee}`
           );
 
           await notificationService.createNotification({
@@ -785,7 +791,7 @@ export const registerPlayerToSeason = async (req: Request, res: Response) => {
       }
 
       // ✅ Emit Socket.IO events to notify both captain and partner about team registration completion
-      if (req.io && season) {
+      if (req.io && seasonData) {
         try {
           // Notify both captain and partner about successful team registration
           const registrationData = {
@@ -795,13 +801,13 @@ export const registerPlayerToSeason = async (req: Request, res: Response) => {
               partnerId: partnerId,
               season: {
                 id: seasonId,
-                name: season.name
+                name: seasonData.name
               }
             },
             memberships: result.memberships,
             message: "Team registration completed successfully"
           };
-          
+
           req.io.to(captainId).emit('team_registration_completed', registrationData);
           req.io.to(partnerId).emit('team_registration_completed', registrationData);
           console.log(`📨 Socket.IO: Notified captain ${captainId} and partner ${partnerId} of team registration completion`);

@@ -331,24 +331,28 @@ export class FriendlyMatchService {
       }
     });
 
+    if (!fullMatch) {
+      throw new Error('Failed to retrieve created match');
+    }
+
     // Send friendly match posted notification (In-App)
     try {
       const matchDateFormatted = fullMatch.matchDate ? new Date(fullMatch.matchDate).toLocaleDateString() : 'TBD';
       const matchTimeFormatted = fullMatch.matchDate ? new Date(fullMatch.matchDate).toLocaleTimeString() : 'TBD';
       const venueText = fullMatch.venue || fullMatch.location || 'TBD';
-      
+
       const notification = matchManagementNotifications.friendlyMatchPosted(
         matchDateFormatted,
         matchTimeFormatted,
         venueText
       );
-      
+
       await this.notificationService.createNotification({
         ...notification,
         userIds: [createdById],
         matchId: fullMatch.id
       });
-      
+
       logger.info('Friendly match posted notification sent', { matchId: fullMatch.id, userId: createdById });
     } catch (notificationError) {
       logger.error('Failed to send friendly match posted notification', { matchId: fullMatch.id }, notificationError as Error);

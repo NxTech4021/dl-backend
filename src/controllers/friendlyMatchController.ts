@@ -133,6 +133,10 @@ export const createFriendlyMatch = async (req: Request, res: Response) => {
       requestRecipientId
     });
 
+    if (!match) {
+      return res.status(500).json({ error: 'Failed to create friendly match' });
+    }
+
     // Send notification for friendly match creation
     try {
       if (isRequest && requestRecipientId) {

@@ -257,6 +257,11 @@ export async function validateNoPartnerPendingRequest(
     ? partnership.partnerId
     : partnership.captainId;
 
+  // If no partner, no partner request possible
+  if (!partnerId) {
+    return { isValid: true };
+  }
+
   // Check for partner's pending withdrawal request
   const partnerPendingRequest = await prisma.withdrawalRequest.findFirst({
     where: {

@@ -817,8 +817,8 @@ export function scheduleTeamRegistrationReminder2h(): void {
 
             // Only send reminder if not registered
             if (!captainMembership) {
-              const partnerName = partnership.partner.name || partnership.partner.username || 'your partner';
-              
+              const partnerName = partnership.partner?.name || partnership.partner?.username || 'your partner';
+
               const notif = doublesNotifications.teamRegistrationReminder2h(
                 season.name || 'this league',
                 partnerName
@@ -1001,8 +1001,8 @@ export function scheduleRegistrationDeadlineCaptain(): void {
 
             // Only send reminder if not registered
             if (!captainMembership) {
-              const partnerName = partnership.partner.name || partnership.partner.username || 'your partner';
-              
+              const partnerName = partnership.partner?.name || partnership.partner?.username || 'your partner';
+
               const notif = doublesNotifications.registrationDeadlineCaptain(
                 season.name || 'this league',
                 partnerName

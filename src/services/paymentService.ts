@@ -33,10 +33,11 @@ export const createPayment = async (data: PaymentCreationData) => {
   return prisma.payment.create({
     data: {
       amount: data.amount,
-      paymentMethod: data.paymentMethod,
+      orderId: `ORD-${Date.now()}-${Math.random().toString(36).substring(7)}`,
+      ...(data.paymentMethod && { paymentMethod: data.paymentMethod }),
       status: status,
-      notes: data.notes,
-      paidAt: status === PaymentStatus.COMPLETED ? new Date() : undefined,
+      ...(data.notes && { notes: data.notes }),
+      ...(status === PaymentStatus.COMPLETED && { paidAt: new Date() }),
     },
   });
 };

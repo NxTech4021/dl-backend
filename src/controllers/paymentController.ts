@@ -79,6 +79,12 @@ export const getPaymentById = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
 
+    if (!id) {
+      return res.status(400).json(
+        new ApiResponse(false, 400, null, 'Payment ID is required')
+      );
+    }
+
     const payment = await prisma.payment.findUnique({
       where: { id },
       include: {
@@ -164,8 +170,15 @@ export const createPayment = async (req: Request, res: Response) => {
 export const updatePayment = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
+
+    if (!id) {
+      return res.status(400).json(
+        new ApiResponse(false, 400, null, 'Payment ID is required')
+      );
+    }
+
     const updateData = { ...req.body };
-    
+
     // Convert amount to number if provided
     if (updateData.amount) {
       updateData.amount = parseFloat(updateData.amount);
@@ -201,6 +214,12 @@ export const markPaymentAsPaid = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
 
+    if (!id) {
+      return res.status(400).json(
+        new ApiResponse(false, 400, null, 'Payment ID is required')
+      );
+    }
+
     // Use service for business logic
     const updatedPayment = await paymentService.markPaymentAsPaid(id);
     
@@ -223,6 +242,12 @@ export const markPaymentAsPaid = async (req: Request, res: Response) => {
 export const deletePayment = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
+
+    if (!id) {
+      return res.status(400).json(
+        new ApiResponse(false, 400, null, 'Payment ID is required')
+      );
+    }
 
     // Use service for business logic
     await paymentService.deletePayment(id);
@@ -543,15 +568,15 @@ async function updatePaymentFromGateway(
       (payload.tranID as string) ||
       (payload.transaction_id as string) ||
       payment.fiuuTransactionId ||
-      undefined,
-    fiuuChannel: (payload.channel as string) || payment.fiuuChannel || undefined,
+      null,
+    fiuuChannel: (payload.channel as string) || payment.fiuuChannel || null,
     fiuuStatusCode:
-      (payload.status as string) || (payload.stat as string) || payment.fiuuStatusCode || undefined,
+      (payload.status as string) || (payload.stat as string) || payment.fiuuStatusCode || null,
     fiuuMessage:
       (payload.errdesc as string) ||
       (payload.error_desc as string) ||
       payment.fiuuMessage ||
-      undefined,
+      null,
     verificationHash: verified ? "VERIFIED" : "UNVERIFIED",
     metadata,
   };

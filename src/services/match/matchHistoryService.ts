@@ -756,7 +756,7 @@ export class MatchHistoryService {
                   team2Games: s.team2Games ?? s.player2Games ?? s.team2Points ?? s.player2Points ?? s.player2 ?? 0,
                   team1Tiebreak: s.team1Tiebreak ?? s.player1Tiebreak ?? s.tiebreak?.player1 ?? null,
                   team2Tiebreak: s.team2Tiebreak ?? s.player2Tiebreak ?? s.tiebreak?.player2 ?? null,
-                  hasTiebreak: s.hasTiebreak ?? !!s.tiebreak ?? false
+                  hasTiebreak: s.hasTiebreak ?? (s.tiebreak ? true : false)
                 }));
               } catch (e) {
                 return [];

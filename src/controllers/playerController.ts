@@ -26,6 +26,7 @@ interface UpdatePlayerProfileBody {
   image?: string;
   phoneNumber?: string;
   bio?: string;
+  dateOfBirth?: string;
 }
 
 interface ChangePlayerPasswordBody {

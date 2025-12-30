@@ -280,9 +280,10 @@ export async function getPlayerRatingHistory(
 
       // For backwards compatibility: set adversary to first opponent or combined names
       if (opponents.length > 0) {
-        if (opponents.length === 1) {
-          adversary = opponents[0].name;
-          adversaryImage = opponents[0].image;
+        const firstOpponent = opponents[0];
+        if (opponents.length === 1 && firstOpponent) {
+          adversary = firstOpponent.name;
+          adversaryImage = firstOpponent.image;
         } else {
           // Combine opponent names for doubles
           adversary = opponents.map(o => o.name).join(' & ');

@@ -178,8 +178,8 @@ export async function notifySeasonRegistrationOpen(
     }
 
     const registrationNotif = notificationTemplates.league.newSeasonAnnouncement(
-      1, // seasonNumber - would need to be passed in data
       data.seasonName,
+      'Location TBD', // location - would need to be passed in data
       'Tennis' // sport - would need to be passed in data
     );
 
