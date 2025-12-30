@@ -11,8 +11,8 @@ import { socketMiddleware } from "./middlewares/socketmiddleware";
 
 import router from "./routes/index";
 import { getApiPrefix } from "./config/network";
-import pinoHttp from "pino-http";
-import pino from "pino";
+// import pinoHttp from "pino-http";
+// import pino from "pino";
 import {
   securityHeaders,
   sanitizeInput,
@@ -21,8 +21,6 @@ import {
 } from "./middlewares/security";
 
 const app = express();
-
-console.log("1");
 
 app.set("trust proxy", true);
 
@@ -171,5 +169,5 @@ app.get("/health", (req, res) => {
   res.json({ status: "OK", message: "Server is running" });
 });
 
-export { app as httpServer, io };
+export { httpServer, io };
 export default app;
