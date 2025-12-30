@@ -79,7 +79,7 @@ const app = express();
 app.set("trust proxy", 1);
 
 const httpServer = createServer(app);
-console.log("DONEEEEE");
+
 const io = socketHandler(httpServer);
 
 // Initialize notification service with socket.io for real-time notifications
