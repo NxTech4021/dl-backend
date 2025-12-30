@@ -19,6 +19,16 @@ import {
   ipBlocker,
 } from "./middlewares/security";
 
+const app = express();
+
+console.log("1");
+
+app.set("trust proxy", true);
+
+console.log("2");
+
+console.log("3");
+
 // Configure pino for clean, concise logging
 const pinoLogger = pino({
   level: process.env.LOG_LEVEL || "info",
@@ -67,16 +77,6 @@ const httpLogger = pinoHttp({
     },
   },
 });
-
-const app = express();
-
-console.log("1");
-
-app.set("trust proxy", true);
-
-console.log("2");
-
-console.log("3");
 
 // Initialize notification service with socket.io for real-time notifications
 
