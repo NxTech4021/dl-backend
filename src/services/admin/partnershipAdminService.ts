@@ -53,6 +53,14 @@ export interface WithdrawalRequestAdmin {
       id: string;
       name: string;
     } | null;
+    // Standing data for the partnership
+    standing: {
+      rank: number;
+      wins: number;
+      losses: number;
+      matchesPlayed: number;
+      totalInDivision: number;
+    } | null;
     // Successor partnership (INCOMPLETE created after dissolution)
     successors: {
       id: string;
@@ -105,6 +113,14 @@ export interface DissolvedPartnershipLifecycle {
   division: {
     id: string;
     name: string;
+  } | null;
+  // Standing data for the partnership (may be transferred to successor)
+  standing: {
+    rank: number;
+    wins: number;
+    losses: number;
+    matchesPlayed: number;
+    totalInDivision: number;
   } | null;
   // Withdrawal request that caused dissolution
   withdrawalRequest: {
@@ -226,6 +242,16 @@ export async function getAllWithdrawalRequests(filters?: {
               name: true,
             },
           },
+          divisionStandings: {
+            select: {
+              rank: true,
+              wins: true,
+              losses: true,
+              matchesPlayed: true,
+              divisionId: true,
+            },
+            take: 1,
+          },
           successors: {
             where: {
               status: { in: ["INCOMPLETE", "ACTIVE"] },
@@ -258,7 +284,40 @@ export async function getAllWithdrawalRequests(filters?: {
     },
   });
 
-  return requests as WithdrawalRequestAdmin[];
+  // Transform to add standing data with totalInDivision
+  const requestsWithStandings = await Promise.all(
+    requests.map(async (request) => {
+      let standing = null;
+      if (request.partnership?.divisionStandings?.[0]) {
+        const divisionStanding = request.partnership.divisionStandings[0];
+        // Count total standings in the same division
+        const totalInDivision = divisionStanding.divisionId
+          ? await prisma.divisionStanding.count({
+              where: { divisionId: divisionStanding.divisionId },
+            })
+          : 0;
+        standing = {
+          rank: divisionStanding.rank,
+          wins: divisionStanding.wins,
+          losses: divisionStanding.losses,
+          matchesPlayed: divisionStanding.matchesPlayed,
+          totalInDivision,
+        };
+      }
+      return {
+        ...request,
+        partnership: request.partnership
+          ? {
+              ...request.partnership,
+              standing,
+              divisionStandings: undefined, // Remove raw data
+            }
+          : null,
+      };
+    })
+  );
+
+  return requestsWithStandings as WithdrawalRequestAdmin[];
 }
 
 /**
@@ -295,10 +354,16 @@ export async function getWithdrawalRequestStats(): Promise<WithdrawalRequestStat
 export async function getDissolvedPartnerships(filters?: {
   seasonId?: string;
   search?: string;
+  status?: "DISSOLVED" | "EXPIRED";
 }): Promise<DissolvedPartnershipLifecycle[]> {
-  const whereClause: any = {
-    status: { in: ["DISSOLVED", "EXPIRED"] },
-  };
+  const whereClause: any = {};
+
+  // Filter by specific status or default to both DISSOLVED and EXPIRED
+  if (filters?.status) {
+    whereClause.status = filters.status;
+  } else {
+    whereClause.status = { in: ["DISSOLVED", "EXPIRED"] };
+  }
 
   if (filters?.seasonId) {
     whereClause.seasonId = filters.seasonId;
@@ -359,6 +424,16 @@ export async function getDissolvedPartnerships(filters?: {
           name: true,
         },
       },
+      divisionStandings: {
+        select: {
+          rank: true,
+          wins: true,
+          losses: true,
+          matchesPlayed: true,
+          divisionId: true,
+        },
+        take: 1,
+      },
       withdrawalRequest: {
         include: {
           user: {
@@ -392,6 +467,16 @@ export async function getDissolvedPartnerships(filters?: {
               image: true,
             },
           },
+          divisionStandings: {
+            select: {
+              rank: true,
+              wins: true,
+              losses: true,
+              matchesPlayed: true,
+              divisionId: true,
+            },
+            take: 1,
+          },
         },
         orderBy: {
           createdAt: "desc",
@@ -403,11 +488,47 @@ export async function getDissolvedPartnerships(filters?: {
     },
   });
 
-  // Transform to match expected type (flatten withdrawalRequest array to single object)
-  return partnerships.map((p) => ({
-    ...p,
-    withdrawalRequest: p.withdrawalRequest[0] || null,
-  })) as DissolvedPartnershipLifecycle[];
+  // Transform to add standing data with totalInDivision
+  const partnershipsWithStandings = await Promise.all(
+    partnerships.map(async (p) => {
+      // Get standing - first check successor (standings may have been transferred)
+      let standing = null;
+      const successorWithStanding = p.successors.find(
+        (s) => s.divisionStandings && s.divisionStandings.length > 0
+      );
+      const divisionStanding =
+        successorWithStanding?.divisionStandings?.[0] ||
+        p.divisionStandings?.[0];
+
+      if (divisionStanding) {
+        const totalInDivision = divisionStanding.divisionId
+          ? await prisma.divisionStanding.count({
+              where: { divisionId: divisionStanding.divisionId },
+            })
+          : 0;
+        standing = {
+          rank: divisionStanding.rank,
+          wins: divisionStanding.wins,
+          losses: divisionStanding.losses,
+          matchesPlayed: divisionStanding.matchesPlayed,
+          totalInDivision,
+        };
+      }
+
+      return {
+        ...p,
+        standing,
+        divisionStandings: undefined, // Remove raw data
+        successors: p.successors.map((s) => ({
+          ...s,
+          divisionStandings: undefined, // Remove raw data from successors
+        })),
+        withdrawalRequest: p.withdrawalRequest[0] || null,
+      };
+    })
+  );
+
+  return partnershipsWithStandings as DissolvedPartnershipLifecycle[];
 }
 
 /**
@@ -449,6 +570,16 @@ export async function getDissolvedPartnershipById(
           name: true,
         },
       },
+      divisionStandings: {
+        select: {
+          rank: true,
+          wins: true,
+          losses: true,
+          matchesPlayed: true,
+          divisionId: true,
+        },
+        take: 1,
+      },
       withdrawalRequest: {
         include: {
           user: {
@@ -482,6 +613,16 @@ export async function getDissolvedPartnershipById(
               image: true,
             },
           },
+          divisionStandings: {
+            select: {
+              rank: true,
+              wins: true,
+              losses: true,
+              matchesPlayed: true,
+              divisionId: true,
+            },
+            take: 1,
+          },
         },
         orderBy: {
           createdAt: "desc",
@@ -494,8 +635,38 @@ export async function getDissolvedPartnershipById(
     return null;
   }
 
+  // Get standing - first check successor (standings may have been transferred)
+  let standing = null;
+  const successorWithStanding = partnership.successors.find(
+    (s) => s.divisionStandings && s.divisionStandings.length > 0
+  );
+  const divisionStanding =
+    successorWithStanding?.divisionStandings?.[0] ||
+    partnership.divisionStandings?.[0];
+
+  if (divisionStanding) {
+    const totalInDivision = divisionStanding.divisionId
+      ? await prisma.divisionStanding.count({
+          where: { divisionId: divisionStanding.divisionId },
+        })
+      : 0;
+    standing = {
+      rank: divisionStanding.rank,
+      wins: divisionStanding.wins,
+      losses: divisionStanding.losses,
+      matchesPlayed: divisionStanding.matchesPlayed,
+      totalInDivision,
+    };
+  }
+
   return {
     ...partnership,
+    standing,
+    divisionStandings: undefined,
+    successors: partnership.successors.map((s) => ({
+      ...s,
+      divisionStandings: undefined,
+    })),
     withdrawalRequest: partnership.withdrawalRequest[0] || null,
   } as DissolvedPartnershipLifecycle;
 }

@@ -17,11 +17,17 @@ export const getWithdrawalRequestsHandler = async (
   try {
     const { status, seasonId, search } = req.query;
 
-    const requests = await getAllWithdrawalRequests({
-      status: status as "PENDING" | "APPROVED" | "REJECTED" | undefined,
-      seasonId: seasonId as string | undefined,
-      search: search as string | undefined,
-    });
+    const filters: {
+      status?: "PENDING" | "APPROVED" | "REJECTED";
+      seasonId?: string;
+      search?: string;
+    } = {};
+
+    if (status) filters.status = status as "PENDING" | "APPROVED" | "REJECTED";
+    if (seasonId) filters.seasonId = seasonId as string;
+    if (search) filters.search = search as string;
+
+    const requests = await getAllWithdrawalRequests(filters);
 
     return res.status(200).json(requests);
   } catch (error) {
@@ -56,12 +62,19 @@ export const getDissolvedPartnershipsHandler = async (
   res: Response
 ) => {
   try {
-    const { seasonId, search } = req.query;
+    const { seasonId, search, status } = req.query;
 
-    const partnerships = await getDissolvedPartnerships({
-      seasonId: seasonId as string | undefined,
-      search: search as string | undefined,
-    });
+    const filters: {
+      seasonId?: string;
+      search?: string;
+      status?: "DISSOLVED" | "EXPIRED";
+    } = {};
+
+    if (seasonId) filters.seasonId = seasonId as string;
+    if (search) filters.search = search as string;
+    if (status) filters.status = status as "DISSOLVED" | "EXPIRED";
+
+    const partnerships = await getDissolvedPartnerships(filters);
 
     return res.status(200).json(partnerships);
   } catch (error) {
