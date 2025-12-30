@@ -8,7 +8,7 @@ import { notificationService } from "./services/notificationService";
 import { toNodeHandler } from "better-auth/node";
 import { auth } from "./lib/auth";
 import { socketMiddleware } from "./middlewares/socketmiddleware";
-console.log("DONE");
+
 import router from "./routes/index";
 import { getApiPrefix } from "./config/network";
 import pinoHttp from "pino-http";
@@ -83,7 +83,7 @@ app.use(ipBlocker);
 // app.use(generalLimiter); // Commented out for development
 app.use(sanitizeInput);
 app.use(preventSQLInjection);
-
+console.log("DONE");
 // Request logging is now handled by pino-http with clean, concise output
 
 // Set up CORS
