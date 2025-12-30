@@ -78,12 +78,15 @@ const httpLogger = pinoHttp({
 // Initialize notification service with socket.io for real-time notifications
 
 // Apply security middlewares first
+console.log("DONE1");
 app.use(securityHeaders);
+console.log("DONE2");
 app.use(ipBlocker);
+console.log("DONE3");
 // app.use(generalLimiter); // Commented out for development
 app.use(sanitizeInput);
+console.log("DONE4");
 app.use(preventSQLInjection);
-console.log("DONE");
 // Request logging is now handled by pino-http with clean, concise output
 
 // Set up CORS
