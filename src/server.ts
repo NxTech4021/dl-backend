@@ -17,23 +17,23 @@ import { getMatchReminderService } from "./services/notification/matchReminderSe
 import { initializeNotificationJobs } from "./jobs/notificationJobs";
 import { getMatchInvitationService } from "./services/match/matchInvitationService";
 import { getMatchResultService } from "./services/match/matchResultService";
-import pino from "pino";
+// import pino from "pino";
 
-// Create server logger
-const log = pino({
-  level: process.env.LOG_LEVEL || "info",
-  ...(process.env.NODE_ENV === "development" && {
-    transport: {
-      target: "pino-pretty",
-      options: {
-        colorize: true,
-        translateTime: "HH:MM:ss",
-        ignore: "pid,hostname",
-        singleLine: true,
-      },
-    },
-  }),
-});
+// // Create server logger
+// const log = pino({
+//   level: process.env.LOG_LEVEL || "info",
+//   ...(process.env.NODE_ENV === "development" && {
+//     transport: {
+//       target: "pino-pretty",
+//       options: {
+//         colorize: true,
+//         translateTime: "HH:MM:ss",
+//         ignore: "pid,hostname",
+//         singleLine: true,
+//       },
+//     },
+//   }),
+// });
 
 // Configure timezone for Malaysia (UTC+8)
 dayjs.extend(utc);
@@ -43,15 +43,16 @@ dayjs.tz.setDefault("Asia/Kuala_Lumpur");
 const PORT = process.env.PORT || 3001;
 
 httpServer.listen(PORT, "0.0.0.0", () => {
-  log.info(
-    {
-      port: PORT,
-      env: process.env.NODE_ENV || "development",
-      dbConfigured: !!process.env.DATABASE_URL,
-      time: dayjs().tz("Asia/Kuala_Lumpur").format("YYYY-MM-DD HH:mm:ss"),
-    },
-    "Server started"
-  );
+  console.log("RUNNING");
+  // log.info(
+  //   {
+  //     port: PORT,
+  //     env: process.env.NODE_ENV || "development",
+  //     dbConfigured: !!process.env.DATABASE_URL,
+  //     time: dayjs().tz("Asia/Kuala_Lumpur").format("YYYY-MM-DD HH:mm:ss"),
+  //   },
+  //   "Server started"
+  // );
 });
 
 // ==========================================
