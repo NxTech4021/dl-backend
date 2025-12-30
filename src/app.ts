@@ -80,6 +80,7 @@ app.set("trust proxy", 1);
 
 const httpServer = createServer(app);
 const io = socketHandler(httpServer);
+console.log("IO", io);
 
 // Initialize notification service with socket.io for real-time notifications
 notificationService.setSocketIO(io);

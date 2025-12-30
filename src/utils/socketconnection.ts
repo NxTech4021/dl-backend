@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-misused-promises */
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
 //@ts-nocheck
 import { Server as HttpServer } from "http";
 import { Server as SocketIOServer } from "socket.io";
