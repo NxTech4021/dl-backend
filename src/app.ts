@@ -4,10 +4,8 @@ import cors from "cors";
 import { createServer } from "http";
 import cookieParser from "cookie-parser";
 import { socketHandler } from "./utils/socketconnection";
-import {
-  notificationService,
-  NotificationService,
-} from "./services/notificationService";
+import { notificationService } from "./services/notificationService";
+console.log("DONE");
 import { toNodeHandler } from "better-auth/node";
 import { auth } from "./lib/auth";
 import { socketMiddleware } from "./middlewares/socketmiddleware";
