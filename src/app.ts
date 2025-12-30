@@ -4,7 +4,7 @@ import cors from "cors";
 import { createServer } from "http";
 import cookieParser from "cookie-parser";
 import { socketHandler } from "./utils/socketconnection";
-import { notificationService } from "./services/notificationService";
+import { NotificationService } from "./services/notificationService";
 import { toNodeHandler } from "better-auth/node";
 import { auth } from "./lib/auth";
 import { socketMiddleware } from "./middlewares/socketmiddleware";
@@ -148,11 +148,12 @@ app.use(httpLogger);
 
 // NOW create server + socket
 const httpServer = createServer(app);
-console.log('2')
+console.log("2");
 const io = socketHandler(httpServer);
-console.log('3')
+console.log("3");
 app.use(socketMiddleware(io));
 
+const notificationService = new NotificationService();
 notificationService.setSocketIO(io);
 
 // Mount API routes with configurable prefix
