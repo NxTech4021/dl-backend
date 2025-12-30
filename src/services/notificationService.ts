@@ -9,16 +9,19 @@ import {
   NotificationStats,
   NotificationType,
 } from "../types/notificationTypes";
-import { 
-  getNotificationDeliveryType, 
+import {
+  getNotificationDeliveryType,
   shouldSendPushNotification,
-  NotificationDeliveryType 
+  NotificationDeliveryType,
 } from "../types/notificationDeliveryTypes";
 import { AppError } from "../utils/errors";
 import { logger } from "../utils/logger";
 import { sendEmail as sendEmailViaResend } from "../config/nodemailer";
 import { Expo, ExpoPushMessage } from "expo-server-sdk";
-import { isPushEnabled, isEmailEnabled } from "./notification/notificationPreferenceService";
+import {
+  isPushEnabled,
+  isEmailEnabled,
+} from "./notification/notificationPreferenceService";
 
 // Initialize Expo SDK for push notifications
 const expo = new Expo();
@@ -83,9 +86,9 @@ export class NotificationService {
       } = data;
 
       // Conditions for push & in-app
-      const deliveryType = type ? getNotificationDeliveryType(type) : 'UNKNOWN';
+      const deliveryType = type ? getNotificationDeliveryType(type) : "UNKNOWN";
       const willSendPush = type ? shouldSendPushNotification(type) : false;
-      
+
       // console.log('🔔 [NotificationService] Creating notification:', {
       //   type,
       //   category,
@@ -108,8 +111,12 @@ export class NotificationService {
       });
       if (users.length !== userIdArray.length) {
         const existingIds = users.map((u) => u.id);
-        const missingIds = userIdArray.filter((id) => !existingIds.includes(id));
-        console.warn('⚠️  [NotificationService] Some users not found:', { missingIds });
+        const missingIds = userIdArray.filter(
+          (id) => !existingIds.includes(id)
+        );
+        console.warn("⚠️  [NotificationService] Some users not found:", {
+          missingIds,
+        });
         logger.warn("Some users not found", { missingIds });
       }
       const validUserIds = users.map((u) => u.id);
@@ -119,10 +126,10 @@ export class NotificationService {
         // Send push notifications to users who have push enabled
         // This runs in the background to not block the response
         this.sendPushNotificationsToUsers(validUserIds, {
-          title: title ?? 'Deuce League',
+          title: title ?? "Deuce League",
           body: message,
           data: {
-            type: type ?? '',
+            type: type ?? "",
             category: category,
             ...Object.fromEntries(
               Object.entries(entityIds)
@@ -130,8 +137,12 @@ export class NotificationService {
                 .map(([k, v]) => [k, String(v)])
             ),
           },
-        }).catch(error => {
-          logger.error("Failed to send push notifications", { type, category }, error as Error);
+        }).catch((error) => {
+          logger.error(
+            "Failed to send push notifications",
+            { type, category },
+            error as Error
+          );
         });
       }
 
@@ -147,20 +158,20 @@ export class NotificationService {
         // Filter out invalid Prisma fields and convert entity IDs to proper format
         const validEntityIds: Record<string, any> = {};
         Object.entries(entityIds).forEach(([key, value]) => {
-          if (value !== undefined && key !== 'isPush' && key !== 'skipPush') {
-            if (key === 'threadId' && value) {
+          if (value !== undefined && key !== "isPush" && key !== "skipPush") {
+            if (key === "threadId" && value) {
               createData.threadId = value;
-            } else if (key === 'divisionId' && value) {
+            } else if (key === "divisionId" && value) {
               createData.divisionId = value;
-            } else if (key === 'seasonId' && value) {
+            } else if (key === "seasonId" && value) {
               createData.seasonId = value;
-            } else if (key === 'matchId' && value) {
+            } else if (key === "matchId" && value) {
               createData.matchId = value;
-            } else if (key === 'partnershipId' && value) {
+            } else if (key === "partnershipId" && value) {
               createData.partnershipId = value;
-            } else if (key === 'pairRequestId' && value) {
+            } else if (key === "pairRequestId" && value) {
               createData.pairRequestId = value;
-            } else if (key === 'withdrawalRequestId' && value) {
+            } else if (key === "withdrawalRequestId" && value) {
               createData.withdrawalRequestId = value;
             }
             validEntityIds[key] = value;
@@ -182,7 +193,10 @@ export class NotificationService {
 
         // Send real-time notifications via Socket.IO
         if (this.io) {
-          console.log('📡 [NotificationService] Emitting via Socket.IO to users:', validUserIds);
+          console.log(
+            "📡 [NotificationService] Emitting via Socket.IO to users:",
+            validUserIds
+          );
           this.emitNotifications(validUserIds, {
             id: notification.id,
             title: notification.title ?? undefined,
@@ -227,7 +241,10 @@ export class NotificationService {
       // If PUSH only, return empty array (no in-app notification created)
       return [];
     } catch (error) {
-      console.error('❌ [NotificationService] Error creating notification:', error);
+      console.error(
+        "❌ [NotificationService] Error creating notification:",
+        error
+      );
       logger.error("Error creating notification", {}, error as Error);
       throw error instanceof AppError
         ? error
@@ -308,12 +325,20 @@ export class NotificationService {
           createdAt: un.notification.createdAt,
           readAt: un.readAt || undefined,
           metadata: {
-            ...(un.notification.metadata as Record<string, any> || {}),
+            ...((un.notification.metadata as Record<string, any>) || {}),
             // Include entity IDs from separate DB columns for navigation
-            ...(un.notification.matchId && { matchId: un.notification.matchId }),
-            ...(un.notification.threadId && { threadId: un.notification.threadId }),
-            ...(un.notification.seasonId && { seasonId: un.notification.seasonId }),
-            ...(un.notification.divisionId && { divisionId: un.notification.divisionId }),
+            ...(un.notification.matchId && {
+              matchId: un.notification.matchId,
+            }),
+            ...(un.notification.threadId && {
+              threadId: un.notification.threadId,
+            }),
+            ...(un.notification.seasonId && {
+              seasonId: un.notification.seasonId,
+            }),
+            ...(un.notification.divisionId && {
+              divisionId: un.notification.divisionId,
+            }),
           },
         })
       );
@@ -459,8 +484,12 @@ export class NotificationService {
       const [total, unread, archived, byTypeData, byCategoryData] =
         await Promise.all([
           this.prisma.userNotification.count({ where: { userId } }),
-          this.prisma.userNotification.count({ where: { userId, read: false } }),
-          this.prisma.userNotification.count({ where: { userId, archive: true } }),
+          this.prisma.userNotification.count({
+            where: { userId, read: false },
+          }),
+          this.prisma.userNotification.count({
+            where: { userId, archive: true },
+          }),
           // Group by notification type
           this.prisma.userNotification.findMany({
             where: { userId },
@@ -616,13 +645,13 @@ export class NotificationService {
     });
 
     if (pushTokens.length === 0) {
-      console.log('No active push tokens found for users:', userIds);
+      console.log("No active push tokens found for users:", userIds);
       return;
     }
 
     const messages = pushTokens.map((tokenRecord) => ({
       to: tokenRecord.token,
-      sound: 'default',
+      sound: "default",
       title: pushData.title,
       body: pushData.body,
       data: pushData.data || {},
@@ -636,11 +665,11 @@ export class NotificationService {
         const ticketChunk = await expo.sendPushNotificationsAsync(chunk);
         tickets.push(...ticketChunk);
       } catch (error) {
-        console.error('Error sending push notification chunk:', error);
+        console.error("Error sending push notification chunk:", error);
       }
     }
 
-    console.log('Push notifications sent successfully:', tickets);
+    console.log("Push notifications sent successfully:", tickets);
   }
 
   /**
@@ -688,7 +717,10 @@ export class NotificationService {
             // If device not registered, deactivate token
             if (ticket.details?.error === "DeviceNotRegistered") {
               await this.deactivatePushToken(token);
-              logger.warn("Token deactivated due to DeviceNotRegistered error", { token });
+              logger.warn(
+                "Token deactivated due to DeviceNotRegistered error",
+                { token }
+              );
             }
           } else {
             logger.info("Push notification sent successfully", {
@@ -748,7 +780,9 @@ export class NotificationService {
           return enabled ? userId : null;
         })
       );
-      const eligibleUserIds = usersWithPushEnabled.filter((id): id is string => id !== null);
+      const eligibleUserIds = usersWithPushEnabled.filter(
+        (id): id is string => id !== null
+      );
 
       if (eligibleUserIds.length === 0) {
         logger.debug("No users with push notifications enabled", { userIds });
@@ -765,7 +799,9 @@ export class NotificationService {
       });
 
       if (tokens.length === 0) {
-        logger.debug("No active push tokens found", { userIds: eligibleUserIds });
+        logger.debug("No active push tokens found", {
+          userIds: eligibleUserIds,
+        });
         return;
       }
 
@@ -786,7 +822,11 @@ export class NotificationService {
         )
       );
     } catch (error) {
-      logger.error("Error sending push notifications to users", { userIds }, error as Error);
+      logger.error(
+        "Error sending push notifications to users",
+        { userIds },
+        error as Error
+      );
     }
   }
 
@@ -841,4 +881,5 @@ export class NotificationService {
   }
 }
 
-// export const notificationService = new NotificationService();
+console.log("NOTIFICATION SERVICE IS RUNNING");
+export const notificationService = new NotificationService();
