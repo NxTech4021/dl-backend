@@ -1,63 +1,63 @@
-// // import app from "./app";
-// import dotenv from "dotenv";
-// dotenv.config();
+// import app from "./app";
+import dotenv from "dotenv";
+dotenv.config();
 
-// import { httpServer } from "./app";
+import { httpServer } from "./app";
 
-// import cron from "node-cron";
-// import dayjs from "dayjs";
-// import utc from "dayjs/plugin/utc.js";
-// import timezone from "dayjs/plugin/timezone.js";
-// import { expireOldSeasonInvitations } from "./services/seasonInvitationService";
-// import { expireOldRequests } from "./services/pairingService";
-// import { getInactivityService } from "./services/inactivityService";
-// import { NotificationService } from "./services/notificationService";
-// import { INACTIVITY_CONFIG } from "./config/inactivity.config";
-// import { getMatchReminderService } from "./services/notification/matchReminderService";
-// import { initializeNotificationJobs } from "./jobs/notificationJobs";
-// import { getMatchInvitationService } from "./services/match/matchInvitationService";
-// import { getMatchResultService } from "./services/match/matchResultService";
-// // import pino from "pino";
+import cron from "node-cron";
+import dayjs from "dayjs";
+import utc from "dayjs/plugin/utc.js";
+import timezone from "dayjs/plugin/timezone.js";
+import { expireOldSeasonInvitations } from "./services/seasonInvitationService";
+import { expireOldRequests } from "./services/pairingService";
+import { getInactivityService } from "./services/inactivityService";
+import { NotificationService } from "./services/notificationService";
+import { INACTIVITY_CONFIG } from "./config/inactivity.config";
+import { getMatchReminderService } from "./services/notification/matchReminderService";
+import { initializeNotificationJobs } from "./jobs/notificationJobs";
+import { getMatchInvitationService } from "./services/match/matchInvitationService";
+import { getMatchResultService } from "./services/match/matchResultService";
+// import pino from "pino";
 
-// // // Create server logger
-// // const log = pino({
-// //   level: process.env.LOG_LEVEL || "info",
-// //   ...(process.env.NODE_ENV === "development" && {
-// //     transport: {
-// //       target: "pino-pretty",
-// //       options: {
-// //         colorize: true,
-// //         translateTime: "HH:MM:ss",
-// //         ignore: "pid,hostname",
-// //         singleLine: true,
-// //       },
-// //     },
-// //   }),
-// // });
-
-// // Configure timezone for Malaysia (UTC+8)
-// dayjs.extend(utc);
-// dayjs.extend(timezone);
-// dayjs.tz.setDefault("Asia/Kuala_Lumpur");
-
-// const PORT = process.env.PORT || 3001;
-
-// httpServer.listen(PORT, () => {
-//   console.log("Server started on port", PORT);
-//   // log.info(
-//   //   {
-//   //     port: PORT,
-//   //     env: process.env.NODE_ENV || "development",
-//   //     dbConfigured: !!process.env.DATABASE_URL,
-//   //     time: dayjs().tz("Asia/Kuala_Lumpur").format("YYYY-MM-DD HH:mm:ss"),
-//   //   },
-//   //   "Server started"
-//   // );
+// // Create server logger
+// const log = pino({
+//   level: process.env.LOG_LEVEL || "info",
+//   ...(process.env.NODE_ENV === "development" && {
+//     transport: {
+//       target: "pino-pretty",
+//       options: {
+//         colorize: true,
+//         translateTime: "HH:MM:ss",
+//         ignore: "pid,hostname",
+//         singleLine: true,
+//       },
+//     },
+//   }),
 // });
 
-// // ==========================================
-// // SCHEDULED TASKS (CRON JOBS)
-// // ==========================================
+// Configure timezone for Malaysia (UTC+8)
+dayjs.extend(utc);
+dayjs.extend(timezone);
+dayjs.tz.setDefault("Asia/Kuala_Lumpur");
+
+const PORT = process.env.PORT || 3001;
+
+httpServer.listen(PORT, () => {
+  console.log("Server started on port", PORT);
+  // log.info(
+  //   {
+  //     port: PORT,
+  //     env: process.env.NODE_ENV || "development",
+  //     dbConfigured: !!process.env.DATABASE_URL,
+  //     time: dayjs().tz("Asia/Kuala_Lumpur").format("YYYY-MM-DD HH:mm:ss"),
+  //   },
+  //   "Server started"
+  // );
+});
+
+// ==========================================
+// SCHEDULED TASKS (CRON JOBS)
+// ==========================================
 
 // // Run daily at midnight to expire old invitations and pair requests
 // cron.schedule("0 0 * * *", async () => {
@@ -163,8 +163,3 @@
 // log.info(
 //   "Cron jobs scheduled: expiration(daily), inactivity(daily), reminders/invitations/auto-approve(hourly)"
 // );
-
-import express from "express";
-const app = express();
-app.get("/health", (_, res) => res.json({ status: "OK" }));
-app.listen(3001, () => console.log("Server running on 3001"));
