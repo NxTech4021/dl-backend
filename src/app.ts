@@ -25,10 +25,6 @@ console.log("1");
 
 app.set("trust proxy", true);
 
-console.log("2");
-
-console.log("3");
-
 // Configure pino for clean, concise logging
 const pinoLogger = pino({
   level: process.env.LOG_LEVEL || "info",
@@ -152,8 +148,9 @@ app.use(httpLogger);
 
 // NOW create server + socket
 const httpServer = createServer(app);
+console.log('2')
 const io = socketHandler(httpServer);
-
+console.log('3')
 app.use(socketMiddleware(io));
 
 notificationService.setSocketIO(io);
