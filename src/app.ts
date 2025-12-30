@@ -72,18 +72,13 @@ const app = express();
 
 console.log("1");
 
-app.set("trust proxy", 1);
+app.set("trust proxy", true);
 
 console.log("2");
 
-const httpServer = createServer(app);
-
 console.log("3");
 
-const io = socketHandler(httpServer);
-
 // Initialize notification service with socket.io for real-time notifications
-notificationService.setSocketIO(io);
 
 // Apply security middlewares first
 app.use(securityHeaders);
@@ -119,13 +114,14 @@ app.use(
     ], // Allow nginx proxy, direct access, and local IP
     credentials: true,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: [
-      "Content-Type",
-      "Authorization",
-      "X-Requested-With",
-      "expo-origin",
-      "Cache-Control",
-    ],
+    allowedHeaders: ["*"],
+    // allowedHeaders: [
+    //   "Content-Type",
+    //   "Authorization",
+    //   "X-Requested-With",
+    //   "expo-origin",
+    //   "Cache-Control",
+    // ],
   })
 );
 
@@ -154,7 +150,13 @@ app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 app.use(httpLogger);
 
+// NOW create server + socket
+const httpServer = createServer(app);
+const io = socketHandler(httpServer);
+
 app.use(socketMiddleware(io));
+
+notificationService.setSocketIO(io);
 
 // Mount API routes with configurable prefix
 // Development: /api, Production: "" (nginx handles /api prefix)
