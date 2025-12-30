@@ -719,14 +719,49 @@ export class MatchHistoryService {
         team1Score: match.team1Score,
         team2Score: match.team2Score,
         outcome: match.outcome,
-        setScores: match.scores.map(s => ({
-          setNumber: s.setNumber,
-          team1Games: s.player1Games,
-          team2Games: s.player2Games,
-          team1Tiebreak: s.player1Tiebreak,
-          team2Tiebreak: s.player2Tiebreak,
-          hasTiebreak: s.hasTiebreak
-        })),
+        // Use scores relation if available, otherwise fall back to JSON setScores field
+        setScores: match.scores.length > 0
+          ? match.scores.map(s => ({
+              setNumber: s.setNumber,
+              team1Games: s.player1Games,
+              team2Games: s.player2Games,
+              team1Tiebreak: s.player1Tiebreak,
+              team2Tiebreak: s.player2Tiebreak,
+              hasTiebreak: s.hasTiebreak
+            }))
+          : (() => {
+              // Parse JSON setScores - can be string, object with sets, or array
+              if (!match.setScores) return [];
+              try {
+                const parsedScores = typeof match.setScores === 'string'
+                  ? JSON.parse(match.setScores)
+                  : match.setScores;
+
+                // Handle both formats:
+                // 1. { sets: [...] } - nested structure from seed data
+                // 2. [...] - direct array format
+                let setsArray: any[] = [];
+                if (Array.isArray(parsedScores)) {
+                  setsArray = parsedScores;
+                } else if (parsedScores?.sets && Array.isArray(parsedScores.sets)) {
+                  setsArray = parsedScores.sets;
+                }
+
+                return setsArray.map((s: any, index: number) => ({
+                  setNumber: s.setNumber ?? s.gameNumber ?? index + 1,
+                  // Handle multiple field naming conventions:
+                  // Tennis/Padel: team1Games, player1Games, player1
+                  // Pickleball: team1Points, player1Points
+                  team1Games: s.team1Games ?? s.player1Games ?? s.team1Points ?? s.player1Points ?? s.player1 ?? 0,
+                  team2Games: s.team2Games ?? s.player2Games ?? s.team2Points ?? s.player2Points ?? s.player2 ?? 0,
+                  team1Tiebreak: s.team1Tiebreak ?? s.player1Tiebreak ?? s.tiebreak?.player1 ?? null,
+                  team2Tiebreak: s.team2Tiebreak ?? s.player2Tiebreak ?? s.tiebreak?.player2 ?? null,
+                  hasTiebreak: s.hasTiebreak ?? !!s.tiebreak ?? false
+                }));
+              } catch (e) {
+                return [];
+              }
+            })(),
         gameScores: match.pickleballScores.map(g => ({
           gameNumber: g.gameNumber,
           team1Points: g.player1Points,
