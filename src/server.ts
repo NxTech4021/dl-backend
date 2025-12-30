@@ -42,7 +42,7 @@ dayjs.tz.setDefault("Asia/Kuala_Lumpur");
 
 const PORT = process.env.PORT || 3001;
 
-httpServer.listen(PORT, () => {
+httpServer.listen(PORT, "0.0.0.0", () => {
   log.info(
     {
       port: PORT,
