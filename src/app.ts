@@ -132,10 +132,10 @@ const authHandler = (req: Request, res: Response) => {
   try {
     void toNodeHandler(auth)(req, res);
   } catch (error) {
-    pinoLogger.error(
-      { err: error, method: req.method, path: req.path },
-      "Auth handler error"
-    );
+    // pinoLogger.error(
+    //   { err: error, method: req.method, path: req.path },
+    //   "Auth handler error"
+    // );
     res.status(500).json({ error: "Authentication error" });
   }
 };
@@ -171,5 +171,5 @@ app.get("/health", (req, res) => {
   res.json({ status: "OK", message: "Server is running" });
 });
 
-export { httpServer, io };
+export { app as httpServer, io };
 export default app;
