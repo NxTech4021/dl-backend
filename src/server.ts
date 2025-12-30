@@ -20,14 +20,14 @@ import pino from "pino";
 
 // Create server logger
 const log = pino({
-  level: process.env.LOG_LEVEL || 'info',
-  ...(process.env.NODE_ENV === 'development' && {
+  level: process.env.LOG_LEVEL || "info",
+  ...(process.env.NODE_ENV === "development" && {
     transport: {
-      target: 'pino-pretty',
+      target: "pino-pretty",
       options: {
         colorize: true,
-        translateTime: 'HH:MM:ss',
-        ignore: 'pid,hostname',
+        translateTime: "HH:MM:ss",
+        ignore: "pid,hostname",
         singleLine: true,
       },
     },
@@ -37,17 +37,20 @@ const log = pino({
 // Configure timezone for Malaysia (UTC+8)
 dayjs.extend(utc);
 dayjs.extend(timezone);
-dayjs.tz.setDefault('Asia/Kuala_Lumpur');
+dayjs.tz.setDefault("Asia/Kuala_Lumpur");
 
 const PORT = process.env.PORT || 3001;
 
 httpServer.listen(PORT, "0.0.0.0", () => {
-  log.info({
-    port: PORT,
-    env: process.env.NODE_ENV || 'development',
-    dbConfigured: !!process.env.DATABASE_URL,
-    time: dayjs().tz('Asia/Kuala_Lumpur').format('YYYY-MM-DD HH:mm:ss'),
-  }, 'Server started');
+  log.info(
+    {
+      port: PORT,
+      env: process.env.NODE_ENV || "development",
+      dbConfigured: !!process.env.DATABASE_URL,
+      time: dayjs().tz("Asia/Kuala_Lumpur").format("YYYY-MM-DD HH:mm:ss"),
+    },
+    "Server started"
+  );
 });
 
 // ==========================================
@@ -59,9 +62,12 @@ cron.schedule("0 0 * * *", async () => {
   try {
     const expiredInvitations = await expireOldSeasonInvitations();
     const expiredRequests = await expireOldRequests();
-    log.info({ expiredInvitations, expiredRequests }, 'Cron: Expired old invitations');
+    log.info(
+      { expiredInvitations, expiredRequests },
+      "Cron: Expired old invitations"
+    );
   } catch (error) {
-    log.error({ err: error }, 'Cron: Failed to expire invitations');
+    log.error({ err: error }, "Cron: Failed to expire invitations");
   }
 });
 
@@ -71,9 +77,12 @@ cron.schedule(INACTIVITY_CONFIG.CRON_SCHEDULE, async () => {
     const notificationService = new NotificationService();
     const inactivityService = getInactivityService(notificationService);
     const results = await inactivityService.checkAndUpdateInactivity();
-    log.info({ markedInactive: results.markedInactive, warnings: results.warnings }, 'Cron: Inactivity check complete');
+    log.info(
+      { markedInactive: results.markedInactive, warnings: results.warnings },
+      "Cron: Inactivity check complete"
+    );
   } catch (error) {
-    log.error({ err: error }, 'Cron: Failed inactivity check');
+    log.error({ err: error }, "Cron: Failed inactivity check");
   }
 });
 
@@ -84,10 +93,16 @@ cron.schedule("0 * * * *", async () => {
     const matchReminderService = getMatchReminderService(notificationService);
     const results = await matchReminderService.sendUpcomingMatchReminders();
     if (results.remindersSent > 0) {
-      log.info({ matchesChecked: results.matchesChecked, remindersSent: results.remindersSent }, 'Cron: Match reminders sent');
+      log.info(
+        {
+          matchesChecked: results.matchesChecked,
+          remindersSent: results.remindersSent,
+        },
+        "Cron: Match reminders sent"
+      );
     }
   } catch (error) {
-    log.error({ err: error }, 'Cron: Failed match reminder check');
+    log.error({ err: error }, "Cron: Failed match reminder check");
   }
 });
 
@@ -95,18 +110,28 @@ cron.schedule("0 * * * *", async () => {
 cron.schedule("0 * * * *", async () => {
   try {
     const matchInvitationService = getMatchInvitationService();
-    const expirationResults = await matchInvitationService.checkExpiredInvitations();
-    const declinedResults = await matchInvitationService.handleFullyDeclinedMatches();
+    const expirationResults =
+      await matchInvitationService.checkExpiredInvitations();
+    const declinedResults =
+      await matchInvitationService.handleFullyDeclinedMatches();
 
-    const totalExpired = expirationResults.invitationsExpired + expirationResults.matchesMovedToDraft + declinedResults.matchesMovedToDraft;
+    const totalExpired =
+      expirationResults.invitationsExpired +
+      expirationResults.matchesMovedToDraft +
+      declinedResults.matchesMovedToDraft;
     if (totalExpired > 0) {
-      log.info({
-        invitationsExpired: expirationResults.invitationsExpired,
-        matchesMovedToDraft: expirationResults.matchesMovedToDraft + declinedResults.matchesMovedToDraft
-      }, 'Cron: Match invitation cleanup');
+      log.info(
+        {
+          invitationsExpired: expirationResults.invitationsExpired,
+          matchesMovedToDraft:
+            expirationResults.matchesMovedToDraft +
+            declinedResults.matchesMovedToDraft,
+        },
+        "Cron: Match invitation cleanup"
+      );
     }
   } catch (error) {
-    log.error({ err: error }, 'Cron: Failed match invitation check');
+    log.error({ err: error }, "Cron: Failed match invitation check");
   }
 });
 
@@ -117,14 +142,22 @@ cron.schedule("0 * * * *", async () => {
     const matchResultService = getMatchResultService(notificationService);
     const results = await matchResultService.autoApproveResults();
     if (results.autoApprovedCount > 0) {
-      log.info({ matchesChecked: results.matchesChecked, autoApproved: results.autoApprovedCount }, 'Cron: Auto-approved match results');
+      log.info(
+        {
+          matchesChecked: results.matchesChecked,
+          autoApproved: results.autoApprovedCount,
+        },
+        "Cron: Auto-approved match results"
+      );
     }
   } catch (error) {
-    log.error({ err: error }, 'Cron: Failed auto-approval check');
+    log.error({ err: error }, "Cron: Failed auto-approval check");
   }
 });
 
 // Initialize all notification jobs
 initializeNotificationJobs();
 
-log.info('Cron jobs scheduled: expiration(daily), inactivity(daily), reminders/invitations/auto-approve(hourly)');
+log.info(
+  "Cron jobs scheduled: expiration(daily), inactivity(daily), reminders/invitations/auto-approve(hourly)"
+);

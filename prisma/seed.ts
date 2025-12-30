@@ -45,7 +45,6 @@ import {
   User,
   Season,
   Division,
-  Admin,
   Match,
   TeamChangeRequestStatus,
   // New imports for 100% coverage
@@ -68,7 +67,9 @@ const prisma = new PrismaClient();
 // =============================================
 
 function randomDate(start: Date, end: Date): Date {
-  return new Date(start.getTime() + Math.random() * (end.getTime() - start.getTime()));
+  return new Date(
+    start.getTime() + Math.random() * (end.getTime() - start.getTime())
+  );
 }
 
 function randomElement<T>(arr: T[]): T {
@@ -93,11 +94,41 @@ async function seedAdmins(): Promise<SeededAdmin[]> {
   const hashedPassword = await hashPassword("Admin@123");
 
   const adminData = [
-    { name: "Super Admin", email: "superadmin@dleague.com", username: "superadmin", role: Role.SUPERADMIN, status: AdminStatus.ACTIVE },
-    { name: "Admin User", email: "admin@dleague.com", username: "admin", role: Role.ADMIN, status: AdminStatus.ACTIVE },
-    { name: "Admin Manager", email: "manager@dleague.com", username: "manager", role: Role.ADMIN, status: AdminStatus.ACTIVE },
-    { name: "Pending Admin", email: "pending_admin@dleague.com", username: "pending_admin", role: Role.ADMIN, status: AdminStatus.PENDING },
-    { name: "Suspended Admin", email: "suspended_admin@dleague.com", username: "suspended_admin", role: Role.ADMIN, status: AdminStatus.SUSPENDED },
+    {
+      name: "Super Admin",
+      email: "superadmin@dleague.com",
+      username: "superadmin",
+      role: Role.SUPERADMIN,
+      status: AdminStatus.ACTIVE,
+    },
+    {
+      name: "Admin User",
+      email: "admin@dleague.com",
+      username: "admin",
+      role: Role.ADMIN,
+      status: AdminStatus.ACTIVE,
+    },
+    {
+      name: "Admin Manager",
+      email: "manager@dleague.com",
+      username: "manager",
+      role: Role.ADMIN,
+      status: AdminStatus.ACTIVE,
+    },
+    {
+      name: "Pending Admin",
+      email: "pending_admin@dleague.com",
+      username: "pending_admin",
+      role: Role.ADMIN,
+      status: AdminStatus.PENDING,
+    },
+    {
+      name: "Suspended Admin",
+      email: "suspended_admin@dleague.com",
+      username: "suspended_admin",
+      role: Role.ADMIN,
+      status: AdminStatus.SUSPENDED,
+    },
   ];
 
   const createdAdmins: SeededAdmin[] = [];
@@ -110,7 +141,10 @@ async function seedAdmins(): Promise<SeededAdmin[]> {
 
     if (existingUser) {
       if (existingUser.admin) {
-        createdAdmins.push({ userId: existingUser.id, adminId: existingUser.admin.id });
+        createdAdmins.push({
+          userId: existingUser.id,
+          adminId: existingUser.admin.id,
+        });
       }
       continue;
     }
@@ -159,11 +193,112 @@ async function seedTestUsers(): Promise<User[]> {
 
   // Malaysian names for more realistic data
   const malaysianFirstNames = {
-    male: ["Ahmad", "Mohammad", "Muhammad", "Azman", "Hafiz", "Faizal", "Rizal", "Khairul", "Shahrul", "Amirul", "Hakim", "Irfan", "Nazri", "Syafiq", "Zulkifli", "Danial", "Farhan", "Hafizul", "Iskandar", "Jazlan", "Kumar", "Lim", "Tan", "Wong", "Lee", "Chen", "Ng", "Ong", "Raj", "Siva"],
-    female: ["Nurul", "Siti", "Nur", "Aisyah", "Fatimah", "Aminah", "Farah", "Sarah", "Hana", "Nadia", "Zahra", "Iman", "Alya", "Syafiqah", "Amalina", "Balqis", "Camelia", "Dania", "Elina", "Fatin", "May", "Mei", "Ling", "Jia", "Hui", "Priya", "Kavitha", "Lakshmi", "Deepa", "Anitha"],
+    male: [
+      "Ahmad",
+      "Mohammad",
+      "Muhammad",
+      "Azman",
+      "Hafiz",
+      "Faizal",
+      "Rizal",
+      "Khairul",
+      "Shahrul",
+      "Amirul",
+      "Hakim",
+      "Irfan",
+      "Nazri",
+      "Syafiq",
+      "Zulkifli",
+      "Danial",
+      "Farhan",
+      "Hafizul",
+      "Iskandar",
+      "Jazlan",
+      "Kumar",
+      "Lim",
+      "Tan",
+      "Wong",
+      "Lee",
+      "Chen",
+      "Ng",
+      "Ong",
+      "Raj",
+      "Siva",
+    ],
+    female: [
+      "Nurul",
+      "Siti",
+      "Nur",
+      "Aisyah",
+      "Fatimah",
+      "Aminah",
+      "Farah",
+      "Sarah",
+      "Hana",
+      "Nadia",
+      "Zahra",
+      "Iman",
+      "Alya",
+      "Syafiqah",
+      "Amalina",
+      "Balqis",
+      "Camelia",
+      "Dania",
+      "Elina",
+      "Fatin",
+      "May",
+      "Mei",
+      "Ling",
+      "Jia",
+      "Hui",
+      "Priya",
+      "Kavitha",
+      "Lakshmi",
+      "Deepa",
+      "Anitha",
+    ],
   };
-  const malaysianLastNames = ["Abdullah", "Rahman", "Ibrahim", "Hassan", "Ismail", "Omar", "Ahmad", "Ali", "Yusof", "Aziz", "Hamid", "Karim", "Rashid", "Malik", "Tan", "Lim", "Wong", "Lee", "Chen", "Ng", "Kumar", "Rajan", "Pillai", "Nair", "Menon"];
-  const areas = ["Kuala Lumpur", "Petaling Jaya", "Subang Jaya", "Shah Alam", "Bangsar", "Mont Kiara", "Damansara", "Ampang", "Cheras", "Puchong", "Cyberjaya", "Putrajaya"];
+  const malaysianLastNames = [
+    "Abdullah",
+    "Rahman",
+    "Ibrahim",
+    "Hassan",
+    "Ismail",
+    "Omar",
+    "Ahmad",
+    "Ali",
+    "Yusof",
+    "Aziz",
+    "Hamid",
+    "Karim",
+    "Rashid",
+    "Malik",
+    "Tan",
+    "Lim",
+    "Wong",
+    "Lee",
+    "Chen",
+    "Ng",
+    "Kumar",
+    "Rajan",
+    "Pillai",
+    "Nair",
+    "Menon",
+  ];
+  const areas = [
+    "Kuala Lumpur",
+    "Petaling Jaya",
+    "Subang Jaya",
+    "Shah Alam",
+    "Bangsar",
+    "Mont Kiara",
+    "Damansara",
+    "Ampang",
+    "Cheras",
+    "Puchong",
+    "Cyberjaya",
+    "Putrajaya",
+  ];
   const bios = [
     "Love playing doubles! Looking for partners.",
     "Intermediate player, play for fun.",
@@ -207,10 +342,14 @@ async function seedTestUsers(): Promise<User[]> {
   // Generate 50 active users with complete profiles
   for (let i = 0; i < 50; i++) {
     const isMale = i % 2 === 0;
-    const firstName = randomElement(isMale ? malaysianFirstNames.male : malaysianFirstNames.female);
+    const firstName = randomElement(
+      isMale ? malaysianFirstNames.male : malaysianFirstNames.female
+    );
     const lastName = randomElement(malaysianLastNames);
     const name = `${firstName} ${lastName}`;
-    const username = `${firstName.toLowerCase()}_${lastName.toLowerCase().slice(0, 3)}${i}`;
+    const username = `${firstName.toLowerCase()}_${lastName
+      .toLowerCase()
+      .slice(0, 3)}${i}`;
     const email = `${username}@test.com`;
 
     // Vary creation dates for user growth chart
@@ -233,25 +372,36 @@ async function seedTestUsers(): Promise<User[]> {
   // Add 10 inactive users
   for (let i = 0; i < 10; i++) {
     const isMale = i % 2 === 0;
-    const firstName = randomElement(isMale ? malaysianFirstNames.male : malaysianFirstNames.female);
+    const firstName = randomElement(
+      isMale ? malaysianFirstNames.male : malaysianFirstNames.female
+    );
     const lastName = randomElement(malaysianLastNames);
     testUsers.push({
       name: `${firstName} ${lastName}`,
       email: `inactive${i + 1}@test.com`,
       username: `inactive_${i + 1}`,
-      bio: randomElement(["Haven't played in a while.", "Taking a break.", "Will be back soon.", "On hiatus."]),
+      bio: randomElement([
+        "Haven't played in a while.",
+        "Taking a break.",
+        "Will be back soon.",
+        "On hiatus.",
+      ]),
       area: randomElement(areas),
       gender: isMale ? "MALE" : "FEMALE",
       status: UserStatus.INACTIVE,
       completedOnboarding: true,
-      createdAt: new Date(Date.now() - randomInt(90, 180) * 24 * 60 * 60 * 1000),
+      createdAt: new Date(
+        Date.now() - randomInt(90, 180) * 24 * 60 * 60 * 1000
+      ),
     });
   }
 
   // Add 5 suspended users
   for (let i = 0; i < 5; i++) {
     const isMale = i % 2 === 0;
-    const firstName = randomElement(isMale ? malaysianFirstNames.male : malaysianFirstNames.female);
+    const firstName = randomElement(
+      isMale ? malaysianFirstNames.male : malaysianFirstNames.female
+    );
     const lastName = randomElement(malaysianLastNames);
     testUsers.push({
       name: `${firstName} ${lastName}`,
@@ -262,7 +412,9 @@ async function seedTestUsers(): Promise<User[]> {
       gender: isMale ? "MALE" : "FEMALE",
       status: UserStatus.SUSPENDED,
       completedOnboarding: true,
-      createdAt: new Date(Date.now() - randomInt(30, 120) * 24 * 60 * 60 * 1000),
+      createdAt: new Date(
+        Date.now() - randomInt(30, 120) * 24 * 60 * 60 * 1000
+      ),
     });
   }
 
@@ -312,7 +464,8 @@ async function seedTestUsers(): Promise<User[]> {
         emailVerified: true,
         dateOfBirth: new Date(birthYear, birthMonth, birthDay),
         lastLogin: userData.completedOnboarding ? new Date() : null,
-        lastActivityCheck: userData.status === UserStatus.ACTIVE ? new Date() : null,
+        lastActivityCheck:
+          userData.status === UserStatus.ACTIVE ? new Date() : null,
         createdAt: userData.createdAt || new Date(),
       },
     });
@@ -364,18 +517,69 @@ async function seedTestUsers(): Promise<User[]> {
 
 async function seedCategories() {
   const categories = [
-    { name: "Men's Singles", game_type: GameType.SINGLES, gender_category: GenderType.MALE, genderRestriction: GenderRestriction.MALE, matchFormat: "Best of 3 sets", categoryOrder: 1 },
-    { name: "Women's Singles", game_type: GameType.SINGLES, gender_category: GenderType.FEMALE, genderRestriction: GenderRestriction.FEMALE, matchFormat: "Best of 3 sets", categoryOrder: 2 },
-    { name: "Men's Doubles", game_type: GameType.DOUBLES, gender_category: GenderType.MALE, genderRestriction: GenderRestriction.MALE, matchFormat: "Best of 3 sets", categoryOrder: 3 },
-    { name: "Women's Doubles", game_type: GameType.DOUBLES, gender_category: GenderType.FEMALE, genderRestriction: GenderRestriction.FEMALE, matchFormat: "Best of 3 sets", categoryOrder: 4 },
-    { name: "Mixed Doubles", game_type: GameType.DOUBLES, gender_category: GenderType.MIXED, genderRestriction: GenderRestriction.MIXED, matchFormat: "Best of 3 sets", categoryOrder: 5 },
-    { name: "Open Singles", game_type: GameType.SINGLES, gender_category: null, genderRestriction: GenderRestriction.OPEN, matchFormat: "Best of 3 sets", categoryOrder: 6 },
-    { name: "Open Doubles", game_type: GameType.DOUBLES, gender_category: null, genderRestriction: GenderRestriction.OPEN, matchFormat: "Best of 3 sets", categoryOrder: 7 },
+    {
+      name: "Men's Singles",
+      game_type: GameType.SINGLES,
+      gender_category: GenderType.MALE,
+      genderRestriction: GenderRestriction.MALE,
+      matchFormat: "Best of 3 sets",
+      categoryOrder: 1,
+    },
+    {
+      name: "Women's Singles",
+      game_type: GameType.SINGLES,
+      gender_category: GenderType.FEMALE,
+      genderRestriction: GenderRestriction.FEMALE,
+      matchFormat: "Best of 3 sets",
+      categoryOrder: 2,
+    },
+    {
+      name: "Men's Doubles",
+      game_type: GameType.DOUBLES,
+      gender_category: GenderType.MALE,
+      genderRestriction: GenderRestriction.MALE,
+      matchFormat: "Best of 3 sets",
+      categoryOrder: 3,
+    },
+    {
+      name: "Women's Doubles",
+      game_type: GameType.DOUBLES,
+      gender_category: GenderType.FEMALE,
+      genderRestriction: GenderRestriction.FEMALE,
+      matchFormat: "Best of 3 sets",
+      categoryOrder: 4,
+    },
+    {
+      name: "Mixed Doubles",
+      game_type: GameType.DOUBLES,
+      gender_category: GenderType.MIXED,
+      genderRestriction: GenderRestriction.MIXED,
+      matchFormat: "Best of 3 sets",
+      categoryOrder: 5,
+    },
+    {
+      name: "Open Singles",
+      game_type: GameType.SINGLES,
+      gender_category: null,
+      genderRestriction: GenderRestriction.OPEN,
+      matchFormat: "Best of 3 sets",
+      categoryOrder: 6,
+    },
+    {
+      name: "Open Doubles",
+      game_type: GameType.DOUBLES,
+      gender_category: null,
+      genderRestriction: GenderRestriction.OPEN,
+      matchFormat: "Best of 3 sets",
+      categoryOrder: 7,
+    },
   ];
 
   const createdCategories = [];
   for (const cat of categories) {
-    const existing = await prisma.category.findFirst({ where: { name: cat.name } });
+    const existing = await prisma.category.findFirst({
+      where: { name: cat.name },
+    });
     if (existing) {
       createdCategories.push(existing);
       continue;
@@ -402,17 +606,43 @@ async function seedCategories() {
 
 async function seedSponsorships(adminId: string) {
   const sponsorships = [
-    { packageTier: TierType.PLATINUM, contractAmount: 50000, sponsoredName: "Wilson Sports" },
-    { packageTier: TierType.GOLD, contractAmount: 25000, sponsoredName: "Nike Athletics" },
-    { packageTier: TierType.SILVER, contractAmount: 10000, sponsoredName: "Adidas" },
-    { packageTier: TierType.BRONZE, contractAmount: 5000, sponsoredName: "Local Sports Shop" },
-    { packageTier: TierType.GOLD, contractAmount: 20000, sponsoredName: "Head Rackets" },
-    { packageTier: TierType.SILVER, contractAmount: 8000, sponsoredName: "Babolat" },
+    {
+      packageTier: TierType.PLATINUM,
+      contractAmount: 50000,
+      sponsoredName: "Wilson Sports",
+    },
+    {
+      packageTier: TierType.GOLD,
+      contractAmount: 25000,
+      sponsoredName: "Nike Athletics",
+    },
+    {
+      packageTier: TierType.SILVER,
+      contractAmount: 10000,
+      sponsoredName: "Adidas",
+    },
+    {
+      packageTier: TierType.BRONZE,
+      contractAmount: 5000,
+      sponsoredName: "Local Sports Shop",
+    },
+    {
+      packageTier: TierType.GOLD,
+      contractAmount: 20000,
+      sponsoredName: "Head Rackets",
+    },
+    {
+      packageTier: TierType.SILVER,
+      contractAmount: 8000,
+      sponsoredName: "Babolat",
+    },
   ];
 
   const createdSponsorships = [];
   for (const sponsor of sponsorships) {
-    const existing = await prisma.sponsorship.findFirst({ where: { sponsoredName: sponsor.sponsoredName } });
+    const existing = await prisma.sponsorship.findFirst({
+      where: { sponsoredName: sponsor.sponsoredName },
+    });
     if (existing) {
       createdSponsorships.push(existing);
       continue;
@@ -434,13 +664,42 @@ async function seedSponsorships(adminId: string) {
 // SEED LEAGUES AND SEASONS
 // =============================================
 
-async function seedLeaguesAndSeasons(adminId: string, categories: any[], sponsorships: any[]) {
+async function seedLeaguesAndSeasons(
+  adminId: string,
+  categories: any[],
+  sponsorships: any[]
+) {
   const leagues = [
-    { name: "Subang Pickleball League", location: "Subang Jaya", sportType: SportType.PICKLEBALL, gameType: GameType.DOUBLES },
-    { name: "KL Tennis League", location: "Kuala Lumpur", sportType: SportType.TENNIS, gameType: GameType.SINGLES },
-    { name: "PJ Padel League", location: "Petaling Jaya", sportType: SportType.PADEL, gameType: GameType.DOUBLES },
-    { name: "Selangor Mixed League", location: "Selangor", sportType: SportType.PICKLEBALL, gameType: GameType.DOUBLES },
-    { name: "Penang Tennis Club", location: "Penang", sportType: SportType.TENNIS, gameType: GameType.SINGLES },
+    {
+      name: "Subang Pickleball League",
+      location: "Subang Jaya",
+      sportType: SportType.PICKLEBALL,
+      gameType: GameType.DOUBLES,
+    },
+    {
+      name: "KL Tennis League",
+      location: "Kuala Lumpur",
+      sportType: SportType.TENNIS,
+      gameType: GameType.SINGLES,
+    },
+    {
+      name: "PJ Padel League",
+      location: "Petaling Jaya",
+      sportType: SportType.PADEL,
+      gameType: GameType.DOUBLES,
+    },
+    {
+      name: "Selangor Mixed League",
+      location: "Selangor",
+      sportType: SportType.PICKLEBALL,
+      gameType: GameType.DOUBLES,
+    },
+    {
+      name: "Penang Tennis Club",
+      location: "Penang",
+      sportType: SportType.TENNIS,
+      gameType: GameType.SINGLES,
+    },
   ];
 
   const createdLeagues = [];
@@ -449,7 +708,9 @@ async function seedLeaguesAndSeasons(adminId: string, categories: any[], sponsor
 
   for (let i = 0; i < leagues.length; i++) {
     const leagueData = leagues[i]!;
-    let league = await prisma.league.findFirst({ where: { name: leagueData.name } });
+    let league = await prisma.league.findFirst({
+      where: { name: leagueData.name },
+    });
 
     if (!league) {
       league = await prisma.league.create({
@@ -460,28 +721,47 @@ async function seedLeaguesAndSeasons(adminId: string, categories: any[], sponsor
           gameType: leagueData.gameType,
           status: Statuses.ACTIVE,
           createdById: adminId,
-          description: `Premier ${leagueData.sportType.toLowerCase()} league in ${leagueData.location}`,
+          description: `Premier ${leagueData.sportType.toLowerCase()} league in ${
+            leagueData.location
+          }`,
         },
       });
     }
     createdLeagues.push(league);
 
     // Create seasons for this league with different statuses
-    const seasonStatuses: SeasonStatus[] = [SeasonStatus.ACTIVE, SeasonStatus.UPCOMING, SeasonStatus.FINISHED, SeasonStatus.CANCELLED];
+    const seasonStatuses: SeasonStatus[] = [
+      SeasonStatus.ACTIVE,
+      SeasonStatus.UPCOMING,
+      SeasonStatus.FINISHED,
+      SeasonStatus.CANCELLED,
+    ];
 
     for (let s = 0; s < 4; s++) {
       const status = seasonStatuses[s]!;
       const seasonName = `${leagueData.name} - Season ${s + 1}`;
 
-      let season = await prisma.season.findFirst({ where: { name: seasonName } });
+      let season = await prisma.season.findFirst({
+        where: { name: seasonName },
+      });
 
       if (!season) {
-        const startOffset = status === SeasonStatus.FINISHED ? -90 :
-                           status === SeasonStatus.ACTIVE ? -30 :
-                           status === SeasonStatus.UPCOMING ? 30 : -60;
-        const endOffset = status === SeasonStatus.FINISHED ? -1 :
-                         status === SeasonStatus.ACTIVE ? 60 :
-                         status === SeasonStatus.UPCOMING ? 120 : -30;
+        const startOffset =
+          status === SeasonStatus.FINISHED
+            ? -90
+            : status === SeasonStatus.ACTIVE
+            ? -30
+            : status === SeasonStatus.UPCOMING
+            ? 30
+            : -60;
+        const endOffset =
+          status === SeasonStatus.FINISHED
+            ? -1
+            : status === SeasonStatus.ACTIVE
+            ? 60
+            : status === SeasonStatus.UPCOMING
+            ? 120
+            : -30;
 
         season = await prisma.season.create({
           data: {
@@ -495,7 +775,9 @@ async function seedLeaguesAndSeasons(adminId: string, categories: any[], sponsor
             withdrawalEnabled: status !== SeasonStatus.FINISHED,
             startDate: new Date(Date.now() + startOffset * 24 * 60 * 60 * 1000),
             endDate: new Date(Date.now() + endOffset * 24 * 60 * 60 * 1000),
-            regiDeadline: new Date(Date.now() + (startOffset - 7) * 24 * 60 * 60 * 1000),
+            regiDeadline: new Date(
+              Date.now() + (startOffset - 7) * 24 * 60 * 60 * 1000
+            ),
             categoryId: categories[i % categories.length]?.id,
             sponsorId: sponsorships[i % sponsorships.length]?.id,
             leagues: { connect: { id: league.id } },
@@ -505,7 +787,11 @@ async function seedLeaguesAndSeasons(adminId: string, categories: any[], sponsor
 
       // Create divisions for active and finished seasons (always check, regardless of season creation)
       if (status === SeasonStatus.ACTIVE || status === SeasonStatus.FINISHED) {
-        const divisionLevels = [DivisionLevel.BEGINNER, DivisionLevel.INTERMEDIATE, DivisionLevel.ADVANCED];
+        const divisionLevels = [
+          DivisionLevel.BEGINNER,
+          DivisionLevel.INTERMEDIATE,
+          DivisionLevel.ADVANCED,
+        ];
 
         for (let d = 0; d < 3; d++) {
           const divisionName = `Division ${String.fromCharCode(65 + d)}`;
@@ -520,9 +806,13 @@ async function seedLeaguesAndSeasons(adminId: string, categories: any[], sponsor
                 description: `${divisionLevels[d]} level division`,
                 level: divisionLevels[d],
                 gameType: leagueData.gameType,
-                genderCategory: categories[i % categories.length]?.genderCategory || GenderType.MIXED,
-                maxSinglesPlayers: leagueData.gameType === GameType.SINGLES ? 16 : null,
-                maxDoublesTeams: leagueData.gameType === GameType.DOUBLES ? 8 : null,
+                genderCategory:
+                  categories[i % categories.length]?.genderCategory ||
+                  GenderType.MIXED,
+                maxSinglesPlayers:
+                  leagueData.gameType === GameType.SINGLES ? 16 : null,
+                maxDoublesTeams:
+                  leagueData.gameType === GameType.DOUBLES ? 8 : null,
                 seasonId: season.id,
                 leagueId: league.id,
                 createdByAdminId: adminId,
@@ -539,23 +829,46 @@ async function seedLeaguesAndSeasons(adminId: string, categories: any[], sponsor
     }
   }
 
-  return { leagues: createdLeagues, seasons: createdSeasons, divisions: createdDivisions };
+  return {
+    leagues: createdLeagues,
+    seasons: createdSeasons,
+    divisions: createdDivisions,
+  };
 }
 
 // =============================================
 // SEED SEASON MEMBERSHIPS
 // =============================================
 
-async function seedSeasonMemberships(users: User[], seasons: Season[], divisions: Division[]) {
-  const activeUsers = users.filter(u => u.status === UserStatus.ACTIVE && u.completedOnboarding);
-  const activeSeasons = seasons.filter(s => s.status === SeasonStatus.ACTIVE || s.status === SeasonStatus.FINISHED);
+async function seedSeasonMemberships(
+  users: User[],
+  seasons: Season[],
+  divisions: Division[]
+) {
+  const activeUsers = users.filter(
+    (u) => u.status === UserStatus.ACTIVE && u.completedOnboarding
+  );
+  const activeSeasons = seasons.filter(
+    (s) =>
+      s.status === SeasonStatus.ACTIVE || s.status === SeasonStatus.FINISHED
+  );
 
   const memberships = [];
-  const membershipStatuses: MembershipStatus[] = [MembershipStatus.ACTIVE, MembershipStatus.PENDING, MembershipStatus.FLAGGED, MembershipStatus.INACTIVE, MembershipStatus.REMOVED];
-  const paymentStatuses: PaymentStatus[] = [PaymentStatus.COMPLETED, PaymentStatus.PENDING, PaymentStatus.FAILED];
+  const membershipStatuses: MembershipStatus[] = [
+    MembershipStatus.ACTIVE,
+    MembershipStatus.PENDING,
+    MembershipStatus.FLAGGED,
+    MembershipStatus.INACTIVE,
+    MembershipStatus.REMOVED,
+  ];
+  const paymentStatuses: PaymentStatus[] = [
+    PaymentStatus.COMPLETED,
+    PaymentStatus.PENDING,
+    PaymentStatus.FAILED,
+  ];
 
   for (const season of activeSeasons) {
-    const seasonDivisions = divisions.filter(d => d.seasonId === season.id);
+    const seasonDivisions = divisions.filter((d) => d.seasonId === season.id);
 
     for (let i = 0; i < Math.min(activeUsers.length, 15); i++) {
       const user = activeUsers[i]!;
@@ -571,8 +884,14 @@ async function seedSeasonMemberships(users: User[], seasons: Season[], divisions
       }
 
       // Most users should be ACTIVE with COMPLETED payment
-      const membershipStatus = i < 10 ? MembershipStatus.ACTIVE : membershipStatuses[i % membershipStatuses.length]!;
-      const paymentStatus = i < 10 ? PaymentStatus.COMPLETED : paymentStatuses[i % paymentStatuses.length]!;
+      const membershipStatus =
+        i < 10
+          ? MembershipStatus.ACTIVE
+          : membershipStatuses[i % membershipStatuses.length]!;
+      const paymentStatus =
+        i < 10
+          ? PaymentStatus.COMPLETED
+          : paymentStatuses[i % paymentStatuses.length]!;
 
       const membership = await prisma.seasonMembership.create({
         data: {
@@ -581,8 +900,14 @@ async function seedSeasonMemberships(users: User[], seasons: Season[], divisions
           divisionId: division?.id,
           status: membershipStatus,
           paymentStatus: paymentStatus,
-          joinedAt: randomDate(new Date(Date.now() - 60 * 24 * 60 * 60 * 1000), new Date()),
-          withdrawalReason: membershipStatus === MembershipStatus.REMOVED ? "Personal reasons" : null,
+          joinedAt: randomDate(
+            new Date(Date.now() - 60 * 24 * 60 * 60 * 1000),
+            new Date()
+          ),
+          withdrawalReason:
+            membershipStatus === MembershipStatus.REMOVED
+              ? "Personal reasons"
+              : null,
         },
       });
       memberships.push(membership);
@@ -590,7 +915,9 @@ async function seedSeasonMemberships(users: User[], seasons: Season[], divisions
       // Create division assignment for active members
       if (division && membershipStatus === MembershipStatus.ACTIVE) {
         await prisma.divisionAssignment.upsert({
-          where: { divisionId_userId: { divisionId: division.id, userId: user.id } },
+          where: {
+            divisionId_userId: { divisionId: division.id, userId: user.id },
+          },
           update: {},
           create: {
             divisionId: division.id,
@@ -609,9 +936,16 @@ async function seedSeasonMemberships(users: User[], seasons: Season[], divisions
 // SEED MATCHES WITH ALL STATUS VARIATIONS
 // =============================================
 
-async function seedMatches(users: User[], divisions: Division[], seasons: Season[], admins: SeededAdmin[]) {
-  const activeUsers = users.filter(u => u.status === UserStatus.ACTIVE && u.completedOnboarding);
-  const activeDivisions = divisions.filter(d => d.isActiveDivision);
+async function seedMatches(
+  users: User[],
+  divisions: Division[],
+  seasons: Season[],
+  admins: SeededAdmin[]
+) {
+  const activeUsers = users.filter(
+    (u) => u.status === UserStatus.ACTIVE && u.completedOnboarding
+  );
+  const activeDivisions = divisions.filter((d) => d.isActiveDivision);
   const adminId = admins[0]!.adminId;
 
   const createdMatches: Match[] = [];
@@ -619,31 +953,115 @@ async function seedMatches(users: User[], divisions: Division[], seasons: Season
   // Match configurations for different scenarios - significantly increased counts for better chart data
   const matchConfigs = [
     // COMPLETED matches - various outcomes (80 total completed matches spread across 12 weeks)
-    { status: MatchStatus.COMPLETED, isWalkover: false, isDisputed: false, isLateCancellation: false, count: 60 },
-    { status: MatchStatus.COMPLETED, isWalkover: true, isDisputed: false, isLateCancellation: false, count: 8, walkoverReason: WalkoverReason.NO_SHOW },
-    { status: MatchStatus.COMPLETED, isWalkover: true, isDisputed: false, isLateCancellation: false, count: 4, walkoverReason: WalkoverReason.LATE_CANCELLATION },
-    { status: MatchStatus.COMPLETED, isWalkover: true, isDisputed: false, isLateCancellation: false, count: 2, walkoverReason: WalkoverReason.INJURY },
-    { status: MatchStatus.COMPLETED, isDisputed: true, isWalkover: false, isLateCancellation: false, count: 6 },
+    {
+      status: MatchStatus.COMPLETED,
+      isWalkover: false,
+      isDisputed: false,
+      isLateCancellation: false,
+      count: 60,
+    },
+    {
+      status: MatchStatus.COMPLETED,
+      isWalkover: true,
+      isDisputed: false,
+      isLateCancellation: false,
+      count: 8,
+      walkoverReason: WalkoverReason.NO_SHOW,
+    },
+    {
+      status: MatchStatus.COMPLETED,
+      isWalkover: true,
+      isDisputed: false,
+      isLateCancellation: false,
+      count: 4,
+      walkoverReason: WalkoverReason.LATE_CANCELLATION,
+    },
+    {
+      status: MatchStatus.COMPLETED,
+      isWalkover: true,
+      isDisputed: false,
+      isLateCancellation: false,
+      count: 2,
+      walkoverReason: WalkoverReason.INJURY,
+    },
+    {
+      status: MatchStatus.COMPLETED,
+      isDisputed: true,
+      isWalkover: false,
+      isLateCancellation: false,
+      count: 6,
+    },
 
     // SCHEDULED matches - future matches
-    { status: MatchStatus.SCHEDULED, isWalkover: false, isDisputed: false, isLateCancellation: false, count: 20 },
+    {
+      status: MatchStatus.SCHEDULED,
+      isWalkover: false,
+      isDisputed: false,
+      isLateCancellation: false,
+      count: 20,
+    },
 
     // ONGOING matches - currently playing
-    { status: MatchStatus.ONGOING, isWalkover: false, isDisputed: false, isLateCancellation: false, count: 5 },
+    {
+      status: MatchStatus.ONGOING,
+      isWalkover: false,
+      isDisputed: false,
+      isLateCancellation: false,
+      count: 5,
+    },
 
     // DRAFT matches - incomplete setup
-    { status: MatchStatus.DRAFT, isWalkover: false, isDisputed: false, isLateCancellation: false, count: 8 },
+    {
+      status: MatchStatus.DRAFT,
+      isWalkover: false,
+      isDisputed: false,
+      isLateCancellation: false,
+      count: 8,
+    },
 
     // CANCELLED matches - various reasons
-    { status: MatchStatus.CANCELLED, isWalkover: false, isDisputed: false, isLateCancellation: false, count: 6, cancellationReason: CancellationReason.WEATHER },
-    { status: MatchStatus.CANCELLED, isWalkover: false, isDisputed: false, isLateCancellation: true, count: 4, cancellationReason: CancellationReason.PERSONAL_EMERGENCY },
-    { status: MatchStatus.CANCELLED, isWalkover: false, isDisputed: false, isLateCancellation: true, count: 4, cancellationReason: CancellationReason.ILLNESS },
+    {
+      status: MatchStatus.CANCELLED,
+      isWalkover: false,
+      isDisputed: false,
+      isLateCancellation: false,
+      count: 6,
+      cancellationReason: CancellationReason.WEATHER,
+    },
+    {
+      status: MatchStatus.CANCELLED,
+      isWalkover: false,
+      isDisputed: false,
+      isLateCancellation: true,
+      count: 4,
+      cancellationReason: CancellationReason.PERSONAL_EMERGENCY,
+    },
+    {
+      status: MatchStatus.CANCELLED,
+      isWalkover: false,
+      isDisputed: false,
+      isLateCancellation: true,
+      count: 4,
+      cancellationReason: CancellationReason.ILLNESS,
+    },
 
     // VOID matches - admin voided
-    { status: MatchStatus.VOID, isWalkover: false, isDisputed: false, isLateCancellation: false, count: 3 },
+    {
+      status: MatchStatus.VOID,
+      isWalkover: false,
+      isDisputed: false,
+      isLateCancellation: false,
+      count: 3,
+    },
 
     // UNFINISHED matches - started but not completed
-    { status: MatchStatus.UNFINISHED, isWalkover: false, isDisputed: false, isLateCancellation: false, count: 4 },
+    {
+      status: MatchStatus.UNFINISHED,
+      isWalkover: false,
+      isDisputed: false,
+      isLateCancellation: false,
+      count: 4,
+    },
   ];
 
   let matchIndex = 0;
@@ -653,7 +1071,7 @@ async function seedMatches(users: User[], divisions: Division[], seasons: Season
       const division = activeDivisions[matchIndex % activeDivisions.length];
       if (!division) continue;
 
-      const season = seasons.find(s => s.id === division.seasonId);
+      const season = seasons.find((s) => s.id === division.seasonId);
       if (!season) continue;
 
       // Select players for the match
@@ -664,15 +1082,28 @@ async function seedMatches(users: User[], divisions: Division[], seasons: Season
 
       // Determine match date based on status - spread over 12 weeks (84 days) for better chart data
       let matchDate: Date;
-      if (config.status === MatchStatus.COMPLETED || config.status === MatchStatus.VOID || config.status === MatchStatus.UNFINISHED) {
+      if (
+        config.status === MatchStatus.COMPLETED ||
+        config.status === MatchStatus.VOID ||
+        config.status === MatchStatus.UNFINISHED
+      ) {
         // Spread completed matches evenly across the last 12 weeks
-        matchDate = randomDate(new Date(Date.now() - 84 * 24 * 60 * 60 * 1000), new Date());
+        matchDate = randomDate(
+          new Date(Date.now() - 84 * 24 * 60 * 60 * 1000),
+          new Date()
+        );
       } else if (config.status === MatchStatus.ONGOING) {
         matchDate = new Date();
       } else if (config.status === MatchStatus.SCHEDULED) {
-        matchDate = randomDate(new Date(), new Date(Date.now() + 30 * 24 * 60 * 60 * 1000));
+        matchDate = randomDate(
+          new Date(),
+          new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+        );
       } else {
-        matchDate = randomDate(new Date(Date.now() - 7 * 24 * 60 * 60 * 1000), new Date(Date.now() + 7 * 24 * 60 * 60 * 1000));
+        matchDate = randomDate(
+          new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
+          new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+        );
       }
 
       // Generate scores for completed matches
@@ -687,13 +1118,20 @@ async function seedMatches(users: User[], divisions: Division[], seasons: Season
           sets: [
             { player1: randomInt(4, 6), player2: randomInt(2, 6) },
             { player1: randomInt(2, 6), player2: randomInt(4, 6) },
-            playerScore + opponentScore === 3 ? { player1: randomInt(4, 7), player2: randomInt(2, 7) } : null,
+            playerScore + opponentScore === 3
+              ? { player1: randomInt(4, 7), player2: randomInt(2, 7) }
+              : null,
           ].filter(Boolean),
         };
       } else if (config.isWalkover) {
         playerScore = 2;
         opponentScore = 0;
-        setScores = { sets: [{ player1: 6, player2: 0 }, { player1: 6, player2: 0 }] };
+        setScores = {
+          sets: [
+            { player1: 6, player2: 0 },
+            { player1: 6, player2: 0 },
+          ],
+        };
       }
 
       const match = await prisma.match.create({
@@ -701,46 +1139,71 @@ async function seedMatches(users: User[], divisions: Division[], seasons: Season
           divisionId: division.id,
           leagueId: division.leagueId,
           seasonId: season.id,
-          sport: division.gameType === GameType.SINGLES ? "TENNIS" : "PICKLEBALL",
-          matchType: division.gameType === GameType.SINGLES ? MatchType.SINGLES : MatchType.DOUBLES,
+          sport:
+            division.gameType === GameType.SINGLES ? "TENNIS" : "PICKLEBALL",
+          matchType:
+            division.gameType === GameType.SINGLES
+              ? MatchType.SINGLES
+              : MatchType.DOUBLES,
           format: MatchFormat.STANDARD,
           status: config.status,
           matchDate: matchDate,
-          location: randomElement(["Subang Sports Center", "KL Arena", "PJ Stadium", "Selangor Courts"]),
+          location: randomElement([
+            "Subang Sports Center",
+            "KL Arena",
+            "PJ Stadium",
+            "Selangor Courts",
+          ]),
           venue: `Court ${randomInt(1, 8)}`,
 
           // Scores
           playerScore: playerScore,
           opponentScore: opponentScore,
-          team1Score: division.gameType === GameType.DOUBLES ? playerScore : null,
-          team2Score: division.gameType === GameType.DOUBLES ? opponentScore : null,
+          team1Score:
+            division.gameType === GameType.DOUBLES ? playerScore : null,
+          team2Score:
+            division.gameType === GameType.DOUBLES ? opponentScore : null,
           setScores: setScores,
 
           // Flags
           isWalkover: config.isWalkover,
           isDisputed: config.isDisputed,
           isLateCancellation: config.isLateCancellation,
-          walkoverReason: config.walkoverReason as WalkoverReason || null,
-          cancellationReason: config.cancellationReason as CancellationReason || null,
+          walkoverReason: (config.walkoverReason as WalkoverReason) || null,
+          cancellationReason:
+            (config.cancellationReason as CancellationReason) || null,
 
           // Result tracking for completed matches
-          resultSubmittedById: config.status === MatchStatus.COMPLETED ? player1.id : null,
-          resultSubmittedAt: config.status === MatchStatus.COMPLETED ? new Date() : null,
-          resultConfirmedById: config.status === MatchStatus.COMPLETED ? player2.id : null,
-          resultConfirmedAt: config.status === MatchStatus.COMPLETED ? new Date() : null,
+          resultSubmittedById:
+            config.status === MatchStatus.COMPLETED ? player1.id : null,
+          resultSubmittedAt:
+            config.status === MatchStatus.COMPLETED ? new Date() : null,
+          resultConfirmedById:
+            config.status === MatchStatus.COMPLETED ? player2.id : null,
+          resultConfirmedAt:
+            config.status === MatchStatus.COMPLETED ? new Date() : null,
 
           // Cancellation tracking
-          cancelledById: config.status === MatchStatus.CANCELLED ? player1.id : null,
-          cancelledAt: config.status === MatchStatus.CANCELLED ? new Date() : null,
-          cancellationComment: config.status === MatchStatus.CANCELLED ? "Match cancelled due to circumstances" : null,
+          cancelledById:
+            config.status === MatchStatus.CANCELLED ? player1.id : null,
+          cancelledAt:
+            config.status === MatchStatus.CANCELLED ? new Date() : null,
+          cancellationComment:
+            config.status === MatchStatus.CANCELLED
+              ? "Match cancelled due to circumstances"
+              : null,
 
           // Creator tracking
           createdById: player1.id,
 
           // Admin notes for special cases
-          adminNotes: config.isDisputed ? "Match disputed - requires review" :
-                      config.isWalkover ? "Walkover recorded" :
-                      config.status === MatchStatus.VOID ? "Match voided by admin" : null,
+          adminNotes: config.isDisputed
+            ? "Match disputed - requires review"
+            : config.isWalkover
+            ? "Walkover recorded"
+            : config.status === MatchStatus.VOID
+            ? "Match voided by admin"
+            : null,
           requiresAdminReview: config.isDisputed || config.isLateCancellation,
         },
       });
@@ -755,25 +1218,40 @@ async function seedMatches(users: User[], divisions: Division[], seasons: Season
             team: division.gameType === GameType.DOUBLES ? "team1" : null,
             invitationStatus: InvitationStatus.ACCEPTED,
             acceptedAt: new Date(),
-            didAttend: config.status === MatchStatus.COMPLETED || config.status === MatchStatus.ONGOING,
+            didAttend:
+              config.status === MatchStatus.COMPLETED ||
+              config.status === MatchStatus.ONGOING,
           },
           {
             matchId: match.id,
             userId: player2.id,
             role: ParticipantRole.OPPONENT,
             team: division.gameType === GameType.DOUBLES ? "team2" : null,
-            invitationStatus: config.status === MatchStatus.DRAFT ? InvitationStatus.PENDING : InvitationStatus.ACCEPTED,
+            invitationStatus:
+              config.status === MatchStatus.DRAFT
+                ? InvitationStatus.PENDING
+                : InvitationStatus.ACCEPTED,
             acceptedAt: config.status !== MatchStatus.DRAFT ? new Date() : null,
-            didAttend: config.status === MatchStatus.COMPLETED && !config.isWalkover,
+            didAttend:
+              config.status === MatchStatus.COMPLETED && !config.isWalkover,
           },
         ],
         skipDuplicates: true,
       });
 
       // Add partners for doubles matches
-      if (division.gameType === GameType.DOUBLES && activeUsers.length > player2Index + 2) {
-        const partner1 = activeUsers[(player1Index + activeUsers.length / 2) % activeUsers.length]!;
-        const partner2 = activeUsers[(player2Index + activeUsers.length / 2) % activeUsers.length]!;
+      if (
+        division.gameType === GameType.DOUBLES &&
+        activeUsers.length > player2Index + 2
+      ) {
+        const partner1 =
+          activeUsers[
+            (player1Index + activeUsers.length / 2) % activeUsers.length
+          ]!;
+        const partner2 =
+          activeUsers[
+            (player2Index + activeUsers.length / 2) % activeUsers.length
+          ]!;
 
         await prisma.matchParticipant.createMany({
           data: [
@@ -784,16 +1262,23 @@ async function seedMatches(users: User[], divisions: Division[], seasons: Season
               team: "team1",
               invitationStatus: InvitationStatus.ACCEPTED,
               acceptedAt: new Date(),
-              didAttend: config.status === MatchStatus.COMPLETED || config.status === MatchStatus.ONGOING,
+              didAttend:
+                config.status === MatchStatus.COMPLETED ||
+                config.status === MatchStatus.ONGOING,
             },
             {
               matchId: match.id,
               userId: partner2.id,
               role: ParticipantRole.PARTNER,
               team: "team2",
-              invitationStatus: config.status === MatchStatus.DRAFT ? InvitationStatus.PENDING : InvitationStatus.ACCEPTED,
-              acceptedAt: config.status !== MatchStatus.DRAFT ? new Date() : null,
-              didAttend: config.status === MatchStatus.COMPLETED && !config.isWalkover,
+              invitationStatus:
+                config.status === MatchStatus.DRAFT
+                  ? InvitationStatus.PENDING
+                  : InvitationStatus.ACCEPTED,
+              acceptedAt:
+                config.status !== MatchStatus.DRAFT ? new Date() : null,
+              didAttend:
+                config.status === MatchStatus.COMPLETED && !config.isWalkover,
             },
           ],
           skipDuplicates: true,
@@ -801,7 +1286,11 @@ async function seedMatches(users: User[], divisions: Division[], seasons: Season
       }
 
       // Create match scores for completed non-walkover matches
-      if (config.status === MatchStatus.COMPLETED && !config.isWalkover && setScores) {
+      if (
+        config.status === MatchStatus.COMPLETED &&
+        !config.isWalkover &&
+        setScores
+      ) {
         for (let setNum = 0; setNum < setScores.sets.length; setNum++) {
           const set = setScores.sets[setNum];
           await prisma.matchScore.create({
@@ -830,19 +1319,40 @@ async function seedMatches(users: User[], divisions: Division[], seasons: Season
 // SEED DISPUTES
 // =============================================
 
-async function seedDisputes(matches: Match[], users: User[], admins: SeededAdmin[]) {
-  const disputedMatches = matches.filter(m => m.isDisputed);
+async function seedDisputes(
+  matches: Match[],
+  users: User[],
+  admins: SeededAdmin[]
+) {
+  const disputedMatches = matches.filter((m) => m.isDisputed);
   const adminId = admins[0]!.adminId;
 
-  const disputeCategories = [DisputeCategory.WRONG_SCORE, DisputeCategory.NO_SHOW, DisputeCategory.BEHAVIOR, DisputeCategory.OTHER];
-  const disputeStatuses = [DisputeStatus.OPEN, DisputeStatus.UNDER_REVIEW, DisputeStatus.RESOLVED, DisputeStatus.REJECTED];
-  const disputePriorities = [DisputePriority.LOW, DisputePriority.NORMAL, DisputePriority.HIGH, DisputePriority.URGENT];
+  const disputeCategories = [
+    DisputeCategory.WRONG_SCORE,
+    DisputeCategory.NO_SHOW,
+    DisputeCategory.BEHAVIOR,
+    DisputeCategory.OTHER,
+  ];
+  const disputeStatuses = [
+    DisputeStatus.OPEN,
+    DisputeStatus.UNDER_REVIEW,
+    DisputeStatus.RESOLVED,
+    DisputeStatus.REJECTED,
+  ];
+  const disputePriorities = [
+    DisputePriority.LOW,
+    DisputePriority.NORMAL,
+    DisputePriority.HIGH,
+    DisputePriority.URGENT,
+  ];
 
   const createdDisputes = [];
 
   for (let i = 0; i < disputedMatches.length; i++) {
     const match = disputedMatches[i]!;
-    const participants = await prisma.matchParticipant.findMany({ where: { matchId: match.id } });
+    const participants = await prisma.matchParticipant.findMany({
+      where: { matchId: match.id },
+    });
     const raiser = participants[0];
     if (!raiser) continue;
 
@@ -854,19 +1364,35 @@ async function seedDisputes(matches: Match[], users: User[], admins: SeededAdmin
         matchId: match.id,
         raisedByUserId: raiser.userId,
         disputeCategory: category,
-        disputeComment: `Dispute raised regarding ${category.toLowerCase().replace('_', ' ')}`,
+        disputeComment: `Dispute raised regarding ${category
+          .toLowerCase()
+          .replace("_", " ")}`,
         disputerScore: { player1: 6, player2: 4, set: 1 },
         evidenceUrl: i % 2 === 0 ? "https://example.com/evidence.jpg" : null,
         status: status,
         priority: disputePriorities[i % disputePriorities.length],
         flaggedForReview: status === DisputeStatus.OPEN,
         reviewedByAdminId: status !== DisputeStatus.OPEN ? adminId : null,
-        resolvedByAdminId: status === DisputeStatus.RESOLVED || status === DisputeStatus.REJECTED ? adminId : null,
-        adminResolution: status === DisputeStatus.RESOLVED ? "After reviewing evidence, the original score stands" :
-                        status === DisputeStatus.REJECTED ? "Insufficient evidence to support claim" : null,
-        resolutionAction: status === DisputeStatus.RESOLVED ? DisputeResolutionAction.UPHOLD_ORIGINAL :
-                         status === DisputeStatus.REJECTED ? DisputeResolutionAction.UPHOLD_ORIGINAL : null,
-        resolvedAt: status === DisputeStatus.RESOLVED || status === DisputeStatus.REJECTED ? new Date() : null,
+        resolvedByAdminId:
+          status === DisputeStatus.RESOLVED || status === DisputeStatus.REJECTED
+            ? adminId
+            : null,
+        adminResolution:
+          status === DisputeStatus.RESOLVED
+            ? "After reviewing evidence, the original score stands"
+            : status === DisputeStatus.REJECTED
+            ? "Insufficient evidence to support claim"
+            : null,
+        resolutionAction:
+          status === DisputeStatus.RESOLVED
+            ? DisputeResolutionAction.UPHOLD_ORIGINAL
+            : status === DisputeStatus.REJECTED
+            ? DisputeResolutionAction.UPHOLD_ORIGINAL
+            : null,
+        resolvedAt:
+          status === DisputeStatus.RESOLVED || status === DisputeStatus.REJECTED
+            ? new Date()
+            : null,
       },
     });
 
@@ -901,21 +1427,33 @@ async function seedDisputes(matches: Match[], users: User[], admins: SeededAdmin
 // SEED WALKOVERS
 // =============================================
 
-async function seedWalkovers(matches: Match[], users: User[], admins: SeededAdmin[]) {
-  const walkoverMatches = matches.filter(m => m.isWalkover);
+async function seedWalkovers(
+  matches: Match[],
+  users: User[],
+  admins: SeededAdmin[]
+) {
+  const walkoverMatches = matches.filter((m) => m.isWalkover);
   const adminId = admins[0]!.adminId;
 
   const createdWalkovers = [];
 
   for (const match of walkoverMatches) {
-    const participants = await prisma.matchParticipant.findMany({ where: { matchId: match.id } });
+    const participants = await prisma.matchParticipant.findMany({
+      where: { matchId: match.id },
+    });
     if (participants.length < 2) continue;
 
-    const defaultingPlayer = participants.find(p => p.role === ParticipantRole.OPPONENT);
-    const winningPlayer = participants.find(p => p.role === ParticipantRole.CREATOR);
+    const defaultingPlayer = participants.find(
+      (p) => p.role === ParticipantRole.OPPONENT
+    );
+    const winningPlayer = participants.find(
+      (p) => p.role === ParticipantRole.CREATOR
+    );
     if (!defaultingPlayer || !winningPlayer) continue;
 
-    const existing = await prisma.matchWalkover.findUnique({ where: { matchId: match.id } });
+    const existing = await prisma.matchWalkover.findUnique({
+      where: { matchId: match.id },
+    });
     if (existing) {
       createdWalkovers.push(existing);
       continue;
@@ -925,7 +1463,11 @@ async function seedWalkovers(matches: Match[], users: User[], admins: SeededAdmi
       data: {
         matchId: match.id,
         walkoverReason: match.walkoverReason || WalkoverReason.NO_SHOW,
-        walkoverReasonDetail: `Player did not ${match.walkoverReason === WalkoverReason.LATE_CANCELLATION ? 'provide adequate notice' : 'show up for the match'}`,
+        walkoverReasonDetail: `Player did not ${
+          match.walkoverReason === WalkoverReason.LATE_CANCELLATION
+            ? "provide adequate notice"
+            : "show up for the match"
+        }`,
         defaultingPlayerId: defaultingPlayer.userId,
         winningPlayerId: winningPlayer.userId,
         reportedBy: winningPlayer.userId,
@@ -934,8 +1476,14 @@ async function seedWalkovers(matches: Match[], users: User[], admins: SeededAdmi
         adminVerifiedBy: adminId,
         adminVerifiedAt: new Date(),
         penaltyApplied: match.walkoverReason === WalkoverReason.NO_SHOW,
-        penaltyType: match.walkoverReason === WalkoverReason.NO_SHOW ? PenaltyType.POINTS_DEDUCTION : PenaltyType.WARNING,
-        penaltyDetails: match.walkoverReason === WalkoverReason.NO_SHOW ? "-5 points deducted" : "Warning issued",
+        penaltyType:
+          match.walkoverReason === WalkoverReason.NO_SHOW
+            ? PenaltyType.POINTS_DEDUCTION
+            : PenaltyType.WARNING,
+        penaltyDetails:
+          match.walkoverReason === WalkoverReason.NO_SHOW
+            ? "-5 points deducted"
+            : "Warning issued",
       },
     });
 
@@ -949,22 +1497,59 @@ async function seedWalkovers(matches: Match[], users: User[], admins: SeededAdmi
 // SEED PENALTIES
 // =============================================
 
-async function seedPenalties(users: User[], matches: Match[], admins: SeededAdmin[]) {
+async function seedPenalties(
+  users: User[],
+  matches: Match[],
+  admins: SeededAdmin[]
+) {
   const adminId = admins[0]!.adminId;
-  const activeUsers = users.filter(u => u.status === UserStatus.ACTIVE).slice(0, 5);
+  const activeUsers = users
+    .filter((u) => u.status === UserStatus.ACTIVE)
+    .slice(0, 5);
 
   const penaltyConfigs = [
-    { type: PenaltyType.WARNING, severity: PenaltySeverity.WARNING, status: PenaltyStatus.ACTIVE },
-    { type: PenaltyType.POINTS_DEDUCTION, severity: PenaltySeverity.POINTS_DEDUCTION, status: PenaltyStatus.ACTIVE, points: 5 },
-    { type: PenaltyType.SUSPENSION, severity: PenaltySeverity.SUSPENSION, status: PenaltyStatus.ACTIVE, suspensionDays: 7 },
-    { type: PenaltyType.WARNING, severity: PenaltySeverity.WARNING, status: PenaltyStatus.EXPIRED },
-    { type: PenaltyType.POINTS_DEDUCTION, severity: PenaltySeverity.POINTS_DEDUCTION, status: PenaltyStatus.APPEALED, points: 3 },
-    { type: PenaltyType.WARNING, severity: PenaltySeverity.WARNING, status: PenaltyStatus.OVERTURNED },
+    {
+      type: PenaltyType.WARNING,
+      severity: PenaltySeverity.WARNING,
+      status: PenaltyStatus.ACTIVE,
+    },
+    {
+      type: PenaltyType.POINTS_DEDUCTION,
+      severity: PenaltySeverity.POINTS_DEDUCTION,
+      status: PenaltyStatus.ACTIVE,
+      points: 5,
+    },
+    {
+      type: PenaltyType.SUSPENSION,
+      severity: PenaltySeverity.SUSPENSION,
+      status: PenaltyStatus.ACTIVE,
+      suspensionDays: 7,
+    },
+    {
+      type: PenaltyType.WARNING,
+      severity: PenaltySeverity.WARNING,
+      status: PenaltyStatus.EXPIRED,
+    },
+    {
+      type: PenaltyType.POINTS_DEDUCTION,
+      severity: PenaltySeverity.POINTS_DEDUCTION,
+      status: PenaltyStatus.APPEALED,
+      points: 3,
+    },
+    {
+      type: PenaltyType.WARNING,
+      severity: PenaltySeverity.WARNING,
+      status: PenaltyStatus.OVERTURNED,
+    },
   ];
 
   const createdPenalties = [];
 
-  for (let i = 0; i < Math.min(activeUsers.length, penaltyConfigs.length); i++) {
+  for (
+    let i = 0;
+    i < Math.min(activeUsers.length, penaltyConfigs.length);
+    i++
+  ) {
     const user = activeUsers[i]!;
     const config = penaltyConfigs[i]!;
     const relatedMatch = matches[i % matches.length];
@@ -979,16 +1564,33 @@ async function seedPenalties(users: User[], matches: Match[], admins: SeededAdmi
         pointsDeducted: config.points || null,
         suspensionDays: config.suspensionDays || null,
         suspensionStartDate: config.suspensionDays ? new Date() : null,
-        suspensionEndDate: config.suspensionDays ? new Date(Date.now() + config.suspensionDays * 24 * 60 * 60 * 1000) : null,
+        suspensionEndDate: config.suspensionDays
+          ? new Date(Date.now() + config.suspensionDays * 24 * 60 * 60 * 1000)
+          : null,
         issuedByAdminId: adminId,
-        reason: `Penalty issued for ${config.type.toLowerCase().replace('_', ' ')}`,
-        expiresAt: config.status === PenaltyStatus.EXPIRED ? new Date(Date.now() - 24 * 60 * 60 * 1000) :
-                  config.type === PenaltyType.WARNING ? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) : null,
-        appealSubmittedAt: config.status === PenaltyStatus.APPEALED ? new Date() : null,
-        appealReason: config.status === PenaltyStatus.APPEALED ? "I believe this penalty was unfairly applied" : null,
-        appealResolvedBy: config.status === PenaltyStatus.OVERTURNED ? adminId : null,
-        appealResolvedAt: config.status === PenaltyStatus.OVERTURNED ? new Date() : null,
-        appealResolutionNotes: config.status === PenaltyStatus.OVERTURNED ? "Appeal upheld - insufficient evidence" : null,
+        reason: `Penalty issued for ${config.type
+          .toLowerCase()
+          .replace("_", " ")}`,
+        expiresAt:
+          config.status === PenaltyStatus.EXPIRED
+            ? new Date(Date.now() - 24 * 60 * 60 * 1000)
+            : config.type === PenaltyType.WARNING
+            ? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+            : null,
+        appealSubmittedAt:
+          config.status === PenaltyStatus.APPEALED ? new Date() : null,
+        appealReason:
+          config.status === PenaltyStatus.APPEALED
+            ? "I believe this penalty was unfairly applied"
+            : null,
+        appealResolvedBy:
+          config.status === PenaltyStatus.OVERTURNED ? adminId : null,
+        appealResolvedAt:
+          config.status === PenaltyStatus.OVERTURNED ? new Date() : null,
+        appealResolutionNotes:
+          config.status === PenaltyStatus.OVERTURNED
+            ? "Appeal upheld - insufficient evidence"
+            : null,
       },
     });
 
@@ -1024,8 +1626,11 @@ async function seedAdminActions(matches: Match[], admins: SeededAdmin[]) {
         adminId: adminId,
         actionType: actionType,
         oldValue: { status: "SCHEDULED", score: null },
-        newValue: { status: match.status, score: { player1: match.playerScore, player2: match.opponentScore } },
-        reason: `Admin action: ${actionType.toLowerCase().replace(/_/g, ' ')}`,
+        newValue: {
+          status: match.status,
+          score: { player1: match.playerScore, player2: match.opponentScore },
+        },
+        reason: `Admin action: ${actionType.toLowerCase().replace(/_/g, " ")}`,
         triggeredRecalculation: actionType === MatchAdminActionType.EDIT_RESULT,
         ipAddress: "192.168.1.1",
       },
@@ -1042,10 +1647,16 @@ async function seedAdminActions(matches: Match[], admins: SeededAdmin[]) {
 // =============================================
 
 async function seedWithdrawalRequests(users: User[], seasons: Season[]) {
-  const activeUsers = users.filter(u => u.status === UserStatus.ACTIVE).slice(10, 15);
-  const activeSeasons = seasons.filter(s => s.status === SeasonStatus.ACTIVE);
+  const activeUsers = users
+    .filter((u) => u.status === UserStatus.ACTIVE)
+    .slice(10, 15);
+  const activeSeasons = seasons.filter((s) => s.status === SeasonStatus.ACTIVE);
 
-  const withdrawalStatuses = [WithdrawalStatus.PENDING, WithdrawalStatus.APPROVED, WithdrawalStatus.REJECTED];
+  const withdrawalStatuses = [
+    WithdrawalStatus.PENDING,
+    WithdrawalStatus.APPROVED,
+    WithdrawalStatus.REJECTED,
+  ];
   const createdRequests = [];
 
   for (let i = 0; i < Math.min(activeUsers.length, activeSeasons.length); i++) {
@@ -1057,9 +1668,16 @@ async function seedWithdrawalRequests(users: User[], seasons: Season[]) {
       data: {
         userId: user.id,
         seasonId: season.id,
-        reason: randomElement(["Personal reasons", "Injury", "Relocation", "Work commitments", "Family emergency"]),
+        reason: randomElement([
+          "Personal reasons",
+          "Injury",
+          "Relocation",
+          "Work commitments",
+          "Family emergency",
+        ]),
         status: status,
-        processedByAdminId: status !== WithdrawalStatus.PENDING ? activeUsers[0]!.id : null,
+        processedByAdminId:
+          status !== WithdrawalStatus.PENDING ? activeUsers[0]!.id : null,
       },
     });
 
@@ -1074,13 +1692,17 @@ async function seedWithdrawalRequests(users: User[], seasons: Season[]) {
 // =============================================
 
 async function seedChatData(users: User[], divisions: Division[]) {
-  const activeUsers = users.filter(u => u.status === UserStatus.ACTIVE && u.completedOnboarding);
+  const activeUsers = users.filter(
+    (u) => u.status === UserStatus.ACTIVE && u.completedOnboarding
+  );
   const createdThreads = [];
   const createdMessages = [];
 
   // Create division threads
   for (const division of divisions.slice(0, 3)) {
-    const existing = await prisma.thread.findFirst({ where: { divisionId: division.id } });
+    const existing = await prisma.thread.findFirst({
+      where: { divisionId: division.id },
+    });
     if (existing) {
       createdThreads.push(existing);
       continue;
@@ -1123,7 +1745,10 @@ async function seedChatData(users: User[], divisions: Division[]) {
             "Check out the updated schedule",
           ]),
           messageType: MessageType.TEXT,
-          createdAt: randomDate(new Date(Date.now() - 7 * 24 * 60 * 60 * 1000), new Date()),
+          createdAt: randomDate(
+            new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
+            new Date()
+          ),
         },
       });
       createdMessages.push(message);
@@ -1165,7 +1790,10 @@ async function seedChatData(users: User[], divisions: Division[]) {
             "Great match today!",
           ]),
           messageType: MessageType.TEXT,
-          createdAt: randomDate(new Date(Date.now() - 3 * 24 * 60 * 60 * 1000), new Date()),
+          createdAt: randomDate(
+            new Date(Date.now() - 3 * 24 * 60 * 60 * 1000),
+            new Date()
+          ),
         },
       });
     }
@@ -1180,17 +1808,61 @@ async function seedChatData(users: User[], divisions: Division[]) {
 // SEED NOTIFICATIONS
 // =============================================
 
-async function seedNotifications(users: User[], matches: Match[], seasons: Season[]) {
-  const activeUsers = users.filter(u => u.status === UserStatus.ACTIVE);
+async function seedNotifications(
+  users: User[],
+  matches: Match[],
+  seasons: Season[]
+) {
+  const activeUsers = users.filter((u) => u.status === UserStatus.ACTIVE);
   const notificationTypes = [
-    { category: NotificationCategory.MATCH, type: "MATCH_SCHEDULED", title: "Match Scheduled", message: "Your match has been scheduled" },
-    { category: NotificationCategory.MATCH, type: "MATCH_REMINDER", title: "Match Reminder", message: "Your match starts in 24 hours" },
-    { category: NotificationCategory.MATCH, type: "MATCH_COMPLETED", title: "Match Completed", message: "Your match result has been recorded" },
-    { category: NotificationCategory.SEASON, type: "SEASON_STARTING", title: "Season Starting", message: "The season starts next week!" },
-    { category: NotificationCategory.DIVISION, type: "DIVISION_UPDATE", title: "Division Update", message: "Your division standings have been updated" },
-    { category: NotificationCategory.CHAT, type: "NEW_MESSAGE", title: "New Message", message: "You have a new message" },
-    { category: NotificationCategory.ADMIN, type: "ADMIN_NOTICE", title: "Admin Notice", message: "Important announcement from admin" },
-    { category: NotificationCategory.PAYMENT, type: "PAYMENT_RECEIVED", title: "Payment Received", message: "Your payment has been processed" },
+    {
+      category: NotificationCategory.MATCH,
+      type: "MATCH_SCHEDULED",
+      title: "Match Scheduled",
+      message: "Your match has been scheduled",
+    },
+    {
+      category: NotificationCategory.MATCH,
+      type: "MATCH_REMINDER",
+      title: "Match Reminder",
+      message: "Your match starts in 24 hours",
+    },
+    {
+      category: NotificationCategory.MATCH,
+      type: "MATCH_COMPLETED",
+      title: "Match Completed",
+      message: "Your match result has been recorded",
+    },
+    {
+      category: NotificationCategory.SEASON,
+      type: "SEASON_STARTING",
+      title: "Season Starting",
+      message: "The season starts next week!",
+    },
+    {
+      category: NotificationCategory.DIVISION,
+      type: "DIVISION_UPDATE",
+      title: "Division Update",
+      message: "Your division standings have been updated",
+    },
+    {
+      category: NotificationCategory.CHAT,
+      type: "NEW_MESSAGE",
+      title: "New Message",
+      message: "You have a new message",
+    },
+    {
+      category: NotificationCategory.ADMIN,
+      type: "ADMIN_NOTICE",
+      title: "Admin Notice",
+      message: "Important announcement from admin",
+    },
+    {
+      category: NotificationCategory.PAYMENT,
+      type: "PAYMENT_RECEIVED",
+      title: "Payment Received",
+      message: "Your payment has been processed",
+    },
   ];
 
   const createdNotifications = [];
@@ -1208,9 +1880,16 @@ async function seedNotifications(users: User[], matches: Match[], seasons: Seaso
         category: notifType.category,
         type: notifType.type,
         userId: user.id,
-        matchId: notifType.category === NotificationCategory.MATCH ? match?.id : null,
-        seasonId: notifType.category === NotificationCategory.SEASON ? season?.id : null,
-        createdAt: randomDate(new Date(Date.now() - 14 * 24 * 60 * 60 * 1000), new Date()),
+        matchId:
+          notifType.category === NotificationCategory.MATCH ? match?.id : null,
+        seasonId:
+          notifType.category === NotificationCategory.SEASON
+            ? season?.id
+            : null,
+        createdAt: randomDate(
+          new Date(Date.now() - 14 * 24 * 60 * 60 * 1000),
+          new Date()
+        ),
       },
     });
 
@@ -1236,11 +1915,18 @@ async function seedNotifications(users: User[], matches: Match[], seasons: Seaso
 // =============================================
 
 async function seedSocialData(users: User[], seasons: Season[]) {
-  const activeUsers = users.filter(u => u.status === UserStatus.ACTIVE && u.completedOnboarding);
-  const activeSeasons = seasons.filter(s => s.status === SeasonStatus.ACTIVE);
+  const activeUsers = users.filter(
+    (u) => u.status === UserStatus.ACTIVE && u.completedOnboarding
+  );
+  const activeSeasons = seasons.filter((s) => s.status === SeasonStatus.ACTIVE);
 
   // Create friendships
-  const friendshipStatuses = [FriendshipStatus.PENDING, FriendshipStatus.ACCEPTED, FriendshipStatus.REJECTED, FriendshipStatus.BLOCKED];
+  const friendshipStatuses = [
+    FriendshipStatus.PENDING,
+    FriendshipStatus.ACCEPTED,
+    FriendshipStatus.REJECTED,
+    FriendshipStatus.BLOCKED,
+  ];
 
   for (let i = 0; i < Math.min(20, activeUsers.length - 1); i++) {
     const requester = activeUsers[i]!;
@@ -1264,16 +1950,29 @@ async function seedSocialData(users: User[], seasons: Season[]) {
   }
 
   // Create pair requests
-  const pairStatuses = [PairRequestStatus.PENDING, PairRequestStatus.ACCEPTED, PairRequestStatus.DENIED, PairRequestStatus.EXPIRED];
+  const pairStatuses = [
+    PairRequestStatus.PENDING,
+    PairRequestStatus.ACCEPTED,
+    PairRequestStatus.DENIED,
+    PairRequestStatus.EXPIRED,
+  ];
 
-  for (let i = 0; i < Math.min(10, activeUsers.length - 1, activeSeasons.length); i++) {
+  for (
+    let i = 0;
+    i < Math.min(10, activeUsers.length - 1, activeSeasons.length);
+    i++
+  ) {
     const requester = activeUsers[i * 2]!;
     const recipient = activeUsers[i * 2 + 1]!;
     const season = activeSeasons[i % activeSeasons.length]!;
     const status = pairStatuses[i % pairStatuses.length]!;
 
     const existing = await prisma.pairRequest.findFirst({
-      where: { requesterId: requester.id, recipientId: recipient.id, seasonId: season.id },
+      where: {
+        requesterId: requester.id,
+        recipientId: recipient.id,
+        seasonId: season.id,
+      },
     });
 
     if (!existing) {
@@ -1292,13 +1991,21 @@ async function seedSocialData(users: User[], seasons: Season[]) {
   }
 
   // Create partnerships from accepted pair requests
-  for (let i = 0; i < Math.min(5, activeUsers.length - 1, activeSeasons.length); i++) {
+  for (
+    let i = 0;
+    i < Math.min(5, activeUsers.length - 1, activeSeasons.length);
+    i++
+  ) {
     const captain = activeUsers[i * 2]!;
     const partner = activeUsers[i * 2 + 1]!;
     const season = activeSeasons[i % activeSeasons.length]!;
 
     const existing = await prisma.partnership.findFirst({
-      where: { captainId: captain.id, partnerId: partner.id, seasonId: season.id },
+      where: {
+        captainId: captain.id,
+        partnerId: partner.id,
+        seasonId: season.id,
+      },
     });
 
     if (!existing) {
@@ -1338,14 +2045,24 @@ async function seedSocialData(users: User[], seasons: Season[]) {
 // SEED PLAYER RATINGS AND STANDINGS
 // =============================================
 
-async function seedRatingsAndStandings(users: User[], seasons: Season[], divisions: Division[], admins: SeededAdmin[]) {
-  const activeUsers = users.filter(u => u.status === UserStatus.ACTIVE && u.completedOnboarding);
-  const activeSeasons = seasons.filter(s => s.status === SeasonStatus.ACTIVE || s.status === SeasonStatus.FINISHED);
+async function seedRatingsAndStandings(
+  users: User[],
+  seasons: Season[],
+  divisions: Division[],
+  admins: SeededAdmin[]
+) {
+  const activeUsers = users.filter(
+    (u) => u.status === UserStatus.ACTIVE && u.completedOnboarding
+  );
+  const activeSeasons = seasons.filter(
+    (s) =>
+      s.status === SeasonStatus.ACTIVE || s.status === SeasonStatus.FINISHED
+  );
   const adminId = admins[0]!.adminId;
 
   // Create player ratings
   for (const season of activeSeasons) {
-    const seasonDivisions = divisions.filter(d => d.seasonId === season.id);
+    const seasonDivisions = divisions.filter((d) => d.seasonId === season.id);
 
     for (let i = 0; i < Math.min(10, activeUsers.length); i++) {
       const user = activeUsers[i]!;
@@ -1384,7 +2101,11 @@ async function seedRatingsAndStandings(users: User[], seasons: Season[], divisio
               delta: randomInt(-15, 25),
               rdBefore: 160,
               rdAfter: 150,
-              reason: randomElement([RatingChangeReason.MATCH_WIN, RatingChangeReason.MATCH_LOSS, RatingChangeReason.WALKOVER_WIN]),
+              reason: randomElement([
+                RatingChangeReason.MATCH_WIN,
+                RatingChangeReason.MATCH_LOSS,
+                RatingChangeReason.WALKOVER_WIN,
+              ]),
               notes: "Rating updated after match",
             },
           });
@@ -1398,7 +2119,11 @@ async function seedRatingsAndStandings(users: User[], seasons: Season[], divisio
         const user = activeUsers[i]!;
 
         const existingStanding = await prisma.divisionStanding.findFirst({
-          where: { divisionId: division.id, seasonId: season.id, userId: user.id },
+          where: {
+            divisionId: division.id,
+            seasonId: season.id,
+            userId: user.id,
+          },
         });
 
         if (!existingStanding) {
@@ -1421,8 +2146,10 @@ async function seedRatingsAndStandings(users: User[], seasons: Season[], divisio
               countedLosses: Math.min(losses, 6 - Math.min(wins, 6)),
               setsWon: wins * 2 + randomInt(0, losses),
               setsLost: losses * 2 + randomInt(0, wins),
-              gamesWon: (wins * 2 + randomInt(0, losses)) * 6 + randomInt(0, 20),
-              gamesLost: (losses * 2 + randomInt(0, wins)) * 6 + randomInt(0, 20),
+              gamesWon:
+                (wins * 2 + randomInt(0, losses)) * 6 + randomInt(0, 20),
+              gamesLost:
+                (losses * 2 + randomInt(0, wins)) * 6 + randomInt(0, 20),
               best6SetsWon: Math.min(wins, 6) * 2,
               best6SetsTotal: Math.min(matchesPlayed, 6) * 2,
               best6GamesWon: Math.min(wins, 6) * 12,
@@ -1437,7 +2164,9 @@ async function seedRatingsAndStandings(users: User[], seasons: Season[], divisio
   }
 
   // Create rating parameters
-  const existingParams = await prisma.ratingParameters.findFirst({ where: { isActive: true } });
+  const existingParams = await prisma.ratingParameters.findFirst({
+    where: { isActive: true },
+  });
   if (!existingParams) {
     await prisma.ratingParameters.create({
       data: {
@@ -1467,25 +2196,89 @@ async function seedRatingsAndStandings(users: User[], seasons: Season[], divisio
 
 async function seedAchievements(users: User[]) {
   const achievements = [
-    { title: "First Match", description: "Complete your first match", category: "Beginner", points: 10 },
-    { title: "5 Matches", description: "Complete 5 matches", category: "Beginner", points: 25 },
-    { title: "10 Matches", description: "Complete 10 matches", category: "Intermediate", points: 50 },
-    { title: "25 Matches", description: "Complete 25 matches", category: "Advanced", points: 100 },
-    { title: "First Win", description: "Win your first match", category: "Beginner", points: 15 },
-    { title: "5 Wins", description: "Win 5 matches", category: "Intermediate", points: 30 },
-    { title: "Win Streak 3", description: "Win 3 matches in a row", category: "Intermediate", points: 40 },
-    { title: "Win Streak 5", description: "Win 5 matches in a row", category: "Advanced", points: 75 },
-    { title: "First League", description: "Complete your first league season", category: "Beginner", points: 50 },
-    { title: "Division Champion", description: "Finish 1st in your division", category: "Champion", points: 200 },
-    { title: "Top 3 Finish", description: "Finish in top 3 of your division", category: "Advanced", points: 100 },
-    { title: "Perfect Attendance", description: "Play all 9 scheduled matches in a season", category: "Dedication", points: 75 },
+    {
+      title: "First Match",
+      description: "Complete your first match",
+      category: "Beginner",
+      points: 10,
+    },
+    {
+      title: "5 Matches",
+      description: "Complete 5 matches",
+      category: "Beginner",
+      points: 25,
+    },
+    {
+      title: "10 Matches",
+      description: "Complete 10 matches",
+      category: "Intermediate",
+      points: 50,
+    },
+    {
+      title: "25 Matches",
+      description: "Complete 25 matches",
+      category: "Advanced",
+      points: 100,
+    },
+    {
+      title: "First Win",
+      description: "Win your first match",
+      category: "Beginner",
+      points: 15,
+    },
+    {
+      title: "5 Wins",
+      description: "Win 5 matches",
+      category: "Intermediate",
+      points: 30,
+    },
+    {
+      title: "Win Streak 3",
+      description: "Win 3 matches in a row",
+      category: "Intermediate",
+      points: 40,
+    },
+    {
+      title: "Win Streak 5",
+      description: "Win 5 matches in a row",
+      category: "Advanced",
+      points: 75,
+    },
+    {
+      title: "First League",
+      description: "Complete your first league season",
+      category: "Beginner",
+      points: 50,
+    },
+    {
+      title: "Division Champion",
+      description: "Finish 1st in your division",
+      category: "Champion",
+      points: 200,
+    },
+    {
+      title: "Top 3 Finish",
+      description: "Finish in top 3 of your division",
+      category: "Advanced",
+      points: 100,
+    },
+    {
+      title: "Perfect Attendance",
+      description: "Play all 9 scheduled matches in a season",
+      category: "Dedication",
+      points: 75,
+    },
   ];
 
   const createdAchievements = [];
-  const activeUsers = users.filter(u => u.status === UserStatus.ACTIVE && u.completedOnboarding);
+  const activeUsers = users.filter(
+    (u) => u.status === UserStatus.ACTIVE && u.completedOnboarding
+  );
 
   for (const ach of achievements) {
-    let achievement = await prisma.achievement.findFirst({ where: { title: ach.title } });
+    let achievement = await prisma.achievement.findFirst({
+      where: { title: ach.title },
+    });
 
     if (!achievement) {
       achievement = await prisma.achievement.create({
@@ -1513,7 +2306,10 @@ async function seedAchievements(users: User[]) {
           data: {
             userId: user.id,
             achievementId: achievement.id,
-            unlockedAt: randomDate(new Date(Date.now() - 60 * 24 * 60 * 60 * 1000), new Date()),
+            unlockedAt: randomDate(
+              new Date(Date.now() - 60 * 24 * 60 * 60 * 1000),
+              new Date()
+            ),
             isCompleted: true,
           },
         });
@@ -1530,18 +2326,51 @@ async function seedAchievements(users: User[]) {
 
 async function seedPromoCodes(seasons: Season[]) {
   const promoCodes = [
-    { code: "WELCOME10", description: "Welcome discount - 10%", discountValue: 10, isPercentage: true },
-    { code: "EARLYBIRD", description: "Early bird discount - RM20", discountValue: 20, isPercentage: false },
-    { code: "SUMMER2024", description: "Summer promotion - 15%", discountValue: 15, isPercentage: true },
-    { code: "REFERRAL5", description: "Referral discount - RM5", discountValue: 5, isPercentage: false },
-    { code: "VIP25", description: "VIP member discount - 25%", discountValue: 25, isPercentage: true },
-    { code: "EXPIRED2023", description: "Expired code", discountValue: 10, isPercentage: true, isActive: false },
+    {
+      code: "WELCOME10",
+      description: "Welcome discount - 10%",
+      discountValue: 10,
+      isPercentage: true,
+    },
+    {
+      code: "EARLYBIRD",
+      description: "Early bird discount - RM20",
+      discountValue: 20,
+      isPercentage: false,
+    },
+    {
+      code: "SUMMER2024",
+      description: "Summer promotion - 15%",
+      discountValue: 15,
+      isPercentage: true,
+    },
+    {
+      code: "REFERRAL5",
+      description: "Referral discount - RM5",
+      discountValue: 5,
+      isPercentage: false,
+    },
+    {
+      code: "VIP25",
+      description: "VIP member discount - 25%",
+      discountValue: 25,
+      isPercentage: true,
+    },
+    {
+      code: "EXPIRED2023",
+      description: "Expired code",
+      discountValue: 10,
+      isPercentage: true,
+      isActive: false,
+    },
   ];
 
-  const activeSeasons = seasons.filter(s => s.promoCodeSupported);
+  const activeSeasons = seasons.filter((s) => s.promoCodeSupported);
 
   for (const promo of promoCodes) {
-    const existing = await prisma.promoCode.findFirst({ where: { code: promo.code } });
+    const existing = await prisma.promoCode.findFirst({
+      where: { code: promo.code },
+    });
 
     if (!existing) {
       await prisma.promoCode.create({
@@ -1551,9 +2380,12 @@ async function seedPromoCodes(seasons: Season[]) {
           discountValue: new Prisma.Decimal(promo.discountValue),
           isPercentage: promo.isPercentage,
           isActive: promo.isActive !== false,
-          expiresAt: promo.isActive !== false ? new Date(Date.now() + 90 * 24 * 60 * 60 * 1000) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
+          expiresAt:
+            promo.isActive !== false
+              ? new Date(Date.now() + 90 * 24 * 60 * 60 * 1000)
+              : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
           seasons: {
-            connect: activeSeasons.slice(0, 2).map(s => ({ id: s.id })),
+            connect: activeSeasons.slice(0, 2).map((s) => ({ id: s.id })),
           },
         },
       });
@@ -1565,7 +2397,11 @@ async function seedPromoCodes(seasons: Season[]) {
 // SEED INACTIVITY SETTINGS
 // =============================================
 
-async function seedInactivitySettings(leagues: any[], seasons: Season[], admins: SeededAdmin[]) {
+async function seedInactivitySettings(
+  leagues: any[],
+  seasons: Season[],
+  admins: SeededAdmin[]
+) {
   const adminId = admins[0]!.adminId;
 
   // Create global default settings
@@ -1613,7 +2449,7 @@ async function seedInactivitySettings(leagues: any[], seasons: Season[], admins:
   }
 
   // Create season-specific settings
-  const activeSeasons = seasons.filter(s => s.status === SeasonStatus.ACTIVE);
+  const activeSeasons = seasons.filter((s) => s.status === SeasonStatus.ACTIVE);
   for (const season of activeSeasons.slice(0, 2)) {
     const existing = await prisma.inactivitySettings.findFirst({
       where: { seasonId: season.id },
@@ -1642,8 +2478,13 @@ async function seedInactivitySettings(leagues: any[], seasons: Season[], admins:
 // =============================================
 
 async function seedSeasonInvitations(users: User[], seasons: Season[]) {
-  const activeUsers = users.filter(u => u.status === UserStatus.ACTIVE && u.completedOnboarding);
-  const activeSeasons = seasons.filter(s => s.status === SeasonStatus.ACTIVE || s.status === SeasonStatus.UPCOMING);
+  const activeUsers = users.filter(
+    (u) => u.status === UserStatus.ACTIVE && u.completedOnboarding
+  );
+  const activeSeasons = seasons.filter(
+    (s) =>
+      s.status === SeasonStatus.ACTIVE || s.status === SeasonStatus.UPCOMING
+  );
 
   if (activeUsers.length < 2) {
     console.log("   ⚠️ Not enough active users to create invitations");
@@ -1661,7 +2502,10 @@ async function seedSeasonInvitations(users: User[], seasons: Season[]) {
 
   for (const season of activeSeasons) {
     // Create 10-15 invitations per season
-    const inviteCount = Math.min(randomInt(10, 15), Math.floor(activeUsers.length / 2));
+    const inviteCount = Math.min(
+      randomInt(10, 15),
+      Math.floor(activeUsers.length / 2)
+    );
 
     for (let i = 0; i < inviteCount; i++) {
       // Pick a sender and recipient (different users)
@@ -1672,7 +2516,11 @@ async function seedSeasonInvitations(users: User[], seasons: Season[]) {
       const status = invitationStatuses[i % invitationStatuses.length]!;
 
       const existing = await prisma.seasonInvitation.findFirst({
-        where: { senderId: sender.id, recipientId: recipient.id, seasonId: season.id },
+        where: {
+          senderId: sender.id,
+          recipientId: recipient.id,
+          seasonId: season.id,
+        },
       });
 
       if (!existing) {
@@ -1690,7 +2538,8 @@ async function seedSeasonInvitations(users: User[], seasons: Season[]) {
               null,
             ]),
             expiresAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
-            respondedAt: status !== SeasonInvitationStatus.PENDING ? new Date() : null,
+            respondedAt:
+              status !== SeasonInvitationStatus.PENDING ? new Date() : null,
           },
         });
         createdInvitations.push(invitation);
@@ -1706,7 +2555,9 @@ async function seedSeasonInvitations(users: User[], seasons: Season[]) {
 // =============================================
 
 async function seedFriendlyMatches(users: User[], leagues: any[]) {
-  const activeUsers = users.filter(u => u.status === UserStatus.ACTIVE && u.completedOnboarding);
+  const activeUsers = users.filter(
+    (u) => u.status === UserStatus.ACTIVE && u.completedOnboarding
+  );
   const createdMatches: Match[] = [];
 
   // Create 30 friendly matches spread across sports
@@ -1732,12 +2583,20 @@ async function seedFriendlyMatches(users: User[], leagues: any[]) {
         format: MatchFormat.STANDARD,
         status: isCompleted ? MatchStatus.COMPLETED : MatchStatus.SCHEDULED,
         matchDate: matchDate,
-        location: randomElement(["Community Courts", "Private Club", "Public Park", "Sports Center"]),
+        location: randomElement([
+          "Community Courts",
+          "Private Club",
+          "Public Park",
+          "Sports Center",
+        ]),
         venue: `Court ${randomInt(1, 6)}`,
         playerScore: isCompleted ? randomInt(0, 2) : null,
         opponentScore: isCompleted ? randomInt(0, 2) : null,
         createdById: player1.id,
-        createdAt: randomDate(new Date(Date.now() - 84 * 24 * 60 * 60 * 1000), matchDate),
+        createdAt: randomDate(
+          new Date(Date.now() - 84 * 24 * 60 * 60 * 1000),
+          matchDate
+        ),
       },
     });
 
@@ -1794,18 +2653,78 @@ async function seedBugTrackingApps(adminId: string) {
       isActive: true,
       bugModules: {
         create: [
-          { name: "Dashboard", code: "DASHBOARD", description: "Main dashboard and analytics", sortOrder: 1 },
-          { name: "Players", code: "PLAYERS", description: "Player management", sortOrder: 2 },
-          { name: "Leagues", code: "LEAGUES", description: "League management", sortOrder: 3 },
-          { name: "Seasons", code: "SEASONS", description: "Season management", sortOrder: 4 },
-          { name: "Divisions", code: "DIVISIONS", description: "Division management", sortOrder: 5 },
-          { name: "Matches", code: "MATCHES", description: "Match scheduling and results", sortOrder: 6 },
-          { name: "Payments", code: "PAYMENTS", description: "Payment processing", sortOrder: 7 },
-          { name: "Chat", code: "CHAT", description: "Chat and messaging", sortOrder: 8 },
-          { name: "Notifications", code: "NOTIFICATIONS", description: "Notification system", sortOrder: 9 },
-          { name: "Settings", code: "SETTINGS", description: "App settings", sortOrder: 10 },
-          { name: "Authentication", code: "AUTH", description: "Login, registration, password", sortOrder: 11 },
-          { name: "Other", code: "OTHER", description: "Other issues", sortOrder: 99 },
+          {
+            name: "Dashboard",
+            code: "DASHBOARD",
+            description: "Main dashboard and analytics",
+            sortOrder: 1,
+          },
+          {
+            name: "Players",
+            code: "PLAYERS",
+            description: "Player management",
+            sortOrder: 2,
+          },
+          {
+            name: "Leagues",
+            code: "LEAGUES",
+            description: "League management",
+            sortOrder: 3,
+          },
+          {
+            name: "Seasons",
+            code: "SEASONS",
+            description: "Season management",
+            sortOrder: 4,
+          },
+          {
+            name: "Divisions",
+            code: "DIVISIONS",
+            description: "Division management",
+            sortOrder: 5,
+          },
+          {
+            name: "Matches",
+            code: "MATCHES",
+            description: "Match scheduling and results",
+            sortOrder: 6,
+          },
+          {
+            name: "Payments",
+            code: "PAYMENTS",
+            description: "Payment processing",
+            sortOrder: 7,
+          },
+          {
+            name: "Chat",
+            code: "CHAT",
+            description: "Chat and messaging",
+            sortOrder: 8,
+          },
+          {
+            name: "Notifications",
+            code: "NOTIFICATIONS",
+            description: "Notification system",
+            sortOrder: 9,
+          },
+          {
+            name: "Settings",
+            code: "SETTINGS",
+            description: "App settings",
+            sortOrder: 10,
+          },
+          {
+            name: "Authentication",
+            code: "AUTH",
+            description: "Login, registration, password",
+            sortOrder: 11,
+          },
+          {
+            name: "Other",
+            code: "OTHER",
+            description: "Other issues",
+            sortOrder: 99,
+          },
         ],
       },
       bugSettings: {
@@ -1841,16 +2760,66 @@ async function seedBugTrackingApps(adminId: string) {
       isActive: true,
       bugModules: {
         create: [
-          { name: "Home", code: "HOME", description: "Home screen", sortOrder: 1 },
-          { name: "Profile", code: "PROFILE", description: "User profile", sortOrder: 2 },
-          { name: "Matches", code: "MATCHES", description: "Match viewing and scheduling", sortOrder: 3 },
-          { name: "Pairing", code: "PAIRING", description: "Partner pairing system", sortOrder: 4 },
-          { name: "Leaderboard", code: "LEADERBOARD", description: "Rankings and standings", sortOrder: 5 },
-          { name: "Chat", code: "CHAT", description: "In-app messaging", sortOrder: 6 },
-          { name: "Notifications", code: "NOTIFICATIONS", description: "Push notifications", sortOrder: 7 },
-          { name: "Registration", code: "REGISTRATION", description: "Season registration", sortOrder: 8 },
-          { name: "Authentication", code: "AUTH", description: "Login, signup, password", sortOrder: 9 },
-          { name: "Other", code: "OTHER", description: "Other issues", sortOrder: 99 },
+          {
+            name: "Home",
+            code: "HOME",
+            description: "Home screen",
+            sortOrder: 1,
+          },
+          {
+            name: "Profile",
+            code: "PROFILE",
+            description: "User profile",
+            sortOrder: 2,
+          },
+          {
+            name: "Matches",
+            code: "MATCHES",
+            description: "Match viewing and scheduling",
+            sortOrder: 3,
+          },
+          {
+            name: "Pairing",
+            code: "PAIRING",
+            description: "Partner pairing system",
+            sortOrder: 4,
+          },
+          {
+            name: "Leaderboard",
+            code: "LEADERBOARD",
+            description: "Rankings and standings",
+            sortOrder: 5,
+          },
+          {
+            name: "Chat",
+            code: "CHAT",
+            description: "In-app messaging",
+            sortOrder: 6,
+          },
+          {
+            name: "Notifications",
+            code: "NOTIFICATIONS",
+            description: "Push notifications",
+            sortOrder: 7,
+          },
+          {
+            name: "Registration",
+            code: "REGISTRATION",
+            description: "Season registration",
+            sortOrder: 8,
+          },
+          {
+            name: "Authentication",
+            code: "AUTH",
+            description: "Login, signup, password",
+            sortOrder: 9,
+          },
+          {
+            name: "Other",
+            code: "OTHER",
+            description: "Other issues",
+            sortOrder: 99,
+          },
         ],
       },
       bugSettings: {
@@ -1879,13 +2848,22 @@ async function seedBugTrackingApps(adminId: string) {
 // SEED TEAM CHANGE REQUESTS
 // =============================================
 
-async function seedTeamChangeRequests(users: User[], seasons: Season[], divisions: Division[], admins: SeededAdmin[]) {
-  const activeUsers = users.filter(u => u.status === UserStatus.ACTIVE && u.completedOnboarding);
-  const activeSeasons = seasons.filter(s => s.status === SeasonStatus.ACTIVE);
+async function seedTeamChangeRequests(
+  users: User[],
+  seasons: Season[],
+  divisions: Division[],
+  admins: SeededAdmin[]
+) {
+  const activeUsers = users.filter(
+    (u) => u.status === UserStatus.ACTIVE && u.completedOnboarding
+  );
+  const activeSeasons = seasons.filter((s) => s.status === SeasonStatus.ACTIVE);
   const adminId = admins[0]!.adminId;
 
   if (activeSeasons.length === 0 || divisions.length === 0) {
-    console.log("   ⚠️ Not enough active seasons or divisions to create team change requests");
+    console.log(
+      "   ⚠️ Not enough active seasons or divisions to create team change requests"
+    );
     return [];
   }
 
@@ -1914,7 +2892,7 @@ async function seedTeamChangeRequests(users: User[], seasons: Season[], division
 
   // Create requests for each active season
   for (const season of activeSeasons) {
-    const seasonDivisions = divisions.filter(d => d.seasonId === season.id);
+    const seasonDivisions = divisions.filter((d) => d.seasonId === season.id);
 
     if (seasonDivisions.length < 2) {
       continue; // Need at least 2 divisions to transfer between
@@ -1926,7 +2904,8 @@ async function seedTeamChangeRequests(users: User[], seasons: Season[], division
     for (let i = 0; i < requestCount; i++) {
       const user = activeUsers[i % activeUsers.length]!;
       const currentDivision = seasonDivisions[i % seasonDivisions.length]!;
-      const requestedDivision = seasonDivisions[(i + 1) % seasonDivisions.length]!;
+      const requestedDivision =
+        seasonDivisions[(i + 1) % seasonDivisions.length]!;
 
       // Skip if same division
       if (currentDivision.id === requestedDivision.id) {
@@ -1961,13 +2940,19 @@ async function seedTeamChangeRequests(users: User[], seasons: Season[], division
         // Next 3: APPROVED (admin reviewed and approved)
         status = TeamChangeRequestStatus.APPROVED;
         reviewedByAdminId = adminId;
-        reviewedAt = randomDate(new Date(Date.now() - 7 * 24 * 60 * 60 * 1000), new Date());
+        reviewedAt = randomDate(
+          new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
+          new Date()
+        );
         adminNotesText = adminNotes[i % adminNotes.length];
       } else if (i < 10) {
         // Next 3: DENIED (admin reviewed and denied)
         status = TeamChangeRequestStatus.DENIED;
         reviewedByAdminId = adminId;
-        reviewedAt = randomDate(new Date(Date.now() - 7 * 24 * 60 * 60 * 1000), new Date());
+        reviewedAt = randomDate(
+          new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
+          new Date()
+        );
         adminNotesText = adminNotes[(i + 2) % adminNotes.length];
       } else {
         // Remaining: CANCELLED (user cancelled their own request)
@@ -1985,7 +2970,10 @@ async function seedTeamChangeRequests(users: User[], seasons: Season[], division
           reviewedByAdminId: reviewedByAdminId,
           reviewedAt: reviewedAt,
           adminNotes: adminNotesText,
-          createdAt: randomDate(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000), new Date()),
+          createdAt: randomDate(
+            new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
+            new Date()
+          ),
         },
       });
 
@@ -2000,9 +2988,14 @@ async function seedTeamChangeRequests(users: User[], seasons: Season[], division
 // SEED ADMIN LOGS (NEW - Admin Action Tracking)
 // =============================================
 
-async function seedAdminLogs(admins: SeededAdmin[], users: User[], matches: Match[], seasons: Season[]) {
+async function seedAdminLogs(
+  admins: SeededAdmin[],
+  users: User[],
+  matches: Match[],
+  seasons: Season[]
+) {
   const adminId = admins[0]!.adminId;
-  const activeUsers = users.filter(u => u.status === UserStatus.ACTIVE);
+  const activeUsers = users.filter((u) => u.status === UserStatus.ACTIVE);
 
   const logEntries: Array<{
     actionType: AdminActionType;
@@ -2031,7 +3024,7 @@ async function seedAdminLogs(admins: SeededAdmin[], users: User[], matches: Matc
   }
 
   // Player ban/unban logs
-  const suspendedUsers = users.filter(u => u.status === UserStatus.SUSPENDED);
+  const suspendedUsers = users.filter((u) => u.status === UserStatus.SUSPENDED);
   for (const user of suspendedUsers) {
     logEntries.push({
       actionType: AdminActionType.PLAYER_BAN,
@@ -2045,7 +3038,7 @@ async function seedAdminLogs(admins: SeededAdmin[], users: User[], matches: Matc
   }
 
   // Match management logs
-  const voidMatches = matches.filter(m => m.status === MatchStatus.VOID);
+  const voidMatches = matches.filter((m) => m.status === MatchStatus.VOID);
   for (const match of voidMatches.slice(0, 3)) {
     logEntries.push({
       actionType: AdminActionType.MATCH_VOID,
@@ -2065,7 +3058,10 @@ async function seedAdminLogs(admins: SeededAdmin[], users: User[], matches: Matc
       targetId: match.id,
       description: `Edited match result after dispute review`,
       oldValue: { playerScore: 1, opponentScore: 2 },
-      newValue: { playerScore: match.playerScore, opponentScore: match.opponentScore },
+      newValue: {
+        playerScore: match.playerScore,
+        opponentScore: match.opponentScore,
+      },
     });
   }
 
@@ -2134,7 +3130,10 @@ async function seedAdminLogs(admins: SeededAdmin[], users: User[], matches: Matc
         oldValue: entry.oldValue || null,
         newValue: entry.newValue || null,
         metadata: entry.metadata || null,
-        createdAt: randomDate(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000), new Date()),
+        createdAt: randomDate(
+          new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
+          new Date()
+        ),
       },
     });
     createdLogs.push(log);
@@ -2178,7 +3177,9 @@ async function seedAdminInviteTokens(admins: SeededAdmin[]) {
 // =============================================
 
 async function seedMatchResults(matches: Match[], users: User[]) {
-  const completedMatches = matches.filter(m => m.status === MatchStatus.COMPLETED && !m.isWalkover);
+  const completedMatches = matches.filter(
+    (m) => m.status === MatchStatus.COMPLETED && !m.isWalkover
+  );
   const createdResults = [];
 
   for (const match of completedMatches) {
@@ -2186,8 +3187,12 @@ async function seedMatchResults(matches: Match[], users: User[]) {
       where: { matchId: match.id },
     });
 
-    const player1 = participants.find(p => p.role === ParticipantRole.CREATOR);
-    const player2 = participants.find(p => p.role === ParticipantRole.OPPONENT);
+    const player1 = participants.find(
+      (p) => p.role === ParticipantRole.CREATOR
+    );
+    const player2 = participants.find(
+      (p) => p.role === ParticipantRole.OPPONENT
+    );
 
     if (!player1 || !player2) continue;
 
@@ -2210,7 +3215,10 @@ async function seedMatchResults(matches: Match[], users: User[]) {
         playerId: player1.userId,
         opponentId: player2.userId,
         sportType: SportType.PICKLEBALL,
-        gameType: match.matchType === MatchType.SINGLES ? GameType.SINGLES : GameType.DOUBLES,
+        gameType:
+          match.matchType === MatchType.SINGLES
+            ? GameType.SINGLES
+            : GameType.DOUBLES,
         isWin: player1Won,
         matchPoints: player1Won ? randomInt(3, 5) : randomInt(1, 2),
         participationPoints: 1,
@@ -2235,7 +3243,10 @@ async function seedMatchResults(matches: Match[], users: User[]) {
         playerId: player2.userId,
         opponentId: player1.userId,
         sportType: SportType.PICKLEBALL,
-        gameType: match.matchType === MatchType.SINGLES ? GameType.SINGLES : GameType.DOUBLES,
+        gameType:
+          match.matchType === MatchType.SINGLES
+            ? GameType.SINGLES
+            : GameType.DOUBLES,
         isWin: !player1Won,
         matchPoints: !player1Won ? randomInt(3, 5) : randomInt(1, 2),
         participationPoints: 1,
@@ -2263,7 +3274,10 @@ async function seedMatchResults(matches: Match[], users: User[]) {
 
 async function seedPickleballGameScores(matches: Match[]) {
   const pickleballMatches = matches.filter(
-    m => m.sport === "PICKLEBALL" && m.status === MatchStatus.COMPLETED && !m.isWalkover
+    (m) =>
+      m.sport === "PICKLEBALL" &&
+      m.status === MatchStatus.COMPLETED &&
+      !m.isWalkover
   );
   const createdScores = [];
 
@@ -2273,7 +3287,8 @@ async function seedPickleballGameScores(matches: Match[]) {
     });
     if (existingScore) continue;
 
-    const gamesCount = match.playerScore === 2 || match.opponentScore === 2 ? 3 : 2;
+    const gamesCount =
+      match.playerScore === 2 || match.opponentScore === 2 ? 3 : 2;
 
     for (let gameNum = 1; gameNum <= gamesCount; gameNum++) {
       const score = await prisma.pickleballGameScore.create({
@@ -2295,12 +3310,16 @@ async function seedPickleballGameScores(matches: Match[]) {
 // SEED PLAYER STATUS CHANGES
 // =============================================
 
-async function seedPlayerStatusChanges(users: User[], admins: SeededAdmin[], matches: Match[]) {
+async function seedPlayerStatusChanges(
+  users: User[],
+  admins: SeededAdmin[],
+  matches: Match[]
+) {
   const adminId = admins[0]!.adminId;
   const createdChanges = [];
 
   // Status changes for suspended users (ban actions)
-  const suspendedUsers = users.filter(u => u.status === UserStatus.SUSPENDED);
+  const suspendedUsers = users.filter((u) => u.status === UserStatus.SUSPENDED);
   for (const user of suspendedUsers) {
     const change = await prisma.playerStatusChange.create({
       data: {
@@ -2316,7 +3335,7 @@ async function seedPlayerStatusChanges(users: User[], admins: SeededAdmin[], mat
   }
 
   // Status changes for inactive users
-  const inactiveUsers = users.filter(u => u.status === UserStatus.INACTIVE);
+  const inactiveUsers = users.filter((u) => u.status === UserStatus.INACTIVE);
   for (const user of inactiveUsers) {
     const change = await prisma.playerStatusChange.create({
       data: {
@@ -2332,7 +3351,9 @@ async function seedPlayerStatusChanges(users: User[], admins: SeededAdmin[], mat
   }
 
   // Activity warnings for some active users
-  const activeUsers = users.filter(u => u.status === UserStatus.ACTIVE).slice(0, 5);
+  const activeUsers = users
+    .filter((u) => u.status === UserStatus.ACTIVE)
+    .slice(0, 5);
   for (const user of activeUsers) {
     await prisma.playerStatusChange.create({
       data: {
@@ -2389,7 +3410,7 @@ async function seedPlayerStatusChanges(users: User[], admins: SeededAdmin[], mat
 
 async function seedBugReports(users: User[], admins: SeededAdmin[]) {
   const adminId = admins[0]!.adminId;
-  const activeUsers = users.filter(u => u.status === UserStatus.ACTIVE);
+  const activeUsers = users.filter((u) => u.status === UserStatus.ACTIVE);
 
   // Get apps and modules
   const dlaApp = await prisma.app.findUnique({
@@ -2409,33 +3430,147 @@ async function seedBugReports(users: User[], admins: SeededAdmin[]) {
 
   const bugReportData = [
     // DLA bugs
-    { app: dlaApp, title: "Dashboard charts not loading", description: "The match statistics charts on the dashboard fail to load on Firefox", severity: BugSeverity.HIGH, status: BugStatus.IN_PROGRESS, priority: BugPriority.HIGH, moduleCode: "DASHBOARD" },
-    { app: dlaApp, title: "Export to Excel fails for large datasets", description: "When exporting more than 1000 records, the Excel export times out", severity: BugSeverity.MEDIUM, status: BugStatus.NEW, priority: BugPriority.NORMAL, moduleCode: "PLAYERS" },
-    { app: dlaApp, title: "Season filter not persisting", description: "The season filter resets when navigating between pages", severity: BugSeverity.LOW, status: BugStatus.TRIAGED, priority: BugPriority.LOW, moduleCode: "SEASONS" },
-    { app: dlaApp, title: "Cannot void completed match", description: "Getting 500 error when trying to void a match that was completed more than 24 hours ago", severity: BugSeverity.HIGH, status: BugStatus.RESOLVED, priority: BugPriority.URGENT, moduleCode: "MATCHES", resolvedAt: new Date() },
-    { app: dlaApp, title: "Dispute notification not sending", description: "Admin notifications for new disputes are not being sent", severity: BugSeverity.CRITICAL, status: BugStatus.IN_PROGRESS, priority: BugPriority.URGENT, moduleCode: "NOTIFICATIONS" },
+    {
+      app: dlaApp,
+      title: "Dashboard charts not loading",
+      description:
+        "The match statistics charts on the dashboard fail to load on Firefox",
+      severity: BugSeverity.HIGH,
+      status: BugStatus.IN_PROGRESS,
+      priority: BugPriority.HIGH,
+      moduleCode: "DASHBOARD",
+    },
+    {
+      app: dlaApp,
+      title: "Export to Excel fails for large datasets",
+      description:
+        "When exporting more than 1000 records, the Excel export times out",
+      severity: BugSeverity.MEDIUM,
+      status: BugStatus.NEW,
+      priority: BugPriority.NORMAL,
+      moduleCode: "PLAYERS",
+    },
+    {
+      app: dlaApp,
+      title: "Season filter not persisting",
+      description: "The season filter resets when navigating between pages",
+      severity: BugSeverity.LOW,
+      status: BugStatus.TRIAGED,
+      priority: BugPriority.LOW,
+      moduleCode: "SEASONS",
+    },
+    {
+      app: dlaApp,
+      title: "Cannot void completed match",
+      description:
+        "Getting 500 error when trying to void a match that was completed more than 24 hours ago",
+      severity: BugSeverity.HIGH,
+      status: BugStatus.RESOLVED,
+      priority: BugPriority.URGENT,
+      moduleCode: "MATCHES",
+      resolvedAt: new Date(),
+    },
+    {
+      app: dlaApp,
+      title: "Dispute notification not sending",
+      description: "Admin notifications for new disputes are not being sent",
+      severity: BugSeverity.CRITICAL,
+      status: BugStatus.IN_PROGRESS,
+      priority: BugPriority.URGENT,
+      moduleCode: "NOTIFICATIONS",
+    },
 
     // DLM bugs
-    { app: dlmApp, title: "Push notifications delayed", description: "Match reminder notifications arriving 30+ minutes late", severity: BugSeverity.HIGH, status: BugStatus.NEEDS_INFO, priority: BugPriority.HIGH, moduleCode: "NOTIFICATIONS" },
-    { app: dlmApp, title: "Profile photo upload crashes app", description: "App crashes when uploading large photos (>5MB)", severity: BugSeverity.MEDIUM, status: BugStatus.NEW, priority: BugPriority.NORMAL, moduleCode: "PROFILE" },
-    { app: dlmApp, title: "Leaderboard showing stale data", description: "Division standings not updating after match completion", severity: BugSeverity.HIGH, status: BugStatus.TRIAGED, priority: BugPriority.HIGH, moduleCode: "LEADERBOARD" },
-    { app: dlmApp, title: "Chat messages out of order", description: "Messages sometimes appear in wrong chronological order", severity: BugSeverity.MEDIUM, status: BugStatus.IN_REVIEW, priority: BugPriority.NORMAL, moduleCode: "CHAT" },
-    { app: dlmApp, title: "Login session expires too quickly", description: "Users getting logged out every few hours", severity: BugSeverity.HIGH, status: BugStatus.RESOLVED, priority: BugPriority.HIGH, moduleCode: "AUTH", resolvedAt: new Date() },
+    {
+      app: dlmApp,
+      title: "Push notifications delayed",
+      description: "Match reminder notifications arriving 30+ minutes late",
+      severity: BugSeverity.HIGH,
+      status: BugStatus.NEEDS_INFO,
+      priority: BugPriority.HIGH,
+      moduleCode: "NOTIFICATIONS",
+    },
+    {
+      app: dlmApp,
+      title: "Profile photo upload crashes app",
+      description: "App crashes when uploading large photos (>5MB)",
+      severity: BugSeverity.MEDIUM,
+      status: BugStatus.NEW,
+      priority: BugPriority.NORMAL,
+      moduleCode: "PROFILE",
+    },
+    {
+      app: dlmApp,
+      title: "Leaderboard showing stale data",
+      description: "Division standings not updating after match completion",
+      severity: BugSeverity.HIGH,
+      status: BugStatus.TRIAGED,
+      priority: BugPriority.HIGH,
+      moduleCode: "LEADERBOARD",
+    },
+    {
+      app: dlmApp,
+      title: "Chat messages out of order",
+      description: "Messages sometimes appear in wrong chronological order",
+      severity: BugSeverity.MEDIUM,
+      status: BugStatus.IN_REVIEW,
+      priority: BugPriority.NORMAL,
+      moduleCode: "CHAT",
+    },
+    {
+      app: dlmApp,
+      title: "Login session expires too quickly",
+      description: "Users getting logged out every few hours",
+      severity: BugSeverity.HIGH,
+      status: BugStatus.RESOLVED,
+      priority: BugPriority.HIGH,
+      moduleCode: "AUTH",
+      resolvedAt: new Date(),
+    },
 
     // More variety
-    { app: dlaApp, title: "Date picker timezone issue", description: "Dates showing wrong timezone for Malaysian users", severity: BugSeverity.MEDIUM, status: BugStatus.CLOSED, priority: BugPriority.NORMAL, moduleCode: "OTHER", resolvedAt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) },
-    { app: dlmApp, title: "Duplicate registration entries", description: "Some users showing twice in season registration list", severity: BugSeverity.HIGH, status: BugStatus.WONT_FIX, priority: BugPriority.LOW, moduleCode: "REGISTRATION" },
-    { app: dlaApp, title: "Memory leak in player list", description: "Browser memory usage increases significantly when scrolling through large player lists", severity: BugSeverity.MEDIUM, status: BugStatus.DUPLICATE, priority: BugPriority.NORMAL, moduleCode: "PLAYERS" },
+    {
+      app: dlaApp,
+      title: "Date picker timezone issue",
+      description: "Dates showing wrong timezone for Malaysian users",
+      severity: BugSeverity.MEDIUM,
+      status: BugStatus.CLOSED,
+      priority: BugPriority.NORMAL,
+      moduleCode: "OTHER",
+      resolvedAt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
+    },
+    {
+      app: dlmApp,
+      title: "Duplicate registration entries",
+      description: "Some users showing twice in season registration list",
+      severity: BugSeverity.HIGH,
+      status: BugStatus.WONT_FIX,
+      priority: BugPriority.LOW,
+      moduleCode: "REGISTRATION",
+    },
+    {
+      app: dlaApp,
+      title: "Memory leak in player list",
+      description:
+        "Browser memory usage increases significantly when scrolling through large player lists",
+      severity: BugSeverity.MEDIUM,
+      status: BugStatus.DUPLICATE,
+      priority: BugPriority.NORMAL,
+      moduleCode: "PLAYERS",
+    },
   ];
 
   const createdReports = [];
   let reportNumber = 1001;
 
   for (const bugData of bugReportData) {
-    const module = bugData.app.bugModules.find(m => m.code === bugData.moduleCode);
+    const module = bugData.app.bugModules.find(
+      (m) => m.code === bugData.moduleCode
+    );
     if (!module) continue;
 
-    const reporter = activeUsers[Math.floor(Math.random() * activeUsers.length)];
+    const reporter =
+      activeUsers[Math.floor(Math.random() * activeUsers.length)];
 
     const report = await prisma.bugReport.create({
       data: {
@@ -2448,15 +3583,20 @@ async function seedBugReports(users: User[], admins: SeededAdmin[]) {
         severity: bugData.severity,
         status: bugData.status,
         priority: bugData.priority,
-        stepsToReproduce: "1. Navigate to the page\n2. Perform the action\n3. Observe the error",
+        stepsToReproduce:
+          "1. Navigate to the page\n2. Perform the action\n3. Observe the error",
         expectedBehavior: "The feature should work correctly",
         actualBehavior: bugData.description,
         reporterId: reporter?.id,
         assignedToId: bugData.status !== BugStatus.NEW ? adminId : null,
         resolvedById: bugData.resolvedAt ? adminId : null,
         resolvedAt: bugData.resolvedAt,
-        resolutionNotes: bugData.resolvedAt ? "Fixed in the latest release" : null,
-        pageUrl: `https://${bugData.app.code === "DLA" ? "admin" : "app"}.deuceleague.com/${bugData.moduleCode.toLowerCase()}`,
+        resolutionNotes: bugData.resolvedAt
+          ? "Fixed in the latest release"
+          : null,
+        pageUrl: `https://${
+          bugData.app.code === "DLA" ? "admin" : "app"
+        }.deuceleague.com/${bugData.moduleCode.toLowerCase()}`,
         browserName: "Chrome",
         browserVersion: "120.0.0",
         osName: "Windows",
@@ -2464,7 +3604,10 @@ async function seedBugReports(users: User[], admins: SeededAdmin[]) {
         screenWidth: 1920,
         screenHeight: 1080,
         appVersion: "1.2.3",
-        createdAt: randomDate(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000), new Date()),
+        createdAt: randomDate(
+          new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
+          new Date()
+        ),
       },
     });
 
@@ -2498,7 +3641,10 @@ async function seedBugReports(users: User[], admins: SeededAdmin[]) {
         },
       });
 
-      if (bugData.status === BugStatus.IN_PROGRESS || bugData.status === BugStatus.RESOLVED) {
+      if (
+        bugData.status === BugStatus.IN_PROGRESS ||
+        bugData.status === BugStatus.RESOLVED
+      ) {
         await prisma.bugComment.create({
           data: {
             bugReportId: report.id,
@@ -2545,8 +3691,12 @@ async function seedBugReports(users: User[], admins: SeededAdmin[]) {
 // =============================================
 
 async function seedWaitlists(seasons: Season[], users: User[]) {
-  const upcomingSeasons = seasons.filter(s => s.status === SeasonStatus.UPCOMING);
-  const activeUsers = users.filter(u => u.status === UserStatus.ACTIVE && u.completedOnboarding);
+  const upcomingSeasons = seasons.filter(
+    (s) => s.status === SeasonStatus.UPCOMING
+  );
+  const activeUsers = users.filter(
+    (u) => u.status === UserStatus.ACTIVE && u.completedOnboarding
+  );
   const createdWaitlists = [];
 
   for (const season of upcomingSeasons.slice(0, 2)) {
@@ -2580,7 +3730,10 @@ async function seedWaitlists(seasons: Season[], users: User[]) {
           data: {
             waitlistId: waitlist.id,
             userId: user.id,
-            waitlistDate: randomDate(new Date(Date.now() - 14 * 24 * 60 * 60 * 1000), new Date()),
+            waitlistDate: randomDate(
+              new Date(Date.now() - 14 * 24 * 60 * 60 * 1000),
+              new Date()
+            ),
             promotedToRegistered: i < 2, // First 2 promoted
           },
         });
@@ -2596,7 +3749,9 @@ async function seedWaitlists(seasons: Season[], users: User[]) {
 // =============================================
 
 async function seedMatchInvitations(matches: Match[], users: User[]) {
-  const scheduledMatches = matches.filter(m => m.status === MatchStatus.SCHEDULED || m.status === MatchStatus.DRAFT);
+  const scheduledMatches = matches.filter(
+    (m) => m.status === MatchStatus.SCHEDULED || m.status === MatchStatus.DRAFT
+  );
   const createdInvitations = [];
 
   for (const match of scheduledMatches.slice(0, 15)) {
@@ -2620,9 +3775,14 @@ async function seedMatchInvitations(matches: Match[], users: User[]) {
       continue;
     }
 
-    const status = match.status === MatchStatus.DRAFT
-      ? randomElement([InvitationStatus.PENDING, InvitationStatus.EXPIRED, InvitationStatus.DECLINED])
-      : InvitationStatus.ACCEPTED;
+    const status =
+      match.status === MatchStatus.DRAFT
+        ? randomElement([
+            InvitationStatus.PENDING,
+            InvitationStatus.EXPIRED,
+            InvitationStatus.DECLINED,
+          ])
+        : InvitationStatus.ACCEPTED;
 
     const invitation = await prisma.matchInvitation.create({
       data: {
@@ -2630,8 +3790,12 @@ async function seedMatchInvitations(matches: Match[], users: User[]) {
         inviterId: inviter.userId,
         inviteeId: invitee.userId,
         status: status,
-        message: status === InvitationStatus.PENDING ? "Would you like to play a match?" : null,
-        declineReason: status === InvitationStatus.DECLINED ? "Schedule conflict" : null,
+        message:
+          status === InvitationStatus.PENDING
+            ? "Would you like to play a match?"
+            : null,
+        declineReason:
+          status === InvitationStatus.DECLINED ? "Schedule conflict" : null,
         expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
         respondedAt: status !== InvitationStatus.PENDING ? new Date() : null,
         reminderSentAt: status === InvitationStatus.PENDING ? new Date() : null,
@@ -2649,14 +3813,23 @@ async function seedMatchInvitations(matches: Match[], users: User[]) {
 // SEED BRACKET SYSTEM
 // =============================================
 
-async function seedBrackets(seasons: Season[], divisions: Division[], users: User[], admins: SeededAdmin[]) {
+async function seedBrackets(
+  seasons: Season[],
+  divisions: Division[],
+  users: User[],
+  admins: SeededAdmin[]
+) {
   const adminId = admins[0]!.adminId;
-  const finishedSeasons = seasons.filter(s => s.status === SeasonStatus.FINISHED);
-  const activeUsers = users.filter(u => u.status === UserStatus.ACTIVE && u.completedOnboarding);
+  const finishedSeasons = seasons.filter(
+    (s) => s.status === SeasonStatus.FINISHED
+  );
+  const activeUsers = users.filter(
+    (u) => u.status === UserStatus.ACTIVE && u.completedOnboarding
+  );
   const createdBrackets = [];
 
   for (const season of finishedSeasons.slice(0, 2)) {
-    const seasonDivisions = divisions.filter(d => d.seasonId === season.id);
+    const seasonDivisions = divisions.filter((d) => d.seasonId === season.id);
 
     for (const division of seasonDivisions.slice(0, 1)) {
       const existing = await prisma.bracket.findFirst({
@@ -2697,7 +3870,9 @@ async function seedBrackets(seasons: Season[], divisions: Division[], users: Use
             bracketId: bracket.id,
             roundNumber: r + 1,
             roundName: roundNames[r]!,
-            startDate: new Date(Date.now() - (21 - r * 3) * 24 * 60 * 60 * 1000),
+            startDate: new Date(
+              Date.now() - (21 - r * 3) * 24 * 60 * 60 * 1000
+            ),
             endDate: new Date(Date.now() - (18 - r * 3) * 24 * 60 * 60 * 1000),
           },
         });
@@ -2742,10 +3917,16 @@ async function seedBrackets(seasons: Season[], divisions: Division[], users: Use
 // SEED RATING ADJUSTMENTS
 // =============================================
 
-async function seedRatingAdjustments(users: User[], seasons: Season[], admins: SeededAdmin[]) {
+async function seedRatingAdjustments(
+  users: User[],
+  seasons: Season[],
+  admins: SeededAdmin[]
+) {
   const adminId = admins[0]!.adminId;
-  const activeUsers = users.filter(u => u.status === UserStatus.ACTIVE && u.completedOnboarding);
-  const activeSeasons = seasons.filter(s => s.status === SeasonStatus.ACTIVE);
+  const activeUsers = users.filter(
+    (u) => u.status === UserStatus.ACTIVE && u.completedOnboarding
+  );
+  const activeSeasons = seasons.filter((s) => s.status === SeasonStatus.ACTIVE);
   const createdAdjustments = [];
 
   const adjustmentTypes = [
@@ -2778,11 +3959,12 @@ async function seedRatingAdjustments(users: User[], seasons: Season[], admins: S
         ratingBefore: playerRating.currentRating - delta,
         ratingAfter: playerRating.currentRating,
         delta: delta,
-        reason: adjustmentType === AdjustmentType.CORRECTION
-          ? "Corrected rating calculation error"
-          : adjustmentType === AdjustmentType.APPEAL_RESOLUTION
-          ? "Rating adjusted after successful appeal"
-          : "Manual rating adjustment by admin",
+        reason:
+          adjustmentType === AdjustmentType.CORRECTION
+            ? "Corrected rating calculation error"
+            : adjustmentType === AdjustmentType.APPEAL_RESOLUTION
+            ? "Rating adjusted after successful appeal"
+            : "Manual rating adjustment by admin",
         internalNotes: "Verified by admin team",
         playerNotified: true,
         notifiedAt: new Date(),
@@ -2800,14 +3982,20 @@ async function seedRatingAdjustments(users: User[], seasons: Season[], admins: S
 // SEED RATING RECALCULATIONS
 // =============================================
 
-async function seedRatingRecalculations(admins: SeededAdmin[], seasons: Season[]) {
+async function seedRatingRecalculations(
+  admins: SeededAdmin[],
+  seasons: Season[]
+) {
   const adminId = admins[0]!.adminId;
   const createdRecalculations = [];
 
   const recalcData = [
     { scope: RecalculationScope.MATCH, status: RecalculationStatus.APPLIED },
     { scope: RecalculationScope.PLAYER, status: RecalculationStatus.APPLIED },
-    { scope: RecalculationScope.DIVISION, status: RecalculationStatus.PREVIEW_READY },
+    {
+      scope: RecalculationScope.DIVISION,
+      status: RecalculationStatus.PREVIEW_READY,
+    },
     { scope: RecalculationScope.SEASON, status: RecalculationStatus.PENDING },
     { scope: RecalculationScope.MATCH, status: RecalculationStatus.FAILED },
   ];
@@ -2819,12 +4007,22 @@ async function seedRatingRecalculations(admins: SeededAdmin[], seasons: Season[]
         status: data.status,
         initiatedByAdminId: adminId,
         seasonId: seasons[0]?.id,
-        affectedPlayersCount: data.status !== RecalculationStatus.PENDING ? randomInt(5, 50) : null,
-        changesPreview: data.status === RecalculationStatus.PREVIEW_READY ? { changes: [{ userId: "test", delta: 10 }] } : null,
-        previewGeneratedAt: data.status !== RecalculationStatus.PENDING ? new Date() : null,
-        appliedAt: data.status === RecalculationStatus.APPLIED ? new Date() : null,
-        failedAt: data.status === RecalculationStatus.FAILED ? new Date() : null,
-        errorMessage: data.status === RecalculationStatus.FAILED ? "Database connection timeout" : null,
+        affectedPlayersCount:
+          data.status !== RecalculationStatus.PENDING ? randomInt(5, 50) : null,
+        changesPreview:
+          data.status === RecalculationStatus.PREVIEW_READY
+            ? { changes: [{ userId: "test", delta: 10 }] }
+            : null,
+        previewGeneratedAt:
+          data.status !== RecalculationStatus.PENDING ? new Date() : null,
+        appliedAt:
+          data.status === RecalculationStatus.APPLIED ? new Date() : null,
+        failedAt:
+          data.status === RecalculationStatus.FAILED ? new Date() : null,
+        errorMessage:
+          data.status === RecalculationStatus.FAILED
+            ? "Database connection timeout"
+            : null,
       },
     });
     createdRecalculations.push(recalc);
@@ -2839,7 +4037,9 @@ async function seedRatingRecalculations(admins: SeededAdmin[], seasons: Season[]
 
 async function seedSeasonLocks(seasons: Season[], admins: SeededAdmin[]) {
   const adminId = admins[0]!.adminId;
-  const finishedSeasons = seasons.filter(s => s.status === SeasonStatus.FINISHED);
+  const finishedSeasons = seasons.filter(
+    (s) => s.status === SeasonStatus.FINISHED
+  );
   const createdLocks = [];
 
   for (const season of finishedSeasons.slice(0, 2)) {
@@ -2873,7 +4073,9 @@ async function seedSeasonLocks(seasons: Season[], admins: SeededAdmin[]) {
 // =============================================
 
 async function seedNotificationPreferences(users: User[]) {
-  const activeUsers = users.filter(u => u.status === UserStatus.ACTIVE && u.completedOnboarding);
+  const activeUsers = users.filter(
+    (u) => u.status === UserStatus.ACTIVE && u.completedOnboarding
+  );
   const createdPrefs = [];
 
   for (const user of activeUsers.slice(0, 20)) {
@@ -2921,7 +4123,9 @@ async function seedNotificationPreferences(users: User[]) {
 // =============================================
 
 async function seedUserPushTokens(users: User[]) {
-  const activeUsers = users.filter(u => u.status === UserStatus.ACTIVE && u.completedOnboarding);
+  const activeUsers = users.filter(
+    (u) => u.status === UserStatus.ACTIVE && u.completedOnboarding
+  );
   const createdTokens = [];
 
   for (const user of activeUsers.slice(0, 30)) {
@@ -2943,7 +4147,10 @@ async function seedUserPushTokens(users: User[]) {
         deviceId: `device_${user.id.slice(0, 8)}`,
         isActive: true,
         failureCount: 0,
-        lastUsedAt: randomDate(new Date(Date.now() - 7 * 24 * 60 * 60 * 1000), new Date()),
+        lastUsedAt: randomDate(
+          new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
+          new Date()
+        ),
       },
     });
     createdTokens.push(token);
@@ -2956,22 +4163,54 @@ async function seedUserPushTokens(users: User[]) {
 // SEED ADMIN MESSAGE LOGS
 // =============================================
 
-async function seedAdminMessageLogs(admins: SeededAdmin[], matches: Match[], seasons: Season[], users: User[]) {
+async function seedAdminMessageLogs(
+  admins: SeededAdmin[],
+  matches: Match[],
+  seasons: Season[],
+  users: User[]
+) {
   const adminId = admins[0]!.adminId;
-  const activeUsers = users.filter(u => u.status === UserStatus.ACTIVE);
+  const activeUsers = users.filter((u) => u.status === UserStatus.ACTIVE);
   const createdLogs = [];
 
   const messageData = [
-    { subject: "Match Reminder", message: "Your match is scheduled for tomorrow at 3 PM. Please confirm your attendance.", sendEmail: true, sendPush: true },
-    { subject: "Season Registration Open", message: "Registration for the new season is now open. Don't miss out!", sendEmail: true, sendPush: true },
-    { subject: "Match Rescheduled", message: "Your match has been rescheduled due to venue unavailability.", sendEmail: true, sendPush: false },
-    { subject: "Important Update", message: "There have been changes to the scoring rules. Please review the updated guidelines.", sendEmail: false, sendPush: true },
-    { subject: "Welcome to DeuceLeague", message: "Welcome to the league! We're excited to have you join us.", sendEmail: true, sendPush: false },
+    {
+      subject: "Match Reminder",
+      message:
+        "Your match is scheduled for tomorrow at 3 PM. Please confirm your attendance.",
+      sendEmail: true,
+      sendPush: true,
+    },
+    {
+      subject: "Season Registration Open",
+      message: "Registration for the new season is now open. Don't miss out!",
+      sendEmail: true,
+      sendPush: true,
+    },
+    {
+      subject: "Match Rescheduled",
+      message: "Your match has been rescheduled due to venue unavailability.",
+      sendEmail: true,
+      sendPush: false,
+    },
+    {
+      subject: "Important Update",
+      message:
+        "There have been changes to the scoring rules. Please review the updated guidelines.",
+      sendEmail: false,
+      sendPush: true,
+    },
+    {
+      subject: "Welcome to DeuceLeague",
+      message: "Welcome to the league! We're excited to have you join us.",
+      sendEmail: true,
+      sendPush: false,
+    },
   ];
 
   for (let i = 0; i < messageData.length; i++) {
     const data = messageData[i]!;
-    const recipients = activeUsers.slice(0, randomInt(5, 15)).map(u => u.id);
+    const recipients = activeUsers.slice(0, randomInt(5, 15)).map((u) => u.id);
 
     const log = await prisma.adminMessageLog.create({
       data: {
@@ -2988,7 +4227,10 @@ async function seedAdminMessageLogs(admins: SeededAdmin[], matches: Match[], sea
         emailSkipped: data.sendEmail ? randomInt(0, 2) : 0,
         pushCount: data.sendPush ? recipients.length - randomInt(0, 3) : 0,
         pushSkipped: data.sendPush ? randomInt(0, 3) : 0,
-        createdAt: randomDate(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000), new Date()),
+        createdAt: randomDate(
+          new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
+          new Date()
+        ),
       },
     });
     createdLogs.push(log);
@@ -3018,7 +4260,9 @@ async function main() {
     // 2. Seed test users
     console.log("👥 Seeding test users...");
     const users = await seedTestUsers();
-    console.log(`   ✅ Created ${users.length} test users (password: Test@123)`);
+    console.log(
+      `   ✅ Created ${users.length} test users (password: Test@123)`
+    );
     console.log("   - 50 active users with complete profiles");
     console.log("   - 10 inactive users");
     console.log("   - 5 suspended users");
@@ -3036,9 +4280,15 @@ async function main() {
 
     // 5. Seed leagues, seasons, and divisions
     console.log("🏆 Seeding leagues, seasons, and divisions...");
-    const { leagues, seasons, divisions } = await seedLeaguesAndSeasons(admins[0]!.adminId, categories, sponsorships);
+    const { leagues, seasons, divisions } = await seedLeaguesAndSeasons(
+      admins[0]!.adminId,
+      categories,
+      sponsorships
+    );
     console.log(`   ✅ Created ${leagues.length} leagues`);
-    console.log(`   ✅ Created ${seasons.length} seasons (ACTIVE, UPCOMING, FINISHED, CANCELLED)`);
+    console.log(
+      `   ✅ Created ${seasons.length} seasons (ACTIVE, UPCOMING, FINISHED, CANCELLED)`
+    );
     console.log(`   ✅ Created ${divisions.length} divisions\n`);
 
     // 6. Seed season memberships
@@ -3058,7 +4308,9 @@ async function main() {
     // 8. Seed disputes
     console.log("⚖️ Seeding match disputes...");
     const disputes = await seedDisputes(matches, users, admins);
-    console.log(`   ✅ Created ${disputes.length} disputes (OPEN, UNDER_REVIEW, RESOLVED, REJECTED)\n`);
+    console.log(
+      `   ✅ Created ${disputes.length} disputes (OPEN, UNDER_REVIEW, RESOLVED, REJECTED)\n`
+    );
 
     // 9. Seed walkovers
     console.log("🚶 Seeding walkovers...");
@@ -3068,7 +4320,9 @@ async function main() {
     // 10. Seed penalties
     console.log("⚠️ Seeding penalties...");
     const penalties = await seedPenalties(users, matches, admins);
-    console.log(`   ✅ Created ${penalties.length} penalties (WARNING, POINTS_DEDUCTION, SUSPENSION)\n`);
+    console.log(
+      `   ✅ Created ${penalties.length} penalties (WARNING, POINTS_DEDUCTION, SUSPENSION)\n`
+    );
 
     // 11. Seed admin actions
     console.log("📝 Seeding admin actions...");
@@ -3094,12 +4348,16 @@ async function main() {
     // 15. Seed social data (friendships, pair requests, partnerships)
     console.log("🤝 Seeding social data...");
     await seedSocialData(users, seasons);
-    console.log("   ✅ Created friendships, pair requests, partnerships, favorites\n");
+    console.log(
+      "   ✅ Created friendships, pair requests, partnerships, favorites\n"
+    );
 
     // 16. Seed ratings and standings
     console.log("📊 Seeding player ratings and standings...");
     await seedRatingsAndStandings(users, seasons, divisions, admins);
-    console.log("   ✅ Created player ratings, rating history, division standings\n");
+    console.log(
+      "   ✅ Created player ratings, rating history, division standings\n"
+    );
 
     // 17. Seed achievements
     console.log("🏅 Seeding achievements...");
@@ -3114,7 +4372,9 @@ async function main() {
     // 19. Seed inactivity settings
     console.log("⏰ Seeding inactivity settings...");
     await seedInactivitySettings(leagues, seasons, admins);
-    console.log("   ✅ Created inactivity settings (global, league-specific, season-specific)\n");
+    console.log(
+      "   ✅ Created inactivity settings (global, league-specific, season-specific)\n"
+    );
 
     // 20. Seed season invitations
     console.log("📧 Seeding season invitations...");
@@ -3133,8 +4393,15 @@ async function main() {
 
     // 23. Seed team change requests
     console.log("🔄 Seeding team change requests...");
-    const teamChangeRequests = await seedTeamChangeRequests(users, seasons, divisions, admins);
-    console.log(`   ✅ Created ${teamChangeRequests.length} team change requests (PENDING, APPROVED, DENIED, CANCELLED)\n`);
+    const teamChangeRequests = await seedTeamChangeRequests(
+      users,
+      seasons,
+      divisions,
+      admins
+    );
+    console.log(
+      `   ✅ Created ${teamChangeRequests.length} team change requests (PENDING, APPROVED, DENIED, CANCELLED)\n`
+    );
 
     // =============================================
     // NEW SEED FUNCTIONS FOR 100% COVERAGE
@@ -3158,22 +4425,30 @@ async function main() {
     // 27. Seed pickleball game scores
     console.log("🏓 Seeding pickleball game scores...");
     const pickleballScores = await seedPickleballGameScores(matches);
-    console.log(`   ✅ Created ${pickleballScores.length} pickleball game scores\n`);
+    console.log(
+      `   ✅ Created ${pickleballScores.length} pickleball game scores\n`
+    );
 
     // 28. Seed player status changes
     console.log("📊 Seeding player status changes...");
     const statusChanges = await seedPlayerStatusChanges(users, admins, matches);
-    console.log(`   ✅ Created ${statusChanges.length} player status changes\n`);
+    console.log(
+      `   ✅ Created ${statusChanges.length} player status changes\n`
+    );
 
     // 29. Seed bug reports
     console.log("🐞 Seeding bug reports...");
     const bugReports = await seedBugReports(users, admins);
-    console.log(`   ✅ Created ${bugReports.length} bug reports with screenshots, comments, and status changes\n`);
+    console.log(
+      `   ✅ Created ${bugReports.length} bug reports with screenshots, comments, and status changes\n`
+    );
 
     // 30. Seed waitlists
     console.log("📋 Seeding waitlists...");
     const waitlists = await seedWaitlists(seasons, users);
-    console.log(`   ✅ Created ${waitlists.length} season waitlists with users\n`);
+    console.log(
+      `   ✅ Created ${waitlists.length} season waitlists with users\n`
+    );
 
     // 31. Seed match invitations
     console.log("✉️ Seeding match invitations...");
@@ -3183,17 +4458,27 @@ async function main() {
     // 32. Seed brackets
     console.log("🏆 Seeding brackets...");
     const brackets = await seedBrackets(seasons, divisions, users, admins);
-    console.log(`   ✅ Created ${brackets.length} brackets with rounds and matches\n`);
+    console.log(
+      `   ✅ Created ${brackets.length} brackets with rounds and matches\n`
+    );
 
     // 33. Seed rating adjustments
     console.log("⚖️ Seeding rating adjustments...");
-    const ratingAdjustments = await seedRatingAdjustments(users, seasons, admins);
-    console.log(`   ✅ Created ${ratingAdjustments.length} rating adjustments\n`);
+    const ratingAdjustments = await seedRatingAdjustments(
+      users,
+      seasons,
+      admins
+    );
+    console.log(
+      `   ✅ Created ${ratingAdjustments.length} rating adjustments\n`
+    );
 
     // 34. Seed rating recalculations
     console.log("🔄 Seeding rating recalculations...");
     const recalculations = await seedRatingRecalculations(admins, seasons);
-    console.log(`   ✅ Created ${recalculations.length} rating recalculation jobs\n`);
+    console.log(
+      `   ✅ Created ${recalculations.length} rating recalculation jobs\n`
+    );
 
     // 35. Seed season locks
     console.log("🔒 Seeding season locks...");
@@ -3203,7 +4488,9 @@ async function main() {
     // 36. Seed notification preferences
     console.log("🔔 Seeding notification preferences...");
     const notifPrefs = await seedNotificationPreferences(users);
-    console.log(`   ✅ Created ${notifPrefs.length} notification preferences\n`);
+    console.log(
+      `   ✅ Created ${notifPrefs.length} notification preferences\n`
+    );
 
     // 37. Seed user push tokens
     console.log("📱 Seeding user push tokens...");
@@ -3212,7 +4499,12 @@ async function main() {
 
     // 38. Seed admin message logs
     console.log("💬 Seeding admin message logs...");
-    const messageLogs = await seedAdminMessageLogs(admins, matches, seasons, users);
+    const messageLogs = await seedAdminMessageLogs(
+      admins,
+      matches,
+      seasons,
+      users
+    );
     console.log(`   ✅ Created ${messageLogs.length} admin message logs\n`);
 
     console.log("═══════════════════════════════════════════════════════");
@@ -3220,7 +4512,9 @@ async function main() {
     console.log("═══════════════════════════════════════════════════════");
     console.log("\n📝 FULL MODEL COVERAGE SUMMARY:");
     console.log("\n   👤 USER & AUTH MODELS:");
-    console.log("   • Users: 75 (50 active, 10 inactive, 5 suspended, 10 incomplete)");
+    console.log(
+      "   • Users: 75 (50 active, 10 inactive, 5 suspended, 10 incomplete)"
+    );
     console.log("   • Admins: 5 (various statuses)");
     console.log("   • Accounts, Sessions, Verification: Auto-seeded");
     console.log("   • Admin Invite Tokens: Pending invites");
@@ -3296,7 +4590,6 @@ async function main() {
     console.log("   • Achievements & User Achievements");
     console.log("   • Withdrawal Requests");
     console.log("   • Team Change Requests\n");
-
   } catch (error) {
     console.error("❌ Error seeding database:", error);
     throw error;

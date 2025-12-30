@@ -15,14 +15,14 @@ import pino from "pino";
 
 // Configure pino for clean, concise logging
 const pinoLogger = pino({
-  level: process.env.LOG_LEVEL || 'info',
-  ...(process.env.NODE_ENV === 'development' && {
+  level: process.env.LOG_LEVEL || "info",
+  ...(process.env.NODE_ENV === "development" && {
     transport: {
-      target: 'pino-pretty',
+      target: "pino-pretty",
       options: {
         colorize: true,
-        translateTime: 'HH:MM:ss',
-        ignore: 'pid,hostname',
+        translateTime: "HH:MM:ss",
+        ignore: "pid,hostname",
         singleLine: true,
       },
     },
@@ -44,18 +44,20 @@ const httpLogger = pinoHttp({
   },
   // Custom log level based on status code
   customLogLevel: (_req, res, err) => {
-    if (res.statusCode >= 500 || err) return 'error';
-    if (res.statusCode >= 400) return 'warn';
-    if (res.statusCode >= 300) return 'silent'; // Don't log redirects/304s
-    return 'info';
+    if (res.statusCode >= 500 || err) return "error";
+    if (res.statusCode >= 400) return "warn";
+    if (res.statusCode >= 300) return "silent"; // Don't log redirects/304s
+    return "info";
   },
   // Skip logging for noisy endpoints
   autoLogging: {
     ignore: (req) => {
-      const url = req.url || '';
-      return url === '/health' ||
-             url === '/favicon.ico' ||
-             url.startsWith('/socket.io');
+      const url = req.url || "";
+      return (
+        url === "/health" ||
+        url === "/favicon.ico" ||
+        url.startsWith("/socket.io")
+      );
     },
   },
 });
@@ -102,16 +104,16 @@ app.use(
       "http://localhost:8081",
       "http://192.168.1.3:3001", // Added current IP from logs
       "http://192.168.1.7:3001",
-      "http://192.168.100.3:8081", 
-      "exp://192.168.100.3:8081", 
+      "http://192.168.100.3:8081",
+      "exp://192.168.100.3:8081",
       "http://192.168.100.53:8081",
-      "exp://192.168.100.53:8081", 
+      "exp://192.168.100.53:8081",
       "http://172.20.10.3:8081",
-      "exp://172.20.10.3:8081", 
-      "http://10.72.179.58:8081", 
-      "exp://10.72.179.58:8081", 
-      "http://10.72.180.20:8081", 
-      "exp://10.72.180.20:8081", 
+      "exp://172.20.10.3:8081",
+      "http://10.72.179.58:8081",
+      "exp://10.72.179.58:8081",
+      "http://10.72.180.20:8081",
+      "exp://10.72.180.20:8081",
       "https://staging.appdevelopers.my",
     ], // Allow nginx proxy, direct access, and local IP
     credentials: true,
@@ -133,7 +135,10 @@ const authHandler = (req: Request, res: Response) => {
   try {
     void toNodeHandler(auth)(req, res);
   } catch (error) {
-    pinoLogger.error({ err: error, method: req.method, path: req.path }, 'Auth handler error');
+    pinoLogger.error(
+      { err: error, method: req.method, path: req.path },
+      "Auth handler error"
+    );
     res.status(500).json({ error: "Authentication error" });
   }
 };
@@ -153,9 +158,9 @@ app.use(socketMiddleware(io));
 // Mount API routes with configurable prefix
 // Development: /api, Production: "" (nginx handles /api prefix)
 const apiPrefix = getApiPrefix();
-pinoLogger.info({ apiPrefix: apiPrefix || '/' }, 'API routes mounted');
+pinoLogger.info({ apiPrefix: apiPrefix || "/" }, "API routes mounted");
 // Mount router with the API prefix
-app.use(apiPrefix, router);
+app.use(router);
 
 // Health check endpoint
 app.get("/health", (req, res) => {
