@@ -82,19 +82,21 @@ export class NotificationService {
         ...entityIds
       } = data;
 
-      // Log notification creation for debugging
-      console.log('🔔 [NotificationService] Creating notification:', {
-        type,
-        category,
-        title,
-        userCount: Array.isArray(userIds) ? userIds.length : 1,
-        deliveryType: type ? getNotificationDeliveryType(type) : 'UNKNOWN',
-        willSendPush: type ? shouldSendPushNotification(type) : false,
-      });
+      // Conditions for push & in-app
+      const deliveryType = type ? getNotificationDeliveryType(type) : 'UNKNOWN';
+      const willSendPush = type ? shouldSendPushNotification(type) : false;
+      
+      // console.log('🔔 [NotificationService] Creating notification:', {
+      //   type,
+      //   category,
+      //   title,
+      //   userCount: Array.isArray(userIds) ? userIds.length : 1,
+      //   deliveryType,
+      //   willSendPush,
+      // });
 
       // Normalize userIds to array
       const userIdArray = Array.isArray(userIds) ? userIds : [userIds];
-
       if (userIdArray.length === 0) {
         throw new AppError("At least one user ID is required", 400);
       }
@@ -104,69 +106,108 @@ export class NotificationService {
         where: { id: { in: userIdArray } },
         select: { id: true },
       });
-
       if (users.length !== userIdArray.length) {
         const existingIds = users.map((u) => u.id);
-        const missingIds = userIdArray.filter(
-          (id) => !existingIds.includes(id)
-        );
+        const missingIds = userIdArray.filter((id) => !existingIds.includes(id));
         console.warn('⚠️  [NotificationService] Some users not found:', { missingIds });
         logger.warn("Some users not found", { missingIds });
       }
-
       const validUserIds = users.map((u) => u.id);
 
-      const createData: any = {
-        message,
-        category,
-      };
+      // Always send push notification if required
+      if (willSendPush) {
+        // Send push notifications to users who have push enabled
+        // This runs in the background to not block the response
+        this.sendPushNotificationsToUsers(validUserIds, {
+          title: title ?? 'Deuce League',
+          body: message,
+          data: {
+            type: type ?? '',
+            category: category,
+            ...Object.fromEntries(
+              Object.entries(entityIds)
+                .filter(([_, v]) => v !== undefined)
+                .map(([k, v]) => [k, String(v)])
+            ),
+          },
+        }).catch(error => {
+          logger.error("Failed to send push notifications", { type, category }, error as Error);
+        });
+      }
 
-      // Only add fields if they have values (not undefined)
-      if (title !== undefined) createData.title = title;
-      if (type !== undefined) createData.type = type;
+      // Only create in-app notification if delivery type is IN_APP
+      if (deliveryType === NotificationDeliveryType.IN_APP) {
+        const createData: any = {
+          message,
+          category,
+        };
+        if (title !== undefined) createData.title = title;
+        if (type !== undefined) createData.type = type;
 
-      // Filter out invalid Prisma fields and convert entity IDs to proper format
-      const validEntityIds: Record<string, any> = {};
-      Object.entries(entityIds).forEach(([key, value]) => {
-        if (value !== undefined && key !== 'isPush' && key !== 'skipPush') {
-          // Convert ID fields to proper Prisma relation format
-          if (key === 'threadId' && value) {
-            createData.threadId = value;
-          } else if (key === 'divisionId' && value) {
-            createData.divisionId = value;
-          } else if (key === 'seasonId' && value) {
-            createData.seasonId = value;
-          } else if (key === 'matchId' && value) {
-            createData.matchId = value;
-          } else if (key === 'partnershipId' && value) {
-            createData.partnershipId = value;
-          } else if (key === 'pairRequestId' && value) {
-            createData.pairRequestId = value;
-          } else if (key === 'withdrawalRequestId' && value) {
-            createData.withdrawalRequestId = value;
+        // Filter out invalid Prisma fields and convert entity IDs to proper format
+        const validEntityIds: Record<string, any> = {};
+        Object.entries(entityIds).forEach(([key, value]) => {
+          if (value !== undefined && key !== 'isPush' && key !== 'skipPush') {
+            if (key === 'threadId' && value) {
+              createData.threadId = value;
+            } else if (key === 'divisionId' && value) {
+              createData.divisionId = value;
+            } else if (key === 'seasonId' && value) {
+              createData.seasonId = value;
+            } else if (key === 'matchId' && value) {
+              createData.matchId = value;
+            } else if (key === 'partnershipId' && value) {
+              createData.partnershipId = value;
+            } else if (key === 'pairRequestId' && value) {
+              createData.pairRequestId = value;
+            } else if (key === 'withdrawalRequestId' && value) {
+              createData.withdrawalRequestId = value;
+            }
+            validEntityIds[key] = value;
           }
-          validEntityIds[key] = value;
+        });
+
+        // Create notification in database
+        const notification = await this.prisma.notification.create({
+          data: createData,
+        });
+
+        // Create UserNotification records for each user
+        await this.prisma.userNotification.createMany({
+          data: validUserIds.map((userId) => ({
+            userId,
+            notificationId: notification.id,
+          })),
+        });
+
+        // Send real-time notifications via Socket.IO
+        if (this.io) {
+          console.log('📡 [NotificationService] Emitting via Socket.IO to users:', validUserIds);
+          this.emitNotifications(validUserIds, {
+            id: notification.id,
+            title: notification.title ?? undefined,
+            message: notification.message,
+            category: notification.category,
+            type: notification.type ?? undefined,
+            read: false,
+            archive: false,
+            createdAt: notification.createdAt,
+            metadata: {
+              ...metadata,
+              ...validEntityIds,
+            },
+            readAt: undefined,
+          });
         }
-      });
 
-     
-      // Create notification in database
-      const notification = await this.prisma.notification.create({
-        data: createData,
-      });
+        logger.info("In-app notification created and sent", {
+          category,
+          type,
+          userCount: validUserIds.length,
+          deliveryType,
+        });
 
-      // Create UserNotification records for each user
-      await this.prisma.userNotification.createMany({
-        data: validUserIds.map((userId) => ({
-          userId,
-          notificationId: notification.id,
-        })),
-      });
-
-      // Send real-time notifications via Socket.IO
-      if (this.io) {
-        console.log('📡 [NotificationService] Emitting via Socket.IO to users:', validUserIds);
-        this.emitNotifications(validUserIds, {
+        return validUserIds.map((userId) => ({
           id: notification.id,
           title: notification.title ?? undefined,
           message: notification.message,
@@ -175,57 +216,16 @@ export class NotificationService {
           read: false,
           archive: false,
           createdAt: notification.createdAt,
+          readAt: undefined,
           metadata: {
             ...metadata,
             ...validEntityIds,
           },
-          readAt: undefined,
-        });
+        }));
       }
 
-      // Send push notifications to users who have push enabled
-      // This runs in the background to not block the response
-      this.sendPushNotificationsToUsers(validUserIds, {
-        title: notification.title ?? 'Deuce League',
-        body: notification.message,
-        data: {
-          notificationId: notification.id,
-          type: notification.type ?? '',
-          category: notification.category,
-          ...Object.fromEntries(
-            Object.entries(entityIds)
-              .filter(([_, v]) => v !== undefined)
-              .map(([k, v]) => [k, String(v)])
-          ),
-        },
-      }).catch(error => {
-        logger.error("Failed to send push notifications", { notificationId: notification.id }, error as Error);
-      });
-
-      logger.info("Notification created and sent", {
-        notificationId: notification.id,
-        category,
-        type,
-        userCount: validUserIds.length,
-        deliveryType: type ? getNotificationDeliveryType(type) : 'UNKNOWN',
-        isPush: type ? shouldSendPushNotification(type) : false,
-      });
-
-      return validUserIds.map((userId) => ({
-        id: notification.id,
-        title: notification.title ?? undefined,
-        message: notification.message,
-        category: notification.category,
-        type: notification.type ?? undefined,
-        read: false,
-        archive: false,
-        createdAt: notification.createdAt,
-        readAt: undefined,
-        metadata: {
-          ...metadata,
-          ...validEntityIds,
-        },
-      }));
+      // If PUSH only, return empty array (no in-app notification created)
+      return [];
     } catch (error) {
       console.error('❌ [NotificationService] Error creating notification:', error);
       logger.error("Error creating notification", {}, error as Error);

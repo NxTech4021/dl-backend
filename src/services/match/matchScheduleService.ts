@@ -11,6 +11,7 @@ import {
 } from '@prisma/client';
 import { logger } from '../../utils/logger';
 import { NotificationService } from '../notificationService';
+import { matchManagementNotifications } from '../../helpers/notifications/matchManagementNotifications';
 
 // Types
 export interface CancelMatchInput {
@@ -150,12 +151,12 @@ export class MatchScheduleService {
     try {
       const match = await prisma.match.findUnique({
         where: { id: matchId },
-        include: { 
-          participants: { 
-            select: { 
+        include: {
+          participants: {
+            select: {
               userId: true,
               user: { select: { name: true } }
-            } 
+            }
           },
           division: { select: { name: true } },
           season: { select: { name: true } },
@@ -176,51 +177,39 @@ export class MatchScheduleService {
 
       if (otherParticipants.length === 0) return;
 
-      const lateWarning = isLate ? ' (Late cancellation - penalties may apply)' : '';
-      
-      // Determine if this is a league match
+      // Use notification types and templates
       const isLeagueMatch = !!match.seasonId;
-      
-      // Handle singles vs doubles differently
       const isDoublesMatch = match.matchType === 'DOUBLES';
-      
-      let notificationType: string;
-      let title: string;
-      let message: string;
+      const opponentName = canceller?.name || 'Opponent';
+      const date = match.matchDate ? match.matchDate.toLocaleDateString() : '';
+      const time = match.matchDate ? match.matchDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+      const venue = match.venue || '';
 
+      let notificationPayload;
       if (isLeagueMatch) {
-        notificationType = 'LEAGUE_MATCH_CANCELLED_BY_OPPONENT';
-        title = 'League Match Cancelled';
-        
-        if (isDoublesMatch) {
-          // For doubles, notify all players (could be partner or opponents)
-          const participantNames = match.participants
-            .filter(p => p.userId === cancelledById)
-            .map(p => p.user.name)
-            .join(', ');
-          message = `${participantNames || canceller?.name} cancelled your doubles league match${match.division ? ` in ${match.division.name}` : ''}${lateWarning}`;
-        } else {
-          // For singles
-          message = `${canceller?.name} cancelled your league match${match.division ? ` in ${match.division.name}` : ''}${lateWarning}`;
-        }
+        // League match cancellation
+        notificationPayload = matchManagementNotifications.leagueMatchCancelledByOpponent(
+          opponentName,
+          date,
+          time,
+          venue
+        );
+      } else if (isDoublesMatch) {
+        // Friendly doubles match cancellation
+        notificationPayload = matchManagementNotifications.friendlyMatchCancelled(
+          opponentName,
+          date,
+          time
+        );
       } else {
-        // Friendly match
-        notificationType = isDoublesMatch ? 'FRIENDLY_MATCH_CANCELLED' : 'MATCH_CANCELLED';
-        title = 'Match Cancelled';
-        
-        if (isDoublesMatch) {
-          message = `Your doubles match has been cancelled by ${canceller?.name || 'a participant'}${lateWarning}`;
-        } else {
-          message = `${canceller?.name} has cancelled the match${lateWarning}`;
-        }
+        // Friendly singles match cancellation
+        notificationPayload = matchManagementNotifications.matchCancelled(
+          opponentName
+        );
       }
 
-      // Send notification to all other participants
       await this.notificationService.createNotification({
-        type: notificationType,
-        title,
-        message,
-        category: 'MATCH',
+        ...notificationPayload,
         matchId,
         userIds: otherParticipants,
         metadata: {
