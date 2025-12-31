@@ -25,10 +25,10 @@ export const validateCreateSeasonData = (data: any) => {
     };
   }
 
-  if (!entryFee || isNaN(Number(entryFee)) || Number(entryFee) < 0) {
-    return { 
-      isValid: false, 
-      error: "Entry fee must be a valid non-negative number" 
+  if (entryFee === undefined || entryFee === null || isNaN(Number(entryFee)) || Number(entryFee) < 0) {
+    return {
+      isValid: false,
+      error: "Entry fee must be a valid non-negative number"
     };
   }
 
