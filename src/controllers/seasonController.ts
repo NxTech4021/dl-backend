@@ -124,7 +124,7 @@ export const createSeason = async (req: Request, res: Response) => {
   } = req.body as CreateSeasonBody;
 
   // Validate required fields
-  if (!name || !startDate || !endDate || !entryFee || !leagueIds || !categoryId) {
+  if (!name || !startDate || !endDate || (entryFee === undefined || entryFee === null) || !leagueIds || !categoryId) {
     return res.status(400).json({
       success: false,
       error: "Missing required fields: name, startDate, endDate, entryFee, leagueIds, and categoryId are required"
@@ -154,6 +154,11 @@ export const createSeason = async (req: Request, res: Response) => {
     if (paymentRequired !== undefined) seasonData.paymentRequired = paymentRequired;
     if (promoCodeSupported !== undefined) seasonData.promoCodeSupported = promoCodeSupported;
     if (withdrawalEnabled !== undefined) seasonData.withdrawalEnabled = withdrawalEnabled;
+
+    // Auto-disable payment for free seasons
+    if (Number(entryFee) === 0) {
+      seasonData.paymentRequired = false;
+    }
 
     const season = await createSeasonService(seasonData);
 
