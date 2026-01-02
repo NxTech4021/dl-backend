@@ -135,6 +135,11 @@ model UserSettings {
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
+  // Self-assessed skill levels per sport
+  tennisSkillLevel      SkillLevel?
+  pickleballSkillLevel  SkillLevel?
+  padelSkillLevel       SkillLevel?
+
   @@index([userId])
   @@map("user_settings")
 }
@@ -2482,6 +2487,16 @@ enum SportType {
   PADEL
   PICKLEBALL
   TENNIS
+}
+
+// Self-assessed skill levels for sports (used during onboarding)
+enum SkillLevel {
+  BEGINNER
+  IMPROVER
+  INTERMEDIATE
+  UPPER_INTERMEDIATE
+  ADVANCED
+  EXPERT
 }
 
 enum TierType {

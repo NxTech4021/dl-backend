@@ -163,7 +163,7 @@ notificationService.setSocketIO(io);
 const apiPrefix = getApiPrefix();
 // pinoLogger.info({ apiPrefix: apiPrefix || "/" }, "API routes mounted");
 // Mount router with the API prefix
-app.use(router);
+app.use(apiPrefix, router); // remmeber to remove the apiPrefix when deploying to production
 
 // Health check endpoint
 app.get("/health", (req, res) => {

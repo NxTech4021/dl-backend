@@ -1550,6 +1550,161 @@ router.get("/locations/search", async (req, res) => {
   }
 });
 
+// Save user sport skill levels (self-assessed during onboarding)
+router.put("/skill-levels/:userId", async (req, res) => {
+  const startTime = Date.now();
+  const requestId = req.requestId!;
+  const { userId } = req.params;
+  const { tennisSkillLevel, pickleballSkillLevel, padelSkillLevel } = req.body;
+
+  try {
+    // Validate userId
+    const validation = validator.validateUserId(userId);
+    if (!validation.isValid) {
+      return handleQuestionnaireError(validation.errors[0], res);
+    }
+
+    // Validate skill levels if provided
+    const validSkillLevels = [
+      "BEGINNER",
+      "IMPROVER",
+      "INTERMEDIATE",
+      "UPPER_INTERMEDIATE",
+      "ADVANCED",
+      "EXPERT",
+    ];
+
+    if (tennisSkillLevel && !validSkillLevels.includes(tennisSkillLevel)) {
+      return res.status(400).json({
+        error: `Invalid tennis skill level. Must be one of: ${validSkillLevels.join(", ")}`,
+        code: "INVALID_SKILL_LEVEL",
+        success: false,
+      });
+    }
+    if (pickleballSkillLevel && !validSkillLevels.includes(pickleballSkillLevel)) {
+      return res.status(400).json({
+        error: `Invalid pickleball skill level. Must be one of: ${validSkillLevels.join(", ")}`,
+        code: "INVALID_SKILL_LEVEL",
+        success: false,
+      });
+    }
+    if (padelSkillLevel && !validSkillLevels.includes(padelSkillLevel)) {
+      return res.status(400).json({
+        error: `Invalid padel skill level. Must be one of: ${validSkillLevels.join(", ")}`,
+        code: "INVALID_SKILL_LEVEL",
+        success: false,
+      });
+    }
+
+    logger.info("Saving user sport skill levels", {
+      userId,
+      requestId,
+      tennisSkillLevel,
+      pickleballSkillLevel,
+      padelSkillLevel,
+      operation: "save_skill_levels",
+    });
+
+    const dbStart = Date.now();
+
+    // Check if user exists
+    const existingUser = await prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!existingUser) {
+      const error = new UserNotFoundError(userId);
+      logger.warn("User not found for skill levels save", {
+        userId,
+        requestId,
+      });
+      return handleQuestionnaireError(error, res);
+    }
+
+    // Get or create user settings
+    let settings = await prisma.userSettings.findUnique({
+      where: { userId },
+    });
+
+    if (!settings) {
+      settings = await prisma.userSettings.create({
+        data: {
+          userId,
+          notifications: true,
+          matchReminders: true,
+          locationServices: false,
+          hapticFeedback: true,
+        },
+      });
+    }
+
+    // Build update data
+    const updateData: any = {
+      updatedAt: new Date(),
+    };
+
+    if (tennisSkillLevel !== undefined) {
+      updateData.tennisSkillLevel = tennisSkillLevel;
+    }
+    if (pickleballSkillLevel !== undefined) {
+      updateData.pickleballSkillLevel = pickleballSkillLevel;
+    }
+    if (padelSkillLevel !== undefined) {
+      updateData.padelSkillLevel = padelSkillLevel;
+    }
+
+    // Update user settings with skill levels
+    const updatedSettings = await prisma.userSettings.update({
+      where: { userId },
+      data: updateData,
+      select: {
+        id: true,
+        tennisSkillLevel: true,
+        pickleballSkillLevel: true,
+        padelSkillLevel: true,
+        updatedAt: true,
+      },
+    });
+
+    const dbDuration = Date.now() - dbStart;
+    logger.databaseOperation("save_skill_levels", "user_settings", dbDuration);
+
+    const totalDuration = Date.now() - startTime;
+    logger.info("User sport skill levels saved successfully", {
+      userId,
+      requestId,
+      duration: totalDuration,
+      skillLevels: {
+        tennis: updatedSettings.tennisSkillLevel,
+        pickleball: updatedSettings.pickleballSkillLevel,
+        padel: updatedSettings.padelSkillLevel,
+      },
+      operation: "save_skill_levels",
+    });
+
+    res.set("X-Request-ID", requestId);
+    res.json({
+      success: true,
+      message: "Sport skill levels saved successfully",
+      data: updatedSettings,
+    });
+  } catch (error) {
+    const duration = Date.now() - startTime;
+    logger.error(
+      "Error saving sport skill levels",
+      {
+        userId,
+        requestId,
+        duration,
+        operation: "save_skill_levels",
+      },
+      error as Error
+    );
+
+    handleQuestionnaireError(error, res);
+  }
+});
+
 // Get user profile information
 router.get("/profile/:userId", async (req, res) => {
   const startTime = Date.now();

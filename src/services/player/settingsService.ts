@@ -1,10 +1,17 @@
 import { prisma } from '../../lib/prisma';
+import { SkillLevel } from '@prisma/client';
 
 export interface UserSettingsData {
   notifications?: boolean;
   matchReminders?: boolean;
   locationServices?: boolean;
   hapticFeedback?: boolean;
+}
+
+export interface SportSkillLevelsData {
+  tennisSkillLevel?: SkillLevel | null;
+  pickleballSkillLevel?: SkillLevel | null;
+  padelSkillLevel?: SkillLevel | null;
 }
 
 /**
@@ -20,6 +27,9 @@ export async function getUserSettings(userId: string) {
       matchReminders: true,
       locationServices: true,
       hapticFeedback: true,
+      tennisSkillLevel: true,
+      pickleballSkillLevel: true,
+      padelSkillLevel: true,
       createdAt: true,
       updatedAt: true,
     },
@@ -41,6 +51,9 @@ export async function getUserSettings(userId: string) {
         matchReminders: true,
         locationServices: true,
         hapticFeedback: true,
+        tennisSkillLevel: true,
+        pickleballSkillLevel: true,
+        padelSkillLevel: true,
         createdAt: true,
         updatedAt: true,
       },
@@ -85,7 +98,47 @@ export async function updateUserSettings(userId: string, data: UserSettingsData)
       matchReminders: true,
       locationServices: true,
       hapticFeedback: true,
+      tennisSkillLevel: true,
+      pickleballSkillLevel: true,
+      padelSkillLevel: true,
       createdAt: true,
+      updatedAt: true,
+    },
+  });
+
+  return updatedSettings;
+}
+
+/**
+ * Update user sport skill levels
+ * Used during onboarding to save self-assessed skill levels
+ */
+export async function updateSportSkillLevels(userId: string, data: SportSkillLevelsData) {
+  // Ensure settings exist first
+  await getUserSettings(userId);
+
+  const updateData: Partial<SportSkillLevelsData> & { updatedAt: Date } = {
+    updatedAt: new Date(),
+  };
+
+  if (data.tennisSkillLevel !== undefined) {
+    updateData.tennisSkillLevel = data.tennisSkillLevel;
+  }
+  if (data.pickleballSkillLevel !== undefined) {
+    updateData.pickleballSkillLevel = data.pickleballSkillLevel;
+  }
+  if (data.padelSkillLevel !== undefined) {
+    updateData.padelSkillLevel = data.padelSkillLevel;
+  }
+
+  const updatedSettings = await prisma.userSettings.update({
+    where: { userId },
+    data: updateData,
+    select: {
+      id: true,
+      tennisSkillLevel: true,
+      pickleballSkillLevel: true,
+      padelSkillLevel: true,
       updatedAt: true,
     },
   });

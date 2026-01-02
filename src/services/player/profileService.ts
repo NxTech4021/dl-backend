@@ -216,6 +216,16 @@ export async function getPlayerProfile(userId: string) {
     throw new Error('Player not found');
   }
 
+  // Get user settings (includes self-assessed skill levels from onboarding)
+  const userSettings = await prisma.userSettings.findUnique({
+    where: { userId },
+    select: {
+      tennisSkillLevel: true,
+      pickleballSkillLevel: true,
+      padelSkillLevel: true,
+    },
+  });
+
   // Get all questionnaire responses (including placeholder entries for skipped questionnaires)
   const responses = await prisma.questionnaireResponse.findMany({
     where: { userId },
@@ -364,6 +374,20 @@ export async function getPlayerProfile(userId: string) {
 
   const activityStatus = 'active'; // TODO: Fix checkPlayerActivityStatus
 
+  // Build self-assessed skill levels object (from onboarding)
+  const selfAssessedSkillLevels: Record<string, string | null> = {};
+  if (userSettings) {
+    if (userSettings.tennisSkillLevel) {
+      selfAssessedSkillLevels.tennis = userSettings.tennisSkillLevel;
+    }
+    if (userSettings.pickleballSkillLevel) {
+      selfAssessedSkillLevels.pickleball = userSettings.pickleballSkillLevel;
+    }
+    if (userSettings.padelSkillLevel) {
+      selfAssessedSkillLevels.padel = userSettings.padelSkillLevel;
+    }
+  }
+
   return {
     id: player.id,
     name: player.name,
@@ -381,6 +405,7 @@ export async function getPlayerProfile(userId: string) {
     registeredDate: player.createdAt,
     sports: allSports,
     skillRatings: Object.keys(skillRatings).length > 0 ? skillRatings : null,
+    selfAssessedSkillLevels: Object.keys(selfAssessedSkillLevels).length > 0 ? selfAssessedSkillLevels : null,
     questionnaireStatus: questionnaireStatus,
     recentMatches: processedMatches,
     totalMatches,
