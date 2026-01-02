@@ -1239,11 +1239,44 @@ export const getActivePartnership = async (
     // Use division from divisionStandings if partnership.division is null
     const resolvedDivision = partnership.division || partnership.divisionStandings?.[0]?.division || null;
 
+    // Check registration status for both captain and partner
+    const memberUserIds = [partnership.captainId];
+    if (partnership.partnerId) {
+      memberUserIds.push(partnership.partnerId);
+    }
+
+    const memberships = await prisma.seasonMembership.findMany({
+      where: {
+        seasonId,
+        userId: { in: memberUserIds },
+      },
+      select: {
+        userId: true,
+        status: true,
+        paymentStatus: true,
+      },
+    });
+
+    const captainMembership = memberships.find(m => m.userId === partnership.captainId);
+    const partnerMembership = partnership.partnerId
+      ? memberships.find(m => m.userId === partnership.partnerId)
+      : null;
+
+    // Team is registered if both have ACTIVE memberships
+    const isTeamRegistered = !!(
+      captainMembership?.status === 'ACTIVE' &&
+      (!partnership.partnerId || partnerMembership?.status === 'ACTIVE')
+    );
+
     const result = {
       ...partnership,
       captain: captainWithSkillRatings,
       partner: partnerWithSkillRatings,
       division: resolvedDivision,
+      // Registration status fields
+      isTeamRegistered,
+      captainMembership: captainMembership || null,
+      partnerMembership: partnerMembership || null,
     };
 
     // Final debug log before returning
@@ -1255,6 +1288,9 @@ export const getActivePartnership = async (
       partnerHasSkillRatings: !!result.partner?.skillRatings,
       captainSkillRatingsKeys: result.captain?.skillRatings ? Object.keys(result.captain.skillRatings) : [],
       partnerSkillRatingsKeys: result.partner?.skillRatings ? Object.keys(result.partner.skillRatings) : [],
+      isTeamRegistered: result.isTeamRegistered,
+      captainMembershipStatus: captainMembership?.status,
+      partnerMembershipStatus: partnerMembership?.status,
     });
 
     return result;
