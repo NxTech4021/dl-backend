@@ -765,9 +765,22 @@ router.put("/profile/:userId", async (req, res) => {
       });
     }
 
-    let parsedDate = null;
+    let parsedDate: Date | null = null;
     if (dateOfBirth) {
-      parsedDate = new Date(dateOfBirth);
+      // Parse date string (expected format: YYYY-MM-DD) and store at noon UTC
+      // This prevents timezone shifts from changing the calendar date
+      const dateParts = dateOfBirth.split('-');
+      if (dateParts.length !== 3) {
+        return res.status(400).json({
+          error: "Invalid date format for dateOfBirth",
+          code: "INVALID_DATE",
+          success: false,
+        });
+      }
+
+      const [year, month, day] = dateParts.map(Number);
+      parsedDate = new Date(Date.UTC(year, month - 1, day, 12, 0, 0));
+
       if (isNaN(parsedDate.getTime())) {
         return res.status(400).json({
           error: "Invalid date format for dateOfBirth",
@@ -778,11 +791,11 @@ router.put("/profile/:userId", async (req, res) => {
 
       // Check if user is at least 13 years old
       const today = new Date();
-      const age = today.getFullYear() - parsedDate.getFullYear();
-      const monthDiff = today.getMonth() - parsedDate.getMonth();
+      const age = today.getFullYear() - year;
+      const monthDiff = today.getMonth() - (month - 1);
       const actualAge =
         monthDiff < 0 ||
-        (monthDiff === 0 && today.getDate() < parsedDate.getDate())
+        (monthDiff === 0 && today.getDate() < day)
           ? age - 1
           : age;
 

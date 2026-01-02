@@ -540,7 +540,13 @@ export async function adminUpdatePlayer(input: AdminUpdatePlayerInput) {
   if (bio !== undefined) updateData.bio = bio.trim() || null;
   if (gender !== undefined) updateData.gender = gender || null;
   if (dateOfBirth !== undefined) {
-    updateData.dateOfBirth = dateOfBirth ? new Date(dateOfBirth) : null;
+    // Store date at noon UTC to prevent timezone shifts from changing the calendar date
+    if (dateOfBirth) {
+      const [year, month, day] = dateOfBirth.split('-').map(Number);
+      updateData.dateOfBirth = new Date(Date.UTC(year, month - 1, day, 12, 0, 0));
+    } else {
+      updateData.dateOfBirth = null;
+    }
   }
 
   // Update player
