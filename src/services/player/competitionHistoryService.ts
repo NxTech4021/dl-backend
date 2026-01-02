@@ -178,12 +178,19 @@ export async function getPlayerSeasonHistory(playerId: string) {
       createdAt: true,
       updatedAt: true,
       memberships: {
-        where: { userId: playerId },
         select: {
           id: true,
+          userId: true,
           joinedAt: true,
           status: true,
           paymentStatus: true,
+          user: {
+            select: {
+              id: true,
+              name: true,
+              image: true
+            }
+          },
           division: {
             select: {
               id: true,
@@ -193,7 +200,8 @@ export async function getPlayerSeasonHistory(playerId: string) {
               level: true
             }
           }
-        }
+        },
+        take: 20 // Limit to first 20 memberships for performance
       },
       category: {
         select: {
@@ -235,11 +243,21 @@ export async function getPlayerSeasonHistory(playerId: string) {
   } as any);
 
   // Transform data for better frontend consumption
-  const transformedSeasons = playerSeasons.map((season: any) => ({
-    ...season,
-    membership: season.memberships?.[0] || null, // Player's membership details
-    memberships: undefined // Remove the array since we only need the player's membership
-  }));
+  const transformedSeasons = playerSeasons.map((season: any) => {
+    // Find the current player's membership
+    const playerMembership = season.memberships?.find((m: any) => m.userId === playerId) || null;
+
+    return {
+      ...season,
+      membership: playerMembership, // Player's membership details
+      // Keep memberships array with user info for profile pictures display
+      memberships: season.memberships?.map((m: any) => ({
+        id: m.id,
+        userId: m.userId,
+        user: m.user
+      })) || []
+    };
+  });
 
   return {
     player: {
