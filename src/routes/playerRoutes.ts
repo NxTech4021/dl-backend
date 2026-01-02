@@ -28,7 +28,7 @@ import {
   getPlayerDivisionHistory,
   getPlayerMatchHistoryAdmin,
 } from '../controllers/playerController';
-import { getSettings, updateSettings } from '../controllers/settingsController';
+import { getSettings, updateSettings, updateSkillLevels } from '../controllers/settingsController';
 
 const playerRouter = Router();
 
@@ -55,6 +55,7 @@ playerRouter.get('/matches/:matchId', verifyAuth, getMatchDetails as any);
 // Settings routes
 playerRouter.get('/settings', verifyAuth, getSettings as any);
 playerRouter.put('/settings', verifyAuth, updateSettings as any);
+playerRouter.put('/settings/skill-levels', verifyAuth, updateSkillLevels as any);
 
 // Track login activity (for regular users)
 playerRouter.put('/track-login', verifyAuth, async (req, res) => {
