@@ -47,20 +47,80 @@ export async function seedAdmins(): Promise<SeededAdmin[]> {
 
   const adminData = [
     // Active superadmins
-    { name: "Super Admin", email: "superadmin@dleague.com", username: "superadmin", role: Role.SUPERADMIN, status: AdminStatus.ACTIVE },
-    { name: "Head Admin", email: "headadmin@dleague.com", username: "headadmin", role: Role.SUPERADMIN, status: AdminStatus.ACTIVE },
+    {
+      name: "Super Admin",
+      email: "superadmin@dleague.com",
+      username: "superadmin",
+      role: Role.SUPERADMIN,
+      status: AdminStatus.ACTIVE,
+    },
+    {
+      name: "Head Admin",
+      email: "headadmin@dleague.com",
+      username: "headadmin",
+      role: Role.SUPERADMIN,
+      status: AdminStatus.ACTIVE,
+    },
 
     // Active admins
-    { name: "Admin User", email: "admin@dleague.com", username: "admin", role: Role.ADMIN, status: AdminStatus.ACTIVE },
-    { name: "Admin Manager", email: "manager@dleague.com", username: "manager", role: Role.ADMIN, status: AdminStatus.ACTIVE },
-    { name: "Operations Admin", email: "ops@dleague.com", username: "ops_admin", role: Role.ADMIN, status: AdminStatus.ACTIVE },
-    { name: "Support Admin", email: "support@dleague.com", username: "support_admin", role: Role.ADMIN, status: AdminStatus.ACTIVE },
-    { name: "League Admin", email: "league_admin@dleague.com", username: "league_admin", role: Role.ADMIN, status: AdminStatus.ACTIVE },
+    {
+      name: "Admin User",
+      email: "admin@dleague.com",
+      username: "admin",
+      role: Role.ADMIN,
+      status: AdminStatus.ACTIVE,
+    },
+    {
+      name: "Admin Manager",
+      email: "manager@dleague.com",
+      username: "manager",
+      role: Role.ADMIN,
+      status: AdminStatus.ACTIVE,
+    },
+    {
+      name: "Operations Admin",
+      email: "ops@dleague.com",
+      username: "ops_admin",
+      role: Role.ADMIN,
+      status: AdminStatus.ACTIVE,
+    },
+    {
+      name: "Support Admin",
+      email: "support@dleague.com",
+      username: "support_admin",
+      role: Role.ADMIN,
+      status: AdminStatus.ACTIVE,
+    },
+    {
+      name: "League Admin",
+      email: "league_admin@dleague.com",
+      username: "league_admin",
+      role: Role.ADMIN,
+      status: AdminStatus.ACTIVE,
+    },
 
     // Various statuses
-    { name: "Pending Admin", email: "pending_admin@dleague.com", username: "pending_admin", role: Role.ADMIN, status: AdminStatus.PENDING },
-    { name: "Suspended Admin", email: "suspended_admin@dleague.com", username: "suspended_admin", role: Role.ADMIN, status: AdminStatus.SUSPENDED },
-    { name: "New Admin", email: "new_admin@dleague.com", username: "new_admin", role: Role.ADMIN, status: AdminStatus.PENDING },
+    {
+      name: "Pending Admin",
+      email: "pending_admin@dleague.com",
+      username: "pending_admin",
+      role: Role.ADMIN,
+      status: AdminStatus.PENDING,
+    },
+    {
+      name: "Suspended Admin",
+      email: "suspended_admin@dleague.com",
+      username: "suspended_admin",
+      role: Role.ADMIN,
+      status: AdminStatus.SUSPENDED,
+    },
+    {
+      name: "New Admin",
+      email: "new_admin@dleague.com",
+      username: "new_admin",
+      role: Role.ADMIN,
+      status: AdminStatus.PENDING,
+    },
   ];
 
   const createdAdmins: SeededAdmin[] = [];
@@ -73,7 +133,10 @@ export async function seedAdmins(): Promise<SeededAdmin[]> {
 
     if (existingUser) {
       if (existingUser.admin) {
-        createdAdmins.push({ userId: existingUser.id, adminId: existingUser.admin.id });
+        createdAdmins.push({
+          userId: existingUser.id,
+          adminId: existingUser.admin.id,
+        });
       }
       continue;
     }
@@ -131,10 +194,10 @@ export async function seedUsers(): Promise<User[]> {
 
   // Configuration for user distribution
   const userConfig = {
-    activeComplete: 400,      // Active users with complete profiles
-    activeIncomplete: 50,     // Active users with incomplete onboarding
-    inactive: 30,             // Inactive users
-    suspended: 20,            // Suspended users
+    activeComplete: 400, // Active users with complete profiles
+    activeIncomplete: 50, // Active users with incomplete onboarding
+    inactive: 30, // Inactive users
+    suspended: 20, // Suspended users
   };
 
   const totalUsers = Object.values(userConfig).reduce((a, b) => a + b, 0);
@@ -148,10 +211,14 @@ export async function seedUsers(): Promise<User[]> {
     bioPool?: string[];
   }): Promise<User | null> {
     const isMale = userIndex % 2 === 0;
-    const firstName = randomElement(isMale ? MALAYSIAN_FIRST_NAMES.male : MALAYSIAN_FIRST_NAMES.female);
+    const firstName = randomElement(
+      isMale ? MALAYSIAN_FIRST_NAMES.male : MALAYSIAN_FIRST_NAMES.female
+    );
     const lastName = randomElement(MALAYSIAN_LAST_NAMES);
     const name = `${firstName} ${lastName}`;
-    const username = `${firstName.toLowerCase()}_${lastName.toLowerCase().slice(0, 3)}${userIndex}`;
+    const username = `${firstName.toLowerCase()}_${lastName
+      .toLowerCase()
+      .slice(0, 3)}${userIndex}`;
     const email = `${username}@test.com`;
 
     // Check if user exists
@@ -161,7 +228,10 @@ export async function seedUsers(): Promise<User[]> {
       return existingUser;
     }
 
-    const createdAt = randomDate(config.createdAtRange[0], config.createdAtRange[1]);
+    const createdAt = randomDate(
+      config.createdAtRange[0],
+      config.createdAtRange[1]
+    );
 
     // Generate birth date between 1970 and 2005
     const birthYear = 1970 + randomInt(0, 35);
@@ -173,16 +243,29 @@ export async function seedUsers(): Promise<User[]> {
         name,
         email,
         username,
-        bio: config.completedOnboarding ? randomElement(config.bioPool || BIOS) : null,
+        bio: config.completedOnboarding
+          ? randomElement(config.bioPool || BIOS)
+          : null,
         area: config.completedOnboarding ? randomElement(AREAS) : null,
-        gender: config.completedOnboarding ? (isMale ? "MALE" : "FEMALE") : null,
+        gender: config.completedOnboarding
+          ? isMale
+            ? "MALE"
+            : "FEMALE"
+          : null,
         status: config.status,
         completedOnboarding: config.completedOnboarding,
         role: Role.USER,
         emailVerified: true,
-        dateOfBirth: config.completedOnboarding ? new Date(birthYear, birthMonth, birthDay) : null,
-        lastLogin: config.completedOnboarding ? randomDate(daysAgo(30), new Date()) : null,
-        lastActivityCheck: config.status === UserStatus.ACTIVE ? randomDate(daysAgo(14), new Date()) : null,
+        dateOfBirth: config.completedOnboarding
+          ? new Date(birthYear, birthMonth, birthDay)
+          : null,
+        lastLogin: config.completedOnboarding
+          ? randomDate(daysAgo(30), new Date())
+          : null,
+        lastActivityCheck:
+          config.status === UserStatus.ACTIVE
+            ? randomDate(daysAgo(14), new Date())
+            : null,
         createdAt,
       },
     });
@@ -228,7 +311,9 @@ export async function seedUsers(): Promise<User[]> {
   }
 
   // Create active users with complete profiles (spread over 12 months)
-  logProgress(`Creating ${userConfig.activeComplete} active users with complete profiles...`);
+  logProgress(
+    `Creating ${userConfig.activeComplete} active users with complete profiles...`
+  );
   for (let i = 0; i < userConfig.activeComplete; i++) {
     const user = await createUser({
       status: UserStatus.ACTIVE,
@@ -243,7 +328,9 @@ export async function seedUsers(): Promise<User[]> {
   }
 
   // Create active users with incomplete onboarding (recent signups)
-  logProgress(`Creating ${userConfig.activeIncomplete} users with incomplete onboarding...`);
+  logProgress(
+    `Creating ${userConfig.activeIncomplete} users with incomplete onboarding...`
+  );
   for (let i = 0; i < userConfig.activeIncomplete; i++) {
     const user = await createUser({
       status: UserStatus.ACTIVE,
@@ -255,7 +342,13 @@ export async function seedUsers(): Promise<User[]> {
 
   // Create inactive users
   logProgress(`Creating ${userConfig.inactive} inactive users...`);
-  const inactiveBios = ["Haven't played in a while.", "Taking a break.", "Will be back soon.", "On hiatus.", "Busy with work."];
+  const inactiveBios = [
+    "Haven't played in a while.",
+    "Taking a break.",
+    "Will be back soon.",
+    "On hiatus.",
+    "Busy with work.",
+  ];
   for (let i = 0; i < userConfig.inactive; i++) {
     const user = await createUser({
       status: UserStatus.INACTIVE,
@@ -268,7 +361,11 @@ export async function seedUsers(): Promise<User[]> {
 
   // Create suspended users
   logProgress(`Creating ${userConfig.suspended} suspended users...`);
-  const suspendedBios = ["Account suspended.", "Violation of terms.", "Under review."];
+  const suspendedBios = [
+    "Account suspended.",
+    "Violation of terms.",
+    "Under review.",
+  ];
   for (let i = 0; i < userConfig.suspended; i++) {
     const user = await createUser({
       status: UserStatus.SUSPENDED,
@@ -281,7 +378,9 @@ export async function seedUsers(): Promise<User[]> {
 
   logSuccess(`Created ${createdUsers.length} users (password: Test@123)`);
   logProgress(`- ${userConfig.activeComplete} active with complete profiles`);
-  logProgress(`- ${userConfig.activeIncomplete} active with incomplete onboarding`);
+  logProgress(
+    `- ${userConfig.activeIncomplete} active with incomplete onboarding`
+  );
   logProgress(`- ${userConfig.inactive} inactive`);
   logProgress(`- ${userConfig.suspended} suspended`);
 
@@ -292,7 +391,9 @@ export async function seedUsers(): Promise<User[]> {
 // SEED ADMIN INVITE TOKENS
 // =============================================
 
-export async function seedAdminInviteTokens(admins: SeededAdmin[]): Promise<void> {
+export async function seedAdminInviteTokens(
+  admins: SeededAdmin[]
+): Promise<void> {
   logSection("🎫 Seeding admin invite tokens...");
 
   const pendingAdmins = await prisma.admin.findMany({
@@ -312,7 +413,9 @@ export async function seedAdminInviteTokens(admins: SeededAdmin[]): Promise<void
         data: {
           adminId: admin.id,
           email: admin.user.email,
-          token: `invite_${Date.now()}_${Math.random().toString(36).substring(7)}`,
+          token: `invite_${Date.now()}_${Math.random()
+            .toString(36)
+            .substring(7)}`,
           status: "PENDING",
           expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
         },
@@ -328,10 +431,14 @@ export async function seedAdminInviteTokens(admins: SeededAdmin[]): Promise<void
 // SEED NOTIFICATION PREFERENCES
 // =============================================
 
-export async function seedNotificationPreferences(users: User[]): Promise<void> {
+export async function seedNotificationPreferences(
+  users: User[]
+): Promise<void> {
   logSection("🔔 Seeding notification preferences...");
 
-  const activeUsers = users.filter(u => u.status === UserStatus.ACTIVE && u.completedOnboarding);
+  const activeUsers = users.filter(
+    (u) => u.status === UserStatus.ACTIVE && u.completedOnboarding
+  );
   let created = 0;
 
   for (const user of activeUsers) {
@@ -378,7 +485,9 @@ export async function seedNotificationPreferences(users: User[]): Promise<void> 
 export async function seedUserPushTokens(users: User[]): Promise<void> {
   logSection("📱 Seeding user push tokens...");
 
-  const activeUsers = users.filter(u => u.status === UserStatus.ACTIVE && u.completedOnboarding);
+  const activeUsers = users.filter(
+    (u) => u.status === UserStatus.ACTIVE && u.completedOnboarding
+  );
   let created = 0;
 
   for (const user of activeUsers) {
