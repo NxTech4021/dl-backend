@@ -452,6 +452,30 @@ export async function getPublicPlayerProfile(userId: string, viewerId?: string) 
     throw new Error('Player not found');
   }
 
+  // Get user settings for self-assessed skill levels
+  const userSettings = await prisma.userSettings.findUnique({
+    where: { userId },
+    select: {
+      tennisSkillLevel: true,
+      pickleballSkillLevel: true,
+      padelSkillLevel: true,
+    },
+  });
+
+  // Build selfAssessedSkillLevels object (same pattern as private profile)
+  const selfAssessedSkillLevels: Record<string, string> = {};
+  if (userSettings) {
+    if (userSettings.tennisSkillLevel) {
+      selfAssessedSkillLevels.tennis = userSettings.tennisSkillLevel;
+    }
+    if (userSettings.pickleballSkillLevel) {
+      selfAssessedSkillLevels.pickleball = userSettings.pickleballSkillLevel;
+    }
+    if (userSettings.padelSkillLevel) {
+      selfAssessedSkillLevels.padel = userSettings.padelSkillLevel;
+    }
+  }
+
   // Get sports and ratings
   const responses = await fetchPlayerQuestionnaires(userId);
   const completedResponses = responses.filter(r => r.completedAt);
@@ -512,6 +536,7 @@ export async function getPublicPlayerProfile(userId: string, viewerId?: string) 
     ...player,
     sports,
     skillRatings: Object.keys(skillRatings).length > 0 ? skillRatings : null,
+    selfAssessedSkillLevels: Object.keys(selfAssessedSkillLevels).length > 0 ? selfAssessedSkillLevels : null,
     recentMatches,
     totalMatches,
     isFriend: !!isFriend,
