@@ -124,7 +124,8 @@ export const createSeason = async (req: Request, res: Response) => {
   } = req.body as CreateSeasonBody;
 
   // Validate required fields
-  if (!name || !startDate || !endDate || !entryFee || !leagueIds || !categoryId) {
+  // Note: entryFee can be 0 (free seasons), so check for undefined/null instead of falsy
+  if (!name || !startDate || !endDate || entryFee === undefined || entryFee === null || !leagueIds || !categoryId) {
     return res.status(400).json({
       success: false,
       error: "Missing required fields: name, startDate, endDate, entryFee, leagueIds, and categoryId are required"
