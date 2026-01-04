@@ -36,7 +36,7 @@ export interface CreateFriendlyMatchInput {
   courtBooked?: boolean;
   fee?: MatchFeeType;
   feeAmount?: number;
-  genderRestriction?: GenderRestriction; // MALE, FEMALE, OPEN (null = OPEN/All)
+  genderRestriction?: GenderRestriction; // MALE, FEMALE, MIXED, OPEN (null = OPEN/All)
   skillLevels: string[]; // ["BEGINNER", "IMPROVER", "INTERMEDIATE", "UPPER_INTERMEDIATE", "EXPERT"]
   opponentId?: string;
   partnerId?: string;

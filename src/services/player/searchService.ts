@@ -203,12 +203,13 @@ export async function getAvailablePlayersForSeason(
     category = categoryData;
   }
 
-  // Check if season is MIXED doubles
+  // Check if season is MIXED doubles or OPEN
   // Note: Category gender values are enums (uppercase), but normalize for comparison
   const categoryGender = category?.genderCategory || category?.genderRestriction;
   const categoryGenderUpper = categoryGender?.toUpperCase();
   const isMixedDoubles = categoryGenderUpper === 'MIXED';
-  console.log('🔍 Season:', season.name, '| Category:', categoryGender, '| Mixed:', isMixedDoubles);
+  const isOpenCategory = categoryGenderUpper === 'OPEN';
+  console.log('🔍 Season:', season.name, '| Category:', categoryGender, '| Mixed:', isMixedDoubles, '| Open:', isOpenCategory);
 
   // Get user's ACCEPTED friendships (both as requester and recipient)
   const friendships = await prisma.friendship.findMany({
@@ -259,7 +260,7 @@ export async function getAvailablePlayersForSeason(
 
   // Build gender filter based on category
   // Note: User gender is stored as lowercase ('male', 'female') in the database
-  // Category gender is stored as uppercase ('MALE', 'FEMALE', 'MIXED') as enum values
+  // Category gender is stored as uppercase ('MALE', 'FEMALE', 'MIXED', 'OPEN') as enum values
   const genderFilter: any = {};
   if (currentUser.gender) {
     // Normalize user gender to lowercase for comparison
@@ -270,6 +271,10 @@ export async function getAvailablePlayersForSeason(
       // If user is female, filter for male partners; if male, filter for female partners
       genderFilter.gender = userGender === 'male' ? 'female' : 'male';
       console.log(`🔍 Mixed doubles: User is ${userGender}, filtering for ${genderFilter.gender} partners`);
+    } else if (isOpenCategory) {
+      // OPEN category: no gender restriction, all genders allowed
+      console.log(`🔍 OPEN category: No gender filtering applied`);
+      // Don't set genderFilter.gender - allow all genders
     } else if (categoryGenderUpper === 'MALE') {
       // Men's doubles: only MALE players
       genderFilter.gender = 'male';

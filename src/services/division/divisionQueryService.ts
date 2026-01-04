@@ -298,7 +298,8 @@ export async function getDivisionSummaryBySeasonId(seasonId: string) {
     byGender: {
       male: divisionStats.filter(d => d.genderCategory === GenderType.MALE).length,
       female: divisionStats.filter(d => d.genderCategory === GenderType.FEMALE).length,
-      mixed: divisionStats.filter(d => d.genderCategory === GenderType.MIXED || !d.genderCategory).length
+      mixed: divisionStats.filter(d => d.genderCategory === GenderType.MIXED).length,
+      open: divisionStats.filter(d => !d.genderCategory).length
     },
     capacityUtilization: divisionStats.map(d => {
       const isSingles = d.gameType === GameType.SINGLES;

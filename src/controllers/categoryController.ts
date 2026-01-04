@@ -64,6 +64,9 @@ export const createCategory = async (req: Request, res: Response) => {
         mappedGenderCategory = GenderType.FEMALE;
       } else if (genderRestriction === 'MIXED') {
         mappedGenderCategory = GenderType.MIXED;
+      } else if (genderRestriction === 'OPEN') {
+        // OPEN means no gender restriction - set to null
+        mappedGenderCategory = null;
       }
     }
 
@@ -246,7 +249,8 @@ export const updateCategory = async (req: Request, res: Response) => {
       } else if (data.genderRestriction === 'MIXED') {
         mappedGenderCategory = GenderType.MIXED;
       } else if (data.genderRestriction === 'OPEN') {
-        mappedGenderCategory = GenderType.MIXED;
+        // OPEN means no gender restriction - set to null
+        mappedGenderCategory = null;
       }
     }
 

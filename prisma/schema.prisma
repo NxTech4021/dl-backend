@@ -2436,6 +2436,7 @@ enum GenderType {
   MALE
   FEMALE
   MIXED
+  OPEN
 }
 
 enum MembershipStatus {

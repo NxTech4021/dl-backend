@@ -145,9 +145,6 @@ export function socketHandler(httpServer: HttpServer) {
           adminId,
         };
 
-        console.log(
-          `✅ Socket.IO: Authenticated via x-user-id - ${user.id} (${user.role})`
-        );
         return next();
       }
 
@@ -191,22 +188,18 @@ export function socketHandler(httpServer: HttpServer) {
           },
         });
 
-        console.log(
-          `🔄 Auto-joining ${userThreads.length} thread rooms for user ${userId}...`
-        );
-
         userThreads.forEach((ut) => {
           socket.join(ut.threadId);
           const threadName =
             ut.thread.name || (ut.thread.isGroup ? "Group Chat" : "DM");
-          console.log(
-            `  ✅ Joined thread room: ${ut.threadId} (${threadName})`
-          );
+          // console.log(
+          //   `  ✅ Joined thread room: ${ut.threadId} (${threadName})`
+          // );
         });
 
-        console.log(
-          `✅ User ${userId} successfully joined ${userThreads.length} thread rooms`
-        );
+        // console.log(
+        //   `✅ User ${userId} successfully joined ${userThreads.length} thread rooms`
+        // );
 
         // Send unread notification count
         const unreadCount = await prisma.userNotification.count({

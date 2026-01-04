@@ -4,7 +4,6 @@ import {
   markNotificationAsRead,
   markAllNotificationsAsRead,
   getUnreadCount,
-  sendTestNotification,
   deleteNotification,
   registerPushToken,
   unregisterPushToken,
@@ -26,14 +25,14 @@ notificationRouter.put('/:id/read', verifyAuth, markNotificationAsRead);
 notificationRouter.put('/mark-all-read', verifyAuth, markAllNotificationsAsRead);
 // notificationRouter.put('/:id/archive', verifyAuth, archiveNotification);
 
-notificationRouter.delete('/:id', verifyAuth, deleteNotification);
-
 // Push token management routes (with rate limiting)
+// IMPORTANT: Specific routes MUST come BEFORE generic /:id routes
 notificationRouter.post('/push-token',  pushTokenLimiter, registerPushToken);
 notificationRouter.delete('/push-token', verifyAuth, unregisterPushToken);
 notificationRouter.get('/push-tokens', getUserPushTokens);
 
-// routes for testing
+notificationRouter.delete('/:id', verifyAuth, deleteNotification);
+
 
 // Testing routes - separate endpoints for different notification types                          
 notificationRouter.post('/test/local', verifyAuth, sendTestLocalNotification);    
