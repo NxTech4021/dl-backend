@@ -84,6 +84,7 @@ export const sendSeasonInvitation = async (data: {
     }
 
     // Validate: Registration is still open
+    // Players can register after season starts as long as registration deadline hasn't passed
     const now = new Date();
 
     if (season.status !== 'UPCOMING' && season.status !== 'ACTIVE') {
@@ -93,10 +94,6 @@ export const sendSeasonInvitation = async (data: {
 
     if (season.regiDeadline && now > season.regiDeadline) {
       return { success: false, message: 'Registration deadline has passed' };
-    }
-
-    if (season.startDate && now > season.startDate) {
-      return { success: false, message: 'Season has already started' };
     }
 
     // Check if sender already has a partnership in this season

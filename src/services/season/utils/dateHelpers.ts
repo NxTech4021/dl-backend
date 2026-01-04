@@ -26,18 +26,15 @@ export function toISODateStringOrNull(input: unknown): string | null {
 
 /**
  * Check if season registration is currently open
- * Extracted from: seasonService.ts lines 356-357
+ * Players can register as long as the registration deadline hasn't passed,
+ * even if the season has already started
  */
 export function isRegistrationOpen(season: any): boolean {
   const now = new Date();
 
-  // Check registration deadline
+  // Only check registration deadline
+  // Registration is open as long as the deadline hasn't passed
   if (season.regiDeadline && now > new Date(season.regiDeadline)) {
-    return false;
-  }
-
-  // Check if season has already started
-  if (season.startDate && now > new Date(season.startDate)) {
     return false;
   }
 

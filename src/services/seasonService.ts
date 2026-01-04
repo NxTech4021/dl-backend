@@ -411,8 +411,10 @@ export class SeasonService {
 
     if (!season.isActive) throw new Error("Season is not active for registration");
 
-    if (season.regiDeadline && (new Date() > season.regiDeadline || (season.startDate && new Date() > season.startDate)))
-      throw new Error("Season registration is not currently open");
+    // Allow registration as long as the registration deadline hasn't passed
+    // Players can join even after the season has started, as long as regiDeadline allows it
+    if (season.regiDeadline && new Date() > season.regiDeadline)
+      throw new Error("Season registration deadline has passed");
 
     const existingMembership = await this.prisma.seasonMembership.findFirst({
       where: { userId, seasonId },

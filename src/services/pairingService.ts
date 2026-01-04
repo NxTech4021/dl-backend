@@ -127,11 +127,12 @@ export const sendPairRequest = async (
       };
     }
 
+    // Allow pairing as long as registration deadline hasn't passed (even after season starts)
     const now = new Date();
-    if ((season.regiDeadline && now > season.regiDeadline) || (season.startDate && now > season.startDate)) {
+    if (season.regiDeadline && now > season.regiDeadline) {
       return {
         success: false,
-        message: 'Season registration is not currently open',
+        message: 'Season registration deadline has passed',
       };
     }
 
