@@ -1,6 +1,7 @@
 import { prisma, PrismaClient } from "../lib/prisma";
 import { Prisma, PaymentStatus } from '@prisma/client';
 import { CreateSeasonData, UpdateSeasonData } from "../types/seasonTypes";
+import { getEndOfDayMalaysia } from "../utils/timezone";
 
 interface StatusUpdate {
   status?: "UPCOMING" | "ACTIVE" | "FINISHED" | "CANCELLED";
@@ -63,7 +64,7 @@ export class SeasonService {
         name,
         startDate: new Date(startDate),
         endDate: new Date(endDate),
-        regiDeadline: regiDeadline ? new Date(regiDeadline) : new Date(endDate),
+        regiDeadline: regiDeadline ? getEndOfDayMalaysia(regiDeadline) : getEndOfDayMalaysia(endDate),
         entryFee: new Prisma.Decimal(entryFee),
         description: description ?? null,
         isActive: isActive ?? false,
@@ -340,7 +341,7 @@ export class SeasonService {
     if (data.name !== undefined) updateData.name = data.name;
     if (data.startDate !== undefined) updateData.startDate = new Date(data.startDate);
     if (data.endDate !== undefined) updateData.endDate = new Date(data.endDate);
-    if (data.regiDeadline !== undefined) updateData.regiDeadline = new Date(data.regiDeadline);
+    if (data.regiDeadline !== undefined) updateData.regiDeadline = getEndOfDayMalaysia(data.regiDeadline);
     if (data.entryFee !== undefined) updateData.entryFee = new Prisma.Decimal(data.entryFee);
     if (data.description !== undefined) updateData.description = data.description ?? null;
     if (data.leagueIds !== undefined) updateData.leagues = { set: data.leagueIds.map(id => ({ id })) };
