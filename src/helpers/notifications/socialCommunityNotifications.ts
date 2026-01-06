@@ -69,6 +69,26 @@ export const socialCommunityNotifications = {
     metadata: { playerName },
   }),
 
+  postLiked: (likerName: string, postId: string): NotificationPayload => ({
+    type: NOTIFICATION_TYPES.POST_LIKED,
+    category: getCategoryForNotificationType(NOTIFICATION_TYPES.POST_LIKED),
+    title: "New Like",
+    message: `${likerName} liked your post`,
+    metadata: { likerName, postId },
+  }),
+
+  postCommented: (
+    commenterName: string,
+    postId: string,
+    commentPreview: string
+  ): NotificationPayload => ({
+    type: NOTIFICATION_TYPES.POST_COMMENTED,
+    category: getCategoryForNotificationType(NOTIFICATION_TYPES.POST_COMMENTED),
+    title: "New Comment",
+    message: `${commenterName}: ${commentPreview}`,
+    metadata: { commenterName, postId, commentPreview },
+  }),
+
   // Chat notifications
   newMessage: (
     senderName: string,
