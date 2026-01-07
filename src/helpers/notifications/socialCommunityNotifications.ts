@@ -108,7 +108,7 @@ export const socialCommunityNotifications = {
     type: NOTIFICATION_TYPES.POST_COMMENTED,
     category: getCategoryForNotificationType(NOTIFICATION_TYPES.POST_COMMENTED),
     title: "New Comment",
-    message: `${commenterName}: ${commentPreview}`,
+    message: `${commenterName} commented: ${commentPreview}`,
     metadata: { commenterName, postId, commentPreview },
   }),
 
