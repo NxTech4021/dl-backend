@@ -5,6 +5,7 @@ import { ApiResponse } from '../utils/ApiResponse';
 import { AuthenticatedRequest } from '../middlewares/auth.middleware';
 import { socialCommunityNotifications } from '../helpers/notifications/socialCommunityNotifications';
 import { notificationService } from '../services/notificationService';
+import { addLikeToGroup } from '../services/notification/likeNotificationGroupingService';
 
 // ============================================
 // POST HANDLERS
@@ -164,7 +165,7 @@ export const toggleLikeHandler = async (req: AuthenticatedRequest, res: Response
 
     const result = await feedService.toggleLike(postId, userId);
 
-    // Send notification if liked (not unliked) and not liking own post
+    // Send grouped notification if liked (not unliked) and not liking own post
     if (result.liked) {
       const post = await feedService.getPostById(postId);
       if (post && post.authorId !== userId) {
@@ -174,18 +175,13 @@ export const toggleLikeHandler = async (req: AuthenticatedRequest, res: Response
         });
 
         if (liker) {
-          const notification = socialCommunityNotifications.postLiked(
-            liker.name || liker.username || 'Someone',
-            postId
+          // Use notification grouping service to batch multiple likes
+          await addLikeToGroup(
+            postId,
+            post.authorId,
+            userId,
+            liker.name || liker.username || 'Someone'
           );
-          await notificationService.createNotification({
-            userIds: [post.authorId],
-            ...notification,
-            metadata: {
-              ...notification.metadata,
-              likerId: userId,
-            },
-          });
         }
       }
     }

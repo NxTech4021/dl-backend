@@ -77,6 +77,29 @@ export const socialCommunityNotifications = {
     metadata: { likerName, postId },
   }),
 
+  postLikedGrouped: (
+    likerNames: string[],
+    postId: string,
+    totalCount: number
+  ): NotificationPayload => {
+    let message: string;
+    if (totalCount === 1) {
+      message = `${likerNames[0]} liked your post`;
+    } else if (totalCount === 2) {
+      message = `${likerNames[0]} and ${likerNames[1]} liked your post`;
+    } else {
+      const othersCount = totalCount - 1;
+      message = `${likerNames[0]} and ${othersCount} other${othersCount > 1 ? "s" : ""} liked your post`;
+    }
+    return {
+      type: NOTIFICATION_TYPES.POST_LIKED,
+      category: getCategoryForNotificationType(NOTIFICATION_TYPES.POST_LIKED),
+      title: "New Likes",
+      message,
+      metadata: { likerNames, postId, totalCount },
+    };
+  },
+
   postCommented: (
     commenterName: string,
     postId: string,
