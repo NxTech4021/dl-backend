@@ -2886,9 +2886,11 @@ model FeedPost {
   gameType  String // league, friendly
 
   // Denormalized match data for fast reads
-  winnerIds String[] // Array of winner user IDs
-  loserIds  String[] // Array of loser user IDs
-  matchDate DateTime
+  winnerIds  String[] // Array of winner user IDs
+  loserIds   String[] // Array of loser user IDs
+  matchDate  DateTime
+  leagueId   String?  // League reference (if league game)
+  divisionId String?  // Division reference (if league game)
 
   // Counters (denormalized for performance)
   likeCount    Int @default(0)

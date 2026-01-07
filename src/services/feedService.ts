@@ -25,6 +25,8 @@ export interface PostWithDetails {
   winnerIds: string[];
   loserIds: string[];
   matchDate: Date;
+  leagueId: string | null;
+  divisionId: string | null;
   likeCount: number;
   commentCount: number;
   createdAt: Date;
@@ -128,6 +130,8 @@ export const createPost = async (data: CreatePostData): Promise<PostWithDetails>
       winnerIds,
       loserIds,
       matchDate: match.matchDate,
+      leagueId: match.leagueId || null,
+      divisionId: match.divisionId || null,
     },
     include: {
       author: {
