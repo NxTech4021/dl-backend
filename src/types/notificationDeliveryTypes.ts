@@ -154,6 +154,8 @@ export const NOTIFICATION_DELIVERY_MAP: Record<string, NotificationDeliveryType>
   SIMILAR_SKILL_PLAYER_NEARBY: NotificationDeliveryType.PUSH,
   SHARE_SCORECARD_PROMPT: NotificationDeliveryType.PUSH,
   FRIEND_REQUEST: NotificationDeliveryType.PUSH,
+  POST_LIKED: NotificationDeliveryType.PUSH,
+  POST_COMMENTED: NotificationDeliveryType.PUSH,
   NEW_MESSAGE: NotificationDeliveryType.PUSH,
   GROUP_CHAT_ADDED: NotificationDeliveryType.PUSH,
   UNREAD_MESSAGES: NotificationDeliveryType.IN_APP,
