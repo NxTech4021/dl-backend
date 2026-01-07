@@ -11,6 +11,8 @@ import { addLikeToGroup } from '../services/notification/likeNotificationGroupin
 // POST HANDLERS
 // ============================================
 
+const MAX_CAPTION_LENGTH = 500;
+
 interface CreatePostBody {
   matchId?: string;
   caption?: string;
@@ -27,6 +29,10 @@ export const createPostHandler = async (req: AuthenticatedRequest, res: Response
 
     if (!matchId) {
       return res.status(400).json(new ApiResponse(false, 400, null, 'Match ID is required'));
+    }
+
+    if (caption && caption.length > MAX_CAPTION_LENGTH) {
+      return res.status(400).json(new ApiResponse(false, 400, null, `Caption must not exceed ${MAX_CAPTION_LENGTH} characters`));
     }
 
     const post = await feedService.createPost({
@@ -111,6 +117,10 @@ export const updatePostCaptionHandler = async (req: AuthenticatedRequest, res: R
 
     if (caption === undefined) {
       return res.status(400).json(new ApiResponse(false, 400, null, 'Caption is required'));
+    }
+
+    if (caption.length > MAX_CAPTION_LENGTH) {
+      return res.status(400).json(new ApiResponse(false, 400, null, `Caption must not exceed ${MAX_CAPTION_LENGTH} characters`));
     }
 
     const post = await feedService.updatePostCaption(postId, userId, caption);
