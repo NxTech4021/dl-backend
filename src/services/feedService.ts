@@ -184,6 +184,13 @@ export const getFeedPosts = async (
       match: {
         select: {
           id: true,
+          matchType: true,
+          matchDate: true,
+          sport: true,
+          team1Score: true,
+          team2Score: true,
+          isWalkover: true,
+          venue: true,
           setScores: true,
           participants: {
             select: {
@@ -210,14 +217,58 @@ export const getFeedPosts = async (
   const lastPost = resultPosts[resultPosts.length - 1];
   const nextCursor = hasMore && lastPost ? lastPost.id : null;
 
-  // Transform to include isLikedByUser
-  const postsWithLikeStatus = resultPosts.map(post => ({
-    ...post,
-    isLikedByUser: currentUserId ? (post as any).likes?.length > 0 : false,
-    likes: undefined,
-  }));
+  // Transform posts: add isLikedByUser and convert participants to team1Players/team2Players
+  const transformedPosts = resultPosts.map(post => {
+    const match = post.match as any;
+    const participants = match?.participants || [];
 
-  return { posts: postsWithLikeStatus as PostWithDetails[], nextCursor };
+    // Split participants into teams
+    const team1Players = participants
+      .filter((p: any) => p.team === 'team1')
+      .map((p: any) => ({
+        id: p.user.id,
+        name: p.user.name,
+        username: p.user.username || p.user.displayUsername,
+        image: p.user.image,
+      }));
+
+    const team2Players = participants
+      .filter((p: any) => p.team === 'team2')
+      .map((p: any) => ({
+        id: p.user.id,
+        name: p.user.name,
+        username: p.user.username || p.user.displayUsername,
+        image: p.user.image,
+      }));
+
+    // Determine outcome based on scores
+    const team1Score = match?.team1Score ?? 0;
+    const team2Score = match?.team2Score ?? 0;
+    const outcome = team1Score > team2Score ? 'team1' : team1Score < team2Score ? 'team2' : 'draw';
+
+    return {
+      ...post,
+      isLikedByUser: currentUserId ? (post as any).likes?.length > 0 : false,
+      likes: undefined,
+      match: {
+        id: match?.id,
+        matchType: match?.matchType?.toLowerCase() || 'singles',
+        matchDate: match?.matchDate,
+        sport: match?.sport,
+        team1Score,
+        team2Score,
+        outcome,
+        setScores: match?.setScores || [],
+        gameScores: match?.gameScores || [],
+        team1Players,
+        team2Players,
+        isWalkover: match?.isWalkover || false,
+        venue: match?.venue,
+      },
+    };
+  });
+
+  return { posts: transformedPosts as unknown as PostWithDetails[], nextCursor };
 };
 
 export const getPostById = async (
@@ -387,9 +438,11 @@ export const addComment = async (
   text: string
 ): Promise<{
   id: string;
+  postId: string;
+  userId: string;
   text: string;
   createdAt: Date;
-  author: { id: string; name: string | null; username: string | null; image: string | null };
+  user: { id: string; name: string | null; username: string | null; image: string | null };
 }> => {
   const post = await prisma.feedPost.findFirst({
     where: { id: postId, isDeleted: false }
@@ -418,7 +471,20 @@ export const addComment = async (
     })
   ]);
 
-  return comment;
+  // Transform author to user to match frontend PostComment type
+  return {
+    id: comment.id,
+    postId: comment.postId,
+    userId: comment.authorId,
+    text: comment.text,
+    createdAt: comment.createdAt,
+    user: {
+      id: comment.author.id,
+      name: comment.author.name,
+      username: comment.author.username || comment.author.displayUsername,
+      image: comment.author.image,
+    }
+  };
 };
 
 export const getPostComments = async (
@@ -427,9 +493,11 @@ export const getPostComments = async (
   offset: number = 0
 ): Promise<Array<{
   id: string;
+  postId: string;
+  userId: string;
   text: string;
   createdAt: Date;
-  author: { id: string; name: string | null; username: string | null; image: string | null };
+  user: { id: string; name: string | null; username: string | null; image: string | null };
 }>> => {
   const comments = await prisma.feedComment.findMany({
     where: { postId, isDeleted: false },
@@ -443,7 +511,20 @@ export const getPostComments = async (
     }
   });
 
-  return comments;
+  // Transform author to user to match frontend PostComment type
+  return comments.map(comment => ({
+    id: comment.id,
+    postId: comment.postId,
+    userId: comment.authorId,
+    text: comment.text,
+    createdAt: comment.createdAt,
+    user: {
+      id: comment.author.id,
+      name: comment.author.name,
+      username: comment.author.username || comment.author.displayUsername,
+      image: comment.author.image,
+    }
+  }));
 };
 
 export const deleteComment = async (commentId: string, authorId: string): Promise<void> => {
