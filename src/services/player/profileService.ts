@@ -662,10 +662,10 @@ export async function updatePlayerProfile(
     // When frontend sends "2000-01-01", we store as "2000-01-01T12:00:00Z" instead of midnight
     // This ensures the date displays correctly in any timezone (UTC-12 to UTC+14)
     if (dateOfBirth) {
-      const [year, month, day] = dateOfBirth.split('-').map(Number);
+      const [year, month, day] = dateOfBirth.split('-').map(Number) as [number, number, number];
       updateData.dateOfBirth = new Date(Date.UTC(year, month - 1, day, 12, 0, 0));
     } else {
-      updateData.dateOfBirth = null;
+      (updateData as any).dateOfBirth = null;
     }
   }
 

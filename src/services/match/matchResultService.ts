@@ -14,7 +14,7 @@ import {
 } from '@prisma/client';
 import { logger } from '../../utils/logger';
 import { NotificationService } from '../notificationService';
-import { handlePostMatchCreation } from '../matchService';
+import { handlePostMatchCreation, createMatchFeedPost } from '../matchService';
 import { DMRRatingService, SetScore as DMRSetScore } from '../rating/dmrRatingService';
 import { SportType, GameType } from '@prisma/client';
 // NOTE: updateMatchStandings removed - V2 standings handles everything now
@@ -339,6 +339,8 @@ export class MatchResultService {
       throw new Error(`Match is not pending confirmation (current status: ${match.status})`);
     }
 
+    let feedPostId: string | null = null;
+
     if (confirmed) {
       // Opponent APPROVED - Complete the match and update standings
       await prisma.match.update({
@@ -353,6 +355,9 @@ export class MatchResultService {
 
       // Process match completion: update standings for ALL participants (including partnerships)
       await this.processMatchCompletion(matchId);
+
+      // Create a feed post for the confirmer (for share prompt)
+      feedPostId = await createMatchFeedPost(matchId, userId);
 
       // Notify all participants of completion
       await this.sendResultConfirmedNotification(matchId, userId);
@@ -403,7 +408,8 @@ export class MatchResultService {
       logger.info(`Opponent denied result for match ${matchId}, dispute created for division admin review`);
     }
 
-    return this.getMatchWithResults(matchId);
+    const matchResult = await this.getMatchWithResults(matchId);
+    return { ...matchResult, feedPostId };
   }
 
   /**
@@ -845,9 +851,13 @@ export class MatchResultService {
     // Process match completion (ratings, standings, Best6) - same as regular match
     await this.processMatchCompletion(matchId);
 
+    // Create a feed post for the reporter (walkover winner) for share prompt
+    const feedPostId = await createMatchFeedPost(matchId, reportedById);
+
     logger.info(`Walkover reported and processed for match ${matchId} by user ${reportedById}`);
 
-    return this.getMatchWithResults(matchId);
+    const matchResult = await this.getMatchWithResults(matchId);
+    return { ...matchResult, feedPostId };
   }
 
   /**

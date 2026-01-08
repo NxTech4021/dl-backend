@@ -18,6 +18,7 @@ import friendlyRoutes from "./friendlyRoutes";
 import bugRouter from "./bugRoutes";
 import ratingRoutes from "./ratingRoutes";
 import standingsRoutes from "./standingsRoutes";
+import feedRoutes from "./feedRoutes";
 
 const router = express.Router();
 
@@ -48,6 +49,9 @@ router.use("/standings", standingsRoutes);
 
 // Chat
 router.use("/chat", chatRoutes);
+
+// Activity Feed
+router.use("/feed", feedRoutes);
 
 // Settings
 
