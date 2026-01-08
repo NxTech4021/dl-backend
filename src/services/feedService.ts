@@ -166,7 +166,7 @@ export const getFeedPosts = async (
 
   const where: Prisma.FeedPostWhereInput = {
     isDeleted: false,
-    ...(sport && { sport }),
+    ...(sport && { sport: sport.toUpperCase() }),
   };
 
   const posts = await prisma.feedPost.findMany({
