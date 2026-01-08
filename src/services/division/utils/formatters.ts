@@ -66,11 +66,11 @@ export function formatDivision(division: any): FormattedDivision {
     currentSinglesCount:
       division.currentSinglesCount !== null && division.currentSinglesCount !== undefined
         ? Number(division.currentSinglesCount)
-        : null,
+        : 0,
     currentDoublesCount:
       division.currentDoublesCount !== null && division.currentDoublesCount !== undefined
         ? Number(division.currentDoublesCount)
-        : null,
+        : 0,
     autoAssignmentEnabled: division.autoAssignmentEnabled,
     isActive: division.isActiveDivision,
     prizePoolTotal: division.prizePoolTotal
