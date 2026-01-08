@@ -137,44 +137,8 @@ export const createFriendlyMatch = async (req: Request, res: Response) => {
       return res.status(500).json({ error: 'Failed to create friendly match' });
     }
 
-    // Send notification for friendly match creation
-    try {
-      if (isRequest && requestRecipientId) {
-        // Get requester name
-        const requester = await prisma.user.findUnique({
-          where: { id: userId },
-          select: { name: true }
-        });
-
-        const notification = matchManagementNotifications.friendlyMatchJoinRequest(
-          requester?.name || 'A player',
-          formatDate(parsedMatchDate),
-          formatTime(parsedMatchDate)
-        );
-        
-        await notificationService.createNotification({
-          ...notification,
-          userIds: requestRecipientId,
-          matchId: match.id,
-        });
-      } else {
-        // Regular friendly match posted notification
-        const notification = matchManagementNotifications.friendlyMatchPosted(
-          formatDate(parsedMatchDate),
-          formatTime(parsedMatchDate),
-          venue || location || 'TBD'
-        );
-        
-        await notificationService.createNotification({
-          ...notification,
-          userIds: userId,
-          matchId: match.id,
-        });
-      }
-    } catch (notifError) {
-      console.error('Failed to send match creation notification:', notifError);
-      // Don't fail the request if notification fails
-    }
+    // Note: Notifications are handled by friendlyMatchService.createFriendlyMatch()
+    // Do NOT send notifications here to avoid duplicates
 
     res.status(201).json(match);
   } catch (error) {
@@ -440,31 +404,8 @@ export const joinFriendlyMatch = async (req: Request, res: Response) => {
 
     const match = await friendlyMatchService.joinFriendlyMatch(id, userId, asPartner, partnerId);
 
-    // Send notification to match creator
-    try {
-      const joiner = await prisma.user.findUnique({
-        where: { id: userId },
-        select: { name: true }
-      });
-
-      if (match.createdById && match.createdById !== userId) {
-        const notification = matchManagementNotifications.friendlyMatchPlayerJoined(
-          joiner?.name || 'A player',
-          formatDate(match.matchDate),
-          formatTime(match.matchDate),
-          match.venue || match.location || 'TBD'
-        );
-        
-        await notificationService.createNotification({
-          ...notification,
-          userIds: match.createdById,
-          matchId: match.id,
-        });
-      }
-    } catch (notifError) {
-      console.error('Failed to send join notification:', notifError);
-      // Don't fail the request if notification fails
-    }
+    // Note: Notifications are handled by friendlyMatchService.joinFriendlyMatch()
+    // Do NOT send notifications here to avoid duplicates
 
     res.json(match);
   } catch (error) {
@@ -660,31 +601,8 @@ export const acceptFriendlyMatchRequest = async (req: Request, res: Response) =>
 
     const match = await friendlyMatchService.acceptFriendlyMatchRequest(id, userId);
 
-    // Send notification to requester
-    try {
-      const accepter = await prisma.user.findUnique({
-        where: { id: userId },
-        select: { name: true }
-      });
-
-      if (match.createdById && match.createdById !== userId) {
-        const notification = matchManagementNotifications.friendlyMatchRequestAccepted(
-          accepter?.name || 'Host',
-          formatDate(match.matchDate),
-          formatTime(match.matchDate),
-          match.venue || match.location || 'TBD'
-        );
-        
-        await notificationService.createNotification({
-          ...notification,
-          userIds: match.createdById,
-          matchId: match.id,
-        });
-      }
-    } catch (notifError) {
-      console.error('Failed to send accept notification:', notifError);
-      // Don't fail the request if notification fails
-    }
+    // Note: Notifications are handled by friendlyMatchService.acceptFriendlyMatchRequest()
+    // Do NOT send notifications here to avoid duplicates
 
     res.json(match);
   } catch (error) {
@@ -712,28 +630,8 @@ export const declineFriendlyMatchRequest = async (req: Request, res: Response) =
 
     const match = await friendlyMatchService.declineFriendlyMatchRequest(id, userId);
 
-    // Send notification to requester
-    try {
-      const decliner = await prisma.user.findUnique({
-        where: { id: userId },
-        select: { name: true }
-      });
-
-      if (match.createdById && match.createdById !== userId) {
-        const notification = matchManagementNotifications.friendlyMatchRequestDeclined(
-          decliner?.name || 'Host'
-        );
-        
-        await notificationService.createNotification({
-          ...notification,
-          userIds: match.createdById,
-          matchId: match.id,
-        });
-      }
-    } catch (notifError) {
-      console.error('Failed to send decline notification:', notifError);
-      // Don't fail the request if notification fails
-    }
+    // Note: Notifications are handled by friendlyMatchService.declineFriendlyMatchRequest()
+    // Do NOT send notifications here to avoid duplicates
 
     res.json(match);
   } catch (error) {
