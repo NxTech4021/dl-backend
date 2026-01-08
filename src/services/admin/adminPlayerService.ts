@@ -542,7 +542,7 @@ export async function adminUpdatePlayer(input: AdminUpdatePlayerInput) {
   if (dateOfBirth !== undefined) {
     // Store date at noon UTC to prevent timezone shifts from changing the calendar date
     if (dateOfBirth) {
-      const [year, month, day] = dateOfBirth.split('-').map(Number);
+      const [year, month, day] = dateOfBirth.split('-').map(Number) as [number, number, number];
       updateData.dateOfBirth = new Date(Date.UTC(year, month - 1, day, 12, 0, 0));
     } else {
       updateData.dateOfBirth = null;
