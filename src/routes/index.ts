@@ -19,12 +19,16 @@ import bugRouter from "./bugRoutes";
 import ratingRoutes from "./ratingRoutes";
 import standingsRoutes from "./standingsRoutes";
 import feedRoutes from "./feedRoutes";
+import authRouter from "./authRoute";
 
 const router = express.Router();
 
 router.get("/health", (req, res) => {
   res.json({ status: "OK", message: "Server is running..." });
 });
+
+// Custom auth endpoints (separate from better-auth handled routes)
+router.use("/auth-custom", authRouter);
 
 router.use("/admin", adminRouter);
 
