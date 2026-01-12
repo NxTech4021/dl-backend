@@ -277,7 +277,7 @@ model Session {
 model Verification {
   id         String   @id @default(cuid())
   identifier String
-  value      String   @unique
+  value      String   
   status     String   @default("PENDING")
   expiresAt  DateTime
   createdAt  DateTime @default(now())
