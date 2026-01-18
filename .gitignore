@@ -3,6 +3,7 @@
 .env.local
 .env.development
 .env.production
+.env.staging
 node_modules/
 .DS_Store
 test-cs.json
