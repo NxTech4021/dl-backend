@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { verifyAuth, optionalAuth } from "../middlewares/auth.middleware";
+import { verifyAuth, optionalAuth, requireAdmin } from "../middlewares/auth.middleware";
 import { upload } from "../services/player/utils/multerConfig";
 import {
   // Public endpoints (Widget)
@@ -83,40 +83,40 @@ bugRouter.get("/apps", verifyAuth, getApps);
 // =============================================
 
 // Get all bug reports with filters and pagination
-bugRouter.get("/admin/reports", verifyAuth, getAllBugReports);
+bugRouter.get("/admin/reports", verifyAuth, requireAdmin, getAllBugReports);
 
 // Get bug statistics
-bugRouter.get("/admin/stats", verifyAuth, getBugStats);
+bugRouter.get("/admin/stats", verifyAuth, requireAdmin, getBugStats);
 
 // Get specific bug report (admin view - includes internal comments)
-bugRouter.get("/admin/reports/:id", verifyAuth, getAdminBugReportById);
+bugRouter.get("/admin/reports/:id", verifyAuth, requireAdmin, getAdminBugReportById);
 
 // Update bug report (status, priority, assignee, etc.)
-bugRouter.put("/admin/reports/:id", verifyAuth, updateBugReport);
+bugRouter.put("/admin/reports/:id", verifyAuth, requireAdmin, updateBugReport);
 
 // Add admin comment (can be internal)
-bugRouter.post("/admin/reports/:id/comments", verifyAuth, addAdminComment);
+bugRouter.post("/admin/reports/:id/comments", verifyAuth, requireAdmin, addAdminComment);
 
 // Mark as duplicate
-bugRouter.post("/admin/reports/:id/duplicate", verifyAuth, markAsDuplicate);
+bugRouter.post("/admin/reports/:id/duplicate", verifyAuth, requireAdmin, markAsDuplicate);
 
 // Delete bug report
-bugRouter.delete("/admin/reports/:id", verifyAuth, deleteBugReport);
+bugRouter.delete("/admin/reports/:id", verifyAuth, requireAdmin, deleteBugReport);
 
 // =============================================
 // APP & MODULE MANAGEMENT (Admin)
 // =============================================
 
 // Create new app
-bugRouter.post("/admin/apps", verifyAuth, createApp);
+bugRouter.post("/admin/apps", verifyAuth, requireAdmin, createApp);
 
 // Create module for app
-bugRouter.post("/admin/apps/:appId/modules", verifyAuth, createModule);
+bugRouter.post("/admin/apps/:appId/modules", verifyAuth, requireAdmin, createModule);
 
 // Get app settings
-bugRouter.get("/admin/apps/:appId/settings", verifyAuth, getAppSettings);
+bugRouter.get("/admin/apps/:appId/settings", verifyAuth, requireAdmin, getAppSettings);
 
 // Update app settings
-bugRouter.put("/admin/apps/:appId/settings", verifyAuth, updateAppSettings);
+bugRouter.put("/admin/apps/:appId/settings", verifyAuth, requireAdmin, updateAppSettings);
 
 export default bugRouter;
