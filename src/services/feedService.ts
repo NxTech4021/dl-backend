@@ -8,10 +8,16 @@ export interface CreatePostData {
   caption?: string;
 }
 
+export interface CreatePostResult {
+  post: PostWithDetails;
+  alreadyExists: boolean;
+}
+
 export interface FeedFilters {
   sport?: string;
   limit?: number;
   cursor?: string;
+  filter?: 'all' | 'friends' | 'recommended';
 }
 
 export interface PostWithDetails {
@@ -59,7 +65,7 @@ export interface PostWithDetails {
 // POST OPERATIONS
 // ============================================
 
-export const createPost = async (data: CreatePostData): Promise<PostWithDetails> => {
+export const createPost = async (data: CreatePostData): Promise<CreatePostResult> => {
   const { matchId, authorId, caption } = data;
 
   // Fetch match with participants and scores
@@ -74,6 +80,15 @@ export const createPost = async (data: CreatePostData): Promise<PostWithDetails>
             select: { id: true, name: true, username: true, displayUsername: true, image: true }
           }
         }
+      },
+      league: {
+        select: { id: true, name: true, sportType: true }
+      },
+      division: {
+        select: { id: true, name: true, gameType: true }
+      },
+      season: {
+        select: { id: true, name: true }
       }
     }
   });
@@ -95,11 +110,51 @@ export const createPost = async (data: CreatePostData): Promise<PostWithDetails>
 
   // Check for existing post by this author for this match
   const existingPost = await prisma.feedPost.findFirst({
-    where: { matchId, authorId, isDeleted: false }
+    where: { matchId, authorId, isDeleted: false },
+    include: {
+      author: {
+        select: { id: true, name: true, username: true, displayUsername: true, image: true }
+      },
+      match: {
+        select: {
+          id: true,
+          matchType: true,
+          matchDate: true,
+          sport: true,
+          team1Score: true,
+          team2Score: true,
+          isWalkover: true,
+          location: true,
+          setScores: true,
+          participants: {
+            select: {
+              userId: true,
+              team: true,
+              user: {
+                select: { id: true, name: true, username: true, displayUsername: true, image: true }
+              }
+            }
+          },
+          league: {
+            select: { id: true, name: true, sportType: true }
+          },
+          division: {
+            select: { id: true, name: true, gameType: true }
+          },
+          season: {
+            select: { id: true, name: true }
+          }
+        }
+      }
+    }
   });
 
   if (existingPost) {
-    throw new Error('You have already posted this match');
+    // Return existing post with flag indicating it already existed
+    return { 
+      post: existingPost as PostWithDetails, 
+      alreadyExists: true 
+    };
   }
 
   // Determine winning team based on scores
@@ -155,19 +210,44 @@ export const createPost = async (data: CreatePostData): Promise<PostWithDetails>
     }
   });
 
-  return post as PostWithDetails;
+  return { post: post as PostWithDetails, alreadyExists: false };
 };
 
 export const getFeedPosts = async (
   filters: FeedFilters,
   currentUserId?: string
 ): Promise<{ posts: PostWithDetails[]; nextCursor: string | null }> => {
-  const { sport, limit = 10, cursor } = filters;
+  const { sport, limit = 10, cursor, filter = 'friends' } = filters;
 
   const where: Prisma.FeedPostWhereInput = {
     isDeleted: false,
     ...(sport && { sport: sport.toUpperCase() }),
   };
+
+  // Apply filter logic
+  if (currentUserId && filter === 'friends') {
+    // Get user's friends
+    const friendships = await prisma.friendship.findMany({
+      where: {
+        OR: [
+          { requesterId: currentUserId, status: 'ACCEPTED' },
+          { recipientId: currentUserId, status: 'ACCEPTED' }
+        ]
+      },
+      select: {
+        requesterId: true,
+        recipientId: true
+      }
+    });
+
+    const friendIds = friendships.map(f => 
+      f.requesterId === currentUserId ? f.recipientId : f.requesterId
+    );
+
+    // Include posts from friends AND the current user
+    where.authorId = { in: [...friendIds, currentUserId] };
+  }
+  // 'recommended' and 'all' show all posts (no additional filtering needed)
 
   const posts = await prisma.feedPost.findMany({
     where,
@@ -190,7 +270,7 @@ export const getFeedPosts = async (
           team1Score: true,
           team2Score: true,
           isWalkover: true,
-          venue: true,
+          location: true,
           setScores: true,
           participants: {
             select: {
@@ -200,6 +280,15 @@ export const getFeedPosts = async (
                 select: { id: true, name: true, username: true, displayUsername: true, image: true }
               }
             }
+          },
+          league: {
+            select: { id: true, name: true, sportType: true }
+          },
+          division: {
+            select: { id: true, name: true, gameType: true }
+          },
+          season: {
+            select: { id: true, name: true }
           }
         }
       },
@@ -246,6 +335,36 @@ export const getFeedPosts = async (
     const team2Score = match?.team2Score ?? 0;
     const outcome = team1Score > team2Score ? 'team1' : team1Score < team2Score ? 'team2' : 'draw';
 
+    // Parse setScores/gameScores from JSON
+    let parsedSetScores: any[] = [];
+    let parsedGameScores: any[] = [];
+    
+    if (match?.setScores) {
+      try {
+        const scoresData = Array.isArray(match.setScores) ? match.setScores : JSON.parse(match.setScores as string);
+        
+        // Determine if this is gameScores (pickleball) or setScores (tennis/padel)
+        // Pickleball uses: gameNumber, team1Points, team2Points
+        // Tennis/Padel uses: setNumber, team1Games, team2Games
+        if (scoresData.length > 0) {
+          const firstScore = scoresData[0];
+          if ('gameNumber' in firstScore || 'team1Points' in firstScore) {
+            // This is pickleball - move to gameScores
+            parsedGameScores = scoresData;
+            parsedSetScores = [];
+          } else {
+            // This is tennis/padel - keep in setScores
+            parsedSetScores = scoresData;
+            parsedGameScores = [];
+          }
+        }
+      } catch (e) {
+        console.error('Error parsing setScores:', e);
+        parsedSetScores = [];
+        parsedGameScores = [];
+      }
+    }
+
     return {
       ...post,
       isLikedByUser: currentUserId ? (post as any).likes?.length > 0 : false,
@@ -258,12 +377,15 @@ export const getFeedPosts = async (
         team1Score,
         team2Score,
         outcome,
-        setScores: match?.setScores || [],
-        gameScores: match?.gameScores || [],
+        setScores: parsedSetScores,
+        gameScores: parsedGameScores,
         team1Players,
         team2Players,
         isWalkover: match?.isWalkover || false,
-        venue: match?.venue,
+        location: match?.location,
+        leagueName: (match as any)?.league?.name,
+        seasonName: (match as any)?.season?.name,
+        divisionName: (match as any)?.division?.name,
       },
     };
   });

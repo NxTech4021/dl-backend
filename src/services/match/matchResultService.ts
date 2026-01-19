@@ -356,9 +356,9 @@ export class MatchResultService {
       // Process match completion: update standings for ALL participants (including partnerships)
       await this.processMatchCompletion(matchId);
 
-      // Create a feed post for the confirmer (for share prompt)
-      feedPostId = await createMatchFeedPost(matchId, userId);
-
+      // NOTE: Feed post creation is now handled by user via share prompt
+      // Don't auto-create feed posts to avoid "already exists" issue
+      
       // Notify all participants of completion
       await this.sendResultConfirmedNotification(matchId, userId);
 
@@ -851,13 +851,13 @@ export class MatchResultService {
     // Process match completion (ratings, standings, Best6) - same as regular match
     await this.processMatchCompletion(matchId);
 
-    // Create a feed post for the reporter (walkover winner) for share prompt
-    const feedPostId = await createMatchFeedPost(matchId, reportedById);
+    // NOTE: Feed post creation is now handled by user via share prompt
+    // Don't auto-create feed posts to avoid "already exists" issue
 
     logger.info(`Walkover reported and processed for match ${matchId} by user ${reportedById}`);
 
     const matchResult = await this.getMatchWithResults(matchId);
-    return { ...matchResult, feedPostId };
+    return matchResult;
   }
 
   /**
