@@ -217,7 +217,7 @@ export const getFeedPosts = async (
   filters: FeedFilters,
   currentUserId?: string
 ): Promise<{ posts: PostWithDetails[]; nextCursor: string | null }> => {
-  const { sport, limit = 10, cursor, filter = 'friends' } = filters;
+  const { sport, limit = 10, cursor, filter = 'all' } = filters;
 
   const where: Prisma.FeedPostWhereInput = {
     isDeleted: false,

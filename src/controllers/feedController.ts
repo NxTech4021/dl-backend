@@ -72,7 +72,7 @@ export const getFeedPostsHandler = async (req: Request, res: Response) => {
 
     const filters: feedService.FeedFilters = { 
       limit: parsedLimit,
-      filter: filter || 'friends' // Default to friends filter
+      filter: filter || 'all' // Default to showing all posts
     };
     if (sport) filters.sport = sport;
     if (cursor) filters.cursor = cursor;
