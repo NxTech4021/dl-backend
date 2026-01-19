@@ -268,7 +268,7 @@ export const createSeason = async (req: Request, res: Response) => {
 };
 
 export const getSeasons = async (req: Request, res: Response) => {
-  const { active, id } = req.query;
+  const { active, id, page, limit } = req.query;
 
   try {
     if (id) {
@@ -290,10 +290,12 @@ export const getSeasons = async (req: Request, res: Response) => {
       return res.status(200).json(activeSeason);
     }
 
-    // Get all seasons
-    const seasons = await getAllSeasonsService();
+    // Get all seasons with pagination
+    const pageNum = page ? parseInt(page as string, 10) : 1;
+    const limitNum = limit ? parseInt(limit as string, 10) : 20;
+    const result = await getAllSeasonsService(pageNum, limitNum);
     return res.status(200).json(
-      new ApiResponse(true, 200, seasons, `Found ${seasons.length} season(s)`)
+      new ApiResponse(true, 200, result, `Found ${result.pagination.total} season(s)`)
     );
   } catch (error: unknown) {
     console.error("Error fetching seasons:", error);
