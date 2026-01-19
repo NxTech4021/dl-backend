@@ -134,57 +134,59 @@ export async function updateDivisionStandings(matchId: string) {
     }
   }
 
-  // Update or create standings for each player
-  for (const [userId, stats] of playerStats.entries()) {
-    await prisma.divisionStanding.upsert({
-      where: {
-        divisionId_seasonId_userId: {
+  // Update or create standings for each player in a single transaction
+  await prisma.$transaction(
+    Array.from(playerStats.entries()).map(([userId, stats]) =>
+      prisma.divisionStanding.upsert({
+        where: {
+          divisionId_seasonId_userId: {
+            divisionId: match.divisionId,
+            seasonId: match.seasonId,
+            userId: userId,
+          },
+        },
+        create: {
           divisionId: match.divisionId,
           seasonId: match.seasonId,
           userId: userId,
+          rank: 0, // Will be calculated after all updates
+          matchesPlayed: stats.matchesPlayed,
+          wins: stats.wins,
+          losses: stats.losses,
+          totalPoints: stats.totalPoints,
+          countedWins: stats.countedWins,
+          countedLosses: stats.countedLosses,
+          setsWon: stats.setsWon,
+          setsLost: stats.setsLost,
+          gamesWon: stats.gamesWon,
+          gamesLost: stats.gamesLost,
+          best6SetsWon: stats.best6SetsWon,
+          best6SetsTotal: stats.best6SetsTotal,
+          best6GamesWon: stats.best6GamesWon,
+          best6GamesTotal: stats.best6GamesTotal,
+          headToHead: stats.headToHead,
         },
-      },
-      create: {
-        divisionId: match.divisionId,
-        seasonId: match.seasonId,
-        userId: userId,
-        rank: 0, // Will be calculated after all updates
-        matchesPlayed: stats.matchesPlayed,
-        wins: stats.wins,
-        losses: stats.losses,
-        totalPoints: stats.totalPoints,
-        countedWins: stats.countedWins,
-        countedLosses: stats.countedLosses,
-        setsWon: stats.setsWon,
-        setsLost: stats.setsLost,
-        gamesWon: stats.gamesWon,
-        gamesLost: stats.gamesLost,
-        best6SetsWon: stats.best6SetsWon,
-        best6SetsTotal: stats.best6SetsTotal,
-        best6GamesWon: stats.best6GamesWon,
-        best6GamesTotal: stats.best6GamesTotal,
-        headToHead: stats.headToHead,
-      },
-      update: {
-        matchesPlayed: stats.matchesPlayed,
-        wins: stats.wins,
-        losses: stats.losses,
-        totalPoints: stats.totalPoints,
-        countedWins: stats.countedWins,
-        countedLosses: stats.countedLosses,
-        setsWon: stats.setsWon,
-        setsLost: stats.setsLost,
-        gamesWon: stats.gamesWon,
-        gamesLost: stats.gamesLost,
-        best6SetsWon: stats.best6SetsWon,
-        best6SetsTotal: stats.best6SetsTotal,
-        best6GamesWon: stats.best6GamesWon,
-        best6GamesTotal: stats.best6GamesTotal,
-        headToHead: stats.headToHead,
-        lastCalculatedAt: new Date(),
-      },
-    });
-  }
+        update: {
+          matchesPlayed: stats.matchesPlayed,
+          wins: stats.wins,
+          losses: stats.losses,
+          totalPoints: stats.totalPoints,
+          countedWins: stats.countedWins,
+          countedLosses: stats.countedLosses,
+          setsWon: stats.setsWon,
+          setsLost: stats.setsLost,
+          gamesWon: stats.gamesWon,
+          gamesLost: stats.gamesLost,
+          best6SetsWon: stats.best6SetsWon,
+          best6SetsTotal: stats.best6SetsTotal,
+          best6GamesWon: stats.best6GamesWon,
+          best6GamesTotal: stats.best6GamesTotal,
+          headToHead: stats.headToHead,
+          lastCalculatedAt: new Date(),
+        },
+      })
+    )
+  );
 
   // Calculate ranks based on total points (Best 6)
   await recalculateRanks(match.divisionId, match.seasonId);
@@ -203,16 +205,17 @@ async function recalculateRanks(divisionId: string, seasonId: string) {
     ],
   });
 
-  // Update ranks
-  for (let i = 0; i < standings.length; i++) {
-    const standing = standings[i];
-    if (standing) {
-      await prisma.divisionStanding.update({
-        where: { id: standing.id },
-        data: { rank: i + 1 },
-      });
-    }
-  }
+  // Update ranks in a single transaction
+  await prisma.$transaction(
+    standings
+      .filter((standing): standing is NonNullable<typeof standing> => standing !== null && standing !== undefined)
+      .map((standing, i) =>
+        prisma.divisionStanding.update({
+          where: { id: standing.id },
+          data: { rank: i + 1 },
+        })
+      )
+  );
 }
 
 export async function getDivisionStandings(divisionId: string, seasonId: string) {
