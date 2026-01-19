@@ -356,11 +356,13 @@ export async function getTeamChangeRequestById(
 }
 
 /**
- * Cancel a pending team change request (by the user who created it)
+ * Cancel a pending team change request
+ * Users can only cancel their own requests, admins can cancel any request
  */
 export async function cancelTeamChangeRequest(
   requestId: string,
-  userId: string
+  userId: string,
+  isAdminUser: boolean = false
 ): Promise<FormattedTeamChangeRequest> {
   const request = await prisma.teamChangeRequest.findUnique({
     where: { id: requestId }
@@ -370,7 +372,8 @@ export async function cancelTeamChangeRequest(
     throw new Error('Team change request not found');
   }
 
-  if (request.userId !== userId) {
+  // Admins can cancel any request, users can only cancel their own
+  if (!isAdminUser && request.userId !== userId) {
     throw new Error('You can only cancel your own requests');
   }
 
@@ -384,7 +387,8 @@ export async function cancelTeamChangeRequest(
     include: teamChangeRequestInclude
   });
 
-  console.log(`✅ Team change request ${requestId} cancelled by user ${userId}`);
+  const cancelledBy = isAdminUser && request.userId !== userId ? `admin ${userId}` : `user ${userId}`;
+  console.log(`✅ Team change request ${requestId} cancelled by ${cancelledBy}`);
 
   return updated as FormattedTeamChangeRequest;
 }
