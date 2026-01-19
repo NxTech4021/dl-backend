@@ -1,5 +1,6 @@
 /// <reference path="../types/express.d.ts" />
 import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
 import { Request, Response, NextFunction } from 'express';
 
 // Security headers middleware
@@ -34,6 +35,56 @@ export const securityHeaders = helmet({
   permittedCrossDomainPolicies: false,
   referrerPolicy: { policy: "same-origin" },
   xssFilter: true,
+});
+
+// Rate limiting configuration
+// General rate limiter: 100 requests per minute for regular endpoints
+export const generalLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 100, // 100 requests per minute
+  message: {
+    error: 'Too many requests, please try again later',
+    code: 'RATE_LIMIT_EXCEEDED',
+    success: false
+  },
+  standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
+  legacyHeaders: false, // Disable the `X-RateLimit-*` headers
+  keyGenerator: (req: Request) => {
+    // Use IP address for rate limiting
+    return req.ip || req.connection.remoteAddress || 'unknown';
+  },
+});
+
+// Auth rate limiter: 5 requests per 15 minutes for authentication endpoints
+export const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 5, // 5 requests per 15 minutes
+  message: {
+    error: 'Too many authentication attempts, please try again later',
+    code: 'AUTH_RATE_LIMIT_EXCEEDED',
+    success: false
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req: Request) => {
+    return req.ip || req.connection.remoteAddress || 'unknown';
+  },
+});
+
+// Strict rate limiter: 10 requests per minute for sensitive endpoints
+export const strictLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 10, // 10 requests per minute
+  message: {
+    error: 'Too many requests to sensitive endpoint, please try again later',
+    code: 'STRICT_RATE_LIMIT_EXCEEDED',
+    success: false
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req: Request) => {
+    return req.ip || req.connection.remoteAddress || 'unknown';
+  },
 });
 
 // Custom MongoDB injection sanitization middleware (Express v5 compatible)
