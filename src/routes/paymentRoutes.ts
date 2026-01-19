@@ -10,20 +10,25 @@ import {
   handleFiuuNotification,
   handleFiuuReturn,
 } from "../controllers/paymentController";
+import { verifyAuth, requireAdmin } from "../middlewares/auth.middleware";
 
 const router = Router();
 
-router.post("/fiuu/checkout", createFiuuCheckout);
+// Webhook routes - NO auth (called by external payment gateway)
 router.post("/fiuu/ipn", handleFiuuNotification);
 router.post("/fiuu/return", handleFiuuReturn);
 router.get("/fiuu/return", handleFiuuReturn);
 
-router.get("/", getPayments);
-router.get("/:id", getPaymentById);
-router.post("/", createPayment);
-router.put("/:id", updatePayment);
-router.patch("/:id/mark-paid", markPaymentAsPaid);
-router.delete("/:id", deletePayment);
+// Authenticated routes
+router.post("/fiuu/checkout", verifyAuth, createFiuuCheckout);
+
+// Admin-only routes
+router.get("/", verifyAuth, requireAdmin, getPayments);
+router.get("/:id", verifyAuth, requireAdmin, getPaymentById);
+router.post("/", verifyAuth, requireAdmin, createPayment);
+router.put("/:id", verifyAuth, requireAdmin, updatePayment);
+router.patch("/:id/mark-paid", verifyAuth, requireAdmin, markPaymentAsPaid);
+router.delete("/:id", verifyAuth, requireAdmin, deletePayment);
 
 export default router;
 
