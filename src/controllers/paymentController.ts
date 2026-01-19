@@ -469,8 +469,22 @@ export const handleFiuuReturn = async (req: Request, res: Response) => {
     }
 
     const verified = verifyNotificationSignature(payload, config);
-    const status = resolvePaymentStatus(payload);
 
+    // SECURITY: Reject if signature verification fails
+    if (!verified) {
+      console.error('SECURITY: Payment return signature verification failed', {
+        orderId,
+        paymentId: payment.id,
+        ip: req.ip || req.connection?.remoteAddress,
+        timestamp: new Date().toISOString(),
+      });
+      return res.status(200).send(
+        renderReturnPage(PaymentStatus.FAILED, "Payment verification failed. Please contact support if you believe this is an error.")
+      );
+    }
+
+    // Only proceed with payment update if signature verification passes
+    const status = resolvePaymentStatus(payload);
     await updatePaymentFromGateway(payment.id, status, payload, verified);
 
     const message =
