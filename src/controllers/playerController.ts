@@ -37,20 +37,25 @@ interface ChangePlayerPasswordBody {
 /**
  * Get all players with sports and skill ratings
  * GET /api/player
+ * Query params: page (default 1), limit (default 20, max 100)
  */
 export const getAllPlayers = async (req: Request, res: Response) => {
   try {
-    const players = await searchService.getAllPlayers();
+    const { page, limit } = req.query;
+    const pageNum = page ? parseInt(page as string, 10) : 1;
+    const limitNum = limit ? parseInt(limit as string, 10) : 20;
 
-    if (players.length === 0) {
+    const result = await searchService.getAllPlayers(pageNum, limitNum);
+
+    if (result.data.length === 0) {
       return res
         .status(200)
-        .json(new ApiResponse(true, 200, [], "No players found"));
+        .json(new ApiResponse(true, 200, result, "No players found"));
     }
 
     return res
       .status(200)
-      .json(new ApiResponse(true, 200, players, "Players fetched successfully"));
+      .json(new ApiResponse(true, 200, result, "Players fetched successfully"));
   } catch (error) {
     console.error("Error fetching players:", error);
     return res
