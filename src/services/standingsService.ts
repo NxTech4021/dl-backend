@@ -32,12 +32,16 @@ export async function updateDivisionStandings(matchId: string) {
     return;
   }
 
+  // Extract validated IDs for use in transaction (TypeScript narrowing)
+  const divisionId = match.divisionId;
+  const seasonId = match.seasonId;
+
   // Get all match results for this division/season
   const allResults = await prisma.matchResult.findMany({
     where: {
       match: {
-        divisionId: match.divisionId,
-        seasonId: match.seasonId,
+        divisionId: divisionId,
+        seasonId: seasonId,
         status: 'COMPLETED',
       },
       countsForStandings: true,
@@ -140,14 +144,14 @@ export async function updateDivisionStandings(matchId: string) {
       prisma.divisionStanding.upsert({
         where: {
           divisionId_seasonId_userId: {
-            divisionId: match.divisionId,
-            seasonId: match.seasonId,
+            divisionId: divisionId,
+            seasonId: seasonId,
             userId: userId,
           },
         },
         create: {
-          divisionId: match.divisionId,
-          seasonId: match.seasonId,
+          divisionId: divisionId,
+          seasonId: seasonId,
           userId: userId,
           rank: 0, // Will be calculated after all updates
           matchesPlayed: stats.matchesPlayed,
@@ -189,7 +193,7 @@ export async function updateDivisionStandings(matchId: string) {
   );
 
   // Calculate ranks based on total points (Best 6)
-  await recalculateRanks(match.divisionId, match.seasonId);
+  await recalculateRanks(divisionId, seasonId);
 }
 
 async function recalculateRanks(divisionId: string, seasonId: string) {
