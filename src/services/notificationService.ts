@@ -136,6 +136,12 @@ export class NotificationService {
                 .filter(([_, v]) => v !== undefined)
                 .map(([k, v]) => [k, String(v)])
             ),
+            // Include metadata in push payload (sport, location, seasonName, etc.)
+            ...(metadata && Object.fromEntries(
+              Object.entries(metadata)
+                .filter(([_, v]) => v !== undefined && v !== null)
+                .map(([k, v]) => [k, String(v)])
+            )),
           },
         }).catch((error) => {
           logger.error(
