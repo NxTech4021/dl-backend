@@ -35,13 +35,20 @@ export const createPostHandler = async (req: AuthenticatedRequest, res: Response
       return res.status(400).json(new ApiResponse(false, 400, null, `Caption must not exceed ${MAX_CAPTION_LENGTH} characters`));
     }
 
-    const post = await feedService.createPost({
+    const result = await feedService.createPost({
       matchId,
       authorId: userId,
       ...(caption !== undefined && { caption }),
     });
 
-    return res.status(201).json(new ApiResponse(true, 201, post, 'Post created successfully'));
+    const statusCode = result.alreadyExists ? 200 : 201;
+    const message = result.alreadyExists 
+      ? 'You have already posted this match' 
+      : 'Post created successfully';
+
+    return res.status(statusCode).json(
+      new ApiResponse(true, statusCode, { ...result.post, alreadyExists: result.alreadyExists }, message)
+    );
   } catch (error: unknown) {
     console.error('Error creating post:', error);
     const errorMessage = error instanceof Error ? error.message : 'Failed to create post';
@@ -53,16 +60,20 @@ interface GetFeedQuery {
   sport?: string;
   limit?: string;
   cursor?: string;
+  filter?: 'all' | 'friends' | 'recommended';
 }
 
 export const getFeedPostsHandler = async (req: Request, res: Response) => {
   try {
     const userId = req.user?.id;
-    const { sport, limit, cursor } = req.query as GetFeedQuery;
+    const { sport, limit, cursor, filter } = req.query as GetFeedQuery;
 
     const parsedLimit = limit ? Math.min(parseInt(limit, 10), 50) : 10;
 
-    const filters: feedService.FeedFilters = { limit: parsedLimit };
+    const filters: feedService.FeedFilters = { 
+      limit: parsedLimit,
+      filter: filter || 'all' // Default to showing all posts
+    };
     if (sport) filters.sport = sport;
     if (cursor) filters.cursor = cursor;
 
