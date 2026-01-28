@@ -11,30 +11,34 @@ import {
   registerPlayerToSeason,
   assignPlayerToDivision,
 } from '../controllers/seasonController';
-import { verifyAuth } from '../middlewares/auth.middleware';
+import { verifyAuth, requireAdmin } from '../middlewares/auth.middleware';
 
 const seasonRoutes = Router();
 
+// Public read operations - seasons can be viewed by anyone
 seasonRoutes.get('/', getSeasons);
 seasonRoutes.get('/:id', getSeasonById);
-seasonRoutes.post('/', createSeason);
 
-//updates all information
-seasonRoutes.put('/:id', updateSeason);
-//updates the status only
-seasonRoutes.put('/:id/status', updateSeasonStatus);
+// Admin-only season management operations
+seasonRoutes.post('/', verifyAuth, requireAdmin, createSeason);
 
-seasonRoutes.delete('/:id', deleteSeason);
+//updates all information (admin only)
+seasonRoutes.put('/:id', verifyAuth, requireAdmin, updateSeason);
+//updates the status only (admin only)
+seasonRoutes.put('/:id/status', verifyAuth, requireAdmin, updateSeasonStatus);
+
+seasonRoutes.delete('/:id', verifyAuth, requireAdmin, deleteSeason);
 
 // Withdrawal/Partner Change Request routes (require authentication)
 seasonRoutes.post('/withdrawals', verifyAuth, submitWithdrawalRequest as RequestHandler);
-seasonRoutes.put('/withdrawals/:id/process', verifyAuth, processWithdrawalRequest as RequestHandler);
+// Processing withdrawals is admin-only
+seasonRoutes.put('/withdrawals/:id/process', verifyAuth, requireAdmin, processWithdrawalRequest as RequestHandler);
 
-// Register Player to Season
-seasonRoutes.post('/player/register', registerPlayerToSeason);
+// Register Player to Season (logged in users can register)
+seasonRoutes.post('/player/register', verifyAuth, registerPlayerToSeason);
 
-// Assign player to Division
-seasonRoutes.post('/player/assign-division', assignPlayerToDivision);
+// Assign player to Division (admin only)
+seasonRoutes.post('/player/assign-division', verifyAuth, requireAdmin, assignPlayerToDivision);
 
 
 export default seasonRoutes;

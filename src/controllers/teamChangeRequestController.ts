@@ -13,6 +13,7 @@ import {
   getPendingTeamChangeRequestsCount
 } from '../services/teamChangeRequestService';
 import { TeamChangeRequestStatus } from '@prisma/client';
+import { isAdmin } from '../middlewares/auth.middleware';
 
 /**
  * Create a new team change request
@@ -149,17 +150,23 @@ export const getRequestById = async (req: Request, res: Response) => {
 /**
  * Cancel a pending team change request
  * PATCH /api/team-change-requests/:id/cancel
+ * User can cancel their own request, admin can cancel any request
  */
 export const cancelRequest = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { userId } = req.body;
+    const authenticatedUserId = req.user?.id;
 
-    if (!id || !userId) {
-      return res.status(400).json({ error: 'Request ID and userId are required' });
+    if (!id) {
+      return res.status(400).json({ error: 'Request ID is required' });
     }
 
-    const request = await cancelTeamChangeRequest(id, userId);
+    if (!authenticatedUserId) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+
+    // Admin can cancel any request, users can only cancel their own
+    const request = await cancelTeamChangeRequest(id, authenticatedUserId, isAdmin(req.user));
 
     return res.status(200).json(request);
   } catch (error) {

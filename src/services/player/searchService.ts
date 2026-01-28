@@ -12,18 +12,38 @@ import { buildSearchWhereClause } from './utils/queryHelpers';
  * Get all players with sports and skill ratings
  * Original: playerController.ts lines 46-136
  */
-export async function getAllPlayers() {
-  const players = await prisma.user.findMany({
-    where: {
-      role: Role.USER,
-    },
-    orderBy: {
-      createdAt: "desc",
-    },
-  });
+export async function getAllPlayers(page = 1, limit = 20) {
+  const skip = (page - 1) * limit;
+  const take = Math.min(limit, 100); // Max 100 items
+
+  const [players, total] = await Promise.all([
+    prisma.user.findMany({
+      where: {
+        role: Role.USER,
+      },
+      orderBy: {
+        createdAt: "desc",
+      },
+      skip,
+      take,
+    }),
+    prisma.user.count({
+      where: {
+        role: Role.USER,
+      },
+    }),
+  ]);
 
   if (players.length === 0) {
-    return [];
+    return {
+      data: [],
+      pagination: {
+        page,
+        limit: take,
+        total,
+        totalPages: Math.ceil(total / take),
+      },
+    };
   }
 
   const playerIds = players.map(p => p.id);
@@ -93,7 +113,7 @@ export async function getAllPlayers() {
   const transformedPlayers = await enrichPlayersWithSkills(players);
 
   // Add additional fields for getAllPlayers response
-  return transformedPlayers.map(player => ({
+  const data = transformedPlayers.map(player => ({
     ...player,
     registeredDate: player.createdAt,
     lastLoginDate: player.lastLogin,
@@ -102,6 +122,16 @@ export async function getAllPlayers() {
     leagueMatchesPlayed: leagueMatchCountMap.get(player.id) ?? 0,
     friendlyMatchesPlayed: friendlyMatchCountMap.get(player.id) ?? 0,
   }));
+
+  return {
+    data,
+    pagination: {
+      page,
+      limit: take,
+      total,
+      totalPages: Math.ceil(total / take),
+    },
+  };
 }
 
 /**

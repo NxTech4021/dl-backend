@@ -102,9 +102,92 @@ export class SeasonService {
     });
   }
 
-  async getAllSeasons() {
-    const seasons = await this.prisma.season.findMany({
-      orderBy: { startDate: "desc" },
+  async getAllSeasons(page = 1, limit = 20) {
+    const skip = (page - 1) * limit;
+    const take = Math.min(limit, 100); // Max 100 items
+
+    const [seasons, total] = await Promise.all([
+      this.prisma.season.findMany({
+        skip,
+        take,
+        orderBy: { startDate: "desc" },
+        select: {
+          id: true,
+          name: true,
+          startDate: true,
+          endDate: true,
+          regiDeadline: true,
+          description: true,
+          entryFee: true,
+          isActive: true,
+          paymentRequired: true,
+          promoCodeSupported: true,
+          withdrawalEnabled: true,
+          status: true,
+          registeredUserCount: true,
+          createdAt: true,
+          updatedAt: true,
+          category: {
+            select: {
+              id: true,
+              name: true,
+              genderRestriction: true,
+              genderCategory: true,
+              gameType: true,
+              matchFormat: true,
+              isActive: true,
+              categoryOrder: true
+            }
+          },
+          leagues: {
+            select: { id: true, name: true, sportType: true, gameType: true }
+          },
+          memberships: {
+            include: {
+              user: {
+                select: {
+                  id: true,
+                  name: true,
+                  image: true,
+                }
+              }
+            },
+            take: 6,
+            orderBy: {
+              joinedAt: 'asc'
+            }
+          } as any,
+          _count: {
+            select: { memberships: true }
+          },
+          divisions: {
+            select: { id: true, name: true }
+          },
+        } as any,
+      }),
+      this.prisma.season.count(),
+    ]);
+
+    const data = seasons.map((season: any) => ({
+      ...season,
+      // registeredUserCount: season.memberships.length, // Commented out: memberships not included
+      registeredUserCount: season._count?.memberships || 0,
+    }));
+
+    return {
+      data,
+      pagination: {
+        page,
+        limit: take,
+        total,
+        totalPages: Math.ceil(total / take),
+      },
+    };
+  }
+
+  async getSeasonById(id: string) {
+    return this.prisma.season.findUnique({
+      where: { id },
       select: {
         id: true,
         name: true,
@@ -121,60 +204,36 @@ export class SeasonService {
         registeredUserCount: true,
         createdAt: true,
         updatedAt: true,
-        category: {
+        divisions: {
           select: {
             id: true,
             name: true,
-            genderRestriction: true,
-            genderCategory: true,
-            gameType: true,
-            matchFormat: true,
+            level: true,
+            maxTeams: true,
+            minRating: true,
+            maxRating: true,
             isActive: true,
-            categoryOrder: true
           }
         },
-        leagues: {
-          select: { id: true, name: true, sportType: true, gameType: true }
-        },
-        memberships: {
-          include: {
-            user: {
-              select: {
-                id: true,
-                name: true,
-                image: true,
-              }
-            }
-          },
-          take: 6,
-          orderBy: {
-            joinedAt: 'asc'
+        promoCodes: {
+          select: {
+            id: true,
+            code: true,
+            discountType: true,
+            discountValue: true,
+            maxUses: true,
+            currentUses: true,
+            isActive: true,
+            expiresAt: true,
           }
-        } as any,
-        _count: {
-          select: { memberships: true }
         },
-        divisions: {
-          select: { id: true, name: true }
-        },
-      } as any,
-    });
-
-    return seasons.map((season: any) => ({
-      ...season,
-      // registeredUserCount: season.memberships.length, // Commented out: memberships not included
-      registeredUserCount: season._count?.memberships || 0,
-    }));
-  }
-
-  async getSeasonById(id: string) {
-    return this.prisma.season.findUnique({
-      where: { id },
-      include: {
-        divisions: true,
-        promoCodes: true,
         withdrawalRequests: {
-          include: {
+          select: {
+            id: true,
+            status: true,
+            reason: true,
+            createdAt: true,
+            processedAt: true,
             user: {
               select: {
                 id: true,
@@ -192,8 +251,18 @@ export class SeasonService {
           },
         },
         waitlist: {
-          include: {
-            waitlistedUsers: true,
+          select: {
+            id: true,
+            maxSize: true,
+            isActive: true,
+            waitlistedUsers: {
+              select: {
+                id: true,
+                userId: true,
+                position: true,
+                joinedAt: true,
+              }
+            },
           },
         },
         leagues: {
@@ -216,6 +285,7 @@ export class SeasonService {
             categoryOrder: true
           }
         },
+        // Memberships preview - lightweight query without expensive questionnaireResponses
         memberships: {
           select: {
             id: true,
@@ -235,30 +305,7 @@ export class SeasonService {
                 image: true,
                 gender: true,
                 area: true,
-                questionnaireResponses: {
-                  select: {
-                    id: true,
-                    sport: true,
-                    completedAt: true,
-                    result: {
-                      select: {
-                        id: true,
-                        singles: true,
-                        doubles: true,
-                        rd: true,
-                        confidence: true,
-                        source: true
-                      }
-                    }
-                  },
-                  where: {
-                    completedAt: { not: null }
-                  },
-                  orderBy: {
-                    completedAt: 'desc'
-                  }
-                  // Removed take: 1 to get all questionnaire responses so frontend can filter by sport type
-                }
+                // questionnaireResponses removed - too expensive for preview, fetch separately when needed
               }
             },
             division: {
@@ -276,7 +323,10 @@ export class SeasonService {
         },
         partnerships: {
           where: { status: 'ACTIVE' },
-          include: {
+          select: {
+            id: true,
+            status: true,
+            createdAt: true,
             captain: {
               select: {
                 id: true,
@@ -443,20 +493,21 @@ export class SeasonService {
       },
     };
 
-    const membership = await this.prisma.seasonMembership.create({
-      data: membershipData as Prisma.SeasonMembershipCreateInput,
-      include: {
-        user: true,
-        season: true,
-        // division: true,
-      },
-    });
-
-    // Increment registeredUserCount
-    await this.prisma.season.update({
-      where: { id: seasonId },
-      data: { registeredUserCount: { increment: 1 } },
-    });
+    // Use transaction to ensure atomicity of membership creation and counter increment
+    const [membership] = await this.prisma.$transaction([
+      this.prisma.seasonMembership.create({
+        data: membershipData as Prisma.SeasonMembershipCreateInput,
+        include: {
+          user: true,
+          season: true,
+          // division: true,
+        },
+      }),
+      this.prisma.season.update({
+        where: { id: seasonId },
+        data: { registeredUserCount: { increment: 1 } },
+      }),
+    ]);
 
     return membership;
   }
@@ -504,8 +555,8 @@ const defaultSeasonService = new SeasonService();
 export const createSeasonService = (data: CreateSeasonData) =>
   defaultSeasonService.createSeason(data);
 
-export const getAllSeasonsService = () =>
-  defaultSeasonService.getAllSeasons();
+export const getAllSeasonsService = (page?: number, limit?: number) =>
+  defaultSeasonService.getAllSeasons(page, limit);
 
 export const getSeasonByIdService = (id: string) =>
   defaultSeasonService.getSeasonById(id);

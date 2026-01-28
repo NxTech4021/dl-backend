@@ -11,12 +11,17 @@ import {
   resolvePaymentStatus,
   verifyNotificationSignature,
 } from "../services/payment/fiuuGateway";
-import { registerMembershipService } from "../services/seasonService";
 
 
 export const getPayments = async (req: Request, res: Response) => {
   try {
-    const { status, amountMin, amountMax } = req.query;
+    const { status, amountMin, amountMax, page, limit } = req.query;
+
+    // Parse pagination parameters
+    const pageNum = page ? parseInt(page as string, 10) : 1;
+    const limitNum = limit ? parseInt(limit as string, 10) : 20;
+    const skip = (pageNum - 1) * limitNum;
+    const take = Math.min(limitNum, 100); // Max 100 items
 
     // Build where clause
     const where: any = {};
@@ -27,23 +32,28 @@ export const getPayments = async (req: Request, res: Response) => {
       if (amountMax) where.amount.lte = parseFloat(amountMax as string);
     }
 
-    const payments = await prisma.payment.findMany({
-      where,
-      include: {
-        user: { select: { id: true, name: true, email: true } },
-        season: { select: { id: true, name: true } },
-        seasonMembership: {
-          select: {
-            id: true,
-            paymentStatus: true,
-            status: true,
-            user: { select: { id: true, name: true, email: true } },
-            season: { select: { id: true, name: true } },
+    const [payments, total] = await Promise.all([
+      prisma.payment.findMany({
+        where,
+        include: {
+          user: { select: { id: true, name: true, email: true } },
+          season: { select: { id: true, name: true } },
+          seasonMembership: {
+            select: {
+              id: true,
+              paymentStatus: true,
+              status: true,
+              user: { select: { id: true, name: true, email: true } },
+              season: { select: { id: true, name: true } },
+            },
           },
         },
-      },
-      orderBy: { createdAt: "desc" },
-    });
+        orderBy: { createdAt: "desc" },
+        skip,
+        take,
+      }),
+      prisma.payment.count({ where }),
+    ]);
 
     // Transform for frontend
     const transformedPayments = payments.map(payment => ({
@@ -58,14 +68,24 @@ export const getPayments = async (req: Request, res: Response) => {
       updatedAt: payment.updatedAt
     }));
 
+    const result = {
+      data: transformedPayments,
+      pagination: {
+        page: pageNum,
+        limit: take,
+        total,
+        totalPages: Math.ceil(total / take),
+      },
+    };
+
     if (transformedPayments.length === 0) {
       return res.status(200).json(
-        new ApiResponse(true, 200, [], "No payments found")
+        new ApiResponse(true, 200, result, "No payments found")
       );
     }
 
     return res.status(200).json(
-      new ApiResponse(true, 200, transformedPayments, "Payments fetched successfully")
+      new ApiResponse(true, 200, result, "Payments fetched successfully")
     );
   } catch (error) {
     console.error("Error fetching payments:", error);
@@ -449,8 +469,22 @@ export const handleFiuuReturn = async (req: Request, res: Response) => {
     }
 
     const verified = verifyNotificationSignature(payload, config);
-    const status = resolvePaymentStatus(payload);
 
+    // SECURITY: Reject if signature verification fails
+    if (!verified) {
+      console.error('SECURITY: Payment return signature verification failed', {
+        orderId,
+        paymentId: payment.id,
+        ip: req.ip || req.connection?.remoteAddress,
+        timestamp: new Date().toISOString(),
+      });
+      return res.status(200).send(
+        renderReturnPage(PaymentStatus.FAILED, "Payment verification failed. Please contact support if you believe this is an error.")
+      );
+    }
+
+    // Only proceed with payment update if signature verification passes
+    const status = resolvePaymentStatus(payload);
     await updatePaymentFromGateway(payment.id, status, payload, verified);
 
     const message =
@@ -488,8 +522,20 @@ export const handleFiuuNotification = async (req: Request, res: Response) => {
     }
 
     const verified = verifyNotificationSignature(payload, config);
-    const status = resolvePaymentStatus(payload);
 
+    // SECURITY: Reject requests that fail signature verification
+    if (!verified) {
+      console.error('SECURITY: Payment webhook signature verification failed', {
+        orderId,
+        paymentId: payment.id,
+        ip: req.ip || req.connection?.remoteAddress,
+        timestamp: new Date().toISOString(),
+      });
+      return res.status(403).json({ error: 'Invalid signature' });
+    }
+
+    // Only proceed with payment update if signature verification passes
+    const status = resolvePaymentStatus(payload);
     await updatePaymentFromGateway(payment.id, status, payload, verified);
 
     return res.status(200).send("OK");
@@ -549,82 +595,98 @@ async function updatePaymentFromGateway(
   payload: Record<string, any>,
   verified: boolean,
 ) {
-  const payment = await prisma.payment.findUnique({ where: { id: paymentId } });
-  if (!payment) {
-    return;
-  }
+  // Use interactive transaction to ensure atomicity of all payment and membership updates
+  await prisma.$transaction(async (tx) => {
+    const payment = await tx.payment.findUnique({ where: { id: paymentId } });
+    if (!payment) {
+      return;
+    }
 
-  const existingMetadata = (payment.metadata as Prisma.JsonObject | undefined) || {};
-  const metadata: Prisma.JsonObject = {
-    ...existingMetadata,
-    lastNotification: payload,
-    verified,
-    lastUpdatedAt: new Date().toISOString(),
-  };
+    const existingMetadata = (payment.metadata as Prisma.JsonObject | undefined) || {};
+    const metadata: Prisma.JsonObject = {
+      ...existingMetadata,
+      lastNotification: payload,
+      verified,
+      lastUpdatedAt: new Date().toISOString(),
+    };
 
-  const updateData: Prisma.PaymentUpdateInput = {
-    status,
-    fiuuTransactionId:
-      (payload.tranID as string) ||
-      (payload.transaction_id as string) ||
-      payment.fiuuTransactionId ||
-      null,
-    fiuuChannel: (payload.channel as string) || payment.fiuuChannel || null,
-    fiuuStatusCode:
-      (payload.status as string) || (payload.stat as string) || payment.fiuuStatusCode || null,
-    fiuuMessage:
-      (payload.errdesc as string) ||
-      (payload.error_desc as string) ||
-      payment.fiuuMessage ||
-      null,
-    verificationHash: verified ? "VERIFIED" : "UNVERIFIED",
-    metadata,
-  };
+    const updateData: Prisma.PaymentUpdateInput = {
+      status,
+      fiuuTransactionId:
+        (payload.tranID as string) ||
+        (payload.transaction_id as string) ||
+        payment.fiuuTransactionId ||
+        null,
+      fiuuChannel: (payload.channel as string) || payment.fiuuChannel || null,
+      fiuuStatusCode:
+        (payload.status as string) || (payload.stat as string) || payment.fiuuStatusCode || null,
+      fiuuMessage:
+        (payload.errdesc as string) ||
+        (payload.error_desc as string) ||
+        payment.fiuuMessage ||
+        null,
+      verificationHash: verified ? "VERIFIED" : "UNVERIFIED",
+      metadata,
+    };
 
-  if (status === PaymentStatus.COMPLETED && !payment.paidAt) {
-    updateData.paidAt = new Date();
-  }
+    if (status === PaymentStatus.COMPLETED && !payment.paidAt) {
+      updateData.paidAt = new Date();
+    }
 
-  await prisma.payment.update({
-    where: { id: paymentId },
-    data: updateData,
-  });
-
-  // If membership is not yet linked and payment is completed, create it now.
-  let membershipId = payment.seasonMembershipId;
-  if (!membershipId && status === PaymentStatus.COMPLETED && payment.userId && payment.seasonId) {
-    const membership = await registerMembershipService({
-      userId: payment.userId,
-      seasonId: payment.seasonId,
-      payLater: true, // mark as paid/active
-    });
-
-    // Link payment to the newly created membership
-    await prisma.payment.update({
+    await tx.payment.update({
       where: { id: paymentId },
-      data: { seasonMembershipId: membership.id },
+      data: updateData,
     });
 
-    membershipId = membership.id;
-  }
+    // If membership is not yet linked and payment is completed, create it now.
+    let membershipId = payment.seasonMembershipId;
+    if (!membershipId && status === PaymentStatus.COMPLETED && payment.userId && payment.seasonId) {
+      // Create membership and increment counter atomically within the transaction
+      const membership = await tx.seasonMembership.create({
+        data: {
+          status: "ACTIVE",
+          paymentStatus: PaymentStatus.COMPLETED,
+          user: { connect: { id: payment.userId } },
+          season: { connect: { id: payment.seasonId } },
+        },
+        include: {
+          user: true,
+          season: true,
+        },
+      });
 
-  if (!membershipId) return;
+      await tx.season.update({
+        where: { id: payment.seasonId },
+        data: { registeredUserCount: { increment: 1 } },
+      });
 
-  const membershipUpdate: Prisma.SeasonMembershipUpdateInput = {
-    paymentStatus:
-      status === PaymentStatus.CANCELLED
-        ? PaymentStatus.PENDING
-        : status,
-  };
+      // Link payment to the newly created membership
+      await tx.payment.update({
+        where: { id: paymentId },
+        data: { seasonMembershipId: membership.id },
+      });
 
-  if (status === PaymentStatus.COMPLETED) {
-    membershipUpdate.status = "ACTIVE";
-  } else if (status === PaymentStatus.FAILED || status === PaymentStatus.CANCELLED) {
-    membershipUpdate.status = "PENDING";
-  }
+      membershipId = membership.id;
+    }
 
-  await prisma.seasonMembership.update({
-    where: { id: membershipId },
-    data: membershipUpdate,
+    if (!membershipId) return;
+
+    const membershipUpdate: Prisma.SeasonMembershipUpdateInput = {
+      paymentStatus:
+        status === PaymentStatus.CANCELLED
+          ? PaymentStatus.PENDING
+          : status,
+    };
+
+    if (status === PaymentStatus.COMPLETED) {
+      membershipUpdate.status = "ACTIVE";
+    } else if (status === PaymentStatus.FAILED || status === PaymentStatus.CANCELLED) {
+      membershipUpdate.status = "PENDING";
+    }
+
+    await tx.seasonMembership.update({
+      where: { id: membershipId },
+      data: membershipUpdate,
+    });
   });
 }

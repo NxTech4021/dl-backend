@@ -12,25 +12,26 @@ import {
   cancelRequest,
   getPendingCount
 } from '../controllers/teamChangeRequestController';
+import { verifyAuth, requireAdmin } from '../middlewares/auth.middleware';
 
 const teamChangeRequestRoutes = Router();
 
-// Get pending count (before :id route to avoid conflict)
-teamChangeRequestRoutes.get('/count/pending', getPendingCount);
+// Get pending count (before :id route to avoid conflict) - Admin only
+teamChangeRequestRoutes.get('/count/pending', verifyAuth, requireAdmin, getPendingCount);
 
-// Get all requests with optional filters
-teamChangeRequestRoutes.get('/', getRequests);
+// Get all requests with optional filters - Admin only (users should use filtered endpoint)
+teamChangeRequestRoutes.get('/', verifyAuth, requireAdmin, getRequests);
 
-// Get single request by ID
-teamChangeRequestRoutes.get('/:id', getRequestById);
+// Get single request by ID - Authenticated users
+teamChangeRequestRoutes.get('/:id', verifyAuth, getRequestById);
 
-// Create a new request
-teamChangeRequestRoutes.post('/', createRequest);
+// Create a new request - Authenticated users
+teamChangeRequestRoutes.post('/', verifyAuth, createRequest);
 
 // Process a request (approve/deny) - Admin only
-teamChangeRequestRoutes.patch('/:id/process', processRequest);
+teamChangeRequestRoutes.patch('/:id/process', verifyAuth, requireAdmin, processRequest);
 
-// Cancel a request - User only
-teamChangeRequestRoutes.patch('/:id/cancel', cancelRequest);
+// Cancel a request - User can cancel own request, admin can cancel any
+teamChangeRequestRoutes.patch('/:id/cancel', verifyAuth, cancelRequest);
 
 export default teamChangeRequestRoutes;

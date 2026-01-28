@@ -287,16 +287,11 @@ export const sendTestNotification = async (req: Request, res: Response) => {
 // Register push notification token
 export const registerPushToken = async (req: Request, res: Response) => {
   try {
-    // Get user ID from auth middleware OR mobile header
-    let userId = req.user?.id;
-    
-    // Mobile fallback - get from x-user-id header
-    if (!userId) {
-      userId = req.headers["x-user-id"] as string;
-    }
+    // Get user ID from auth middleware only (secure - no header fallback)
+    const userId = req.user?.id;
 
     if (!userId) {
-      return res.status(401).json({ error: 'Authentication required' });
+      return res.status(401).json({ error: 'Authentication required - valid session needed' });
     }
 
     const { token, platform = "android", deviceId } = req.body;

@@ -1,9 +1,9 @@
+# Environment files (NEVER commit secrets)
 .env
-.env.test
-.env.local
-.env.development
-.env.production
-.env.staging
+.env.*
+!.env.example
+
+# Keep .env.example as template
 node_modules/
 .DS_Store
 test-cs.json

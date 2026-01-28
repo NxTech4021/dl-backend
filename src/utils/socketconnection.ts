@@ -35,124 +35,69 @@ export function socketHandler(httpServer: HttpServer) {
 
   console.log("🚀 Socket.IO server initialized");
 
-  // Dual authentication middleware: Better Auth (web) OR x-user-id header (mobile)
+  // Authentication middleware: Better Auth session only (secure)
   io.use(async (socket, next) => {
     try {
       console.log("🔐 Socket.IO: Authenticating connection...");
 
-      // OPTION 1: Try Better Auth session first (for Next.js web app)
-      try {
-        const session = await auth.api.getSession({
-          headers: socket.handshake.headers,
-        });
+      // Better Auth session authentication only
+      const session = await auth.api.getSession({
+        headers: socket.handshake.headers,
+      });
 
-        if (session && session.user && session.user.id) {
-          console.log("🔐 Socket.IO: Better Auth session found");
+      if (!session || !session.user || !session.user.id) {
+        console.error("❌ Socket.IO: No valid session found");
+        return next(new Error("Authentication required - valid session needed"));
+      }
 
-          // Verify user exists in database
-          const user = await prisma.user.findUnique({
-            where: { id: session.user.id },
+      console.log("🔐 Socket.IO: Better Auth session found");
+
+      // Verify user exists in database
+      const user = await prisma.user.findUnique({
+        where: { id: session.user.id },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          username: true,
+          role: true,
+          admin: {
             select: {
               id: true,
-              name: true,
-              email: true,
-              username: true,
-              role: true,
-              admin: {
-                select: {
-                  id: true,
-                  status: true,
-                },
-              },
-            },
-          });
-
-          if (user) {
-            // Get admin ID if user has admin record and is active
-            let adminId: string | undefined;
-            if (user.admin && user.admin.status === "ACTIVE") {
-              adminId = user.admin.id;
-            }
-
-            // Store user info in socket data
-            socket.data.userId = session.user.id;
-            socket.data.user = {
-              id: session.user.id,
-              name: session.user.name,
-              email: session.user.email,
-              username: session.user.username || undefined,
-              role: user.role,
-              adminId,
-            };
-
-            console.log(
-              `✅ Socket.IO: Authenticated via Better Auth - ${session.user.id} (${user.role})`
-            );
-            return next();
-          }
-        }
-      } catch (authError) {
-        console.log(
-          "⚠️ Socket.IO: Better Auth failed, trying x-user-id fallback..."
-        );
-      }
-
-      // OPTION 2: Fallback to x-user-id header (for Expo mobile app)
-      const headerUserId = socket.handshake.headers["x-user-id"];
-
-      if (headerUserId && typeof headerUserId === "string") {
-        console.log("🔐 Socket.IO: Using x-user-id header:", headerUserId);
-
-        // Verify user exists in database
-        const user = await prisma.user.findUnique({
-          where: { id: headerUserId },
-          select: {
-            id: true,
-            name: true,
-            email: true,
-            username: true,
-            role: true,
-            admin: {
-              select: {
-                id: true,
-                status: true,
-              },
+              status: true,
             },
           },
-        });
+        },
+      });
 
-        if (!user) {
-          console.error(
-            `❌ Socket.IO: User ${headerUserId} not found in database`
-          );
-          return next(new Error("User not found"));
-        }
-
-        // Get admin ID if user has admin record and is active
-        let adminId: string | undefined;
-        if (user.admin && user.admin.status === "ACTIVE") {
-          adminId = user.admin.id;
-        }
-
-        // Store user info in socket data
-        socket.data.userId = user.id;
-        socket.data.user = {
-          id: user.id,
-          name: user.name,
-          email: user.email,
-          username: user.username || undefined,
-          role: user.role,
-          adminId,
-        };
-
-        return next();
+      if (!user) {
+        console.error(
+          `❌ Socket.IO: User ${session.user.id} not found in database`
+        );
+        return next(new Error("User not found"));
       }
 
-      // No valid authentication found
-      console.error(
-        "❌ Socket.IO: No valid authentication (no session or x-user-id header)"
+      // Get admin ID if user has admin record and is active
+      let adminId: string | undefined;
+      if (user.admin && user.admin.status === "ACTIVE") {
+        adminId = user.admin.id;
+      }
+
+      // Store user info in socket data
+      socket.data.userId = session.user.id;
+      socket.data.user = {
+        id: session.user.id,
+        name: session.user.name,
+        email: session.user.email,
+        username: session.user.username || undefined,
+        role: user.role,
+        adminId,
+      };
+
+      console.log(
+        `✅ Socket.IO: Authenticated via Better Auth - ${session.user.id} (${user.role})`
       );
-      return next(new Error("Authentication required"));
+      return next();
     } catch (error) {
       console.error("❌ Socket.IO: Authentication error:", error);
       return next(new Error("Authentication failed"));

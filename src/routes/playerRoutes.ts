@@ -1,6 +1,6 @@
 import { prisma } from "../lib/prisma";
 import { Router } from 'express';
-import { verifyAuth } from '../middlewares/auth.middleware';
+import { verifyAuth, requireAdmin } from '../middlewares/auth.middleware';
 
 import {
   getAllPlayers,
@@ -33,14 +33,15 @@ import { getSettings, updateSettings, updateSkillLevels } from '../controllers/s
 const playerRouter = Router();
 
 // Admin routes
-playerRouter.get('/', getAllPlayers);
-playerRouter.get('/stats', getPlayerStats);
+playerRouter.get('/', verifyAuth, requireAdmin, getAllPlayers);
+playerRouter.get('/stats', verifyAuth, requireAdmin, getPlayerStats);
 
-// Player history routes (admin access)
-playerRouter.get('/:id/leagues', getPlayerLeagueHistory);
-playerRouter.get('/:id/seasons', getPlayerSeasonHistory);
-playerRouter.get('/:id/divisions', getPlayerDivisionHistory);
-playerRouter.get('/:id/matches', getPlayerMatchHistoryAdmin);
+// Player history routes (authenticated user viewing own or admin)
+playerRouter.get('/:id/leagues', verifyAuth, getPlayerLeagueHistory);
+playerRouter.get('/:id/seasons', verifyAuth, getPlayerSeasonHistory);
+playerRouter.get('/:id/divisions', verifyAuth, getPlayerDivisionHistory);
+// Admin match history - requires admin access
+playerRouter.get('/:id/matches', verifyAuth, requireAdmin, getPlayerMatchHistoryAdmin);
 
 // Player profile routes (authenticated user)
 playerRouter.get('/profile/me', verifyAuth, getPlayerProfile as any);
@@ -153,7 +154,7 @@ playerRouter.get('/withdrawal-requests', verifyAuth, async (req, res) => {
 });
 
 // Parameterized routes - MUST BE LAST to avoid catching specific routes
-playerRouter.get('/:id', getPlayerById);
+playerRouter.get('/:id', verifyAuth, getPlayerById);
 
 export default playerRouter;
 

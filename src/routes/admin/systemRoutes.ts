@@ -4,7 +4,7 @@
  */
 
 import { Router } from 'express';
-import { verifyAuth } from '../../middlewares/auth.middleware';
+import { verifyAuth, requireAdmin } from '../../middlewares/auth.middleware';
 import {
   createMaintenance,
   updateMaintenance,
@@ -27,8 +27,7 @@ const adminSystemRoutes = Router();
 
 // Apply authentication middleware to all routes
 adminSystemRoutes.use(verifyAuth);
-
-// TODO: Add admin role verification middleware
+adminSystemRoutes.use(requireAdmin);
 
 // System Maintenance Routes
 adminSystemRoutes.post('/maintenance', createMaintenance);

@@ -8,7 +8,6 @@ import { expo } from "@better-auth/expo";
 import { sendEmail } from "../config/nodemailer";
 import {
   getBackendBaseURL,
-  getTrustedOrigins,
   getAuthBasePath,
 } from "../config/network";
 
@@ -30,90 +29,34 @@ console.log(
 // Get auth base path dynamically based on environment
 // Development: /api/auth/, Production: /auth/ (nginx handles /api prefix)
 const authBasePath = getAuthBasePath();
+
+// Environment-aware security settings
+const isProduction = process.env.NODE_ENV === 'production';
+// Session expiry: configurable via env, defaults to 24 hours in production, 7 days in development
+const sessionExpirySeconds = process.env.SESSION_EXPIRY_SECONDS
+  ? parseInt(process.env.SESSION_EXPIRY_SECONDS, 10)
+  : isProduction
+    ? 60 * 60 * 24 // 24 hours for production
+    : 60 * 60 * 24 * 7; // 7 days for development
 console.log(`   BETTER_AUTH_BASE_PATH: ${authBasePath}`);
-const defaultTrustedOrigins = [
-  "http://localhost:3030",
-  "http://localhost",
-  "http://localhost:82",
-  "http://localhost:3001",
-  "http://localhost:8081",
-  "http://192.168.1.3:3001",
-  "http://192.168.1.7:3001",
-  "http://192.168.1.5:8081",
-  "exp://192.168.1.5:8081",
-  "http://192.168.100.28:8081",
-  "exp://192.168.100.28:8081",
-  "http://192.168.100.3:8081",
-  "exp://192.168.100.3:8081",
-  "http://192.168.100.53:8081",
-  "exp://192.168.100.53:8081",
-  "http://172.20.10.3:8081",
-  "exp://172.20.10.3:8081",
-  "http://10.72.179.58:8081",
-  "exp://10.72.179.58:8081",
-  "http://10.72.180.20:8081",
-  "exp://10.72.180.20:8081",
-  "http://192.168.100.224:8081",
-  "exp://192.168.100.224:8081",
-  "http://172.20.10.2:3001",
-  "http://172.20.10.2:82",
-  "http://172.20.10.2:8081",
-  "exp://172.20.10.2:8081",
-  "http://192.168.0.60:3001",
-  "http://192.168.0.60:82",
-  "http://192.168.0.60:8081",
-  "exp://192.168.0.60:8081",
-  "http://192.168.100.36:8081",
-  "exp://192.168.100.36:8081",
-  "exp://192.168.1.4:8081",
-  "http://192.168.1.4:8081",
-  "exp://192.168.0.109:8081",
-  "http://10.72.191.11:8081",
-  "exp://10.72.191.11:8081",
-  "exp://172.20.10.11:8081",
-  "http://172.20.10.11:8081",
-  "exp://192.168.100.67:8081",
-  "http://192.168.100.67:8081",
-  "exp://10.72.191.105:8081",
-  "http://10.72.191.105:8081",
-  "exp://192.168.1.3:8081",
-  "http://192.168.1.3:8081",
-  "exp://192.168.100.110:8081",
-  "http://192.168.100.110:8081",
-  "exp://192.168.1.7:8081",
-  "http://192.168.1.7:8081",
-  "exp://10.72.186.182:8081",
-  "http://10.72.186.182:8081",
-  "exp://192.168.100.144:8081",
-  "http://192.168.100.144:8081",
-  "http://192.168.0.123:8081",
-  "exp://192.168.0.123:8081",
-  "http://192.168.0.197:8081",
-  "exp://192.168.0.197:8081",
-  "https://staging.appdevelopers.my",
-  "deuceleague://",
-];
 
-const envTrustedOrigins = [
-  ...(process.env.BETTER_AUTH_TRUSTED_ORIGINS || "")
-    .split(",")
-    .map((origin) => origin.trim())
-    .filter(Boolean),
-];
+// Get trusted origins from environment with sensible defaults
+const getTrustedOrigins = (): string[] => {
+  // Get from environment variable (comma-separated)
+  const envOrigins = process.env.TRUSTED_ORIGINS?.split(',').map(o => o.trim()).filter(Boolean) || [];
 
-const corsAllowedOrigins = (process.env.CORS_ALLOWED_ORIGINS || "")
-  .split(",")
-  .map((origin) => origin.trim())
-  .filter(Boolean);
+  // Default development origins (only used if no env var set)
+  const devOrigins = process.env.NODE_ENV !== 'production' ? [
+    'http://localhost:3000',
+    'http://localhost:3001',
+    'http://localhost:8081',
+    'http://localhost:8082',
+  ] : [];
 
-const combinedTrustedOrigins = Array.from(
-  new Set([
-    ...defaultTrustedOrigins,
-    ...envTrustedOrigins,
-    ...corsAllowedOrigins,
-    ...getTrustedOrigins(),
-  ])
-);
+  return [...envOrigins, ...devOrigins];
+};
+
+const trustedOrigins = getTrustedOrigins();
 
 // Test database connection
 prisma
@@ -283,12 +226,13 @@ export const auth = betterAuth({
 
   basePath: authBasePath,
 
-  trustedOrigins: combinedTrustedOrigins,
+  trustedOrigins: trustedOrigins,
 
   // Session configuration for mobile/Expo compatibility
+  // Security: Reduced expiry in production (24h default), configurable via SESSION_EXPIRY_SECONDS env var
   session: {
-    expiresIn: 60 * 60 * 24 * 7, // 7 days
-    updateAge: 60 * 60 * 24, // 1 day
+    expiresIn: sessionExpirySeconds,
+    updateAge: 60 * 60, // 1 hour (reduced from 1 day for better security)
     cookieCache: {
       enabled: true,
       maxAge: 5 * 60, // 5 minutes
@@ -296,25 +240,26 @@ export const auth = betterAuth({
   },
 
   // Advanced configuration for mobile/Expo compatibility
+  // Security: Environment-aware settings - secure in production, permissive in development
   advanced: {
-    useSecureCookies: false, // Set to false for development/localhost
+    useSecureCookies: isProduction,
     // disableOriginCheck: true, // Need to remove for prod
     crossSubDomainCookies: {
       enabled: false, // Disable for mobile apps
     },
     defaultCookieAttributes: {
       httpOnly: true,
-      secure: false, // Set to false for development/localhost
-      sameSite: "lax", // Better for mobile apps
+      secure: isProduction,
+      sameSite: isProduction ? "strict" : "lax",
     },
     // Add explicit cookie configuration for better session handling
     cookies: {
       sessionToken: {
         attributes: {
           httpOnly: true,
-          secure: false,
-          sameSite: "lax",
-          maxAge: 60 * 60 * 24 * 7, // 7 days
+          secure: isProduction,
+          sameSite: isProduction ? "strict" : "lax",
+          maxAge: sessionExpirySeconds,
         },
       },
     },

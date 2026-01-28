@@ -1,6 +1,6 @@
 import { prisma } from "../lib/prisma";
 // Production-grade onboarding routes
-import express from "express";
+import express, { Request, Response, NextFunction } from "express";
 import { PrismaClient, Prisma } from "@prisma/client";
 import QuestionnaireService, {
   loadQuestionnaire,
@@ -20,6 +20,8 @@ import {
 import ConfigurationService from "../config/questionnaire";
 import Logger from "../utils/logger";
 import QuestionnaireValidator from "../validators/questionnaire";
+import { verifyAuth } from "../middlewares/auth.middleware";
+import { onboardingLimiter, questionnaireLimiter } from "../middlewares/rateLimiter";
 
 const router = express.Router();
 const logger = Logger.getInstance(
@@ -28,6 +30,34 @@ const logger = Logger.getInstance(
 );
 const questionnaireService = new QuestionnaireService(logger);
 const validator = new QuestionnaireValidator(logger);
+
+// Ownership validation middleware - ensures user can only access their own data unless admin
+const validateOwnUserOrAdmin = (req: Request, res: Response, next: NextFunction) => {
+  const { userId } = req.params;
+  const requestingUser = req.user;
+
+  if (!requestingUser) {
+    return res.status(401).json({ success: false, error: 'Authentication required' });
+  }
+
+  if (!userId) {
+    return res.status(400).json({ success: false, error: 'User ID is required' });
+  }
+
+  const isAdmin = requestingUser.role === 'ADMIN' || requestingUser.role === 'SUPERADMIN';
+  if (userId !== requestingUser.id && !isAdmin) {
+    return res.status(403).json({ success: false, error: 'You can only access your own data' });
+  }
+
+  next();
+};
+
+// Helper to get validated userId from params (use after validateOwnUserOrAdmin middleware)
+const getValidatedUserId = (req: Request): string => {
+  const userId = req.params.userId;
+  if (!userId) throw new Error('userId should be validated by middleware');
+  return userId;
+};
 
 // Nominatim rate limiter: 1 request per second (OSM Foundation policy)
 let lastNominatimRequestTime = 0;
@@ -126,10 +156,10 @@ declare global {
 // to prevent "step" from being matched as a sport name
 
 // Update user's current onboarding step
-router.put("/step/:userId", async (req, res) => {
+router.put("/step/:userId", onboardingLimiter, verifyAuth, validateOwnUserOrAdmin, async (req, res) => {
   const startTime = Date.now();
   const requestId = req.requestId!;
-  const { userId } = req.params;
+  const userId = req.params.userId!; // Validated by validateOwnUserOrAdmin middleware
   const { step } = req.body;
 
   try {
@@ -277,7 +307,7 @@ router.get("/:sport/questions", validateSportParam, async (req, res) => {
 });
 
 // Submit answers and save + score with proper error handling
-router.post("/:sport/submit", validateSportParam, async (req, res) => {
+router.post("/:sport/submit", questionnaireLimiter, verifyAuth, validateSportParam, async (req, res) => {
   const startTime = Date.now();
   const requestId = req.requestId!;
   const sport = req.sport!;
@@ -304,6 +334,16 @@ router.post("/:sport/submit", validateSportParam, async (req, res) => {
         })),
       });
       return handleQuestionnaireError(error, res);
+    }
+
+    // Verify ownership - user can only submit for themselves unless admin
+    const requestingUser = req.user;
+    if (!requestingUser) {
+      return res.status(401).json({ success: false, error: 'Authentication required' });
+    }
+    const isAdmin = requestingUser.role === 'ADMIN' || requestingUser.role === 'SUPERADMIN';
+    if (submissionRequest.userId !== requestingUser.id && !isAdmin) {
+      return res.status(403).json({ success: false, error: 'You can only submit for your own account' });
     }
 
     // Sanitize answers to prevent injection
@@ -577,10 +617,10 @@ router.post("/:sport/submit", validateSportParam, async (req, res) => {
 });
 
 // Get user's questionnaire responses with validation
-router.get("/responses/:userId", async (req, res) => {
+router.get("/responses/:userId", onboardingLimiter, verifyAuth, validateOwnUserOrAdmin, async (req, res) => {
   const startTime = Date.now();
   const requestId = req.requestId!;
-  const { userId } = req.params;
+  const userId = req.params.userId!; // Validated by validateOwnUserOrAdmin middleware
 
   try {
     // Validate userId
@@ -643,10 +683,10 @@ router.get("/responses/:userId", async (req, res) => {
 });
 
 // Get specific sport response for user with validation
-router.get("/responses/:userId/:sport", async (req, res) => {
+router.get("/responses/:userId/:sport", onboardingLimiter, verifyAuth, validateOwnUserOrAdmin, async (req, res) => {
   const startTime = Date.now();
   const requestId = req.requestId!;
-  const { userId } = req.params;
+  const userId = req.params.userId!; // Validated by validateOwnUserOrAdmin middleware
   const sport = req.params.sport as SportType;
 
   try {
@@ -735,10 +775,10 @@ router.get("/responses/:userId/:sport", async (req, res) => {
 });
 
 // Update user profile information (name, gender, dateOfBirth)
-router.put("/profile/:userId", async (req, res) => {
+router.put("/profile/:userId", onboardingLimiter, verifyAuth, validateOwnUserOrAdmin, async (req, res) => {
   const startTime = Date.now();
   const requestId = req.requestId!;
-  const { userId } = req.params;
+  const userId = req.params.userId!; // Validated by validateOwnUserOrAdmin middleware
   const { name, gender, dateOfBirth } = req.body;
 
   try {
@@ -879,10 +919,10 @@ router.put("/profile/:userId", async (req, res) => {
 });
 
 // Mark onboarding as completed for a user
-router.post("/complete/:userId", async (req, res) => {
+router.post("/complete/:userId", onboardingLimiter, verifyAuth, validateOwnUserOrAdmin, async (req, res) => {
   const startTime = Date.now();
   const requestId = req.requestId!;
-  const { userId } = req.params;
+  const userId = req.params.userId!; // Validated by validateOwnUserOrAdmin middleware
 
   try {
     // Validate userId
@@ -958,10 +998,10 @@ router.post("/complete/:userId", async (req, res) => {
 });
 
 // Check if user has completed any sport assessments
-router.get("/assessment-status/:userId", async (req, res) => {
+router.get("/assessment-status/:userId", onboardingLimiter, verifyAuth, validateOwnUserOrAdmin, async (req, res) => {
   const startTime = Date.now();
   const requestId = req.requestId!;
-  const { userId } = req.params;
+  const userId = req.params.userId!; // Validated by validateOwnUserOrAdmin middleware
 
   try {
     // Validate userId
@@ -1052,10 +1092,10 @@ router.get("/assessment-status/:userId", async (req, res) => {
 });
 
 // Check if user has completed onboarding
-router.get("/status/:userId", async (req, res) => {
+router.get("/status/:userId", onboardingLimiter, verifyAuth, validateOwnUserOrAdmin, async (req, res) => {
   const startTime = Date.now();
   const requestId = req.requestId!;
-  const { userId } = req.params;
+  const userId = req.params.userId!; // Validated by validateOwnUserOrAdmin middleware
 
   try {
     // Validate userId
@@ -1151,10 +1191,10 @@ router.get("/status/:userId", async (req, res) => {
 });
 
 // Save user sports selection
-router.post("/sports/:userId", async (req, res) => {
+router.post("/sports/:userId", onboardingLimiter, verifyAuth, validateOwnUserOrAdmin, async (req, res) => {
   const startTime = Date.now();
   const requestId = req.requestId!;
-  const { userId } = req.params;
+  const userId = req.params.userId!; // Validated by validateOwnUserOrAdmin middleware
   const { sports } = req.body;
 
   try {
@@ -1284,10 +1324,10 @@ router.post("/sports/:userId", async (req, res) => {
 });
 
 // Save user location information
-router.post("/location/:userId", async (req, res) => {
+router.post("/location/:userId", onboardingLimiter, verifyAuth, validateOwnUserOrAdmin, async (req, res) => {
   const startTime = Date.now();
   const requestId = req.requestId!;
-  const { userId } = req.params;
+  const userId = req.params.userId!; // Validated by validateOwnUserOrAdmin middleware
   const { country, state, city, latitude, longitude } = req.body;
 
   try {
@@ -1564,10 +1604,10 @@ router.get("/locations/search", async (req, res) => {
 });
 
 // Save user sport skill levels (self-assessed during onboarding)
-router.put("/skill-levels/:userId", async (req, res) => {
+router.put("/skill-levels/:userId", onboardingLimiter, verifyAuth, validateOwnUserOrAdmin, async (req, res) => {
   const startTime = Date.now();
   const requestId = req.requestId!;
-  const { userId } = req.params;
+  const userId = req.params.userId!; // Validated by validateOwnUserOrAdmin middleware
   const { tennisSkillLevel, pickleballSkillLevel, padelSkillLevel } = req.body;
 
   try {
@@ -1719,10 +1759,10 @@ router.put("/skill-levels/:userId", async (req, res) => {
 });
 
 // Get user profile information
-router.get("/profile/:userId", async (req, res) => {
+router.get("/profile/:userId", onboardingLimiter, verifyAuth, validateOwnUserOrAdmin, async (req, res) => {
   const startTime = Date.now();
   const requestId = req.requestId!;
-  const { userId } = req.params;
+  const userId = req.params.userId!; // Validated by validateOwnUserOrAdmin middleware
 
   try {
     // Validate userId

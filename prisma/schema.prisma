@@ -626,6 +626,8 @@ model SeasonMembership {
   @@index([userId])
   @@index([seasonId])
   @@index([divisionId, status])
+  @@index([userId, seasonId])
+  @@index([seasonId, status])
 }
 
 model DivisionAssignment {
@@ -817,6 +819,7 @@ model Match {
   @@index([isFriendlyRequest])
   @@index([requestStatus])
   @@index([requestExpiresAt])
+  @@index([divisionId, seasonId, status])
 }
 
 model MatchParticipant {
@@ -1416,6 +1419,7 @@ model DivisionStanding {
   @@index([divisionId, rank])
   @@index([seasonId])
   @@index([totalPoints(sort: Desc)])
+  @@index([divisionId, seasonId])
   @@map("division_standing")
 }
 
@@ -2034,6 +2038,8 @@ model PairRequest {
   @@index([recipientId])
   @@index([seasonId])
   @@index([status])
+  @@index([recipientId, seasonId, status])
+  @@index([requesterId, seasonId])
   @@map("pair_request")
 }
 
@@ -2347,6 +2353,7 @@ model Payment {
   @@index([seasonId])
   @@index([seasonMembershipId])
   @@index([status])
+  @@index([userId, status])
   @@map("payment")
 }
 
