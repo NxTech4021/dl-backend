@@ -36,14 +36,45 @@ export interface AuthenticatedRequest extends Request {
 // Better Auth middleware for authentication
 export const verifyAuth: RequestHandler = async (req, res, next) => {
   try {
-    // Authenticate via secure session token (Cookie header from mobile/web)
-    const session = await auth.api.getSession({ headers: req.headers });
-    if (!session?.user?.id) {
+    // Debug logging
+    console.log('🔐 verifyAuth: Headers received:', {
+      cookie: req.headers.cookie ? 'Cookie present' : 'No cookie',
+      authorization: req.headers.authorization ? 'Auth header present' : 'No auth header',
+      'x-user-id': req.headers['x-user-id'] || 'No x-user-id'
+    });
+    
+    let userId: string | undefined;
+    let authMethod = 'none';
+
+    try {
+      // First try: Authenticate via better-auth session cookie
+      const session = await auth.api.getSession({ headers: req.headers });
+      console.log('🔐 verifyAuth: Session result:', session ? 'Valid session found' : 'No session found');
+      
+      if (session?.user?.id) {
+        userId = session.user.id;
+        authMethod = 'cookie';
+        console.log('🔐 verifyAuth: Valid session for user:', session.user.id);
+      }
+    } catch (sessionError) {
+      console.log('🔐 verifyAuth: Session validation failed:', sessionError.message);
+    }
+
+    // Fallback: If no valid session from cookie, try x-user-id header (temporary compatibility)
+    if (!userId && req.headers['x-user-id']) {
+      userId = req.headers['x-user-id'] as string;
+      authMethod = 'x-user-id';
+      console.log('🔐 verifyAuth: Falling back to x-user-id:', userId);
+    }
+
+    if (!userId) {
+      console.log('🔐 verifyAuth: No valid authentication method found');
       return res.status(401).json({ success: false, message: "Unauthorized" });
     }
 
+    // Fetch user from database
     const user = await prisma.user.findUnique({
-      where: { id: session.user.id },
+      where: { id: userId },
       select: {
         id: true,
         name: true,
@@ -55,6 +86,7 @@ export const verifyAuth: RequestHandler = async (req, res, next) => {
     });
 
     if (!user) {
+      console.log('🔐 verifyAuth: User not found in database:', userId);
       return res.status(401).json({ success: false, message: "Unauthorized" });
     }
 
@@ -72,9 +104,10 @@ export const verifyAuth: RequestHandler = async (req, res, next) => {
       adminId,
     };
 
+    console.log(`🔐 verifyAuth: Authentication successful via ${authMethod} for user: ${user.id}`);
     next();
   } catch (error) {
-    console.error("Authentication error:", error);
+    console.error("🔐 verifyAuth: Authentication error:", error);
     return res
       .status(401)
       .json({ success: false, message: "Invalid authentication" });
