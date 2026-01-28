@@ -2,6 +2,7 @@ import { Router } from 'express';
 import {
   getLeagues,
   getLeagueById,
+  getLeagueSeasons,
   createLeague,
   updateLeague,
   deleteLeague,
@@ -16,7 +17,8 @@ const leagueRoutes = Router();
 leagueRoutes.get('/', getLeagues);                         
 // leagueRoutes.post('/join', joinLeague); // LeagueMembership model has been removed
 // leagueRoutes.post('/invite', sendLeagueInvite);  
-leagueRoutes.get('/:id', getLeagueById);               
+leagueRoutes.get('/:id', getLeagueById);
+leagueRoutes.get('/:id/seasons', getLeagueSeasons);
 // Public routes - View sports at a league
 // leagueRoutes.get('/:leagueId/sport', getSportsAtLeague); 
 

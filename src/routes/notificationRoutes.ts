@@ -27,7 +27,7 @@ notificationRouter.put('/mark-all-read', verifyAuth, markAllNotificationsAsRead)
 
 // Push token management routes (with rate limiting)
 // IMPORTANT: Specific routes MUST come BEFORE generic /:id routes
-notificationRouter.post('/push-token',  pushTokenLimiter, registerPushToken);
+notificationRouter.post('/push-token', verifyAuth, pushTokenLimiter, registerPushToken);
 notificationRouter.delete('/push-token', verifyAuth, unregisterPushToken);
 notificationRouter.get('/push-tokens', getUserPushTokens);
 
