@@ -429,6 +429,103 @@ export class LeagueService {
       where: { id }
     });
   }
+
+  async getLeagueSeasons(leagueId: string, page = 1, limit = 20) {
+    const skip = (page - 1) * limit;
+    const take = Math.min(limit, 100); // Max 100 items
+
+    const [seasons, total] = await Promise.all([
+      this.prisma.season.findMany({
+        where: {
+          leagues: {
+            some: {
+              id: leagueId
+            }
+          }
+        },
+        skip,
+        take,
+        orderBy: { startDate: "desc" },
+        select: {
+          id: true,
+          name: true,
+          startDate: true,
+          endDate: true,
+          regiDeadline: true,
+          description: true,
+          entryFee: true,
+          isActive: true,
+          paymentRequired: true,
+          promoCodeSupported: true,
+          withdrawalEnabled: true,
+          status: true,
+          registeredUserCount: true,
+          createdAt: true,
+          updatedAt: true,
+          category: {
+            select: {
+              id: true,
+              name: true,
+              genderRestriction: true,
+              genderCategory: true,
+              gameType: true,
+              matchFormat: true,
+              isActive: true,
+              categoryOrder: true
+            }
+          },
+          leagues: {
+            select: { id: true, name: true, sportType: true, gameType: true }
+          },
+          memberships: {
+            include: {
+              user: {
+                select: {
+                  id: true,
+                  name: true,
+                  image: true,
+                }
+              }
+            },
+            take: 6,
+            orderBy: {
+              joinedAt: 'asc'
+            }
+          } as any,
+          _count: {
+            select: { memberships: true }
+          },
+          divisions: {
+            select: { id: true, name: true }
+          },
+        } as any,
+      }),
+      this.prisma.season.count({
+        where: {
+          leagues: {
+            some: {
+              id: leagueId
+            }
+          }
+        }
+      }),
+    ]);
+
+    const data = seasons.map((season: any) => ({
+      ...season,
+      registeredUserCount: season._count?.memberships || 0,
+    }));
+
+    return {
+      data,
+      pagination: {
+        page,
+        limit: take,
+        total,
+        totalPages: Math.ceil(total / take),
+      },
+    };
+  }
 }
 
 // Create a default instance for backward compatibility
@@ -449,3 +546,6 @@ export const updateLeague = (id: string, data: LeagueData) =>
 
 export const deleteLeague = (id: string) =>
   defaultLeagueService.deleteLeague(id);
+
+export const getLeagueSeasons = (leagueId: string, page?: number, limit?: number) =>
+  defaultLeagueService.getLeagueSeasons(leagueId, page, limit);

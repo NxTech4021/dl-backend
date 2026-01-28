@@ -468,3 +468,45 @@ export const deleteLeague = async (req: Request, res: Response) => {
       .json(new ApiResponse(false, 500, null, "Error deleting league"));
   }
 };
+
+export const getLeagueSeasons = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { page, limit } = req.query;
+
+    if (!id) {
+      return res
+        .status(400)
+        .json(new ApiResponse(false, 400, null, "League ID is required"));
+    }
+
+    // Check if league exists
+    const league = await leagueService.getLeagueById(id);
+    if (!league) {
+      return res
+        .status(404)
+        .json(new ApiResponse(false, 404, null, "League not found"));
+    }
+
+    const pageNum = page ? parseInt(page as string, 10) : 1;
+    const limitNum = limit ? parseInt(limit as string, 10) : 20;
+
+    const seasons = await leagueService.getLeagueSeasons(id, pageNum, limitNum);
+
+    return res
+      .status(200)
+      .json(
+        new ApiResponse(
+          true, 
+          200, 
+          seasons, 
+          `Found ${seasons.data.length} season(s) for league`
+        )
+      );
+  } catch (error: unknown) {
+    console.error("Error fetching league seasons:", error);
+    return res
+      .status(500)
+      .json(new ApiResponse(false, 500, null, "Error fetching league seasons"));
+  }
+};
