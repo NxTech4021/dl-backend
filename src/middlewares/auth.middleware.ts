@@ -36,7 +36,7 @@ export interface AuthenticatedRequest extends Request {
 // Better Auth middleware for authentication
 export const verifyAuth: RequestHandler = async (req, res, next) => {
   try {
-    // Authenticate via secure session token only
+    // Authenticate via secure session token (Cookie header from mobile/web)
     const session = await auth.api.getSession({ headers: req.headers });
     if (!session?.user?.id) {
       return res.status(401).json({ success: false, message: "Unauthorized" });
