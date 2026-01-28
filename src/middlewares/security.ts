@@ -38,10 +38,11 @@ export const securityHeaders = helmet({
 });
 
 // Rate limiting configuration
-// General rate limiter: 100 requests per minute for regular endpoints
+// General rate limiter: higher limit in development (single developer shares one IP)
+const isDev = process.env.NODE_ENV !== 'production';
 export const generalLimiter = rateLimit({
   windowMs: 60 * 1000, // 1 minute
-  max: 100, // 100 requests per minute
+  max: isDev ? 300 : 100, // 300/min in dev, 100/min in production
   message: {
     error: 'Too many requests, please try again later',
     code: 'RATE_LIMIT_EXCEEDED',
