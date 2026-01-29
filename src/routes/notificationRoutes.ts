@@ -29,7 +29,7 @@ notificationRouter.put('/mark-all-read', verifyAuth, markAllNotificationsAsRead)
 // IMPORTANT: Specific routes MUST come BEFORE generic /:id routes
 notificationRouter.post('/push-token', verifyAuth, pushTokenLimiter, registerPushToken);
 notificationRouter.delete('/push-token', verifyAuth, unregisterPushToken);
-notificationRouter.get('/push-tokens', getUserPushTokens);
+notificationRouter.get('/push-tokens', verifyAuth, getUserPushTokens);
 
 notificationRouter.delete('/:id', verifyAuth, deleteNotification);
 
