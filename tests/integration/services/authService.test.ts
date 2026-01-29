@@ -201,34 +201,74 @@ describe('AuthService', () => {
       expect(result.code).toBe('OTP_INVALID');
     });
 
-    // Note: These tests are skipped because they require creating verification records
-    // directly via prismaTest, but the service uses global prisma which can't see
-    // data in the prismaTest transaction. These scenarios are covered by the service's
-    // code paths but would need dependency injection to test properly.
-    it.skip('should reject expired OTP', async () => {
-      // This test requires creating an expired verification record directly,
-      // which the service (using global prisma) cannot see due to transaction isolation.
+    // These tests use dependency injection to pass prismaTest to the service
+    it('should reject expired OTP', async () => {
+      // Arrange - Create an expired verification record
       const email = `expired-${Date.now()}@example.com`;
+      const normalizedEmail = email.toLowerCase();
       const otp = '123456';
-      const result = await verifyResetOTP(email, otp);
+      const expiredDate = new Date(Date.now() - 60 * 60 * 1000); // 1 hour ago
+
+      await prismaTest.verification.create({
+        data: {
+          identifier: normalizedEmail,
+          value: otp,
+          expiresAt: expiredDate,
+          status: 'PENDING',
+        },
+      });
+
+      // Act - Pass prismaTest as the client
+      const result = await verifyResetOTP(email, otp, prismaTest as any);
+
+      // Assert
       expect(result.success).toBe(false);
+      expect(result.code).toBe('OTP_EXPIRED');
     });
 
-    it.skip('should reject already used OTP', async () => {
-      // This test requires creating a USED verification record directly,
-      // which the service (using global prisma) cannot see due to transaction isolation.
+    it('should reject already used OTP', async () => {
+      // Arrange - Create a USED verification record
       const email = `used-${Date.now()}@example.com`;
+      const normalizedEmail = email.toLowerCase();
       const otp = '654321';
-      const result = await verifyResetOTP(email, otp);
+
+      await prismaTest.verification.create({
+        data: {
+          identifier: normalizedEmail,
+          value: otp,
+          expiresAt: new Date(Date.now() + 15 * 60 * 1000), // 15 min from now
+          status: 'USED',
+        },
+      });
+
+      // Act - Pass prismaTest as the client
+      const result = await verifyResetOTP(email, otp, prismaTest as any);
+
+      // Assert
       expect(result.success).toBe(false);
+      expect(result.code).toBe('OTP_ALREADY_USED');
     });
 
-    it.skip('should handle better-auth format OTP (code:period)', async () => {
-      // This test requires creating a verification with specific format directly,
-      // which the service (using global prisma) cannot see due to transaction isolation.
+    it('should handle better-auth format OTP (code:period)', async () => {
+      // Arrange - Create verification with better-auth format "code:period"
       const email = `betterauth-${Date.now()}@example.com`;
+      const normalizedEmail = email.toLowerCase();
       const otpCode = '789012';
-      const result = await verifyResetOTP(email, otpCode);
+      const betterAuthFormat = `${otpCode}:0`;
+
+      await prismaTest.verification.create({
+        data: {
+          identifier: normalizedEmail,
+          value: betterAuthFormat,
+          expiresAt: new Date(Date.now() + 15 * 60 * 1000),
+          status: 'PENDING',
+        },
+      });
+
+      // Act - Pass prismaTest and verify using just the code part
+      const result = await verifyResetOTP(email, otpCode, prismaTest as any);
+
+      // Assert
       expect(result.success).toBe(true);
     });
 
@@ -326,13 +366,33 @@ describe('AuthService', () => {
       expect(result.code).toBe('OTP_INVALID');
     });
 
-    it.skip('should handle better-auth format OTP on consumption', async () => {
-      // This test requires creating a verification with specific format directly,
-      // which the service (using global prisma) cannot see due to transaction isolation.
+    it('should handle better-auth format OTP on consumption', async () => {
+      // Arrange - Create verification with better-auth format "code:period"
       const email = `ba-consume-${Date.now()}@example.com`;
+      const normalizedEmail = email.toLowerCase();
       const otpCode = '456789';
-      const result = await consumeOTP(email, otpCode);
+      const betterAuthFormat = `${otpCode}:0`;
+
+      await prismaTest.verification.create({
+        data: {
+          identifier: normalizedEmail,
+          value: betterAuthFormat,
+          expiresAt: new Date(Date.now() + 15 * 60 * 1000),
+          status: 'PENDING',
+        },
+      });
+
+      // Act - Pass prismaTest and consume using just the code part
+      const result = await consumeOTP(email, otpCode, prismaTest as any);
+
+      // Assert
       expect(result.success).toBe(true);
+
+      // Verify it was marked as USED
+      const verification = await prismaTest.verification.findFirst({
+        where: { identifier: normalizedEmail },
+      });
+      expect(verification!.status).toBe('USED');
     });
   });
 
