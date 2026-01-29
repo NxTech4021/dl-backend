@@ -87,7 +87,7 @@ describe('DMRRatingService', () => {
 
         // Should not throw
         await expect(
-          service.processsinglesMatch({
+          service.processSinglesMatch({
             winnerId: user1.id,
             loserId: user2.id,
             setScores,
@@ -103,7 +103,7 @@ describe('DMRRatingService', () => {
         const setScores: SetScore[] = [{ score1: 11, score2: 9 }];
 
         await expect(
-          service.processsinglesMatch({
+          service.processSinglesMatch({
             winnerId: user1.id,
             loserId: user2.id,
             setScores,
@@ -119,7 +119,7 @@ describe('DMRRatingService', () => {
         const setScores: SetScore[] = [{ score1: 12, score2: 10 }];
 
         await expect(
-          service.processsinglesMatch({
+          service.processSinglesMatch({
             winnerId: user1.id,
             loserId: user2.id,
             setScores,
@@ -135,7 +135,7 @@ describe('DMRRatingService', () => {
         const setScores: SetScore[] = [{ score1: 15, score2: 10 }];
 
         await expect(
-          service.processsinglesMatch({
+          service.processSinglesMatch({
             winnerId: user1.id,
             loserId: user2.id,
             setScores,
@@ -151,7 +151,7 @@ describe('DMRRatingService', () => {
         const setScores: SetScore[] = [{ score1: 10, score2: 10 }];
 
         await expect(
-          service.processsinglesMatch({
+          service.processSinglesMatch({
             winnerId: user1.id,
             loserId: user2.id,
             setScores,
@@ -167,7 +167,7 @@ describe('DMRRatingService', () => {
         const setScores: SetScore[] = [{ score1: 11, score2: -1 }];
 
         await expect(
-          service.processsinglesMatch({
+          service.processSinglesMatch({
             winnerId: user1.id,
             loserId: user2.id,
             setScores,
@@ -183,7 +183,7 @@ describe('DMRRatingService', () => {
         const setScores: SetScore[] = [{ score1: 11, score2: 10 }];
 
         await expect(
-          service.processsinglesMatch({
+          service.processSinglesMatch({
             winnerId: user1.id,
             loserId: user2.id,
             setScores,
@@ -197,7 +197,7 @@ describe('DMRRatingService', () => {
         const user2 = await createTestUser();
 
         await expect(
-          service.processsinglesMatch({
+          service.processSinglesMatch({
             winnerId: user1.id,
             loserId: user2.id,
             setScores: [],
@@ -213,7 +213,7 @@ describe('DMRRatingService', () => {
         const setScores: SetScore[] = Array(6).fill({ score1: 11, score2: 5 });
 
         await expect(
-          service.processsinglesMatch({
+          service.processSinglesMatch({
             winnerId: user1.id,
             loserId: user2.id,
             setScores,
@@ -225,12 +225,12 @@ describe('DMRRatingService', () => {
   });
 
   describe('Singles Match Processing', () => {
-    describe('processsinglesMatch', () => {
+    describe('processSinglesMatch', () => {
       it('should create initial ratings for new players', async () => {
         const user1 = await createTestUser();
         const user2 = await createTestUser();
 
-        const result = await service.processsinglesMatch({
+        const result = await service.processSinglesMatch({
           winnerId: user1.id,
           loserId: user2.id,
           setScores: [{ score1: 11, score2: 5 }],
@@ -246,7 +246,7 @@ describe('DMRRatingService', () => {
         const user1 = await createTestUser();
         const user2 = await createTestUser();
 
-        const result = await service.processsinglesMatch({
+        const result = await service.processSinglesMatch({
           winnerId: user1.id,
           loserId: user2.id,
           setScores: [{ score1: 11, score2: 5 }],
@@ -270,7 +270,7 @@ describe('DMRRatingService', () => {
         const testSeasonId = division.seasonId!;
 
         // Dominant win: 11-0
-        const dominantResult = await service.processsinglesMatch({
+        const dominantResult = await service.processSinglesMatch({
           winnerId: user1.id,
           loserId: user2.id,
           setScores: [{ score1: 11, score2: 0 }],
@@ -278,7 +278,7 @@ describe('DMRRatingService', () => {
         });
 
         // Close win: 11-9
-        const closeResult = await service.processsinglesMatch({
+        const closeResult = await service.processSinglesMatch({
           winnerId: user3.id,
           loserId: user4.id,
           setScores: [{ score1: 11, score2: 9 }],
@@ -293,7 +293,7 @@ describe('DMRRatingService', () => {
         const user1 = await createTestUser();
         const user2 = await createTestUser();
 
-        const result = await service.processsinglesMatch({
+        const result = await service.processSinglesMatch({
           winnerId: user1.id,
           loserId: user2.id,
           setScores: [{ score1: 11, score2: 5 }],
@@ -308,7 +308,7 @@ describe('DMRRatingService', () => {
         const user1 = await createTestUser();
 
         await expect(
-          service.processsinglesMatch({
+          service.processSinglesMatch({
             winnerId: user1.id,
             loserId: user1.id,
             setScores: [{ score1: 11, score2: 5 }],
@@ -323,7 +323,7 @@ describe('DMRRatingService', () => {
 
         // Winner supposedly won but loser has more set wins
         await expect(
-          service.processsinglesMatch({
+          service.processSinglesMatch({
             winnerId: user1.id,
             loserId: user2.id,
             setScores: [
@@ -339,7 +339,7 @@ describe('DMRRatingService', () => {
         const user1 = await createTestUser();
         const user2 = await createTestUser();
 
-        await service.processsinglesMatch({
+        await service.processSinglesMatch({
           winnerId: user1.id,
           loserId: user2.id,
           setScores: [{ score1: 11, score2: 5 }],
@@ -363,7 +363,7 @@ describe('DMRRatingService', () => {
         const user1 = await createTestUser();
         const user2 = await createTestUser();
 
-        const result = await service.processsinglesMatch({
+        const result = await service.processSinglesMatch({
           winnerId: user1.id,
           loserId: user2.id,
           setScores: [{ score1: 11, score2: 0 }],
@@ -406,7 +406,7 @@ describe('DMRRatingService', () => {
           },
         });
 
-        const result = await service.processsinglesMatch({
+        const result = await service.processSinglesMatch({
           winnerId: user1.id,
           loserId: user2.id,
           setScores: [{ score1: 11, score2: 0 }],
@@ -568,7 +568,7 @@ describe('DMRRatingService', () => {
         });
 
         // Process the match
-        const result = await service.processsinglesMatch({
+        const result = await service.processSinglesMatch({
           winnerId: user1.id,
           loserId: user2.id,
           setScores: [{ score1: 11, score2: 5 }],
@@ -602,7 +602,7 @@ describe('DMRRatingService', () => {
           seasonId,
         });
 
-        await service.processsinglesMatch({
+        await service.processSinglesMatch({
           winnerId: user1.id,
           loserId: user2.id,
           setScores: [{ score1: 11, score2: 5 }],
@@ -629,7 +629,7 @@ describe('DMRRatingService', () => {
           seasonId,
         });
 
-        await service.processsinglesMatch({
+        await service.processSinglesMatch({
           winnerId: user1.id,
           loserId: user2.id,
           setScores: [{ score1: 11, score2: 5 }],
@@ -848,7 +848,7 @@ describe('DMRRatingService', () => {
 
       // Play multiple matches
       for (let i = 0; i < 5; i++) {
-        await service.processsinglesMatch({
+        await service.processSinglesMatch({
           winnerId: user1.id,
           loserId: user2.id,
           setScores: [{ score1: 11, score2: 5 }],
@@ -868,7 +868,7 @@ describe('DMRRatingService', () => {
       const user = await createTestUser();
       const opponent = await createTestUser();
 
-      await service.processsinglesMatch({
+      await service.processSinglesMatch({
         winnerId: user.id,
         loserId: opponent.id,
         setScores: [{ score1: 11, score2: 0 }],
@@ -886,7 +886,7 @@ describe('DMRRatingService', () => {
       const user = await createTestUser();
       const opponent = await createTestUser();
 
-      await service.processsinglesMatch({
+      await service.processSinglesMatch({
         winnerId: opponent.id,
         loserId: user.id,
         setScores: [{ score1: 11, score2: 0 }],
@@ -919,7 +919,7 @@ describe('DMRRatingService', () => {
 
       const opponent = await createTestUser();
 
-      await service.processsinglesMatch({
+      await service.processSinglesMatch({
         winnerId: user.id,
         loserId: opponent.id,
         setScores: [{ score1: 11, score2: 5 }],
