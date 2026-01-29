@@ -1,4 +1,5 @@
 import { prisma } from "../lib/prisma";
+import { PrismaClient } from "@prisma/client";
 import { sendEmail } from "../config/nodemailer";
 
 export interface VerifyOtpResult {
@@ -108,7 +109,8 @@ const generateRandomOTP = (): string => {
  */
 export const createAndSendOTP = async (
   email: string,
-  type: "forget-password" | "email-verification" | "sign-in" = "forget-password"
+  type: "forget-password" | "email-verification" | "sign-in" = "forget-password",
+  prismaClient: PrismaClient = prisma
 ): Promise<{ success: boolean; message: string }> => {
   try {
     const normalizedEmail = email.toLowerCase().trim();
@@ -117,7 +119,7 @@ export const createAndSendOTP = async (
 
     // 1. Invalidate any existing PENDING codes for this user
     // This prevents multiple valid codes floating around
-    await prisma.verification.updateMany({
+    await prismaClient.verification.updateMany({
       where: {
         identifier: normalizedEmail,
         status: "PENDING",
@@ -128,7 +130,7 @@ export const createAndSendOTP = async (
     });
 
     // 2. Create the new OTP
-    await prisma.verification.create({
+    await prismaClient.verification.create({
       data: {
         identifier: normalizedEmail,
         value: otp,
@@ -190,7 +192,8 @@ const extractOtpCode = (value: string): string => {
  */
 export const consumeOTP = async (
   email: string,
-  otp: string
+  otp: string,
+  prismaClient: PrismaClient = prisma
 ): Promise<VerifyOtpResult> => {
   try {
     const normalizedEmail = email.toLowerCase().trim();
@@ -202,7 +205,7 @@ export const consumeOTP = async (
 
     // Better-auth stores OTPs in format "code:period" (e.g., "123456:0")
     // We need to find by the identifier and check the code part
-    const allVerifications = await prisma.verification.findMany({
+    const allVerifications = await prismaClient.verification.findMany({
       where: {
         identifier: {
           contains: normalizedEmail,
@@ -235,7 +238,7 @@ export const consumeOTP = async (
     console.log("      ID:", verification.id);
 
     // Mark it as USED so it can't be used again
-    await prisma.verification.update({
+    await prismaClient.verification.update({
       where: { id: verification.id },
       data: { status: "USED" },
     });
@@ -267,7 +270,8 @@ export const consumeOTP = async (
  */
 export const verifyResetOTP = async (
   email: string,
-  otp: string
+  otp: string,
+  prismaClient: PrismaClient = prisma
 ): Promise<VerifyOtpResult> => {
   try {
     const normalizedEmail = email.toLowerCase().trim();
@@ -295,7 +299,7 @@ export const verifyResetOTP = async (
     // - "forget-password-{email}" for password reset
     // - Just "{email}" for sign-in
     // We need to search for pending OTPs that match the email pattern
-    const allVerifications = await prisma.verification.findMany({
+    const allVerifications = await prismaClient.verification.findMany({
       where: {
         identifier: {
           contains: normalizedEmail,
@@ -338,7 +342,7 @@ export const verifyResetOTP = async (
       recordFailedAttempt(normalizedEmail);
 
       // Check if there's an expired OTP to give better feedback
-      const expiredVerifications = await prisma.verification.findMany({
+      const expiredVerifications = await prismaClient.verification.findMany({
         where: {
           identifier: {
             contains: normalizedEmail,
