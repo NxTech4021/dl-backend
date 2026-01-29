@@ -62,6 +62,7 @@ describe('NotificationService', () => {
       const result = await service.createNotification({
         userIds: [user.id],
         category: GENERAL_CATEGORY,
+        type: 'WELCOME_TO_DEUCE', // Type required for IN_APP delivery
         title: 'Test Notification',
         message: 'This is a test message',
       });
@@ -83,6 +84,7 @@ describe('NotificationService', () => {
       const result = await service.createNotification({
         userIds: [user1.id, user2.id],
         category: MATCH_CATEGORY,
+        type: 'FRIENDLY_MATCH_POSTED', // Type required for IN_APP delivery
         title: 'Match Notification',
         message: 'You have a new match',
       });
@@ -132,6 +134,7 @@ describe('NotificationService', () => {
       const result = await service.createNotification({
         userIds: [user.id, nonExistentUserId],
         category: GENERAL_CATEGORY,
+        type: 'WELCOME_TO_DEUCE', // Type required for IN_APP delivery
         title: 'Test',
         message: 'Test message',
       });
@@ -146,6 +149,7 @@ describe('NotificationService', () => {
         service.createNotification({
           userIds: [],
           category: GENERAL_CATEGORY,
+          type: 'WELCOME_TO_DEUCE', // Type required for IN_APP delivery
           title: 'Test',
           message: 'Test message',
         })
@@ -175,6 +179,7 @@ describe('NotificationService', () => {
         await service.createNotification({
           userIds: [user.id],
           category: GENERAL_CATEGORY,
+          type: 'WELCOME_TO_DEUCE', // Type required for IN_APP delivery
           title: `Notification ${i + 1}`,
           message: `Message ${i + 1}`,
         });
@@ -556,18 +561,21 @@ describe('NotificationService', () => {
       const [notif1] = await service.createNotification({
         userIds: [user.id],
         category: GENERAL_CATEGORY,
+        type: 'WELCOME_TO_DEUCE', // Type required for IN_APP delivery
         title: 'Test 1',
         message: 'Msg 1',
       });
       const [notif2] = await service.createNotification({
         userIds: [user.id],
         category: GENERAL_CATEGORY,
+        type: 'WELCOME_TO_DEUCE', // Type required for IN_APP delivery
         title: 'Test 2',
         message: 'Msg 2',
       });
       const [notif3] = await service.createNotification({
         userIds: [user.id],
         category: GENERAL_CATEGORY,
+        type: 'WELCOME_TO_DEUCE', // Type required for IN_APP delivery
         title: 'Test 3',
         message: 'Msg 3',
       });
