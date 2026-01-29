@@ -12,7 +12,7 @@ import {
   createTestSeason,
   createTestDivision,
 } from '../../helpers/factories';
-import { PairRequestStatus } from '@prisma/client';
+import { PairRequestStatus, GameType } from '@prisma/client';
 
 // Mock notification service to prevent actual notifications
 jest.mock('../../../src/services/notificationService', () => ({
@@ -83,26 +83,137 @@ describe('PairingService', () => {
       expect(rating).toBe(0);
     });
 
-    // Note: These tests are skipped because pairingService.calculatePairRating uses
-    // the global prisma client, which cannot see data created in prismaTest transaction.
-    it.skip('should calculate average rating from singles ratings', async () => {
-      // This test requires questionnaire responses created via prismaTest,
-      // but the service uses global prisma which can't see them.
+    // These tests use dependency injection to pass prismaTest to the service
+    // Note: The first test 'should return 0 when no questionnaire responses exist'
+    // already validates DI is working (returns 0 for non-existent data).
+    // These tests verify ratings are found when questionnaire data exists.
+
+    it('should calculate rating from user with questionnaire response', async () => {
+      // Arrange - Create a single user with questionnaire response
       const user1 = await createTestUser();
-      const user2 = await createTestUser();
-      const { season } = await createFutureSeason();
-      const rating = await pairingService.calculatePairRating(user1.id, user2.id, season.id);
-      expect(rating).toBe(1400);
+      const user2 = await createTestUser(); // No questionnaire for user2
+
+      // Create category with gameType (SINGLES/DOUBLES enum)
+      const category = await prismaTest.category.create({
+        data: {
+          name: 'Test Category',
+          gameType: GameType.DOUBLES,
+          isActive: true,
+        },
+      });
+
+      // Create season with category
+      const futureDate = new Date();
+      futureDate.setMonth(futureDate.getMonth() + 2);
+
+      const season = await prismaTest.season.create({
+        data: {
+          name: `Rating Test Season ${Date.now()}`,
+          startDate: futureDate,
+          endDate: new Date(futureDate.getTime() + 90 * 24 * 60 * 60 * 1000),
+          entryFee: 50,
+          status: 'UPCOMING',
+          isActive: false,
+          categoryId: category.id,
+        },
+      });
+
+      // Create questionnaire response only for user1
+      const response1 = await prismaTest.questionnaireResponse.create({
+        data: {
+          userId: user1.id,
+          sport: 'doubles',
+          qVersion: 1,
+          qHash: 'test-hash-single',
+          answersJson: {},
+          completedAt: new Date(),
+        },
+      });
+
+      await prismaTest.initialRatingResult.create({
+        data: {
+          responseId: response1.id,
+          source: 'questionnaire',
+          singles: 1500,
+          doubles: null,
+        },
+      });
+
+      // Act - Pass prismaTest as the client
+      const rating = await pairingService.calculatePairRating(
+        user1.id,
+        user2.id,
+        season.id,
+        prismaTest as any
+      );
+
+      // Assert - Should find user1's rating (1500), user2 has 0
+      // Average = (1500 + 0) / 2 = 750
+      expect(rating).toBe(750);
     });
 
-    it.skip('should prefer doubles rating over singles', async () => {
-      // This test requires questionnaire responses created via prismaTest,
-      // but the service uses global prisma which can't see them.
+    it('should prefer doubles rating over singles when both exist', async () => {
+      // Arrange - Create user with both singles and doubles ratings
       const user1 = await createTestUser();
-      const user2 = await createTestUser();
-      const { season } = await createFutureSeason();
-      const rating = await pairingService.calculatePairRating(user1.id, user2.id, season.id);
-      expect(rating).toBe(1500);
+      const user2 = await createTestUser(); // No questionnaire for user2
+
+      // Create category with gameType
+      const category = await prismaTest.category.create({
+        data: {
+          name: 'Doubles Test Category',
+          gameType: GameType.DOUBLES,
+          isActive: true,
+        },
+      });
+
+      // Create season with category
+      const futureDate = new Date();
+      futureDate.setMonth(futureDate.getMonth() + 2);
+
+      const season = await prismaTest.season.create({
+        data: {
+          name: `Doubles Rating Test Season ${Date.now()}`,
+          startDate: futureDate,
+          endDate: new Date(futureDate.getTime() + 90 * 24 * 60 * 60 * 1000),
+          entryFee: 50,
+          status: 'UPCOMING',
+          isActive: false,
+          categoryId: category.id,
+        },
+      });
+
+      // Create questionnaire response with both singles AND doubles ratings
+      const response1 = await prismaTest.questionnaireResponse.create({
+        data: {
+          userId: user1.id,
+          sport: 'doubles',
+          qVersion: 1,
+          qHash: 'doubles-test-hash',
+          answersJson: {},
+          completedAt: new Date(),
+        },
+      });
+
+      await prismaTest.initialRatingResult.create({
+        data: {
+          responseId: response1.id,
+          source: 'questionnaire',
+          singles: 1200,  // Lower singles rating
+          doubles: 1600,  // Higher doubles rating - should be used
+        },
+      });
+
+      // Act - Pass prismaTest as the client
+      const rating = await pairingService.calculatePairRating(
+        user1.id,
+        user2.id,
+        season.id,
+        prismaTest as any
+      );
+
+      // Assert - Should use doubles rating (1600), not singles (1200)
+      // Average = (1600 + 0) / 2 = 800
+      expect(rating).toBe(800);
     });
   });
 
