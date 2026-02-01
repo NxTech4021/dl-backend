@@ -209,20 +209,17 @@ export class SeasonService {
             id: true,
             name: true,
             level: true,
-            maxTeams: true,
-            minRating: true,
-            maxRating: true,
-            isActive: true,
+            maxSinglesPlayers: true,
+            maxDoublesTeams: true,
+            isActiveDivision: true,
           }
         },
         promoCodes: {
           select: {
             id: true,
             code: true,
-            discountType: true,
             discountValue: true,
-            maxUses: true,
-            currentUses: true,
+            isPercentage: true,
             isActive: true,
             expiresAt: true,
           }
@@ -232,8 +229,8 @@ export class SeasonService {
             id: true,
             status: true,
             reason: true,
+            requestDate: true,
             createdAt: true,
-            processedAt: true,
             user: {
               select: {
                 id: true,
@@ -253,14 +250,13 @@ export class SeasonService {
         waitlist: {
           select: {
             id: true,
-            maxSize: true,
-            isActive: true,
+            maxParticipants: true,
+            enabled: true,
             waitlistedUsers: {
               select: {
                 id: true,
                 userId: true,
-                position: true,
-                joinedAt: true,
+                waitlistDate: true,
               }
             },
           },

@@ -38,3 +38,16 @@ export {
   createWalkoverMatch,
   type CreateMatchOptions,
 } from './matchFactory';
+
+// Notification factories
+export {
+  createTestNotification,
+  createTestNotifications,
+  createUnreadNotification,
+  createReadNotification,
+  createArchivedNotification,
+  createMatchNotification,
+  createPartnershipNotification,
+  createOldNotification,
+  type CreateNotificationOptions,
+} from './notificationFactory';

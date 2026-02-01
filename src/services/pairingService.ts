@@ -1,5 +1,5 @@
 import { prisma } from '../lib/prisma';
-import { PairRequestStatus } from '@prisma/client';
+import { PrismaClient, PairRequestStatus } from '@prisma/client';
 import { enrichPlayerWithSkills } from './player/utils/playerTransformer';
 import { notificationTemplates } from '../helpers/notifications';
 import { notificationService } from './notificationService';
@@ -28,11 +28,12 @@ interface PairRequestResponse {
 export const calculatePairRating = async (
   player1Id: string,
   player2Id: string,
-  seasonId: string
+  seasonId: string,
+  prismaClient: PrismaClient = prisma
 ): Promise<number> => {
   try {
     // Get season details to know which sport
-    const season = await prisma.season.findUnique({
+    const season = await prismaClient.season.findUnique({
       where: { id: seasonId },
       select: {
         categoryId: true
@@ -44,7 +45,7 @@ export const calculatePairRating = async (
     }
 
     // Get category to find game type
-    const category = season.categoryId ? await prisma.category.findUnique({
+    const category = season.categoryId ? await prismaClient.category.findUnique({
       where: { id: season.categoryId },
       select: { gameType: true }
     }) : null;
@@ -53,7 +54,7 @@ export const calculatePairRating = async (
 
     // Get questionnaire responses for both players for this sport
     const [player1Response, player2Response] = await Promise.all([
-      prisma.questionnaireResponse.findFirst({
+      prismaClient.questionnaireResponse.findFirst({
         where: {
           userId: player1Id,
           sport: {
@@ -64,7 +65,7 @@ export const calculatePairRating = async (
         },
         include: { result: true },
       }),
-      prisma.questionnaireResponse.findFirst({
+      prismaClient.questionnaireResponse.findFirst({
         where: {
           userId: player2Id,
           sport: {

@@ -71,10 +71,8 @@ export async function createTestAdmin(options: CreateUserOptions = {}) {
 
   const admin = await prismaTest.admin.create({
     data: {
-      userId: user.id,
+      user: { connect: { id: user.id } },
       status: 'ACTIVE',
-      fullName: user.name,
-      designation: 'Test Admin',
     },
   });
 
