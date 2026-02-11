@@ -7,6 +7,7 @@ import {
   getSeasonInvitations,
   getPendingSeasonInvitation
 } from '../services/seasonInvitationService';
+import { sendSuccess, sendError } from '../utils/response';
 
 /**
  * POST /api/pairing/season/invitation
@@ -16,15 +17,13 @@ export const sendSeasonInvitationHandler = async (req: Request, res: Response) =
   try {
     const userId = req.user?.id;
     if (!userId) {
-      return res.status(401).json({ error: 'Unauthorized' });
+      return sendError(res, 'Unauthorized', 401);
     }
 
     const { recipientId, seasonId, message } = req.body;
 
     if (!recipientId || !seasonId) {
-      return res.status(400).json({
-        error: 'Recipient ID and season ID are required'
-      });
+      return sendError(res, 'Recipient ID and season ID are required', 400);
     }
 
     const result = await sendSeasonInvitation({
@@ -35,16 +34,13 @@ export const sendSeasonInvitationHandler = async (req: Request, res: Response) =
     });
 
     if (!result.success) {
-      return res.status(400).json({ error: result.message });
+      return sendError(res, result.message, 400);
     }
 
-    return res.status(201).json({
-      message: result.message,
-      data: result.data
-    });
+    return sendSuccess(res, result.data, result.message, 201);
   } catch (error) {
     console.error('Error in sendSeasonInvitationHandler:', error);
-    return res.status(500).json({ error: 'Internal server error' });
+    return sendError(res, 'Internal server error');
   }
 };
 
@@ -56,29 +52,25 @@ export const acceptSeasonInvitationHandler = async (req: Request, res: Response)
   try {
     const userId = req.user?.id;
     if (!userId) {
-      return res.status(401).json({ error: 'Unauthorized' });
+      return sendError(res, 'Unauthorized', 401);
     }
 
     const { invitationId } = req.params;
 
     if (!invitationId) {
-      return res.status(400).json({ error: 'Invitation ID is required' });
+      return sendError(res, 'Invitation ID is required', 400);
     }
 
     const result = await acceptSeasonInvitation(invitationId, userId);
 
     if (!result.success) {
-      return res.status(400).json({ error: result.message });
+      return sendError(res, result.message, 400);
     }
 
-    return res.status(200).json({
-      success: true,
-      message: result.message,
-      data: result.data
-    });
+    return sendSuccess(res, result.data, result.message);
   } catch (error) {
     console.error('Error in acceptSeasonInvitationHandler:', error);
-    return res.status(500).json({ error: 'Internal server error' });
+    return sendError(res, 'Internal server error');
   }
 };
 
@@ -90,25 +82,25 @@ export const denySeasonInvitationHandler = async (req: Request, res: Response) =
   try {
     const userId = req.user?.id;
     if (!userId) {
-      return res.status(401).json({ error: 'Unauthorized' });
+      return sendError(res, 'Unauthorized', 401);
     }
 
     const { invitationId } = req.params;
 
     if (!invitationId) {
-      return res.status(400).json({ error: 'Invitation ID is required' });
+      return sendError(res, 'Invitation ID is required', 400);
     }
 
     const result = await denySeasonInvitation(invitationId, userId);
 
     if (!result.success) {
-      return res.status(400).json({ error: result.message });
+      return sendError(res, result.message, 400);
     }
 
-    return res.status(200).json({ success: true, message: result.message });
+    return sendSuccess(res, null, result.message);
   } catch (error) {
     console.error('Error in denySeasonInvitationHandler:', error);
-    return res.status(500).json({ error: 'Internal server error' });
+    return sendError(res, 'Internal server error');
   }
 };
 
@@ -120,25 +112,25 @@ export const cancelSeasonInvitationHandler = async (req: Request, res: Response)
   try {
     const userId = req.user?.id;
     if (!userId) {
-      return res.status(401).json({ error: 'Unauthorized' });
+      return sendError(res, 'Unauthorized', 401);
     }
 
     const { invitationId } = req.params;
 
     if (!invitationId) {
-      return res.status(400).json({ error: 'Invitation ID is required' });
+      return sendError(res, 'Invitation ID is required', 400);
     }
 
     const result = await cancelSeasonInvitation(invitationId, userId);
 
     if (!result.success) {
-      return res.status(400).json({ error: result.message });
+      return sendError(res, result.message, 400);
     }
 
-    return res.status(200).json({ message: result.message });
+    return sendSuccess(res, null, result.message);
   } catch (error) {
     console.error('Error in cancelSeasonInvitationHandler:', error);
-    return res.status(500).json({ error: 'Internal server error' });
+    return sendError(res, 'Internal server error');
   }
 };
 
@@ -150,15 +142,15 @@ export const getSeasonInvitationsHandler = async (req: Request, res: Response) =
   try {
     const userId = req.user?.id;
     if (!userId) {
-      return res.status(401).json({ error: 'Unauthorized' });
+      return sendError(res, 'Unauthorized', 401);
     }
 
     const invitations = await getSeasonInvitations(userId);
 
-    return res.status(200).json({ data: invitations });
+    return sendSuccess(res, invitations);
   } catch (error) {
     console.error('Error in getSeasonInvitationsHandler:', error);
-    return res.status(500).json({ error: 'Internal server error' });
+    return sendError(res, 'Internal server error');
   }
 };
 
@@ -170,20 +162,20 @@ export const getPendingSeasonInvitationHandler = async (req: Request, res: Respo
   try {
     const userId = req.user?.id;
     if (!userId) {
-      return res.status(401).json({ error: 'Unauthorized' });
+      return sendError(res, 'Unauthorized', 401);
     }
 
     const { seasonId } = req.params;
 
     if (!seasonId) {
-      return res.status(400).json({ error: 'Season ID is required' });
+      return sendError(res, 'Season ID is required', 400);
     }
 
     const invitation = await getPendingSeasonInvitation(userId, seasonId);
 
-    return res.status(200).json({ data: invitation });
+    return sendSuccess(res, invitation);
   } catch (error) {
     console.error('Error in getPendingSeasonInvitationHandler:', error);
-    return res.status(500).json({ error: 'Internal server error' });
+    return sendError(res, 'Internal server error');
   }
 };
