@@ -2,7 +2,7 @@
 import { prisma } from "../lib/prisma";
 import { Request, Response, NextFunction, RequestHandler } from "express";
 import { auth } from "../lib/auth";
-import { ApiResponse } from "../utils/ApiResponse";
+import { sendError } from "../utils/response";
 import { Role } from "@prisma/client";
 
 // Extend the Express Request interface instead of creating a new one
@@ -69,7 +69,7 @@ export const verifyAuth: RequestHandler = async (req, res, next) => {
 
     if (!userId) {
       console.log('🔐 verifyAuth: No valid authentication method found');
-      return res.status(401).json({ success: false, message: "Unauthorized" });
+      return sendError(res, "Unauthorized", 401);
     }
 
     // Fetch user from database
@@ -87,7 +87,7 @@ export const verifyAuth: RequestHandler = async (req, res, next) => {
 
     if (!user) {
       console.log('🔐 verifyAuth: User not found in database:', userId);
-      return res.status(401).json({ success: false, message: "Unauthorized" });
+      return sendError(res, "Unauthorized", 401);
     }
 
     let adminId: string | undefined;
@@ -108,9 +108,7 @@ export const verifyAuth: RequestHandler = async (req, res, next) => {
     next();
   } catch (error) {
     console.error("🔐 verifyAuth: Authentication error:", error);
-    return res
-      .status(401)
-      .json({ success: false, message: "Invalid authentication" });
+    return sendError(res, "Invalid authentication", 401);
   }
 };
 
@@ -167,15 +165,11 @@ export const requireAdmin: RequestHandler = async (
   next: NextFunction
 ) => {
   if (!req.user) {
-    return res
-      .status(401)
-      .json(new ApiResponse(false, 401, null, "Authentication required"));
+    return sendError(res, "Authentication required", 401);
   }
 
   if (req.user.role === "USER") {
-    return res
-      .status(403)
-      .json(new ApiResponse(false, 403, null, "Admin access required"));
+    return sendError(res, "Admin access required", 403);
   }
 
   next();
@@ -188,15 +182,11 @@ export const requireSuperAdmin: RequestHandler = async (
   next: NextFunction
 ) => {
   if (!req.user) {
-    return res
-      .status(401)
-      .json(new ApiResponse(false, 401, null, "Authentication required"));
+    return sendError(res, "Authentication required", 401);
   }
 
   if (req.user.role !== "SUPERADMIN") {
-    return res
-      .status(403)
-      .json(new ApiResponse(false, 403, null, "Super admin access required"));
+    return sendError(res, "Super admin access required", 403);
   }
 
   next();
