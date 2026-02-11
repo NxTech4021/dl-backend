@@ -4,6 +4,7 @@ import { NotificationType, NOTIFICATION_TYPES } from '../types/notificationTypes
 import { notificationService } from '../services/notificationService';
 import { prisma } from '../lib/prisma';
 import { Expo } from 'expo-server-sdk';
+import { sendSuccess, sendError, sendPaginated } from '../utils/response';
 
 // Validate Expo push token format
 function isValidExpoPushToken(token: string): boolean {
@@ -15,7 +16,7 @@ export const getUserNotifications = async (req: Request, res: Response) => {
   try {
     const userId = req.user?.id;
     if (!userId) {
-      return res.status(401).json({ error: 'Unauthorized' });
+      return sendError(res, 'Unauthorized', 401);
     }
 
     const {
@@ -35,9 +36,7 @@ export const getUserNotifications = async (req: Request, res: Response) => {
       try {
         parsedCategories = JSON.parse(categories);
       } catch (error) {
-        return res.status(400).json({ 
-          error: 'Invalid categories format. Expected JSON array.' 
-        });
+        return sendError(res, 'Invalid categories format. Expected JSON array.', 400);
       }
     }
 
@@ -47,9 +46,7 @@ export const getUserNotifications = async (req: Request, res: Response) => {
       try {
         parsedTypes = JSON.parse(types);
       } catch (error) {
-        return res.status(400).json({ 
-          error: 'Invalid types format. Expected JSON array.' 
-        });
+        return sendError(res, 'Invalid types format. Expected JSON array.', 400);
       }
     }
 
@@ -59,21 +56,15 @@ export const getUserNotifications = async (req: Request, res: Response) => {
       unreadOnly: unreadOnly === 'true',
       archived: archived === 'true',
       category: category as NotificationCategory,
-      categories: parsedCategories || [], 
+      categories: parsedCategories || [],
       type: type as NotificationType,
       types: parsedTypes,
     });
 
-    res.json({
-      success: true,
-      data: result,
-    });
+    sendPaginated(res, result.notifications, result.pagination);
   } catch (error) {
     console.error('Error getting notifications:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to get notifications',
-    });
+    sendError(res, 'Failed to get notifications');
   }
 };
 
@@ -84,25 +75,19 @@ export const markNotificationAsRead = async (req: Request, res: Response) => {
     const { id } = req.params;
 
     if (!userId) {
-      return res.status(401).json({ error: 'Unauthorized' });
+      return sendError(res, 'Unauthorized', 401);
     }
 
     if (!id) {
-      return res.status(400).json({ error: 'Notification ID is required' });
+      return sendError(res, 'Notification ID is required', 400);
     }
 
     await notificationService.markAsRead(id, userId);
 
-    res.json({
-      success: true,
-      message: 'Notification marked as read',
-    });
+    sendSuccess(res, null, 'Notification marked as read');
   } catch (error) {
     console.error('Error marking notification as read:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to mark notification as read',
-    });
+    sendError(res, 'Failed to mark notification as read');
   }
 };
 
@@ -112,22 +97,15 @@ export const markAllNotificationsAsRead = async (req: Request, res: Response) =>
     const userId = req.user?.id;
 
     if (!userId) {
-      return res.status(401).json({ error: 'Unauthorized' });
+      return sendError(res, 'Unauthorized', 401);
     }
 
     const result = await notificationService.markAllAsRead(userId);
 
-    res.json({
-      success: true,
-      message: `${result.count} notifications marked as read`,
-      data: { updatedCount: result.count },
-    });
+    sendSuccess(res, { updatedCount: result.count }, `${result.count} notifications marked as read`);
   } catch (error) {
     console.error('Error marking all notifications as read:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to mark all notifications as read',
-    });
+    sendError(res, 'Failed to mark all notifications as read');
   }
 };
 
@@ -138,25 +116,19 @@ export const deleteNotification = async (req: Request, res: Response) => {
     const { id } = req.params;
 
     if (!userId) {
-      return res.status(401).json({ error: 'Unauthorized' });
+      return sendError(res, 'Unauthorized', 401);
     }
 
     if (!id) {
-      return res.status(400).json({ error: 'Notification ID is required' });
+      return sendError(res, 'Notification ID is required', 400);
     }
 
     await notificationService.deleteNotification(id, userId);
 
-    res.json({
-      success: true,
-      message: 'Notification archived',
-    });
+    sendSuccess(res, null, 'Notification archived');
   } catch (error) {
     console.error('Error archiving notification:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to archive notification',
-    });
+    sendError(res, 'Failed to archive notification');
   }
 };
 
@@ -166,21 +138,15 @@ export const getUnreadCount = async (req: Request, res: Response) => {
     const userId = req.user?.id;
 
     if (!userId) {
-      return res.status(401).json({ error: 'Unauthorized' });
+      return sendError(res, 'Unauthorized', 401);
     }
 
     const count = await notificationService.getUnreadCount(userId);
 
-    res.json({
-      success: true,
-      data: { unreadCount: count },
-    });
+    sendSuccess(res, { unreadCount: count });
   } catch (error) {
     console.error('Error getting unread count:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to get unread count',
-    });
+    sendError(res, 'Failed to get unread count');
   }
 };
 
@@ -192,10 +158,7 @@ export const getNotificationsByCategory = async (req: Request, res: Response) =>
     const { limit = 100 } = req.query;
 
     if (!category || !Object.values(NotificationCategory).includes(category as NotificationCategory)) {
-      return res.status(400).json({ 
-        error: 'Valid notification category is required',
-        validCategories: Object.values(NotificationCategory),
-      });
+      return sendError(res, 'Valid notification category is required', 400);
     }
 
     const notifications = await notificationService.getNotificationsByCategory(
@@ -203,16 +166,10 @@ export const getNotificationsByCategory = async (req: Request, res: Response) =>
       Number(limit)
     );
 
-    res.json({
-      success: true,
-      data: notifications,
-    });
+    sendSuccess(res, notifications);
   } catch (error) {
     console.error('Error getting notifications by category:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to get notifications by category',
-    });
+    sendError(res, 'Failed to get notifications by category');
   }
 };
 
@@ -237,22 +194,15 @@ export const sendTestNotification = async (req: Request, res: Response) => {
 
     // Validation
     if (!userIds || (!Array.isArray(userIds) && typeof userIds !== 'string')) {
-      return res.status(400).json({
-        error: 'userIds is required (string or array of strings)',
-      });
+      return sendError(res, 'userIds is required (string or array of strings)', 400);
     }
 
     if (!category || !Object.values(NotificationCategory).includes(category)) {
-      return res.status(400).json({
-        error: 'Valid notification category is required',
-        validCategories: Object.values(NotificationCategory),
-      });
+      return sendError(res, 'Valid notification category is required', 400);
     }
 
     if (!message) {
-      return res.status(400).json({
-        error: 'message is required',
-      });
+      return sendError(res, 'message is required', 400);
     }
 
     const result = await notificationService.createNotification({
@@ -270,17 +220,10 @@ export const sendTestNotification = async (req: Request, res: Response) => {
       withdrawalRequestId,
     });
 
-    res.json({
-      success: true,
-      data: result,
-      message: `Test notification sent to ${Array.isArray(userIds) ? userIds.length : 1} user(s)`,
-    });
+    sendSuccess(res, result, `Test notification sent to ${Array.isArray(userIds) ? userIds.length : 1} user(s)`);
   } catch (error) {
     console.error('Error sending test notification:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to send test notification',
-    });
+    sendError(res, 'Failed to send test notification');
   }
 };
 
@@ -291,26 +234,22 @@ export const registerPushToken = async (req: Request, res: Response) => {
     const userId = req.user?.id;
 
     if (!userId) {
-      return res.status(401).json({ error: 'Authentication required - valid session needed' });
+      return sendError(res, 'Authentication required - valid session needed', 401);
     }
 
     const { token, platform = "android", deviceId } = req.body;
 
     if (!token) {
-      return res.status(400).json({ error: 'Push token is required' });
+      return sendError(res, 'Push token is required', 400);
     }
 
     if (!platform || !['ios', 'android', 'web'].includes(platform)) {
-      return res.status(400).json({
-        error: 'Valid platform is required (ios, android, or web)'
-      });
+      return sendError(res, 'Valid platform is required (ios, android, or web)', 400);
     }
 
     // Validate Expo push token format before storing
     if (!isValidExpoPushToken(token)) {
-      return res.status(400).json({
-        error: 'Invalid push token format. Expected Expo push token format (ExponentPushToken[...] or ExpoPushToken[...])'
-      });
+      return sendError(res, 'Invalid push token format. Expected Expo push token format (ExponentPushToken[...] or ExpoPushToken[...])', 400);
     }
 
     // Verify user exists in database
@@ -320,7 +259,7 @@ export const registerPushToken = async (req: Request, res: Response) => {
     });
 
     if (!user) {
-      return res.status(404).json({ error: 'User not found' });
+      return sendError(res, 'User not found', 404);
     }
 
     // Upsert push token - update if exists, create if not
@@ -343,22 +282,15 @@ export const registerPushToken = async (req: Request, res: Response) => {
       },
     });
 
-    res.json({
-      success: true,
-      message: 'Push token registered successfully',
-      data: {
-        id: pushToken.id,
-        platform: pushToken.platform,
-        isActive: pushToken.isActive,
-        userId: pushToken.userId, // Added for debugging
-      },
-    });
+    sendSuccess(res, {
+      id: pushToken.id,
+      platform: pushToken.platform,
+      isActive: pushToken.isActive,
+      userId: pushToken.userId, // Added for debugging
+    }, 'Push token registered successfully');
   } catch (error) {
     console.error('Error registering push token:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to register push token',
-    });
+    sendError(res, 'Failed to register push token');
   }
 };
 
@@ -367,13 +299,13 @@ export const unregisterPushToken = async (req: Request, res: Response) => {
   try {
     const userId = req.user?.id;
     if (!userId) {
-      return res.status(401).json({ error: 'Unauthorized' });
+      return sendError(res, 'Unauthorized', 401);
     }
 
     const { token } = req.body;
 
     if (!token) {
-      return res.status(400).json({ error: 'Push token is required' });
+      return sendError(res, 'Push token is required', 400);
     }
 
     // Deactivate the token instead of deleting (for audit trail)
@@ -387,16 +319,10 @@ export const unregisterPushToken = async (req: Request, res: Response) => {
       },
     });
 
-    res.json({
-      success: true,
-      message: 'Push token unregistered successfully',
-    });
+    sendSuccess(res, null, 'Push token unregistered successfully');
   } catch (error) {
     console.error('Error unregistering push token:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to unregister push token',
-    });
+    sendError(res, 'Failed to unregister push token');
   }
 };
 
@@ -405,7 +331,7 @@ export const getUserPushTokens = async (req: Request, res: Response) => {
   try {
     const userId = req.user?.id;
     if (!userId) {
-      return res.status(401).json({ error: 'Unauthorized' });
+      return sendError(res, 'Unauthorized', 401);
     }
 
     const tokens = await prisma.userPushToken.findMany({
@@ -422,16 +348,10 @@ export const getUserPushTokens = async (req: Request, res: Response) => {
       },
     });
 
-    res.json({
-      success: true,
-      data: tokens,
-    });
+    sendSuccess(res, tokens);
   } catch (error) {
     console.error('Error getting push tokens:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to get push tokens',
-    });
+    sendError(res, 'Failed to get push tokens');
   }
 };
 
@@ -455,22 +375,15 @@ export const sendTestLocalNotification = async (req: Request, res: Response) => 
 
     // Validation
     if (!userIds || (!Array.isArray(userIds) && typeof userIds !== 'string')) {
-      return res.status(400).json({
-        error: 'userIds is required (string or array of strings)',
-      });
+      return sendError(res, 'userIds is required (string or array of strings)', 400);
     }
 
     if (!category || !Object.values(NotificationCategory).includes(category)) {
-      return res.status(400).json({
-        error: 'Valid notification category is required',
-        validCategories: Object.values(NotificationCategory),
-      });
+      return sendError(res, 'Valid notification category is required', 400);
     }
 
     if (!message) {
-      return res.status(400).json({
-        error: 'message is required',
-      });
+      return sendError(res, 'message is required', 400);
     }
 
     const result = await notificationService.createNotification({
@@ -488,18 +401,10 @@ export const sendTestLocalNotification = async (req: Request, res: Response) => 
       withdrawalRequestId,
     });
 
-    res.json({
-      success: true,
-      data: result,
-      message: `Local notification created for ${Array.isArray(userIds) ? userIds.length : 1} user(s)`,
-      type: 'LOCAL_IN_APP',
-    });
+    sendSuccess(res, { ...result, type: 'LOCAL_IN_APP' }, `Local notification created for ${Array.isArray(userIds) ? userIds.length : 1} user(s)`);
   } catch (error) {
     console.error('Error sending local notification:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to send local notification',
-    });
+    sendError(res, 'Failed to send local notification');
   }
 };
 
@@ -509,7 +414,7 @@ export const sendTestPushNotification = async (req: Request, res: Response) => {
     const { userIds, title, message, data } = req.body;
 
     if (!userIds || !title || !message) {
-      return res.status(400).json({ error: 'Missing required fields: userIds, title, message' });
+      return sendError(res, 'Missing required fields: userIds, title, message', 400);
     }
 
     // Ensure userIds is an array
@@ -524,10 +429,7 @@ export const sendTestPushNotification = async (req: Request, res: Response) => {
     });
 
     if (pushTokens.length === 0) {
-      return res.status(400).json({ 
-        error: 'No active push tokens found',
-        userIds: userIdArray,
-      });
+      return sendError(res, 'No active push tokens found', 400);
     }
 
     // Send to Expo push service directly
@@ -553,24 +455,17 @@ export const sendTestPushNotification = async (req: Request, res: Response) => {
       }
     }
 
-    res.json({
-      success: true,
-      message: 'Push notification sent',
+    sendSuccess(res, {
       type: 'PUSH_NOTIFICATION',
       tokensAttempted: pushTokens.length,
       results,
-      data: {
-        title,
-        message,
-        userIds: userIdArray,
-        tokenCount: pushTokens.length,
-      },
-    });
+      title,
+      message,
+      userIds: userIdArray,
+      tokenCount: pushTokens.length,
+    }, 'Push notification sent');
   } catch (error) {
     console.error('Error sending push notification:', error);
-    res.status(500).json({ 
-      success: false,
-      error: 'Failed to send push notification',
-    });
+    sendError(res, 'Failed to send push notification');
   }
 };
