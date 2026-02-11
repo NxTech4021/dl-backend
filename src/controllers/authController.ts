@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import { verifyResetOTP } from "../services/authService";
-import { ApiResponse } from "../utils/ApiResponse";
+import { sendSuccess, sendError } from "../utils/response";
 import { prisma } from "../lib/prisma";
 
 /**
@@ -22,60 +22,44 @@ export const verifyResetOtp = async (req: Request, res: Response) => {
 
     // Validate required fields
     if (!email || typeof email !== "string") {
-      return res.status(400).json(
-        new ApiResponse(false, 400, null, "Email is required")
-      );
+      return sendError(res, "Email is required", 400);
     }
 
     if (!otp || typeof otp !== "string") {
-      return res.status(400).json(
-        new ApiResponse(false, 400, null, "Verification code is required")
-      );
+      return sendError(res, "Verification code is required", 400);
     }
 
     // Email length validation (prevent DoS via long strings)
     const MAX_EMAIL_LENGTH = 255;
     if (email.length > MAX_EMAIL_LENGTH) {
-      return res.status(400).json(
-        new ApiResponse(false, 400, null, "Email address is too long")
-      );
+      return sendError(res, "Email address is too long", 400);
     }
 
     // Basic email format validation
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email.trim())) {
-      return res.status(400).json(
-        new ApiResponse(false, 400, null, "Invalid email format")
-      );
+      return sendError(res, "Invalid email format", 400);
     }
 
     // OTP should be 6 digits
     const otpRegex = /^\d{6}$/;
     if (!otpRegex.test(otp.trim())) {
-      return res.status(400).json(
-        new ApiResponse(false, 400, null, "Invalid verification code format")
-      );
+      return sendError(res, "Invalid verification code format", 400);
     }
 
     // Verify the OTP
     const result = await verifyResetOTP(email.trim(), otp.trim());
 
     if (result.success) {
-      return res.status(200).json(
-        new ApiResponse(true, 200, { verified: true }, result.message)
-      );
+      return sendSuccess(res, { verified: true }, result.message);
     }
 
     // Return appropriate error based on the code
     const statusCode = result.code === "INTERNAL_ERROR" ? 500 : 400;
-    return res.status(statusCode).json(
-      new ApiResponse(false, statusCode, { code: result.code }, result.message)
-    );
+    return sendError(res, result.message, statusCode);
   } catch (error) {
     console.error("Verify reset OTP error:", error);
-    return res.status(500).json(
-      new ApiResponse(false, 500, null, "Something went wrong. Please try again.")
-    );
+    return sendError(res, "Something went wrong. Please try again.", 500);
   }
 };
 
@@ -97,9 +81,7 @@ export const checkEmailAvailability = async (req: Request, res: Response) => {
 
     // Validate email
     if (!email || typeof email !== "string") {
-      return res.status(400).json(
-        new ApiResponse(false, 400, null, "Email is required")
-      );
+      return sendError(res, "Email is required", 400);
     }
 
     const trimmedEmail = email.trim().toLowerCase();
@@ -107,17 +89,13 @@ export const checkEmailAvailability = async (req: Request, res: Response) => {
     // Email length validation
     const MAX_EMAIL_LENGTH = 255;
     if (trimmedEmail.length > MAX_EMAIL_LENGTH) {
-      return res.status(400).json(
-        new ApiResponse(false, 400, null, "Email address is too long")
-      );
+      return sendError(res, "Email address is too long", 400);
     }
 
     // Basic email format validation
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(trimmedEmail)) {
-      return res.status(400).json(
-        new ApiResponse(false, 400, null, "Invalid email format")
-      );
+      return sendError(res, "Invalid email format", 400);
     }
 
     // Check if email exists
@@ -128,19 +106,14 @@ export const checkEmailAvailability = async (req: Request, res: Response) => {
 
     const available = !existingUser;
 
-    return res.status(200).json(
-      new ApiResponse(
-        true,
-        200,
-        { available },
-        available ? "Email is available" : "This email is already registered"
-      )
+    return sendSuccess(
+      res,
+      { available },
+      available ? "Email is available" : "This email is already registered"
     );
   } catch (error) {
     console.error("Check email availability error:", error);
-    return res.status(500).json(
-      new ApiResponse(false, 500, null, "Something went wrong. Please try again.")
-    );
+    return sendError(res, "Something went wrong. Please try again.", 500);
   }
 };
 
@@ -162,9 +135,7 @@ export const checkUsernameAvailability = async (req: Request, res: Response) => 
 
     // Validate username
     if (!username || typeof username !== "string") {
-      return res.status(400).json(
-        new ApiResponse(false, 400, null, "Username is required")
-      );
+      return sendError(res, "Username is required", 400);
     }
 
     const trimmedUsername = username.trim();
@@ -173,36 +144,27 @@ export const checkUsernameAvailability = async (req: Request, res: Response) => 
     const MIN_USERNAME_LENGTH = 3;
     const MAX_USERNAME_LENGTH = 30;
     if (trimmedUsername.length < MIN_USERNAME_LENGTH) {
-      return res.status(400).json(
-        new ApiResponse(
-          false,
-          400,
-          null,
-          `Username must be at least ${MIN_USERNAME_LENGTH} characters`
-        )
+      return sendError(
+        res,
+        `Username must be at least ${MIN_USERNAME_LENGTH} characters`,
+        400
       );
     }
     if (trimmedUsername.length > MAX_USERNAME_LENGTH) {
-      return res.status(400).json(
-        new ApiResponse(
-          false,
-          400,
-          null,
-          `Username must be less than ${MAX_USERNAME_LENGTH} characters`
-        )
+      return sendError(
+        res,
+        `Username must be less than ${MAX_USERNAME_LENGTH} characters`,
+        400
       );
     }
 
     // Username format validation (alphanumeric and underscores only)
     const usernameRegex = /^[a-zA-Z0-9_]+$/;
     if (!usernameRegex.test(trimmedUsername)) {
-      return res.status(400).json(
-        new ApiResponse(
-          false,
-          400,
-          null,
-          "Username can only contain letters, numbers, and underscores"
-        )
+      return sendError(
+        res,
+        "Username can only contain letters, numbers, and underscores",
+        400
       );
     }
 
@@ -219,18 +181,13 @@ export const checkUsernameAvailability = async (req: Request, res: Response) => 
 
     const available = !existingUser;
 
-    return res.status(200).json(
-      new ApiResponse(
-        true,
-        200,
-        { available },
-        available ? "Username is available" : "This username is already taken"
-      )
+    return sendSuccess(
+      res,
+      { available },
+      available ? "Username is available" : "This username is already taken"
     );
   } catch (error) {
     console.error("Check username availability error:", error);
-    return res.status(500).json(
-      new ApiResponse(false, 500, null, "Something went wrong. Please try again.")
-    );
+    return sendError(res, "Something went wrong. Please try again.", 500);
   }
 };
