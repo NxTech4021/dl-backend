@@ -21,6 +21,7 @@ import {
   AdminActionType,
   AdminTargetType
 } from '@prisma/client';
+import { sendSuccess, sendError } from '../../utils/response';
 
 const adminMatchService = getAdminMatchService();
 const participantService = new AdminMatchParticipantService();
@@ -72,10 +73,10 @@ export const getAdminMatches = async (req: Request, res: Response) => {
 
     const result = await adminMatchService.getAdminMatches(filters);
 
-    res.json(result);
+    sendSuccess(res, result);
   } catch (error) {
     console.error('Get Admin Matches Error:', error);
-    res.status(500).json({ error: 'Failed to retrieve matches' });
+    sendError(res, 'Failed to retrieve matches');
   }
 };
 
@@ -93,10 +94,10 @@ export const getMatchStats = async (req: Request, res: Response) => {
       divisionId: divisionId as string
     });
 
-    res.json(stats);
+    sendSuccess(res, stats);
   } catch (error) {
     console.error('Get Match Stats Error:', error);
-    res.status(500).json({ error: 'Failed to retrieve match statistics' });
+    sendError(res, 'Failed to retrieve match statistics');
   }
 };
 
@@ -108,18 +109,18 @@ export const getMatchById = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     if (!id) {
-      return res.status(400).json({ error: 'Match ID is required' });
+      return sendError(res, 'Match ID is required', 400);
     }
 
     const match = await adminMatchService.getMatchById(id);
     if (!match) {
-      return res.status(404).json({ error: 'Match not found' });
+      return sendError(res, 'Match not found', 404);
     }
 
-    res.json({ data: match });
+    sendSuccess(res, match);
   } catch (error) {
     console.error('Get Match By ID Error:', error);
-    res.status(500).json({ error: 'Failed to retrieve match' });
+    sendError(res, 'Failed to retrieve match');
   }
 };
 
@@ -141,10 +142,10 @@ export const getDisputes = async (req: Request, res: Response) => {
 
     const result = await adminMatchService.getDisputes(disputeFilters);
 
-    res.json(result);
+    sendSuccess(res, result);
   } catch (error) {
     console.error('Get Disputes Error:', error);
-    res.status(500).json({ error: 'Failed to retrieve disputes' });
+    sendError(res, 'Failed to retrieve disputes');
   }
 };
 
@@ -156,18 +157,18 @@ export const getDisputeById = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     if (!id) {
-      return res.status(400).json({ error: 'Dispute ID is required' });
+      return sendError(res, 'Dispute ID is required', 400);
     }
 
     const dispute = await adminMatchService.getDisputeById(id);
     if (!dispute) {
-      return res.status(404).json({ error: 'Dispute not found' });
+      return sendError(res, 'Dispute not found', 404);
     }
 
-    res.json(dispute);
+    sendSuccess(res, dispute);
   } catch (error) {
     console.error('Get Dispute By ID Error:', error);
-    res.status(500).json({ error: 'Failed to retrieve dispute' });
+    sendError(res, 'Failed to retrieve dispute');
   }
 };
 
@@ -180,20 +181,20 @@ export const startDisputeReview = async (req: Request, res: Response) => {
     const authReq = req as AuthenticatedRequest;
     const adminId = authReq.user?.adminId;
     if (!adminId) {
-      return res.status(401).json({ error: 'Admin authentication required' });
+      return sendError(res, 'Admin authentication required', 401);
     }
 
     const { id } = req.params;
     if (!id) {
-      return res.status(400).json({ error: 'Dispute ID is required' });
+      return sendError(res, 'Dispute ID is required', 400);
     }
 
     const dispute = await adminMatchService.startDisputeReview(id, adminId);
-    res.json(dispute);
+    sendSuccess(res, dispute);
   } catch (error) {
     console.error('Start Dispute Review Error:', error);
     const message = error instanceof Error ? error.message : 'Failed to start dispute review';
-    res.status(400).json({ error: message });
+    sendError(res, message, 400);
   }
 };
 
@@ -206,18 +207,18 @@ export const resolveDispute = async (req: Request, res: Response) => {
     const authReq = req as AuthenticatedRequest;
     const adminId = authReq.user?.adminId;
     if (!adminId) {
-      return res.status(401).json({ error: 'Admin authentication required' });
+      return sendError(res, 'Admin authentication required', 401);
     }
 
     const { id } = req.params;
     if (!id) {
-      return res.status(400).json({ error: 'Dispute ID is required' });
+      return sendError(res, 'Dispute ID is required', 400);
     }
 
     const { action, finalScore, reason, notifyPlayers } = req.body;
 
     if (!action || !reason) {
-      return res.status(400).json({ error: 'action and reason are required' });
+      return sendError(res, 'action and reason are required', 400);
     }
 
     const validActions = [
@@ -226,7 +227,7 @@ export const resolveDispute = async (req: Request, res: Response) => {
     ];
 
     if (!validActions.includes(action)) {
-      return res.status(400).json({ error: 'Invalid resolution action' });
+      return sendError(res, 'Invalid resolution action', 400);
     }
 
     const dispute = await adminMatchService.resolveDispute({
@@ -248,11 +249,11 @@ export const resolveDispute = async (req: Request, res: Response) => {
       newValue: { action, finalScore, reason }
     });
 
-    res.json(dispute);
+    sendSuccess(res, dispute);
   } catch (error) {
     console.error('Resolve Dispute Error:', error);
     const message = error instanceof Error ? error.message : 'Failed to resolve dispute';
-    res.status(400).json({ error: message });
+    sendError(res, message, 400);
   }
 };
 
@@ -265,25 +266,25 @@ export const addDisputeNote = async (req: Request, res: Response) => {
     const authReq = req as AuthenticatedRequest;
     const adminId = authReq.user?.adminId;
     if (!adminId) {
-      return res.status(401).json({ error: 'Admin authentication required' });
+      return sendError(res, 'Admin authentication required', 401);
     }
 
     const { id } = req.params;
     if (!id) {
-      return res.status(400).json({ error: 'Dispute ID is required' });
+      return sendError(res, 'Dispute ID is required', 400);
     }
 
     const { note, isInternalOnly = true } = req.body;
 
     if (!note) {
-      return res.status(400).json({ error: 'note is required' });
+      return sendError(res, 'note is required', 400);
     }
 
     const result = await adminMatchService.addDisputeNote(id, adminId, note, isInternalOnly);
-    res.status(201).json(result);
+    sendSuccess(res, result, undefined, 201);
   } catch (error) {
     console.error('Add Dispute Note Error:', error);
-    res.status(500).json({ error: 'Failed to add note' });
+    sendError(res, 'Failed to add note');
   }
 };
 
@@ -296,18 +297,18 @@ export const editMatchResult = async (req: Request, res: Response) => {
     const authReq = req as AuthenticatedRequest;
     const adminId = authReq.user?.adminId;
     if (!adminId) {
-      return res.status(401).json({ error: 'Admin authentication required' });
+      return sendError(res, 'Admin authentication required', 401);
     }
 
     const { id } = req.params;
     if (!id) {
-      return res.status(400).json({ error: 'Match ID is required' });
+      return sendError(res, 'Match ID is required', 400);
     }
 
     const { team1Score, team2Score, setScores, outcome, isWalkover, walkoverReason, reason } = req.body;
 
     if (!reason) {
-      return res.status(400).json({ error: 'reason is required for audit trail' });
+      return sendError(res, 'reason is required for audit trail', 400);
     }
 
     const match = await adminMatchService.editMatchResult({
@@ -332,11 +333,11 @@ export const editMatchResult = async (req: Request, res: Response) => {
       { team1Score, team2Score, setScores, outcome, isWalkover }
     );
 
-    res.json(match);
+    sendSuccess(res, match);
   } catch (error) {
     console.error('Edit Match Result Error:', error);
     const message = error instanceof Error ? error.message : 'Failed to edit result';
-    res.status(400).json({ error: message });
+    sendError(res, message, 400);
   }
 };
 
@@ -349,18 +350,18 @@ export const voidMatch = async (req: Request, res: Response) => {
     const authReq = req as AuthenticatedRequest;
     const adminId = authReq.user?.adminId;
     if (!adminId) {
-      return res.status(401).json({ error: 'Admin authentication required' });
+      return sendError(res, 'Admin authentication required', 401);
     }
 
     const { id } = req.params;
     if (!id) {
-      return res.status(400).json({ error: 'Match ID is required' });
+      return sendError(res, 'Match ID is required', 400);
     }
 
     const { reason } = req.body;
 
     if (!reason) {
-      return res.status(400).json({ error: 'reason is required' });
+      return sendError(res, 'reason is required', 400);
     }
 
     const match = await adminMatchService.voidMatch(id, adminId, reason);
@@ -375,11 +376,11 @@ export const voidMatch = async (req: Request, res: Response) => {
       { status: 'VOIDED', reason }
     );
 
-    res.json(match);
+    sendSuccess(res, match);
   } catch (error) {
     console.error('Void Match Error:', error);
     const message = error instanceof Error ? error.message : 'Failed to void match';
-    res.status(400).json({ error: message });
+    sendError(res, message, 400);
   }
 };
 
@@ -390,10 +391,10 @@ export const voidMatch = async (req: Request, res: Response) => {
 export const getPendingCancellations = async (req: Request, res: Response) => {
   try {
     const cancellations = await adminMatchService.getPendingCancellations();
-    res.json(cancellations);
+    sendSuccess(res, cancellations);
   } catch (error) {
     console.error('Get Pending Cancellations Error:', error);
-    res.status(500).json({ error: 'Failed to retrieve pending cancellations' });
+    sendError(res, 'Failed to retrieve pending cancellations');
   }
 };
 
@@ -406,18 +407,18 @@ export const reviewCancellation = async (req: Request, res: Response) => {
     const authReq = req as AuthenticatedRequest;
     const adminId = authReq.user?.adminId;
     if (!adminId) {
-      return res.status(401).json({ error: 'Admin authentication required' });
+      return sendError(res, 'Admin authentication required', 401);
     }
 
     const { id } = req.params;
     if (!id) {
-      return res.status(400).json({ error: 'Match ID is required' });
+      return sendError(res, 'Match ID is required', 400);
     }
 
     const { approved, applyPenalty, penaltySeverity, reason } = req.body;
 
     if (typeof approved !== 'boolean') {
-      return res.status(400).json({ error: 'approved (boolean) is required' });
+      return sendError(res, 'approved (boolean) is required', 400);
     }
 
     const result = await adminMatchService.reviewCancellation({
@@ -429,11 +430,11 @@ export const reviewCancellation = async (req: Request, res: Response) => {
       reason
     });
 
-    res.json(result);
+    sendSuccess(res, result);
   } catch (error) {
     console.error('Review Cancellation Error:', error);
     const message = error instanceof Error ? error.message : 'Failed to review cancellation';
-    res.status(400).json({ error: message });
+    sendError(res, message, 400);
   }
 };
 
@@ -446,7 +447,7 @@ export const applyPenalty = async (req: Request, res: Response) => {
     const authReq = req as AuthenticatedRequest;
     const adminId = authReq.user?.adminId;
     if (!adminId) {
-      return res.status(401).json({ error: 'Admin authentication required' });
+      return sendError(res, 'Admin authentication required', 401);
     }
 
     const {
@@ -462,9 +463,7 @@ export const applyPenalty = async (req: Request, res: Response) => {
     } = req.body;
 
     if (!userId || !penaltyType || !severity || !reason) {
-      return res.status(400).json({
-        error: 'userId, penaltyType, severity, and reason are required'
-      });
+      return sendError(res, 'userId, penaltyType, severity, and reason are required', 400);
     }
 
     const penalty = await adminMatchService.applyPenalty({
@@ -480,11 +479,11 @@ export const applyPenalty = async (req: Request, res: Response) => {
       evidenceUrl
     });
 
-    res.status(201).json(penalty);
+    sendSuccess(res, penalty, undefined, 201);
   } catch (error) {
     console.error('Apply Penalty Error:', error);
     const message = error instanceof Error ? error.message : 'Failed to apply penalty';
-    res.status(400).json({ error: message });
+    sendError(res, message, 400);
   }
 };
 
@@ -496,14 +495,14 @@ export const getPlayerPenalties = async (req: Request, res: Response) => {
   try {
     const { userId } = req.params;
     if (!userId) {
-      return res.status(400).json({ error: 'User ID is required' });
+      return sendError(res, 'User ID is required', 400);
     }
 
     const penalties = await adminMatchService.getPlayerPenalties(userId);
-    res.json(penalties);
+    sendSuccess(res, penalties);
   } catch (error) {
     console.error('Get Player Penalties Error:', error);
-    res.status(500).json({ error: 'Failed to retrieve penalties' });
+    sendError(res, 'Failed to retrieve penalties');
   }
 };
 
@@ -516,18 +515,18 @@ export const messageParticipants = async (req: Request, res: Response) => {
     const authReq = req as AuthenticatedRequest;
     const adminId = authReq.user?.adminId;
     if (!adminId) {
-      return res.status(401).json({ error: 'Admin authentication required' });
+      return sendError(res, 'Admin authentication required', 401);
     }
 
     const { id } = req.params;
     if (!id) {
-      return res.status(400).json({ error: 'Match ID is required' });
+      return sendError(res, 'Match ID is required', 400);
     }
 
     const { subject, message, sendEmail = false, sendPush = false } = req.body;
 
     if (!message) {
-      return res.status(400).json({ error: 'message is required' });
+      return sendError(res, 'message is required', 400);
     }
 
     // Validate at least one delivery method when explicitly set
@@ -542,14 +541,11 @@ export const messageParticipants = async (req: Request, res: Response) => {
       sendPush,
     });
 
-    res.json({
-      success: true,
-      data: result,
-    });
+    sendSuccess(res, result);
   } catch (error) {
     console.error('Message Participants Error:', error);
     const errorMessage = error instanceof Error ? error.message : 'Failed to send message';
-    res.status(400).json({ error: errorMessage });
+    sendError(res, errorMessage, 400);
   }
 };
 
@@ -562,34 +558,34 @@ export const editMatchParticipants = async (req: Request, res: Response) => {
     const authReq = req as AuthenticatedRequest;
     const adminId = authReq.user?.adminId;
     if (!adminId) {
-      return res.status(401).json({ error: 'Admin authentication required' });
+      return sendError(res, 'Admin authentication required', 401);
     }
 
     const { id } = req.params;
     if (!id) {
-      return res.status(400).json({ error: 'Match ID is required' });
+      return sendError(res, 'Match ID is required', 400);
     }
 
     const { participants, reason } = req.body;
 
     if (!participants || !Array.isArray(participants)) {
-      return res.status(400).json({ error: 'participants array is required' });
+      return sendError(res, 'participants array is required', 400);
     }
 
     if (!reason) {
-      return res.status(400).json({ error: 'reason is required for audit trail' });
+      return sendError(res, 'reason is required for audit trail', 400);
     }
 
     // Validate participant structure
     for (const p of participants) {
       if (!p.userId) {
-        return res.status(400).json({ error: 'Each participant must have a userId' });
+        return sendError(res, 'Each participant must have a userId', 400);
       }
       if (!p.role || !Object.values(ParticipantRole).includes(p.role)) {
-        return res.status(400).json({ error: `Invalid role for participant ${p.userId}` });
+        return sendError(res, `Invalid role for participant ${p.userId}`, 400);
       }
       if (p.team && !['team1', 'team2'].includes(p.team)) {
-        return res.status(400).json({ error: `Invalid team for participant ${p.userId}` });
+        return sendError(res, `Invalid team for participant ${p.userId}`, 400);
       }
     }
 
@@ -600,11 +596,11 @@ export const editMatchParticipants = async (req: Request, res: Response) => {
       reason
     });
 
-    res.json(result);
+    sendSuccess(res, result);
   } catch (error) {
     console.error('Edit Match Participants Error:', error);
     const message = error instanceof Error ? error.message : 'Failed to edit participants';
-    res.status(400).json({ error: message });
+    sendError(res, message, 400);
   }
 };
 
@@ -616,22 +612,22 @@ export const validateMatchParticipants = async (req: Request, res: Response) => 
   try {
     const { id } = req.params;
     if (!id) {
-      return res.status(400).json({ error: 'Match ID is required' });
+      return sendError(res, 'Match ID is required', 400);
     }
 
     const { participants } = req.body;
 
     if (!participants || !Array.isArray(participants)) {
-      return res.status(400).json({ error: 'participants array is required' });
+      return sendError(res, 'participants array is required', 400);
     }
 
     const validation = await validateParticipantEdit(id, participants);
 
-    res.json(validation);
+    sendSuccess(res, validation);
   } catch (error) {
     console.error('Validate Participants Error:', error);
     const message = error instanceof Error ? error.message : 'Validation failed';
-    res.status(400).json({ error: message });
+    sendError(res, message, 400);
   }
 };
 
@@ -643,7 +639,7 @@ export const getAvailablePlayers = async (req: Request, res: Response) => {
   try {
     const { divisionId } = req.params;
     if (!divisionId) {
-      return res.status(400).json({ error: 'Division ID is required' });
+      return sendError(res, 'Division ID is required', 400);
     }
 
     const { excludeMatchId, search } = req.query;
@@ -654,10 +650,10 @@ export const getAvailablePlayers = async (req: Request, res: Response) => {
       search as string | undefined
     );
 
-    res.json(players);
+    sendSuccess(res, players);
   } catch (error) {
     console.error('Get Available Players Error:', error);
-    res.status(500).json({ error: 'Failed to retrieve available players' });
+    sendError(res, 'Failed to retrieve available players');
   }
 };
 
@@ -670,26 +666,26 @@ export const hideMatch = async (req: Request, res: Response) => {
     const authReq = req as AuthenticatedRequest;
     const adminId = authReq.user?.adminId;
     if (!adminId) {
-      return res.status(401).json({ error: 'Admin authentication required' });
+      return sendError(res, 'Admin authentication required', 401);
     }
 
     const { id } = req.params;
     if (!id) {
-      return res.status(400).json({ error: 'Match ID is required' });
+      return sendError(res, 'Match ID is required', 400);
     }
 
     const { reason } = req.body;
 
     if (!reason) {
-      return res.status(400).json({ error: 'reason is required' });
+      return sendError(res, 'reason is required', 400);
     }
 
     const match = await adminMatchService.hideMatch(id, adminId, reason);
-    res.json(match);
+    sendSuccess(res, match);
   } catch (error) {
     console.error('Hide Match Error:', error);
     const message = error instanceof Error ? error.message : 'Failed to hide match';
-    res.status(400).json({ error: message });
+    sendError(res, message, 400);
   }
 };
 
@@ -702,20 +698,20 @@ export const unhideMatch = async (req: Request, res: Response) => {
     const authReq = req as AuthenticatedRequest;
     const adminId = authReq.user?.adminId;
     if (!adminId) {
-      return res.status(401).json({ error: 'Admin authentication required' });
+      return sendError(res, 'Admin authentication required', 401);
     }
 
     const { id } = req.params;
     if (!id) {
-      return res.status(400).json({ error: 'Match ID is required' });
+      return sendError(res, 'Match ID is required', 400);
     }
 
     const match = await adminMatchService.unhideMatch(id, adminId);
-    res.json(match);
+    sendSuccess(res, match);
   } catch (error) {
     console.error('Unhide Match Error:', error);
     const message = error instanceof Error ? error.message : 'Failed to unhide match';
-    res.status(400).json({ error: message });
+    sendError(res, message, 400);
   }
 };
 
@@ -728,22 +724,22 @@ export const reportMatchAbuse = async (req: Request, res: Response) => {
     const authReq = req as AuthenticatedRequest;
     const adminId = authReq.user?.adminId;
     if (!adminId) {
-      return res.status(401).json({ error: 'Admin authentication required' });
+      return sendError(res, 'Admin authentication required', 401);
     }
 
     const { id } = req.params;
     if (!id) {
-      return res.status(400).json({ error: 'Match ID is required' });
+      return sendError(res, 'Match ID is required', 400);
     }
 
     const { reason, category } = req.body;
 
     if (!reason) {
-      return res.status(400).json({ error: 'reason is required' });
+      return sendError(res, 'reason is required', 400);
     }
 
     if (!category) {
-      return res.status(400).json({ error: 'category is required' });
+      return sendError(res, 'category is required', 400);
     }
 
     const validCategories = [
@@ -752,15 +748,15 @@ export const reportMatchAbuse = async (req: Request, res: Response) => {
     ];
 
     if (!validCategories.includes(category)) {
-      return res.status(400).json({ error: 'Invalid report category' });
+      return sendError(res, 'Invalid report category', 400);
     }
 
     const match = await adminMatchService.reportMatchAbuse(id, adminId, reason, category as MatchReportCategory);
-    res.json(match);
+    sendSuccess(res, match);
   } catch (error) {
     console.error('Report Match Abuse Error:', error);
     const message = error instanceof Error ? error.message : 'Failed to report match';
-    res.status(400).json({ error: message });
+    sendError(res, message, 400);
   }
 };
 
@@ -773,20 +769,20 @@ export const clearMatchReport = async (req: Request, res: Response) => {
     const authReq = req as AuthenticatedRequest;
     const adminId = authReq.user?.adminId;
     if (!adminId) {
-      return res.status(401).json({ error: 'Admin authentication required' });
+      return sendError(res, 'Admin authentication required', 401);
     }
 
     const { id } = req.params;
     if (!id) {
-      return res.status(400).json({ error: 'Match ID is required' });
+      return sendError(res, 'Match ID is required', 400);
     }
 
     const match = await adminMatchService.clearMatchReport(id, adminId);
-    res.json(match);
+    sendSuccess(res, match);
   } catch (error) {
     console.error('Clear Match Report Error:', error);
     const message = error instanceof Error ? error.message : 'Failed to clear report';
-    res.status(400).json({ error: message });
+    sendError(res, message, 400);
   }
 };
 
@@ -799,22 +795,22 @@ export const convertToWalkover = async (req: Request, res: Response) => {
     const authReq = req as AuthenticatedRequest;
     const adminId = authReq.user?.adminId;
     if (!adminId) {
-      return res.status(401).json({ error: 'Admin authentication required' });
+      return sendError(res, 'Admin authentication required', 401);
     }
 
     const { id } = req.params;
     if (!id) {
-      return res.status(400).json({ error: 'Match ID is required' });
+      return sendError(res, 'Match ID is required', 400);
     }
 
     const { winnerId, reason, walkoverReason } = req.body;
 
     if (!winnerId) {
-      return res.status(400).json({ error: 'winnerId is required' });
+      return sendError(res, 'winnerId is required', 400);
     }
 
     if (!reason) {
-      return res.status(400).json({ error: 'reason is required for audit trail' });
+      return sendError(res, 'reason is required for audit trail', 400);
     }
 
     const userId = authReq.user?.id || adminId;
@@ -838,13 +834,10 @@ export const convertToWalkover = async (req: Request, res: Response) => {
       { winnerId, walkoverReason }
     );
 
-    res.json({
-      success: true,
-      data: match
-    });
+    sendSuccess(res, match);
   } catch (error) {
     console.error('Convert To Walkover Error:', error);
     const message = error instanceof Error ? error.message : 'Failed to convert to walkover';
-    res.status(400).json({ error: message });
+    sendError(res, message, 400);
   }
 };
