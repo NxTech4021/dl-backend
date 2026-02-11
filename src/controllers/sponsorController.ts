@@ -1,7 +1,6 @@
 import { prisma } from "../lib/prisma";
 import { Request, Response } from "express";
-import { PrismaClient } from "@prisma/client";
-import { ApiResponse } from "../utils/ApiResponse";
+import { sendSuccess, sendError } from "../utils/response";
 
 
 // Get all sponsors with their linked leagues
@@ -19,14 +18,10 @@ export const getAllSponsors = async (req: Request, res: Response) => {
       orderBy: { createdAt: 'desc' }
     });
 
-    return res.status(200).json(
-      new ApiResponse(true, 200, sponsors, "Sponsors fetched successfully")
-    );
+    return sendSuccess(res, sponsors, "Sponsors fetched successfully");
   } catch (error) {
     console.error("Error fetching sponsors:", error);
-    return res.status(500).json(
-      new ApiResponse(false, 500, null, "Error fetching sponsors")
-    );
+    return sendError(res, "Error fetching sponsors", 500);
   }
 };
 
@@ -37,9 +32,7 @@ export const createSponsor = async (req: Request, res: Response) => {
 
     // Validate required fields
     if (!sponsoredName || !packageTier) {
-      return res.status(400).json(
-        new ApiResponse(false, 400, null, "Sponsored name and package tier are required")
-      );
+      return sendError(res, "Sponsored name and package tier are required", 400);
     }
 
     // Create the sponsorship
@@ -63,14 +56,10 @@ export const createSponsor = async (req: Request, res: Response) => {
       }
     });
 
-    return res.status(201).json(
-      new ApiResponse(true, 201, sponsor, "Sponsor created successfully")
-    );
+    return sendSuccess(res, sponsor, "Sponsor created successfully", 201);
   } catch (error) {
     console.error("Error creating sponsor:", error);
-    return res.status(500).json(
-      new ApiResponse(false, 500, null, "Error creating sponsor")
-    );
+    return sendError(res, "Error creating sponsor", 500);
   }
 };
 
@@ -80,9 +69,7 @@ export const getSponsorById = async (req: Request, res: Response) => {
     const { id } = req.params;
 
     if (!id) {
-      return res.status(400).json(
-        new ApiResponse(false, 400, null, "Sponsor ID is required")
-      );
+      return sendError(res, "Sponsor ID is required", 400);
     }
 
     const sponsor = await prisma.sponsorship.findUnique({
@@ -98,19 +85,13 @@ export const getSponsorById = async (req: Request, res: Response) => {
     });
 
     if (!sponsor) {
-      return res.status(404).json(
-        new ApiResponse(false, 404, null, "Sponsor not found")
-      );
+      return sendError(res, "Sponsor not found", 404);
     }
 
-    return res.status(200).json(
-      new ApiResponse(true, 200, sponsor, "Sponsor fetched successfully")
-    );
+    return sendSuccess(res, sponsor, "Sponsor fetched successfully");
   } catch (error) {
     console.error("Error fetching sponsor:", error);
-    return res.status(500).json(
-      new ApiResponse(false, 500, null, "Error fetching sponsor")
-    );
+    return sendError(res, "Error fetching sponsor", 500);
   }
 };
 
@@ -121,9 +102,7 @@ export const updateSponsor = async (req: Request, res: Response) => {
     const { sponsoredName, packageTier, contractAmount, sponsorRevenue, leagueIds } = req.body;
 
     if (!id) {
-      return res.status(400).json(
-        new ApiResponse(false, 400, null, "Sponsor ID is required")
-      );
+      return sendError(res, "Sponsor ID is required", 400);
     }
 
     // Check if sponsor exists
@@ -132,9 +111,7 @@ export const updateSponsor = async (req: Request, res: Response) => {
     });
 
     if (!existingSponsor) {
-      return res.status(404).json(
-        new ApiResponse(false, 404, null, "Sponsor not found")
-      );
+      return sendError(res, "Sponsor not found", 404);
     }
 
     // Update the sponsorship
@@ -159,14 +136,10 @@ export const updateSponsor = async (req: Request, res: Response) => {
       }
     });
 
-    return res.status(200).json(
-      new ApiResponse(true, 200, updatedSponsor, "Sponsor updated successfully")
-    );
+    return sendSuccess(res, updatedSponsor, "Sponsor updated successfully");
   } catch (error) {
     console.error("Error updating sponsor:", error);
-    return res.status(500).json(
-      new ApiResponse(false, 500, null, "Error updating sponsor")
-    );
+    return sendError(res, "Error updating sponsor", 500);
   }
 };
 
@@ -176,9 +149,7 @@ export const deleteSponsor = async (req: Request, res: Response) => {
     const { id } = req.params;
 
     if (!id) {
-      return res.status(400).json(
-        new ApiResponse(false, 400, null, "Sponsor ID is required")
-      );
+      return sendError(res, "Sponsor ID is required", 400);
     }
 
     // Check if sponsor exists
@@ -187,9 +158,7 @@ export const deleteSponsor = async (req: Request, res: Response) => {
     });
 
     if (!existingSponsor) {
-      return res.status(404).json(
-        new ApiResponse(false, 404, null, "Sponsor not found")
-      );
+      return sendError(res, "Sponsor not found", 404);
     }
 
     // Delete the sponsorship
@@ -197,13 +166,9 @@ export const deleteSponsor = async (req: Request, res: Response) => {
       where: { id }
     });
 
-    return res.status(200).json(
-      new ApiResponse(true, 200, null, "Sponsor deleted successfully")
-    );
+    return sendSuccess(res, null, "Sponsor deleted successfully");
   } catch (error) {
     console.error("Error deleting sponsor:", error);
-    return res.status(500).json(
-      new ApiResponse(false, 500, null, "Error deleting sponsor")
-    );
+    return sendError(res, "Error deleting sponsor", 500);
   }
 };
