@@ -12,6 +12,7 @@ import {
   getSportComparisonData,
   getAllDashboardStats,
 } from '../services/admin/adminDashboardService';
+import { sendSuccess, sendError } from '../utils/response';
 import { logger } from '../utils/logger';
 
 /**
@@ -22,16 +23,10 @@ export async function getDashboardStats(req: Request, res: Response) {
   try {
     const stats = await getAllDashboardStats();
 
-    return res.status(200).json({
-      success: true,
-      data: stats,
-    });
+    return sendSuccess(res, stats);
   } catch (error: any) {
     logger.error('Get dashboard stats error:', error);
-    return res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to get dashboard stats',
-    });
+    return sendError(res, error.message || 'Failed to get dashboard stats');
   }
 }
 
@@ -43,16 +38,10 @@ export async function getKPIStats(req: Request, res: Response) {
   try {
     const stats = await getDashboardKPIStats();
 
-    return res.status(200).json({
-      success: true,
-      data: stats,
-    });
+    return sendSuccess(res, stats);
   } catch (error: any) {
     logger.error('Get KPI stats error:', error);
-    return res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to get KPI stats',
-    });
+    return sendError(res, error.message || 'Failed to get KPI stats');
   }
 }
 
@@ -64,16 +53,10 @@ export async function getSportsMetrics(req: Request, res: Response) {
   try {
     const metrics = await getSportMetrics();
 
-    return res.status(200).json({
-      success: true,
-      data: metrics,
-    });
+    return sendSuccess(res, metrics);
   } catch (error: any) {
     logger.error('Get sports metrics error:', error);
-    return res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to get sports metrics',
-    });
+    return sendError(res, error.message || 'Failed to get sports metrics');
   }
 }
 
@@ -88,16 +71,10 @@ export async function getMatchActivity(req: Request, res: Response) {
 
     const data = await getMatchActivityData(weeksNum);
 
-    return res.status(200).json({
-      success: true,
-      data,
-    });
+    return sendSuccess(res, data);
   } catch (error: any) {
     logger.error('Get match activity error:', error);
-    return res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to get match activity data',
-    });
+    return sendError(res, error.message || 'Failed to get match activity data');
   }
 }
 
@@ -112,16 +89,10 @@ export async function getUserGrowth(req: Request, res: Response) {
 
     const data = await getUserGrowthData(monthsNum);
 
-    return res.status(200).json({
-      success: true,
-      data,
-    });
+    return sendSuccess(res, data);
   } catch (error: any) {
     logger.error('Get user growth error:', error);
-    return res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to get user growth data',
-    });
+    return sendError(res, error.message || 'Failed to get user growth data');
   }
 }
 
@@ -133,15 +104,9 @@ export async function getSportComparison(req: Request, res: Response) {
   try {
     const data = await getSportComparisonData();
 
-    return res.status(200).json({
-      success: true,
-      data,
-    });
+    return sendSuccess(res, data);
   } catch (error: any) {
     logger.error('Get sport comparison error:', error);
-    return res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to get sport comparison data',
-    });
+    return sendError(res, error.message || 'Failed to get sport comparison data');
   }
 }
