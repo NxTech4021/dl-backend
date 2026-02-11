@@ -5,6 +5,7 @@
 
 import { Request, Response } from 'express';
 import { getMaintenanceService } from '../../services/systemMaintenanceService';
+import { sendSuccess, sendError } from '../../utils/response';
 
 const maintenanceService = getMaintenanceService();
 
@@ -17,20 +18,18 @@ export const createMaintenance = async (req: Request, res: Response) => {
     const { title, description, startDateTime, endDateTime, affectedServices } = req.body;
 
     if (!title || !startDateTime || !endDateTime) {
-      return res.status(400).json({
-        error: 'Title, start date/time, and end date/time are required'
-      });
+      return sendError(res, 'Title, start date/time, and end date/time are required', 400);
     }
 
     const start = new Date(startDateTime);
     const end = new Date(endDateTime);
 
     if (isNaN(start.getTime()) || isNaN(end.getTime())) {
-      return res.status(400).json({ error: 'Invalid date/time format' });
+      return sendError(res, 'Invalid date/time format', 400);
     }
 
     if (end <= start) {
-      return res.status(400).json({ error: 'End date/time must be after start date/time' });
+      return sendError(res, 'End date/time must be after start date/time', 400);
     }
 
     const maintenance = await maintenanceService.createMaintenance({
@@ -41,11 +40,11 @@ export const createMaintenance = async (req: Request, res: Response) => {
       affectedServices: affectedServices || []
     });
 
-    res.status(201).json(maintenance);
+    sendSuccess(res, maintenance, undefined, 201);
   } catch (error) {
     console.error('Create Maintenance Error:', error);
     const message = error instanceof Error ? error.message : 'Failed to create maintenance schedule';
-    res.status(400).json({ error: message });
+    sendError(res, message, 400);
   }
 };
 
@@ -68,7 +67,7 @@ export const updateMaintenance = async (req: Request, res: Response) => {
     if (startDateTime) {
       const start = new Date(startDateTime);
       if (isNaN(start.getTime())) {
-        return res.status(400).json({ error: 'Invalid start date/time format' });
+        return sendError(res, 'Invalid start date/time format', 400);
       }
       updateData.startDateTime = start;
     }
@@ -76,17 +75,17 @@ export const updateMaintenance = async (req: Request, res: Response) => {
     if (endDateTime) {
       const end = new Date(endDateTime);
       if (isNaN(end.getTime())) {
-        return res.status(400).json({ error: 'Invalid end date/time format' });
+        return sendError(res, 'Invalid end date/time format', 400);
       }
       updateData.endDateTime = end;
     }
 
     const maintenance = await maintenanceService.updateMaintenance(updateData);
-    res.json(maintenance);
+    sendSuccess(res, maintenance);
   } catch (error) {
     console.error('Update Maintenance Error:', error);
     const message = error instanceof Error ? error.message : 'Failed to update maintenance schedule';
-    res.status(400).json({ error: message });
+    sendError(res, message, 400);
   }
 };
 
@@ -99,16 +98,16 @@ export const sendMaintenanceNotification = async (req: Request, res: Response) =
     const { id } = req.params;
 
     if (!id) {
-      return res.status(400).json({ error: 'Maintenance ID is required' });
+      return sendError(res, 'Maintenance ID is required', 400);
     }
 
     await maintenanceService.sendMaintenanceNotification(id);
 
-    res.json({ message: 'Maintenance notification sent successfully' });
+    sendSuccess(res, null, 'Maintenance notification sent successfully');
   } catch (error) {
     console.error('Send Maintenance Notification Error:', error);
     const message = error instanceof Error ? error.message : 'Failed to send maintenance notification';
-    res.status(400).json({ error: message });
+    sendError(res, message, 400);
   }
 };
 
@@ -121,17 +120,16 @@ export const completeMaintenanceNotification = async (req: Request, res: Respons
     const { id } = req.params;
 
     if (!id) {
-      return res.status(400).json({ error: 'Maintenance ID is required' });
+      return sendError(res, 'Maintenance ID is required', 400);
     }
 
     await maintenanceService.sendMaintenanceCompleteNotification(id);
 
-    
-    res.json({ message: 'Maintenance completion notification sent successfully' });
+    sendSuccess(res, null, 'Maintenance completion notification sent successfully');
   } catch (error) {
     console.error('Send Completion Notification Error:', error);
     const message = error instanceof Error ? error.message : 'Failed to send completion notification';
-    res.status(400).json({ error: message });
+    sendError(res, message, 400);
   }
 };
 
@@ -142,11 +140,11 @@ export const completeMaintenanceNotification = async (req: Request, res: Respons
 export const getUpcomingMaintenance = async (req: Request, res: Response) => {
   try {
     const maintenances = await maintenanceService.getUpcomingMaintenance();
-    res.json(maintenances);
+    sendSuccess(res, maintenances);
   } catch (error) {
     console.error('Get Upcoming Maintenance Error:', error);
     const message = error instanceof Error ? error.message : 'Failed to retrieve maintenance schedules';
-    res.status(400).json({ error: message });
+    sendError(res, message, 400);
   }
 };
 
@@ -159,15 +157,15 @@ export const startMaintenance = async (req: Request, res: Response) => {
     const { id } = req.params;
 
       if (!id) {
-      return res.status(400).json({ error: 'Maintenance ID is required' });
+      return sendError(res, 'Maintenance ID is required', 400);
     }
 
     const maintenance = await maintenanceService.startMaintenance(id);
-    res.json(maintenance);
+    sendSuccess(res, maintenance);
   } catch (error) {
     console.error('Start Maintenance Error:', error);
     const message = error instanceof Error ? error.message : 'Failed to start maintenance';
-    res.status(400).json({ error: message });
+    sendError(res, message, 400);
   }
 };
 
@@ -181,14 +179,14 @@ export const cancelMaintenance = async (req: Request, res: Response) => {
     const { reason } = req.body;
 
       if (!id) {
-      return res.status(400).json({ error: 'Maintenance ID is required' });
+      return sendError(res, 'Maintenance ID is required', 400);
     }
 
     const maintenance = await maintenanceService.cancelMaintenance(id, reason);
-    res.json(maintenance);
+    sendSuccess(res, maintenance);
   } catch (error) {
     console.error('Cancel Maintenance Error:', error);
     const message = error instanceof Error ? error.message : 'Failed to cancel maintenance';
-    res.status(400).json({ error: message });
+    sendError(res, message, 400);
   }
 };
