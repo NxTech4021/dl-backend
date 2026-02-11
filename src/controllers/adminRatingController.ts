@@ -23,6 +23,7 @@ import {
 } from '../services/rating/adminRatingService';
 import { notificationService } from '../services/notificationService';
 import { logger } from '../utils/logger';
+import { sendSuccess, sendError } from '../utils/response';
 
 /**
  * Get all player ratings in a division
@@ -32,21 +33,15 @@ export async function getAdminDivisionRatings(req: Request, res: Response) {
   try {
     const { divisionId } = req.params;
     if (!divisionId) {
-      return res.status(400).json({ error: 'Division ID is required' });
+      return sendError(res, 'Division ID is required', 400);
     }
 
     const ratings = await getDivisionPlayerRatings(divisionId);
 
-    return res.status(200).json({
-      success: true,
-      data: ratings
-    });
+    return sendSuccess(res, ratings);
   } catch (error: any) {
     logger.error('Get admin division ratings error:', error);
-    return res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to get division ratings'
-    });
+    return sendError(res, error.message || 'Failed to get division ratings');
   }
 }
 
@@ -58,21 +53,15 @@ export async function getAdminDivisionSummary(req: Request, res: Response) {
   try {
     const { divisionId } = req.params;
     if (!divisionId) {
-      return res.status(400).json({ error: 'Division ID is required' });
+      return sendError(res, 'Division ID is required', 400);
     }
 
     const summary = await getDivisionRatingSummary(divisionId);
 
-    return res.status(200).json({
-      success: true,
-      data: summary
-    });
+    return sendSuccess(res, summary);
   } catch (error: any) {
     logger.error('Get admin division summary error:', error);
-    return res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to get division summary'
-    });
+    return sendError(res, error.message || 'Failed to get division summary');
   }
 }
 
@@ -86,17 +75,11 @@ export async function adjustRating(req: Request, res: Response) {
     const { userId, seasonId, gameType, newRating, reason } = req.body;
 
     if (!adminId) {
-      return res.status(401).json({
-        success: false,
-        message: 'Admin not authenticated'
-      });
+      return sendError(res, 'Admin not authenticated', 401);
     }
 
     if (!userId || !seasonId || !newRating) {
-      return res.status(400).json({
-        success: false,
-        message: 'Missing required fields: userId, seasonId, newRating'
-      });
+      return sendError(res, 'Missing required fields: userId, seasonId, newRating', 400);
     }
 
     await adjustPlayerRating({
@@ -121,16 +104,10 @@ export async function adjustRating(req: Request, res: Response) {
       logger.warn('Failed to send rating adjustment notification:', notifError);
     }
 
-    return res.status(200).json({
-      success: true,
-      message: 'Rating adjusted successfully'
-    });
+    return sendSuccess(res, null, 'Rating adjusted successfully');
   } catch (error: any) {
     logger.error('Adjust rating error:', error);
-    return res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to adjust rating'
-    });
+    return sendError(res, error.message || 'Failed to adjust rating');
   }
 }
 
@@ -144,29 +121,19 @@ export async function recalculateRatings(req: Request, res: Response) {
     const { seasonId } = req.params;
 
     if (!adminId) {
-      return res.status(401).json({
-        success: false,
-        message: 'Admin not authenticated'
-      });
+      return sendError(res, 'Admin not authenticated', 401);
     }
 
     if (!seasonId) {
-      return res.status(400).json({ error: 'Season ID is required' });
+      return sendError(res, 'Season ID is required', 400);
     }
 
     const result = await recalculateSeasonRatings(seasonId, adminId);
 
-    return res.status(200).json({
-      success: true,
-      message: 'Ratings recalculated successfully',
-      data: result
-    });
+    return sendSuccess(res, result, 'Ratings recalculated successfully');
   } catch (error: any) {
     logger.error('Recalculate ratings error:', error);
-    return res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to recalculate ratings'
-    });
+    return sendError(res, error.message || 'Failed to recalculate ratings');
   }
 }
 
@@ -178,21 +145,15 @@ export async function getParameters(req: Request, res: Response) {
   try {
     const { seasonId } = req.params;
     if (!seasonId) {
-      return res.status(400).json({ error: 'Season ID is required' });
+      return sendError(res, 'Season ID is required', 400);
     }
 
     const params = await getRatingParameters(seasonId);
 
-    return res.status(200).json({
-      success: true,
-      data: params
-    });
+    return sendSuccess(res, params);
   } catch (error: any) {
     logger.error('Get rating parameters error:', error);
-    return res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to get rating parameters'
-    });
+    return sendError(res, error.message || 'Failed to get rating parameters');
   }
 }
 
@@ -210,17 +171,10 @@ export async function updateParameters(req: Request, res: Response) {
       ...params
     });
 
-    return res.status(200).json({
-      success: true,
-      message: 'Rating parameters updated successfully',
-      warning: result.warning
-    });
+    return sendSuccess(res, { warning: result.warning }, 'Rating parameters updated successfully');
   } catch (error: any) {
     logger.error('Update rating parameters error:', error);
-    return res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to update rating parameters'
-    });
+    return sendError(res, error.message || 'Failed to update rating parameters');
   }
 }
 
@@ -235,14 +189,11 @@ export async function lockSeason(req: Request, res: Response) {
     const { notes } = req.body;
 
     if (!adminId) {
-      return res.status(401).json({
-        success: false,
-        message: 'Admin not authenticated'
-      });
+      return sendError(res, 'Admin not authenticated', 401);
     }
 
     if (!seasonId) {
-      return res.status(400).json({ error: 'Season ID is required' });
+      return sendError(res, 'Season ID is required', 400);
     }
 
     await lockSeasonRatings({
@@ -251,16 +202,10 @@ export async function lockSeason(req: Request, res: Response) {
       notes
     });
 
-    return res.status(200).json({
-      success: true,
-      message: 'Season ratings locked successfully'
-    });
+    return sendSuccess(res, null, 'Season ratings locked successfully');
   } catch (error: any) {
     logger.error('Lock season ratings error:', error);
-    return res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to lock season ratings'
-    });
+    return sendError(res, error.message || 'Failed to lock season ratings');
   }
 }
 
@@ -274,28 +219,19 @@ export async function unlockSeason(req: Request, res: Response) {
     const { seasonId } = req.params;
 
     if (!adminId) {
-      return res.status(401).json({
-        success: false,
-        message: 'Admin not authenticated'
-      });
+      return sendError(res, 'Admin not authenticated', 401);
     }
 
     if (!seasonId) {
-      return res.status(400).json({ error: 'Season ID is required' });
+      return sendError(res, 'Season ID is required', 400);
     }
 
     await unlockSeasonRatings(seasonId, adminId);
 
-    return res.status(200).json({
-      success: true,
-      message: 'Season ratings unlocked successfully'
-    });
+    return sendSuccess(res, null, 'Season ratings unlocked successfully');
   } catch (error: any) {
     logger.error('Unlock season ratings error:', error);
-    return res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to unlock season ratings'
-    });
+    return sendError(res, error.message || 'Failed to unlock season ratings');
   }
 }
 
@@ -307,21 +243,15 @@ export async function getLockStatus(req: Request, res: Response) {
   try {
     const { seasonId } = req.params;
     if (!seasonId) {
-      return res.status(400).json({ error: 'Season ID is required' });
+      return sendError(res, 'Season ID is required', 400);
     }
 
     const status = await getSeasonLockStatus(seasonId);
 
-    return res.status(200).json({
-      success: true,
-      data: status
-    });
+    return sendSuccess(res, status);
   } catch (error: any) {
     logger.error('Get lock status error:', error);
-    return res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to get lock status'
-    });
+    return sendError(res, error.message || 'Failed to get lock status');
   }
 }
 
@@ -334,24 +264,15 @@ export async function previewRecalc(req: Request, res: Response) {
     const { scope, targetId } = req.body;
 
     if (!scope || !targetId) {
-      return res.status(400).json({
-        success: false,
-        message: 'Missing required fields: scope, targetId'
-      });
+      return sendError(res, 'Missing required fields: scope, targetId', 400);
     }
 
     const preview = await previewRecalculation(scope, targetId);
 
-    return res.status(200).json({
-      success: true,
-      data: preview
-    });
+    return sendSuccess(res, preview);
   } catch (error: any) {
     logger.error('Preview recalculation error:', error);
-    return res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to preview recalculation'
-    });
+    return sendError(res, error.message || 'Failed to preview recalculation');
   }
 }
 
@@ -365,28 +286,19 @@ export async function recalculateMatch(req: Request, res: Response) {
     const { matchId } = req.params;
 
     if (!adminId) {
-      return res.status(401).json({
-        success: false,
-        message: 'Admin not authenticated'
-      });
+      return sendError(res, 'Admin not authenticated', 401);
     }
 
     if (!matchId) {
-      return res.status(400).json({ error: 'Match ID is required' });
+      return sendError(res, 'Match ID is required', 400);
     }
 
     const result = await recalculateMatchRatings(matchId, adminId);
 
-    return res.status(200).json({
-      success: true,
-      data: result
-    });
+    return sendSuccess(res, result);
   } catch (error: any) {
     logger.error('Recalculate match error:', error);
-    return res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to recalculate match'
-    });
+    return sendError(res, error.message || 'Failed to recalculate match');
   }
 }
 
@@ -401,36 +313,23 @@ export async function recalculatePlayer(req: Request, res: Response) {
     const { seasonId } = req.body;
 
     if (!adminId) {
-      return res.status(401).json({
-        success: false,
-        message: 'Admin not authenticated'
-      });
+      return sendError(res, 'Admin not authenticated', 401);
     }
 
     if (!seasonId) {
-      return res.status(400).json({
-        success: false,
-        message: 'Missing required field: seasonId'
-      });
+      return sendError(res, 'Missing required field: seasonId', 400);
     }
 
     if (!userId) {
-      return res.status(400).json({ error: 'User ID is required' });
+      return sendError(res, 'User ID is required', 400);
     }
 
     const result = await recalculatePlayerRatings(userId, seasonId, adminId);
 
-    return res.status(200).json({
-      success: true,
-      message: 'Player ratings recalculated successfully',
-      data: result
-    });
+    return sendSuccess(res, result, 'Player ratings recalculated successfully');
   } catch (error: any) {
     logger.error('Recalculate player error:', error);
-    return res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to recalculate player ratings'
-    });
+    return sendError(res, error.message || 'Failed to recalculate player ratings');
   }
 }
 
@@ -444,29 +343,19 @@ export async function recalculateDivision(req: Request, res: Response) {
     const { divisionId } = req.params;
 
     if (!adminId) {
-      return res.status(401).json({
-        success: false,
-        message: 'Admin not authenticated'
-      });
+      return sendError(res, 'Admin not authenticated', 401);
     }
 
     if (!divisionId) {
-      return res.status(400).json({ error: 'Division ID is required' });
+      return sendError(res, 'Division ID is required', 400);
     }
 
     const result = await recalculateDivisionRatings(divisionId, adminId);
 
-    return res.status(200).json({
-      success: true,
-      message: 'Division ratings recalculated successfully',
-      data: result
-    });
+    return sendSuccess(res, result, 'Division ratings recalculated successfully');
   } catch (error: any) {
     logger.error('Recalculate division error:', error);
-    return res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to recalculate division ratings'
-    });
+    return sendError(res, error.message || 'Failed to recalculate division ratings');
   }
 }
 
@@ -478,7 +367,7 @@ export async function getSeasonExport(req: Request, res: Response) {
   try {
     const { seasonId } = req.params;
     if (!seasonId) {
-      return res.status(400).json({ error: 'Season ID is required' });
+      return sendError(res, 'Season ID is required', 400);
     }
 
     const format = (req.query.format as 'csv' | 'json') || 'json';
@@ -492,9 +381,6 @@ export async function getSeasonExport(req: Request, res: Response) {
     return res.status(200).send(result.data);
   } catch (error: any) {
     logger.error('Generate export error:', error);
-    return res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to generate export'
-    });
+    return sendError(res, error.message || 'Failed to generate export');
   }
 }
