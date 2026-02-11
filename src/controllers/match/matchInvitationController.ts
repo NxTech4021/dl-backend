@@ -10,6 +10,7 @@ import { prisma } from '../../lib/prisma';
 import { NotificationService } from '../../services/notificationService';
 import { NOTIFICATION_TYPES } from '../../types/notificationTypes';
 import { matchManagementNotifications } from '../../helpers/notifications/matchManagementNotifications';
+import { sendSuccess, sendError } from '../../utils/response';
 import dayjs from 'dayjs';
 import utc from 'dayjs/plugin/utc';
 import timezone from 'dayjs/plugin/timezone';
@@ -42,7 +43,7 @@ export const createMatch = async (req: Request, res: Response) => {
   try {
     const userId = req.user?.id;
     if (!userId) {
-      return res.status(401).json({ error: 'Authentication required' });
+      return sendError(res, 'Authentication required', 401);
     }
 
     const {
@@ -66,11 +67,11 @@ export const createMatch = async (req: Request, res: Response) => {
     } = req.body;
 
     if (!divisionId) {
-      return res.status(400).json({ error: 'divisionId is required' });
+      return sendError(res, 'divisionId is required', 400);
     }
 
     if (!matchType || !['SINGLES', 'DOUBLES'].includes(matchType)) {
-      return res.status(400).json({ error: 'Valid matchType (SINGLES/DOUBLES) is required' });
+      return sendError(res, 'Valid matchType (SINGLES/DOUBLES) is required', 400);
     }
 
     // TIMEZONE CONVERSION: Convert from device timezone to Malaysia timezone
@@ -130,7 +131,7 @@ export const createMatch = async (req: Request, res: Response) => {
     });
 
     if (!match) {
-      return res.status(500).json({ error: 'Failed to create match' });
+      return sendError(res, 'Failed to create match');
     }
 
     console.log('🎯 [Match Creation] Match created, sending division notifications...', {
@@ -220,12 +221,12 @@ export const createMatch = async (req: Request, res: Response) => {
       // Don't fail the request if notification fails
     }
 
-    
-    res.status(201).json(match);
+
+    sendSuccess(res, match, undefined, 201);
   } catch (error) {
     console.error('Create Match Error:', error);
     const message = error instanceof Error ? error.message : 'Failed to create match';
-    res.status(400).json({ error: message });
+    sendError(res, message, 400);
   }
 };
 
@@ -277,10 +278,10 @@ export const getMatches = async (req: Request, res: Response) => {
       parseInt(limit as string)
     );
 
-    res.json(result);
+    sendSuccess(res, result);
   } catch (error) {
     console.error('Get Matches Error:', error);
-    res.status(500).json({ error: 'Failed to retrieve matches' });
+    sendError(res, 'Failed to retrieve matches');
   }
 };
 
@@ -292,18 +293,18 @@ export const getMatchById = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     if (!id) {
-      return res.status(400).json({ error: 'Match ID is required' });
+      return sendError(res, 'Match ID is required', 400);
     }
 
     const match = await matchInvitationService.getMatchById(id);
     if (!match) {
-      return res.status(404).json({ error: 'Match not found' });
+      return sendError(res, 'Match not found', 404);
     }
 
-    res.json(match);
+    sendSuccess(res, match);
   } catch (error) {
     console.error('Get Match By ID Error:', error);
-    res.status(500).json({ error: 'Failed to retrieve match' });
+    sendError(res, 'Failed to retrieve match');
   }
 };
 
@@ -316,12 +317,12 @@ export const getAvailableMatches = async (req: Request, res: Response) => {
   try {
     const userId = req.user?.id;
     if (!userId) {
-      return res.status(401).json({ error: 'Authentication required' });
+      return sendError(res, 'Authentication required', 401);
     }
 
     const { divisionId } = req.params;
     if (!divisionId) {
-      return res.status(400).json({ error: 'divisionId is required' });
+      return sendError(res, 'divisionId is required', 400);
     }
 
     const {
@@ -352,10 +353,10 @@ export const getAvailableMatches = async (req: Request, res: Response) => {
       parseInt(page as string),
       parseInt(limit as string)
     );
-    res.json(result);
+    sendSuccess(res, result);
   } catch (error) {
     console.error('Get Available Matches Error:', error);
-    res.status(500).json({ error: 'Failed to retrieve available matches' });
+    sendError(res, 'Failed to retrieve available matches');
   }
 };
 
@@ -370,7 +371,7 @@ export const getMyMatches = async (req: Request, res: Response) => {
   try {
     const userId = req.user?.id;
     if (!userId) {
-      return res.status(401).json({ error: 'Authentication required' });
+      return sendError(res, 'Authentication required', 401);
     }
 
     const { status, page = '1', limit = '20' } = req.query;
@@ -447,13 +448,13 @@ export const getMyMatches = async (req: Request, res: Response) => {
       };
     });
 
-    res.json({
+    sendSuccess(res, {
       ...result,
       matches: matchesWithInvitationStatus
     });
   } catch (error) {
     console.error('Get My Matches Error:', error);
-    res.status(500).json({ error: 'Failed to retrieve your matches' });
+    sendError(res, 'Failed to retrieve your matches');
   }
 };
 
@@ -465,22 +466,22 @@ export const joinMatch = async (req: Request, res: Response) => {
   try {
     const userId = req.user?.id;
     if (!userId) {
-      return res.status(401).json({ error: 'Authentication required' });
+      return sendError(res, 'Authentication required', 401);
     }
 
     const { id } = req.params;
     if (!id) {
-      return res.status(400).json({ error: 'Match ID is required' });
+      return sendError(res, 'Match ID is required', 400);
     }
 
     const { asPartner = false, partnerId } = req.body;
 
     const match = await matchInvitationService.joinMatch(id, userId, asPartner, partnerId);
-    res.json(match);
+    sendSuccess(res, match);
   } catch (error) {
     console.error('Join Match Error:', error);
     const message = error instanceof Error ? error.message : 'Failed to join match';
-    res.status(400).json({ error: message });
+    sendError(res, message, 400);
   }
 };
 
@@ -492,18 +493,18 @@ export const respondToInvitation = async (req: Request, res: Response) => {
   try {
     const userId = req.user?.id;
     if (!userId) {
-      return res.status(401).json({ error: 'Authentication required' });
+      return sendError(res, 'Authentication required', 401);
     }
 
     const { id } = req.params;
     if (!id) {
-      return res.status(400).json({ error: 'Invitation ID is required' });
+      return sendError(res, 'Invitation ID is required', 400);
     }
 
     const { accept, declineReason } = req.body;
 
     if (typeof accept !== 'boolean') {
-      return res.status(400).json({ error: 'accept (boolean) is required' });
+      return sendError(res, 'accept (boolean) is required', 400);
     }
 
     const match = await matchInvitationService.respondToInvitation({
@@ -513,11 +514,11 @@ export const respondToInvitation = async (req: Request, res: Response) => {
       declineReason
     });
 
-    res.json(match);
+    sendSuccess(res, match);
   } catch (error) {
     console.error('Respond to Invitation Error:', error);
     const message = error instanceof Error ? error.message : 'Failed to respond to invitation';
-    res.status(400).json({ error: message });
+    sendError(res, message, 400);
   }
 };
 
@@ -527,7 +528,7 @@ export const respondToInvitation = async (req: Request, res: Response) => {
  * COMMENTED OUT - timeSlots model doesn't exist in schema
  */
 export const proposeTimeSlot = async (req: Request, res: Response) => {
-  return res.status(400).json({ error: 'Time slot feature not yet implemented' });
+  return sendError(res, 'Time slot feature not yet implemented', 400);
 
   // try {
   //   const userId = req.user?.id;
@@ -568,7 +569,7 @@ export const proposeTimeSlot = async (req: Request, res: Response) => {
  * COMMENTED OUT - timeSlots model doesn't exist in schema
  */
 export const voteForTimeSlot = async (req: Request, res: Response) => {
-  return res.status(400).json({ error: 'Time slot feature not yet implemented' });
+  return sendError(res, 'Time slot feature not yet implemented', 400);
 
   // try {
   //   const userId = req.user?.id;
@@ -602,12 +603,12 @@ export const editMatch = async (req: Request, res: Response) => {
   try {
     const userId = req.user?.id;
     if (!userId) {
-      return res.status(401).json({ error: 'Authentication required' });
+      return sendError(res, 'Authentication required', 401);
     }
 
     const { id } = req.params;
     if (!id) {
-      return res.status(400).json({ error: 'Match ID is required' });
+      return sendError(res, 'Match ID is required', 400);
     }
 
     const {
@@ -648,11 +649,11 @@ export const editMatch = async (req: Request, res: Response) => {
       expiresInHours
     });
 
-    res.json(match);
+    sendSuccess(res, match);
   } catch (error) {
     console.error('Edit Match Error:', error);
     const message = error instanceof Error ? error.message : 'Failed to edit match';
-    res.status(400).json({ error: message });
+    sendError(res, message, 400);
   }
 };
 
@@ -664,24 +665,24 @@ export const postMatchToChat = async (req: Request, res: Response) => {
   try {
     const userId = req.user?.id;
     if (!userId) {
-      return res.status(401).json({ error: 'Authentication required' });
+      return sendError(res, 'Authentication required', 401);
     }
 
     const { id: matchId } = req.params;
 
     if (!matchId) {
-      return res.status(400).json({ error: 'Match ID is required' });
+      return sendError(res, 'Match ID is required', 400);
     }
 
     // 1. Get match details
     const match = await matchInvitationService.getMatchById(matchId);
     if (!match) {
-      return res.status(404).json({ error: 'Match not found' });
+      return sendError(res, 'Match not found', 404);
     }
 
     // 2. Verify user is match creator
     if (match.createdById !== userId) {
-      return res.status(403).json({ error: 'Only match creator can post to chat' });
+      return sendError(res, 'Only match creator can post to chat', 403);
     }
 
     // 3. Get division thread
@@ -690,7 +691,7 @@ export const postMatchToChat = async (req: Request, res: Response) => {
     });
 
     if (!thread) {
-      return res.status(404).json({ error: 'Division chat not found' });
+      return sendError(res, 'Division chat not found', 404);
     }
 
 
@@ -780,10 +781,10 @@ export const postMatchToChat = async (req: Request, res: Response) => {
       });
     }
 
-    res.json({ message, threadId: thread.id });
+    sendSuccess(res, { message, threadId: thread.id });
   } catch (error) {
     console.error('Post Match to Chat Error:', error);
-    res.status(500).json({ error: 'Failed to post match to chat' });
+    sendError(res, 'Failed to post match to chat');
   }
 };
 
@@ -795,20 +796,20 @@ export const requestToJoinMatch = async (req: Request, res: Response) => {
   try {
     const userId = req.user?.id;
     if (!userId) {
-      return res.status(401).json({ error: 'Authentication required' });
+      return sendError(res, 'Authentication required', 401);
     }
 
     const { id: matchId } = req.params;
     const { message } = req.body;
 
     if (!matchId) {
-      return res.status(400).json({ error: 'Match ID is required' });
+      return sendError(res, 'Match ID is required', 400);
     }
 
     // 1. Get match
     const match = await matchInvitationService.getMatchById(matchId);
     if (!match) {
-      return res.status(404).json({ error: 'Match not found' });
+      return sendError(res, 'Match not found', 404);
     }
 
     // 2. Verify user is in same division (via SeasonMembership which has status field)
@@ -821,7 +822,7 @@ export const requestToJoinMatch = async (req: Request, res: Response) => {
     });
 
     if (!divisionMember) {
-      return res.status(403).json({ error: 'You are not a member of this division' });
+      return sendError(res, 'You are not a member of this division', 403);
     }
 
     // 3. Check if already requested
@@ -851,7 +852,7 @@ export const requestToJoinMatch = async (req: Request, res: Response) => {
     //   }
     // });
 
-    return res.status(400).json({ error: 'Join request feature not yet implemented' });
+    return sendError(res, 'Join request feature not yet implemented', 400);
 
     // 5. Notify match creator
     // COMMENTED OUT - depends on joinRequest which doesn't exist
@@ -869,7 +870,7 @@ export const requestToJoinMatch = async (req: Request, res: Response) => {
     // res.status(201).json(joinRequest);
   } catch (error) {
     console.error('Request to Join Match Error:', error);
-    res.status(500).json({ error: 'Failed to request join' });
+    sendError(res, 'Failed to request join');
   }
 };
 
@@ -881,22 +882,22 @@ export const respondToJoinRequest = async (req: Request, res: Response) => {
   try {
     const userId = req.user?.id;
     if (!userId) {
-      return res.status(401).json({ error: 'Authentication required' });
+      return sendError(res, 'Authentication required', 401);
     }
 
     const { requestId } = req.params;
     const { approve, declineReason } = req.body;
 
     if (typeof approve !== 'boolean') {
-      return res.status(400).json({ error: 'approve (boolean) is required' });
+      return sendError(res, 'approve (boolean) is required', 400);
     }
 
     if (!requestId) {
-      return res.status(400).json({ error: 'requestId is required' });
+      return sendError(res, 'requestId is required', 400);
     }
 
     // COMMENTED OUT - matchJoinRequest model doesn't exist in schema
-    return res.status(400).json({ error: 'Join request feature not yet implemented' });
+    return sendError(res, 'Join request feature not yet implemented', 400);
 
     // // 1. Get join request
     // const joinRequest = await prisma.matchJoinRequest.findUnique({
@@ -979,7 +980,7 @@ export const respondToJoinRequest = async (req: Request, res: Response) => {
     // res.json({ success: true, approved: approve });
   } catch (error) {
     console.error('Respond to Join Request Error:', error);
-    res.status(500).json({ error: 'Failed to respond to join request' });
+    sendError(res, 'Failed to respond to join request');
   }
 };
 
@@ -989,7 +990,7 @@ export const respondToJoinRequest = async (req: Request, res: Response) => {
  * COMMENTED OUT - timeSlots model doesn't exist in schema
  */
 export const confirmTimeSlot = async (req: Request, res: Response) => {
-  return res.status(400).json({ error: 'Time slot feature not yet implemented' });
+  return sendError(res, 'Time slot feature not yet implemented', 400);
 
   // try {
   //   const userId = req.user?.id;
@@ -1019,21 +1020,21 @@ export const getInvitationById = async (req: Request, res: Response) => {
   try {
     const userId = req.user?.id;
     if (!userId) {
-      return res.status(401).json({ error: 'Authentication required' });
+      return sendError(res, 'Authentication required', 401);
     }
 
     const { id } = req.params;
     if (!id) {
-      return res.status(400).json({ error: 'Invitation ID is required' });
+      return sendError(res, 'Invitation ID is required', 400);
     }
 
     const invitation = await matchInvitationService.getInvitationById(id, userId);
-    res.json(invitation);
+    sendSuccess(res, invitation);
   } catch (error) {
     console.error('Get Invitation Error:', error);
     const message = error instanceof Error ? error.message : 'Failed to get invitation';
     const status = error instanceof Error && error.message.includes('not authorized') ? 403 : 404;
-    res.status(status).json({ error: message });
+    sendError(res, message, status);
   }
 };
 
@@ -1045,14 +1046,14 @@ export const getPendingInvitations = async (req: Request, res: Response) => {
   try {
     const userId = req.user?.id;
     if (!userId) {
-      return res.status(401).json({ error: 'Authentication required' });
+      return sendError(res, 'Authentication required', 401);
     }
 
     const invitations = await matchInvitationService.getPendingInvitations(userId);
-    res.json(invitations);
+    sendSuccess(res, invitations);
   } catch (error) {
     console.error('Get Pending Invitations Error:', error);
-    res.status(500).json({ error: 'Failed to get pending invitations' });
+    sendError(res, 'Failed to get pending invitations');
   }
 };
 
@@ -1065,7 +1066,7 @@ export const getMyMatchesSummary = async (req: Request, res: Response) => {
   try {
     const userId = req.user?.id;
     if (!userId) {
-      return res.status(401).json({ error: 'Authentication required' });
+      return sendError(res, 'Authentication required', 401);
     }
 
     // Get count and latest updatedAt for matches where user is a participant
@@ -1084,12 +1085,12 @@ export const getMyMatchesSummary = async (req: Request, res: Response) => {
       })
     ]);
 
-    res.json({
+    sendSuccess(res, {
       count: countResult,
       latestUpdatedAt: latestMatch?.updatedAt?.toISOString() || null
     });
   } catch (error) {
     console.error('Get My Matches Summary Error:', error);
-    res.status(500).json({ error: 'Failed to retrieve matches summary' });
+    sendError(res, 'Failed to retrieve matches summary');
   }
 };
