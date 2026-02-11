@@ -381,6 +381,11 @@ export const updateSeason = async (req: Request, res: Response) => {
     if (promoCodeSupported !== undefined) seasonData.promoCodeSupported = promoCodeSupported;
     if (withdrawalEnabled !== undefined) seasonData.withdrawalEnabled = withdrawalEnabled;
 
+    // Auto-disable payment for free seasons
+    if (entryFee !== undefined && Number(entryFee) === 0) {
+      seasonData.paymentRequired = false;
+    }
+
     const season = await updateSeasonService(id, seasonData);
 
     // 🆕 Send notifications for status changes
