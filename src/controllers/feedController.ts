@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import { prisma } from '../lib/prisma';
 import * as feedService from '../services/feedService';
-import { ApiResponse } from '../utils/ApiResponse';
+import { sendSuccess, sendError } from '../utils/response';
 import { AuthenticatedRequest } from '../middlewares/auth.middleware';
 import { socialCommunityNotifications } from '../helpers/notifications/socialCommunityNotifications';
 import { notificationService } from '../services/notificationService';
@@ -24,15 +24,15 @@ export const createPostHandler = async (req: AuthenticatedRequest, res: Response
     const { matchId, caption } = req.body as CreatePostBody;
 
     if (!userId) {
-      return res.status(401).json(new ApiResponse(false, 401, null, 'Authentication required'));
+      return sendError(res, 'Authentication required', 401);
     }
 
     if (!matchId) {
-      return res.status(400).json(new ApiResponse(false, 400, null, 'Match ID is required'));
+      return sendError(res, 'Match ID is required', 400);
     }
 
     if (caption && caption.length > MAX_CAPTION_LENGTH) {
-      return res.status(400).json(new ApiResponse(false, 400, null, `Caption must not exceed ${MAX_CAPTION_LENGTH} characters`));
+      return sendError(res, `Caption must not exceed ${MAX_CAPTION_LENGTH} characters`, 400);
     }
 
     const result = await feedService.createPost({
@@ -42,17 +42,15 @@ export const createPostHandler = async (req: AuthenticatedRequest, res: Response
     });
 
     const statusCode = result.alreadyExists ? 200 : 201;
-    const message = result.alreadyExists 
-      ? 'You have already posted this match' 
+    const message = result.alreadyExists
+      ? 'You have already posted this match'
       : 'Post created successfully';
 
-    return res.status(statusCode).json(
-      new ApiResponse(true, statusCode, { ...result.post, alreadyExists: result.alreadyExists }, message)
-    );
+    return sendSuccess(res, { ...result.post, alreadyExists: result.alreadyExists }, message, statusCode);
   } catch (error: unknown) {
     console.error('Error creating post:', error);
     const errorMessage = error instanceof Error ? error.message : 'Failed to create post';
-    return res.status(400).json(new ApiResponse(false, 400, null, errorMessage));
+    return sendError(res, errorMessage, 400);
   }
 };
 
@@ -70,7 +68,7 @@ export const getFeedPostsHandler = async (req: Request, res: Response) => {
 
     const parsedLimit = limit ? Math.min(parseInt(limit, 10), 50) : 10;
 
-    const filters: feedService.FeedFilters = { 
+    const filters: feedService.FeedFilters = {
       limit: parsedLimit,
       filter: filter || 'all' // Default to showing all posts
     };
@@ -79,10 +77,10 @@ export const getFeedPostsHandler = async (req: Request, res: Response) => {
 
     const result = await feedService.getFeedPosts(filters, userId);
 
-    return res.status(200).json(new ApiResponse(true, 200, result, 'Feed retrieved successfully'));
+    return sendSuccess(res, result, 'Feed retrieved successfully');
   } catch (error: unknown) {
     console.error('Error getting feed:', error);
-    return res.status(500).json(new ApiResponse(false, 500, null, 'Failed to get feed'));
+    return sendError(res, 'Failed to get feed', 500);
   }
 };
 
@@ -92,19 +90,19 @@ export const getPostByIdHandler = async (req: Request, res: Response) => {
     const { postId } = req.params;
 
     if (!postId) {
-      return res.status(400).json(new ApiResponse(false, 400, null, 'Post ID is required'));
+      return sendError(res, 'Post ID is required', 400);
     }
 
     const post = await feedService.getPostById(postId, userId);
 
     if (!post) {
-      return res.status(404).json(new ApiResponse(false, 404, null, 'Post not found'));
+      return sendError(res, 'Post not found', 404);
     }
 
-    return res.status(200).json(new ApiResponse(true, 200, post, 'Post retrieved successfully'));
+    return sendSuccess(res, post, 'Post retrieved successfully');
   } catch (error: unknown) {
     console.error('Error getting post:', error);
-    return res.status(500).json(new ApiResponse(false, 500, null, 'Failed to get post'));
+    return sendError(res, 'Failed to get post', 500);
   }
 };
 
@@ -119,28 +117,28 @@ export const updatePostCaptionHandler = async (req: AuthenticatedRequest, res: R
     const { caption } = req.body as UpdateCaptionBody;
 
     if (!userId) {
-      return res.status(401).json(new ApiResponse(false, 401, null, 'Authentication required'));
+      return sendError(res, 'Authentication required', 401);
     }
 
     if (!postId) {
-      return res.status(400).json(new ApiResponse(false, 400, null, 'Post ID is required'));
+      return sendError(res, 'Post ID is required', 400);
     }
 
     if (caption === undefined) {
-      return res.status(400).json(new ApiResponse(false, 400, null, 'Caption is required'));
+      return sendError(res, 'Caption is required', 400);
     }
 
     if (caption.length > MAX_CAPTION_LENGTH) {
-      return res.status(400).json(new ApiResponse(false, 400, null, `Caption must not exceed ${MAX_CAPTION_LENGTH} characters`));
+      return sendError(res, `Caption must not exceed ${MAX_CAPTION_LENGTH} characters`, 400);
     }
 
     const post = await feedService.updatePostCaption(postId, userId, caption);
 
-    return res.status(200).json(new ApiResponse(true, 200, post, 'Caption updated successfully'));
+    return sendSuccess(res, post, 'Caption updated successfully');
   } catch (error: unknown) {
     console.error('Error updating caption:', error);
     const errorMessage = error instanceof Error ? error.message : 'Failed to update caption';
-    return res.status(400).json(new ApiResponse(false, 400, null, errorMessage));
+    return sendError(res, errorMessage, 400);
   }
 };
 
@@ -150,20 +148,20 @@ export const deletePostHandler = async (req: AuthenticatedRequest, res: Response
     const { postId } = req.params;
 
     if (!userId) {
-      return res.status(401).json(new ApiResponse(false, 401, null, 'Authentication required'));
+      return sendError(res, 'Authentication required', 401);
     }
 
     if (!postId) {
-      return res.status(400).json(new ApiResponse(false, 400, null, 'Post ID is required'));
+      return sendError(res, 'Post ID is required', 400);
     }
 
     await feedService.deletePost(postId, userId);
 
-    return res.status(200).json(new ApiResponse(true, 200, null, 'Post deleted successfully'));
+    return sendSuccess(res, null, 'Post deleted successfully');
   } catch (error: unknown) {
     console.error('Error deleting post:', error);
     const errorMessage = error instanceof Error ? error.message : 'Failed to delete post';
-    return res.status(400).json(new ApiResponse(false, 400, null, errorMessage));
+    return sendError(res, errorMessage, 400);
   }
 };
 
@@ -177,11 +175,11 @@ export const toggleLikeHandler = async (req: AuthenticatedRequest, res: Response
     const { postId } = req.params;
 
     if (!userId) {
-      return res.status(401).json(new ApiResponse(false, 401, null, 'Authentication required'));
+      return sendError(res, 'Authentication required', 401);
     }
 
     if (!postId) {
-      return res.status(400).json(new ApiResponse(false, 400, null, 'Post ID is required'));
+      return sendError(res, 'Post ID is required', 400);
     }
 
     const result = await feedService.toggleLike(postId, userId);
@@ -207,13 +205,11 @@ export const toggleLikeHandler = async (req: AuthenticatedRequest, res: Response
       }
     }
 
-    return res.status(200).json(
-      new ApiResponse(true, 200, result, result.liked ? 'Post liked' : 'Post unliked')
-    );
+    return sendSuccess(res, result, result.liked ? 'Post liked' : 'Post unliked');
   } catch (error: unknown) {
     console.error('Error toggling like:', error);
     const errorMessage = error instanceof Error ? error.message : 'Failed to toggle like';
-    return res.status(400).json(new ApiResponse(false, 400, null, errorMessage));
+    return sendError(res, errorMessage, 400);
   }
 };
 
@@ -227,16 +223,16 @@ export const getPostLikersHandler = async (req: Request, res: Response) => {
     const { limit } = req.query as GetLikersQuery;
 
     if (!postId) {
-      return res.status(400).json(new ApiResponse(false, 400, null, 'Post ID is required'));
+      return sendError(res, 'Post ID is required', 400);
     }
 
     const parsedLimit = limit ? Math.min(parseInt(limit, 10), 100) : 50;
     const likers = await feedService.getPostLikers(postId, parsedLimit);
 
-    return res.status(200).json(new ApiResponse(true, 200, likers, 'Likers retrieved successfully'));
+    return sendSuccess(res, likers, 'Likers retrieved successfully');
   } catch (error: unknown) {
     console.error('Error getting likers:', error);
-    return res.status(500).json(new ApiResponse(false, 500, null, 'Failed to get likers'));
+    return sendError(res, 'Failed to get likers', 500);
   }
 };
 
@@ -255,15 +251,15 @@ export const addCommentHandler = async (req: AuthenticatedRequest, res: Response
     const { text } = req.body as AddCommentBody;
 
     if (!userId) {
-      return res.status(401).json(new ApiResponse(false, 401, null, 'Authentication required'));
+      return sendError(res, 'Authentication required', 401);
     }
 
     if (!postId) {
-      return res.status(400).json(new ApiResponse(false, 400, null, 'Post ID is required'));
+      return sendError(res, 'Post ID is required', 400);
     }
 
     if (!text) {
-      return res.status(400).json(new ApiResponse(false, 400, null, 'Comment text is required'));
+      return sendError(res, 'Comment text is required', 400);
     }
 
     const comment = await feedService.addComment(postId, userId, text);
@@ -295,11 +291,11 @@ export const addCommentHandler = async (req: AuthenticatedRequest, res: Response
       }
     }
 
-    return res.status(201).json(new ApiResponse(true, 201, comment, 'Comment added successfully'));
+    return sendSuccess(res, comment, 'Comment added successfully', 201);
   } catch (error: unknown) {
     console.error('Error adding comment:', error);
     const errorMessage = error instanceof Error ? error.message : 'Failed to add comment';
-    return res.status(400).json(new ApiResponse(false, 400, null, errorMessage));
+    return sendError(res, errorMessage, 400);
   }
 };
 
@@ -314,7 +310,7 @@ export const getPostCommentsHandler = async (req: Request, res: Response) => {
     const { limit, offset } = req.query as GetCommentsQuery;
 
     if (!postId) {
-      return res.status(400).json(new ApiResponse(false, 400, null, 'Post ID is required'));
+      return sendError(res, 'Post ID is required', 400);
     }
 
     const parsedLimit = limit ? Math.min(parseInt(limit, 10), 100) : 50;
@@ -322,10 +318,10 @@ export const getPostCommentsHandler = async (req: Request, res: Response) => {
 
     const comments = await feedService.getPostComments(postId, parsedLimit, parsedOffset);
 
-    return res.status(200).json(new ApiResponse(true, 200, comments, 'Comments retrieved successfully'));
+    return sendSuccess(res, comments, 'Comments retrieved successfully');
   } catch (error: unknown) {
     console.error('Error getting comments:', error);
-    return res.status(500).json(new ApiResponse(false, 500, null, 'Failed to get comments'));
+    return sendError(res, 'Failed to get comments', 500);
   }
 };
 
@@ -335,19 +331,19 @@ export const deleteCommentHandler = async (req: AuthenticatedRequest, res: Respo
     const { commentId } = req.params;
 
     if (!userId) {
-      return res.status(401).json(new ApiResponse(false, 401, null, 'Authentication required'));
+      return sendError(res, 'Authentication required', 401);
     }
 
     if (!commentId) {
-      return res.status(400).json(new ApiResponse(false, 400, null, 'Comment ID is required'));
+      return sendError(res, 'Comment ID is required', 400);
     }
 
     await feedService.deleteComment(commentId, userId);
 
-    return res.status(200).json(new ApiResponse(true, 200, null, 'Comment deleted successfully'));
+    return sendSuccess(res, null, 'Comment deleted successfully');
   } catch (error: unknown) {
     console.error('Error deleting comment:', error);
     const errorMessage = error instanceof Error ? error.message : 'Failed to delete comment';
-    return res.status(400).json(new ApiResponse(false, 400, null, errorMessage));
+    return sendError(res, errorMessage, 400);
   }
 };
