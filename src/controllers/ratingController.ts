@@ -17,6 +17,7 @@ import {
   getPlayerStanding
 } from '../services/rating/standingsCalculationService';
 import { logger } from '../utils/logger';
+import { sendSuccess, sendError } from '../utils/response';
 
 /**
  * Get current user's rating
@@ -28,10 +29,7 @@ export async function getMyRating(req: Request, res: Response) {
     const { seasonId, gameType } = req.query;
 
     if (!userId) {
-      return res.status(401).json({
-        success: false,
-        message: 'User not authenticated'
-      });
+      return sendError(res, 'User not authenticated', 401);
     }
 
     const rating = await getPlayerRating(
@@ -41,22 +39,13 @@ export async function getMyRating(req: Request, res: Response) {
     );
 
     if (!rating) {
-      return res.status(404).json({
-        success: false,
-        message: 'No rating found'
-      });
+      return sendError(res, 'No rating found', 404);
     }
 
-    return res.status(200).json({
-      success: true,
-      data: rating
-    });
+    return sendSuccess(res, rating);
   } catch (error: any) {
     logger.error('Get my rating error:', error);
-    return res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to get rating'
-    });
+    return sendError(res, error.message || 'Failed to get rating');
   }
 }
 
@@ -69,24 +58,15 @@ export async function getMyRatingSummary(req: Request, res: Response) {
     const userId = (req as any).user?.id;
 
     if (!userId) {
-      return res.status(401).json({
-        success: false,
-        message: 'User not authenticated'
-      });
+      return sendError(res, 'User not authenticated', 401);
     }
 
     const summary = await getPlayerRatingSummary(userId);
 
-    return res.status(200).json({
-      success: true,
-      data: summary
-    });
+    return sendSuccess(res, summary);
   } catch (error: any) {
     logger.error('Get my rating summary error:', error);
-    return res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to get rating summary'
-    });
+    return sendError(res, error.message || 'Failed to get rating summary');
   }
 }
 
@@ -100,10 +80,7 @@ export async function getMyRatingHistory(req: Request, res: Response) {
     const { seasonId, gameType, limit, sport } = req.query;
 
     if (!userId) {
-      return res.status(401).json({
-        success: false,
-        message: 'User not authenticated'
-      });
+      return sendError(res, 'User not authenticated', 401);
     }
 
     const history = await getPlayerRatingHistory(
@@ -114,16 +91,10 @@ export async function getMyRatingHistory(req: Request, res: Response) {
       sport ? (sport as SportType) : undefined
     );
 
-    return res.status(200).json({
-      success: true,
-      data: history
-    });
+    return sendSuccess(res, history);
   } catch (error: any) {
     logger.error('Get my rating history error:', error);
-    return res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to get rating history'
-    });
+    return sendError(res, error.message || 'Failed to get rating history');
   }
 }
 
@@ -136,24 +107,15 @@ export async function getMyRatingStats(req: Request, res: Response) {
     const userId = (req as any).user?.id;
 
     if (!userId) {
-      return res.status(401).json({
-        success: false,
-        message: 'User not authenticated'
-      });
+      return sendError(res, 'User not authenticated', 401);
     }
 
     const stats = await getPlayerRatingStats(userId);
 
-    return res.status(200).json({
-      success: true,
-      data: stats
-    });
+    return sendSuccess(res, stats);
   } catch (error: any) {
     logger.error('Get my rating stats error:', error);
-    return res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to get rating stats'
-    });
+    return sendError(res, error.message || 'Failed to get rating stats');
   }
 }
 
@@ -165,7 +127,7 @@ export async function getPlayerRatingById(req: Request, res: Response) {
   try {
     const { userId } = req.params;
     if (!userId) {
-      return res.status(400).json({ error: 'User ID is required' });
+      return sendError(res, 'User ID is required', 400);
     }
 
     const { seasonId, gameType } = req.query;
@@ -177,22 +139,13 @@ export async function getPlayerRatingById(req: Request, res: Response) {
     );
 
     if (!rating) {
-      return res.status(404).json({
-        success: false,
-        message: 'No rating found for this player'
-      });
+      return sendError(res, 'No rating found for this player', 404);
     }
 
-    return res.status(200).json({
-      success: true,
-      data: rating
-    });
+    return sendSuccess(res, rating);
   } catch (error: any) {
     logger.error('Get player rating error:', error);
-    return res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to get player rating'
-    });
+    return sendError(res, error.message || 'Failed to get player rating');
   }
 }
 
@@ -204,21 +157,15 @@ export async function getAllPlayerRatings(req: Request, res: Response) {
   try {
     const { userId } = req.params;
     if (!userId) {
-      return res.status(400).json({ error: 'User ID is required' });
+      return sendError(res, 'User ID is required', 400);
     }
 
     const ratings = await getPlayerRatings(userId);
 
-    return res.status(200).json({
-      success: true,
-      data: ratings
-    });
+    return sendSuccess(res, ratings);
   } catch (error: any) {
     logger.error('Get all player ratings error:', error);
-    return res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to get player ratings'
-    });
+    return sendError(res, error.message || 'Failed to get player ratings');
   }
 }
 
@@ -230,7 +177,7 @@ export async function getPlayerRatingHistoryById(req: Request, res: Response) {
   try {
     const { userId } = req.params;
     if (!userId) {
-      return res.status(400).json({ error: 'User ID is required' });
+      return sendError(res, 'User ID is required', 400);
     }
 
     const { seasonId, gameType, limit } = req.query;
@@ -242,16 +189,10 @@ export async function getPlayerRatingHistoryById(req: Request, res: Response) {
       parseInt(limit as string) || 50
     );
 
-    return res.status(200).json({
-      success: true,
-      data: history
-    });
+    return sendSuccess(res, history);
   } catch (error: any) {
     logger.error('Get player rating history error:', error);
-    return res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to get player rating history'
-    });
+    return sendError(res, error.message || 'Failed to get player rating history');
   }
 }
 
@@ -263,21 +204,15 @@ export async function getDivisionStandingsHandler(req: Request, res: Response) {
   try {
     const { divisionId } = req.params;
     if (!divisionId) {
-      return res.status(400).json({ error: 'Division ID is required' });
+      return sendError(res, 'Division ID is required', 400);
     }
 
     const standings = await getDivisionStandings(divisionId);
 
-    return res.status(200).json({
-      success: true,
-      data: standings
-    });
+    return sendSuccess(res, standings);
   } catch (error: any) {
     logger.error('Get division standings error:', error);
-    return res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to get division standings'
-    });
+    return sendError(res, error.message || 'Failed to get division standings');
   }
 }
 
@@ -291,38 +226,23 @@ export async function getMyStanding(req: Request, res: Response) {
     const { divisionId } = req.query;
 
     if (!userId) {
-      return res.status(401).json({
-        success: false,
-        message: 'User not authenticated'
-      });
+      return sendError(res, 'User not authenticated', 401);
     }
 
     if (!divisionId) {
-      return res.status(400).json({
-        success: false,
-        message: 'Division ID is required'
-      });
+      return sendError(res, 'Division ID is required', 400);
     }
 
     const standing = await getPlayerStanding(userId, divisionId as string);
 
     if (!standing) {
-      return res.status(404).json({
-        success: false,
-        message: 'No standing found in this division'
-      });
+      return sendError(res, 'No standing found in this division', 404);
     }
 
-    return res.status(200).json({
-      success: true,
-      data: standing
-    });
+    return sendSuccess(res, standing);
   } catch (error: any) {
     logger.error('Get my standing error:', error);
-    return res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to get standing'
-    });
+    return sendError(res, error.message || 'Failed to get standing');
   }
 }
 
@@ -334,27 +254,18 @@ export async function getPlayerStandingHandler(req: Request, res: Response) {
   try {
     const { userId, divisionId } = req.params;
     if (!userId || !divisionId) {
-      return res.status(400).json({ error: 'User ID and Division ID are required' });
+      return sendError(res, 'User ID and Division ID are required', 400);
     }
 
     const standing = await getPlayerStanding(userId, divisionId);
 
     if (!standing) {
-      return res.status(404).json({
-        success: false,
-        message: 'No standing found for this player in this division'
-      });
+      return sendError(res, 'No standing found for this player in this division', 404);
     }
 
-    return res.status(200).json({
-      success: true,
-      data: standing
-    });
+    return sendSuccess(res, standing);
   } catch (error: any) {
     logger.error('Get player standing error:', error);
-    return res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to get player standing'
-    });
+    return sendError(res, error.message || 'Failed to get player standing');
   }
 }
