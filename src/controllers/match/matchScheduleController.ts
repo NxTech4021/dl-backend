@@ -6,6 +6,7 @@
 import { Request, Response } from 'express';
 import { getMatchScheduleService } from '../../services/match/matchScheduleService';
 import { CancellationReason } from '@prisma/client';
+import { sendSuccess, sendError } from '../../utils/response';
 
 const matchScheduleService = getMatchScheduleService();
 
@@ -17,18 +18,18 @@ export const cancelMatch = async (req: Request, res: Response) => {
   try {
     const userId = req.user?.id;
     if (!userId) {
-      return res.status(401).json({ error: 'Authentication required' });
+      return sendError(res, 'Authentication required', 401);
     }
 
     const { id } = req.params;
     if (!id) {
-      return res.status(400).json({ error: 'Match ID is required' });
+      return sendError(res, 'Match ID is required', 400);
     }
 
     const { reason, comment } = req.body;
 
     if (!reason) {
-      return res.status(400).json({ error: 'Cancellation reason is required' });
+      return sendError(res, 'Cancellation reason is required', 400);
     }
 
     const validReasons = [
@@ -37,7 +38,7 @@ export const cancelMatch = async (req: Request, res: Response) => {
     ];
 
     if (!validReasons.includes(reason)) {
-      return res.status(400).json({ error: 'Invalid cancellation reason' });
+      return sendError(res, 'Invalid cancellation reason', 400);
     }
 
     const match = await matchScheduleService.cancelMatch({
@@ -47,11 +48,11 @@ export const cancelMatch = async (req: Request, res: Response) => {
       comment
     });
 
-    res.json(match);
+    sendSuccess(res, match);
   } catch (error) {
     console.error('Cancel Match Error:', error);
     const message = error instanceof Error ? error.message : 'Failed to cancel match';
-    res.status(400).json({ error: message });
+    sendError(res, message, 400);
   }
 };
 
@@ -63,22 +64,22 @@ export const requestReschedule = async (req: Request, res: Response) => {
   try {
     const userId = req.user?.id;
     if (!userId) {
-      return res.status(401).json({ error: 'Authentication required' });
+      return sendError(res, 'Authentication required', 401);
     }
 
     const { id } = req.params;
     if (!id) {
-      return res.status(400).json({ error: 'Match ID is required' });
+      return sendError(res, 'Match ID is required', 400);
     }
 
     const { proposedTimes, reason } = req.body;
 
     if (!proposedTimes || !Array.isArray(proposedTimes) || proposedTimes.length === 0) {
-      return res.status(400).json({ error: 'At least one proposed time is required' });
+      return sendError(res, 'At least one proposed time is required', 400);
     }
 
     if (!reason) {
-      return res.status(400).json({ error: 'Reason for rescheduling is required' });
+      return sendError(res, 'Reason for rescheduling is required', 400);
     }
 
     const match = await matchScheduleService.requestReschedule({
@@ -88,11 +89,11 @@ export const requestReschedule = async (req: Request, res: Response) => {
       reason
     });
 
-    res.json(match);
+    sendSuccess(res, match);
   } catch (error) {
     console.error('Request Reschedule Error:', error);
     const message = error instanceof Error ? error.message : 'Failed to request reschedule';
-    res.status(400).json({ error: message });
+    sendError(res, message, 400);
   }
 };
 
@@ -104,20 +105,20 @@ export const getCancellationRuleImpact = async (req: Request, res: Response) => 
   try {
     const userId = req.user?.id;
     if (!userId) {
-      return res.status(401).json({ error: 'Authentication required' });
+      return sendError(res, 'Authentication required', 401);
     }
 
     const { id } = req.params;
     if (!id) {
-      return res.status(400).json({ error: 'Match ID is required' });
+      return sendError(res, 'Match ID is required', 400);
     }
 
     const impact = await matchScheduleService.getCancellationRuleImpact(id);
-    res.json(impact);
+    sendSuccess(res, impact);
   } catch (error) {
     console.error('Get Cancellation Impact Error:', error);
     const message = error instanceof Error ? error.message : 'Failed to get cancellation impact';
-    res.status(400).json({ error: message });
+    sendError(res, message, 400);
   }
 };
 
@@ -129,22 +130,22 @@ export const recordWalkover = async (req: Request, res: Response) => {
   try {
     const userId = req.user?.id;
     if (!userId) {
-      return res.status(401).json({ error: 'Authentication required' });
+      return sendError(res, 'Authentication required', 401);
     }
 
     const { id } = req.params;
     if (!id) {
-      return res.status(400).json({ error: 'Match ID is required' });
+      return sendError(res, 'Match ID is required', 400);
     }
 
     const { defaultingPlayerId, reason } = req.body;
 
     if (!defaultingPlayerId) {
-      return res.status(400).json({ error: 'Defaulting player ID is required' });
+      return sendError(res, 'Defaulting player ID is required', 400);
     }
 
     if (!reason) {
-      return res.status(400).json({ error: 'Reason is required' });
+      return sendError(res, 'Reason is required', 400);
     }
 
     const match = await matchScheduleService.recordWalkover(
@@ -154,11 +155,11 @@ export const recordWalkover = async (req: Request, res: Response) => {
       reason
     );
 
-    res.json(match);
+    sendSuccess(res, match);
   } catch (error) {
     console.error('Record Walkover Error:', error);
     const message = error instanceof Error ? error.message : 'Failed to record walkover';
-    res.status(400).json({ error: message });
+    sendError(res, message, 400);
   }
 };
 
@@ -170,18 +171,18 @@ export const continueMatch = async (req: Request, res: Response) => {
   try {
     const userId = req.user?.id;
     if (!userId) {
-      return res.status(401).json({ error: 'Authentication required' });
+      return sendError(res, 'Authentication required', 401);
     }
 
     const { id } = req.params;
     if (!id) {
-      return res.status(400).json({ error: 'Match ID is required' });
+      return sendError(res, 'Match ID is required', 400);
     }
 
     const { proposedTimes, notes } = req.body;
 
     if (!proposedTimes || !Array.isArray(proposedTimes) || proposedTimes.length === 0) {
-      return res.status(400).json({ error: 'At least one proposed time is required' });
+      return sendError(res, 'At least one proposed time is required', 400);
     }
 
     const match = await matchScheduleService.continueUnfinishedMatch(
@@ -191,10 +192,10 @@ export const continueMatch = async (req: Request, res: Response) => {
       notes
     );
 
-    res.json(match);
+    sendSuccess(res, match);
   } catch (error) {
     console.error('Continue Match Error:', error);
     const message = error instanceof Error ? error.message : 'Failed to continue match';
-    res.status(400).json({ error: message });
+    sendError(res, message, 400);
   }
 };
