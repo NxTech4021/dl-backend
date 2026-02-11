@@ -7,6 +7,7 @@ import { Request, Response } from 'express';
 import { PaymentStatus } from '@prisma/client';
 import * as adminPaymentService from '../../services/admin/adminPaymentService';
 import { logger } from '../../utils/logger';
+import { sendSuccess, sendError, sendPaginated } from '../../utils/response';
 
 /**
  * Get payments with filters and pagination
@@ -54,19 +55,11 @@ export const getPayments = async (req: Request, res: Response) => {
       sortOrder: validSortOrder
     });
 
-    return res.status(200).json({
-      success: true,
-      data: result.data,
-      pagination: result.pagination,
-      message: 'Payments retrieved successfully'
-    });
+    return sendPaginated(res, result.data, result.pagination, 'Payments retrieved successfully');
   } catch (error: any) {
     logger.error('Get payments error:', error);
 
-    return res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to get payments'
-    });
+    return sendError(res, error.message || 'Failed to get payments');
   }
 };
 
@@ -83,18 +76,11 @@ export const getPaymentStats = async (req: Request, res: Response) => {
       seasonId ? String(seasonId) : undefined
     );
 
-    return res.status(200).json({
-      success: true,
-      data: stats,
-      message: 'Payment statistics retrieved successfully'
-    });
+    return sendSuccess(res, stats, 'Payment statistics retrieved successfully');
   } catch (error: any) {
     logger.error('Get payment stats error:', error);
 
-    return res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to get payment statistics'
-    });
+    return sendError(res, error.message || 'Failed to get payment statistics');
   }
 };
 
@@ -110,24 +96,15 @@ export const updatePaymentStatus = async (req: Request, res: Response) => {
     const { paymentStatus, notes } = req.body;
 
     if (!adminId) {
-      return res.status(401).json({
-        success: false,
-        message: 'Admin not authenticated'
-      });
+      return sendError(res, 'Admin not authenticated', 401);
     }
 
     if (!membershipId) {
-      return res.status(400).json({
-        success: false,
-        message: 'Membership ID is required'
-      });
+      return sendError(res, 'Membership ID is required', 400);
     }
 
     if (!paymentStatus || !Object.values(PaymentStatus).includes(paymentStatus)) {
-      return res.status(400).json({
-        success: false,
-        message: `Invalid payment status. Must be one of: ${Object.values(PaymentStatus).join(', ')}`
-      });
+      return sendError(res, `Invalid payment status. Must be one of: ${Object.values(PaymentStatus).join(', ')}`, 400);
     }
 
     const result = await adminPaymentService.updatePaymentStatus({
@@ -137,21 +114,13 @@ export const updatePaymentStatus = async (req: Request, res: Response) => {
       notes: notes?.trim()
     });
 
-    return res.status(200).json({
-      success: true,
-      data: result.membership,
-      previousStatus: result.previousStatus,
-      message: `Payment status updated to ${paymentStatus}`
-    });
+    return sendSuccess(res, { membership: result.membership, previousStatus: result.previousStatus }, `Payment status updated to ${paymentStatus}`);
   } catch (error: any) {
     logger.error('Update payment status error:', error);
 
     const statusCode = error.message === 'Membership not found' ? 404 : 500;
 
-    return res.status(statusCode).json({
-      success: false,
-      message: error.message || 'Failed to update payment status'
-    });
+    return sendError(res, error.message || 'Failed to update payment status', statusCode);
   }
 };
 
@@ -166,24 +135,15 @@ export const bulkUpdatePaymentStatus = async (req: Request, res: Response) => {
     const { membershipIds, paymentStatus, notes } = req.body;
 
     if (!adminId) {
-      return res.status(401).json({
-        success: false,
-        message: 'Admin not authenticated'
-      });
+      return sendError(res, 'Admin not authenticated', 401);
     }
 
     if (!membershipIds || !Array.isArray(membershipIds) || membershipIds.length === 0) {
-      return res.status(400).json({
-        success: false,
-        message: 'Membership IDs array is required'
-      });
+      return sendError(res, 'Membership IDs array is required', 400);
     }
 
     if (!paymentStatus || !Object.values(PaymentStatus).includes(paymentStatus)) {
-      return res.status(400).json({
-        success: false,
-        message: `Invalid payment status. Must be one of: ${Object.values(PaymentStatus).join(', ')}`
-      });
+      return sendError(res, `Invalid payment status. Must be one of: ${Object.values(PaymentStatus).join(', ')}`, 400);
     }
 
     const result = await adminPaymentService.bulkUpdatePaymentStatus({
@@ -193,20 +153,13 @@ export const bulkUpdatePaymentStatus = async (req: Request, res: Response) => {
       notes: notes?.trim()
     });
 
-    return res.status(200).json({
-      success: true,
-      data: result,
-      message: `${result.updated} payment(s) updated to ${paymentStatus}`
-    });
+    return sendSuccess(res, result, `${result.updated} payment(s) updated to ${paymentStatus}`);
   } catch (error: any) {
     logger.error('Bulk update payment status error:', error);
 
     const statusCode = error.message.includes('not found') ? 404 : 500;
 
-    return res.status(statusCode).json({
-      success: false,
-      message: error.message || 'Failed to bulk update payment status'
-    });
+    return sendError(res, error.message || 'Failed to bulk update payment status', statusCode);
   }
 };
 
@@ -218,17 +171,10 @@ export const getSeasonsWithPayment = async (req: Request, res: Response) => {
   try {
     const seasons = await adminPaymentService.getSeasonsWithPayment();
 
-    return res.status(200).json({
-      success: true,
-      data: seasons,
-      message: 'Seasons retrieved successfully'
-    });
+    return sendSuccess(res, seasons, 'Seasons retrieved successfully');
   } catch (error: any) {
     logger.error('Get seasons with payment error:', error);
 
-    return res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to get seasons'
-    });
+    return sendError(res, error.message || 'Failed to get seasons');
   }
 };
