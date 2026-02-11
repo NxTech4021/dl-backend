@@ -2,7 +2,7 @@ import { Request, Response } from "express";
 import { Prisma, PaymentStatus } from "@prisma/client";
 import { prisma } from "../lib/prisma";
 import * as paymentService from "../services/paymentService";
-import { ApiResponse } from "../utils/ApiResponse";
+import { sendSuccess, sendPaginated, sendError } from "../utils/response";
 import { getFiuuConfig } from "../config/fiuu";
 import {
   buildCheckoutPayload,
@@ -68,30 +68,21 @@ export const getPayments = async (req: Request, res: Response) => {
       updatedAt: payment.updatedAt
     }));
 
-    const result = {
-      data: transformedPayments,
-      pagination: {
-        page: pageNum,
-        limit: take,
-        total,
-        totalPages: Math.ceil(total / take),
-      },
+    const pagination = {
+      page: pageNum,
+      limit: take,
+      total,
+      totalPages: Math.ceil(total / take),
     };
 
     if (transformedPayments.length === 0) {
-      return res.status(200).json(
-        new ApiResponse(true, 200, result, "No payments found")
-      );
+      return sendPaginated(res, transformedPayments, pagination, "No payments found");
     }
 
-    return res.status(200).json(
-      new ApiResponse(true, 200, result, "Payments fetched successfully")
-    );
+    return sendPaginated(res, transformedPayments, pagination, "Payments fetched successfully");
   } catch (error) {
     console.error("Error fetching payments:", error);
-    return res.status(500).json(
-      new ApiResponse(false, 500, null, "Error fetching payments")
-    );
+    return sendError(res, "Error fetching payments", 500);
   }
 };
 
@@ -100,9 +91,7 @@ export const getPaymentById = async (req: Request, res: Response) => {
     const { id } = req.params;
 
     if (!id) {
-      return res.status(400).json(
-        new ApiResponse(false, 400, null, 'Payment ID is required')
-      );
+      return sendError(res, "Payment ID is required", 400);
     }
 
     const payment = await prisma.payment.findUnique({
@@ -123,9 +112,7 @@ export const getPaymentById = async (req: Request, res: Response) => {
     });
 
     if (!payment) {
-      return res.status(404).json(
-        new ApiResponse(false, 404, null, 'Payment not found')
-      );
+      return sendError(res, "Payment not found", 404);
     }
 
     // Transform for detailed view
@@ -141,14 +128,10 @@ export const getPaymentById = async (req: Request, res: Response) => {
       updatedAt: payment.updatedAt
     };
 
-    return res.status(200).json(
-      new ApiResponse(true, 200, transformedPayment, "Payment details fetched successfully")
-    );
+    return sendSuccess(res, transformedPayment, "Payment details fetched successfully");
   } catch (error: any) {
     console.error("Error fetching payment:", error);
-    return res.status(500).json(
-      new ApiResponse(false, 500, null, "Error fetching payment")
-    );
+    return sendError(res, "Error fetching payment", 500);
   }
 };
 
@@ -157,15 +140,11 @@ export const createPayment = async (req: Request, res: Response) => {
     const { amount, paymentMethod, status, notes } = req.body;
 
     if (!amount) {
-      return res.status(400).json(
-        new ApiResponse(false, 400, null, 'Missing required field: amount')
-      );
+      return sendError(res, "Missing required field: amount", 400);
     }
 
     if (status && !Object.values(PaymentStatus).includes(status)) {
-      return res.status(400).json(
-        new ApiResponse(false, 400, null, `Invalid status provided. Must be one of: ${Object.values(PaymentStatus).join(', ')}`)
-      );
+      return sendError(res, `Invalid status provided. Must be one of: ${Object.values(PaymentStatus).join(', ')}`, 400);
     }
 
     // Use service for business logic
@@ -176,14 +155,10 @@ export const createPayment = async (req: Request, res: Response) => {
       notes,
     });
 
-    return res.status(201).json(
-      new ApiResponse(true, 201, newPayment, "Payment created successfully")
-    );
+    return sendSuccess(res, newPayment, "Payment created successfully", 201);
   } catch (error: any) {
     console.error("Create payment error:", error);
-    return res.status(500).json(
-      new ApiResponse(false, 500, null, "Error creating payment")
-    );
+    return sendError(res, "Error creating payment", 500);
   }
 };
 
@@ -192,9 +167,7 @@ export const updatePayment = async (req: Request, res: Response) => {
     const { id } = req.params;
 
     if (!id) {
-      return res.status(400).json(
-        new ApiResponse(false, 400, null, 'Payment ID is required')
-      );
+      return sendError(res, "Payment ID is required", 400);
     }
 
     const updateData = { ...req.body };
@@ -206,27 +179,19 @@ export const updatePayment = async (req: Request, res: Response) => {
 
     // Validate status if provided
     if (updateData.status && !Object.values(PaymentStatus).includes(updateData.status)) {
-      return res.status(400).json(
-        new ApiResponse(false, 400, null, `Invalid status provided. Must be one of: ${Object.values(PaymentStatus).join(', ')}`)
-      );
+      return sendError(res, `Invalid status provided. Must be one of: ${Object.values(PaymentStatus).join(', ')}`, 400);
     }
 
     // Use service for business logic
     const updatedPayment = await paymentService.updatePayment(id, updateData);
-    
-    return res.status(200).json(
-      new ApiResponse(true, 200, updatedPayment, "Payment updated successfully")
-    );
+
+    return sendSuccess(res, updatedPayment, "Payment updated successfully");
   } catch (error: any) {
     console.error("Error updating payment:", error);
     if (error.message.includes('not found')) {
-      return res.status(404).json(
-        new ApiResponse(false, 404, null, error.message)
-      );
+      return sendError(res, error.message, 404);
     }
-    return res.status(500).json(
-      new ApiResponse(false, 500, null, "Error updating payment")
-    );
+    return sendError(res, "Error updating payment", 500);
   }
 };
 
@@ -235,27 +200,19 @@ export const markPaymentAsPaid = async (req: Request, res: Response) => {
     const { id } = req.params;
 
     if (!id) {
-      return res.status(400).json(
-        new ApiResponse(false, 400, null, 'Payment ID is required')
-      );
+      return sendError(res, "Payment ID is required", 400);
     }
 
     // Use service for business logic
     const updatedPayment = await paymentService.markPaymentAsPaid(id);
-    
-    return res.status(200).json(
-      new ApiResponse(true, 200, updatedPayment, "Payment marked as paid successfully")
-    );
+
+    return sendSuccess(res, updatedPayment, "Payment marked as paid successfully");
   } catch (error: any) {
     console.error("Error marking payment as paid:", error);
     if (error.message.includes('not found') || error.message.includes('already marked')) {
-      return res.status(400).json(
-        new ApiResponse(false, 400, null, error.message)
-      );
+      return sendError(res, error.message, 400);
     }
-    return res.status(500).json(
-      new ApiResponse(false, 500, null, "Error marking payment as paid")
-    );
+    return sendError(res, "Error marking payment as paid", 500);
   }
 };
 
@@ -264,31 +221,21 @@ export const deletePayment = async (req: Request, res: Response) => {
     const { id } = req.params;
 
     if (!id) {
-      return res.status(400).json(
-        new ApiResponse(false, 400, null, 'Payment ID is required')
-      );
+      return sendError(res, "Payment ID is required", 400);
     }
 
     // Use service for business logic
     await paymentService.deletePayment(id);
-    
-    return res.status(200).json(
-      new ApiResponse(true, 200, null, "Payment deleted successfully")
-    );
+
+    return sendSuccess(res, null, "Payment deleted successfully");
   } catch (error: any) {
     console.error("Error deleting payment:", error);
     if (error.message.includes('Cannot delete')) {
-      return res.status(400).json(
-        new ApiResponse(false, 400, null, error.message)
-      );
+      return sendError(res, error.message, 400);
     } else if (error.message.includes('not found')) {
-      return res.status(404).json(
-        new ApiResponse(false, 404, null, error.message)
-      );
+      return sendError(res, error.message, 404);
     } else {
-      return res.status(500).json(
-        new ApiResponse(false, 500, null, "Error deleting payment")
-      );
+      return sendError(res, "Error deleting payment", 500);
     }
   }
 };
@@ -300,9 +247,7 @@ export const createFiuuCheckout = async (req: Request, res: Response) => {
   };
 
   if (!userId || !seasonId) {
-    return res
-      .status(400)
-      .json(new ApiResponse(false, 400, null, "userId and seasonId are required."));
+    return sendError(res, "userId and seasonId are required.", 400);
   }
 
   try {
@@ -332,36 +277,24 @@ export const createFiuuCheckout = async (req: Request, res: Response) => {
     ]);
 
     if (!user) {
-      return res
-        .status(404)
-        .json(new ApiResponse(false, 404, null, "User not found."));
+      return sendError(res, "User not found.", 404);
     }
 
     if (!season) {
-      return res
-        .status(404)
-        .json(new ApiResponse(false, 404, null, "Season not found."));
+      return sendError(res, "Season not found.", 404);
     }
 
     if (!season.paymentRequired) {
-      return res
-        .status(400)
-        .json(new ApiResponse(false, 400, null, "This season does not require payment."));
+      return sendError(res, "This season does not require payment.", 400);
     }
 
     if (!season.entryFee) {
-      return res
-        .status(400)
-        .json(new ApiResponse(false, 400, null, "Season entry fee is not configured."));
+      return sendError(res, "Season entry fee is not configured.", 400);
     }
 
     // Block if already fully paid/active
     if (existingMembership?.paymentStatus === PaymentStatus.COMPLETED) {
-      return res
-        .status(400)
-        .json(
-          new ApiResponse(false, 400, null, "Payment already completed for this season."),
-        );
+      return sendError(res, "Payment already completed for this season.", 400);
     }
 
     // Do not auto-register; only create payment intent. Membership will be created on successful payment.
@@ -425,26 +358,22 @@ export const createFiuuCheckout = async (req: Request, res: Response) => {
           },
         });
 
-    return res.status(201).json(
-      new ApiResponse(
-        true,
-        201,
-        {
-          paymentId: paymentRecord.id,
-          orderId: paymentRecord.orderId,
-          amount,
-          currency: "MYR",
-          membershipId,
-          checkout,
-        },
-        "FIUU checkout generated successfully.",
-      ),
+    return sendSuccess(
+      res,
+      {
+        paymentId: paymentRecord.id,
+        orderId: paymentRecord.orderId,
+        amount,
+        currency: "MYR",
+        membershipId,
+        checkout,
+      },
+      "FIUU checkout generated successfully.",
+      201,
     );
   } catch (error) {
     console.error("Error creating FIUU checkout:", error);
-    return res
-      .status(500)
-      .json(new ApiResponse(false, 500, null, "Failed to start FIUU payment."));
+    return sendError(res, "Failed to start FIUU payment.", 500);
   }
 };
 
@@ -531,7 +460,7 @@ export const handleFiuuNotification = async (req: Request, res: Response) => {
         ip: req.ip || req.connection?.remoteAddress,
         timestamp: new Date().toISOString(),
       });
-      return res.status(403).json({ error: 'Invalid signature' });
+      return sendError(res, "Invalid signature", 403);
     }
 
     // Only proceed with payment update if signature verification passes
