@@ -817,9 +817,12 @@ export const convertToWalkover = async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'reason is required for audit trail' });
     }
 
+    const userId = authReq.user?.id || adminId;
+
     const match = await adminMatchService.convertToWalkover({
       matchId: id,
       adminId,
+      userId,
       winnerId,
       reason,
       walkoverReason
