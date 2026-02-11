@@ -6,6 +6,7 @@
 import { Request, Response } from 'express';
 import { getFriendlyMatchService } from '../services/match/friendlyMatchService';
 import { getMatchCommentService } from '../services/match/matchCommentService';
+import { sendSuccess, sendError } from '../utils/response';
 import { MatchType, MatchFormat, MatchStatus, GenderRestriction, SportType } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import dayjs from 'dayjs';
@@ -55,7 +56,7 @@ export const createFriendlyMatch = async (req: Request, res: Response) => {
   try {
     const userId = req.user?.id;
     if (!userId) {
-      return res.status(401).json({ error: 'Authentication required' });
+      return sendError(res, 'Authentication required', 401);
     }
 
     const {
@@ -83,19 +84,19 @@ export const createFriendlyMatch = async (req: Request, res: Response) => {
     } = req.body;
 
     if (!sport || !['PICKLEBALL', 'TENNIS', 'PADEL'].includes(sport)) {
-      return res.status(400).json({ error: 'Valid sport (PICKLEBALL/TENNIS/PADEL) is required' });
+      return sendError(res, 'Valid sport (PICKLEBALL/TENNIS/PADEL) is required', 400);
     }
 
     if (!matchType || !['SINGLES', 'DOUBLES'].includes(matchType)) {
-      return res.status(400).json({ error: 'Valid matchType (SINGLES/DOUBLES) is required' });
+      return sendError(res, 'Valid matchType (SINGLES/DOUBLES) is required', 400);
     }
 
     if (!matchDate) {
-      return res.status(400).json({ error: 'matchDate is required' });
+      return sendError(res, 'matchDate is required', 400);
     }
 
     if (!skillLevels || !Array.isArray(skillLevels) || skillLevels.length === 0) {
-      return res.status(400).json({ error: 'At least one skillLevel is required' });
+      return sendError(res, 'At least one skillLevel is required', 400);
     }
 
     // Timezone conversion
@@ -134,17 +135,17 @@ export const createFriendlyMatch = async (req: Request, res: Response) => {
     });
 
     if (!match) {
-      return res.status(500).json({ error: 'Failed to create friendly match' });
+      return sendError(res, 'Failed to create friendly match');
     }
 
     // Note: Notifications are handled by friendlyMatchService.createFriendlyMatch()
     // Do NOT send notifications here to avoid duplicates
 
-    res.status(201).json(match);
+    sendSuccess(res, match, undefined, 201);
   } catch (error) {
     console.error('Create Friendly Match Error:', error);
     const message = error instanceof Error ? error.message : 'Failed to create friendly match';
-    res.status(400).json({ error: message });
+    sendError(res, message, 400);
   }
 };
 
@@ -189,10 +190,10 @@ export const getFriendlyMatches = async (req: Request, res: Response) => {
       parseInt(limit as string)
     );
 
-    res.json(result);
+    sendSuccess(res, result);
   } catch (error) {
     console.error('Get Friendly Matches Error:', error);
-    res.status(500).json({ error: 'Failed to retrieve friendly matches' });
+    sendError(res, 'Failed to retrieve friendly matches');
   }
 };
 
@@ -204,16 +205,16 @@ export const getFriendlyMatchById = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     if (!id) {
-      return res.status(400).json({ error: 'Match ID is required' });
+      return sendError(res, 'Match ID is required', 400);
     }
 
     const match = await friendlyMatchService.getFriendlyMatchById(id);
-    res.json(match);
+    sendSuccess(res, match);
   } catch (error) {
     console.error('Get Friendly Match By ID Error:', error);
     const message = error instanceof Error ? error.message : 'Failed to retrieve friendly match';
     const status = message.includes('not found') ? 404 : 500;
-    res.status(status).json({ error: message });
+    sendError(res, message, status);
   }
 };
 
@@ -226,7 +227,7 @@ export const getFriendlyMatchDetails = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     if (!id) {
-      return res.status(400).json({ error: 'Match ID is required' });
+      return sendError(res, 'Match ID is required', 400);
     }
 
     const match = await prisma.match.findFirst({
@@ -261,7 +262,7 @@ export const getFriendlyMatchDetails = async (req: Request, res: Response) => {
     }) as any;
 
     if (!match) {
-      return res.status(404).json({ error: 'Friendly match not found' });
+      return sendError(res, 'Friendly match not found', 404);
     }
 
     // Format match date and time
@@ -376,11 +377,11 @@ export const getFriendlyMatchDetails = async (req: Request, res: Response) => {
       createdBy: match.createdBy,
     };
 
-    res.json({ data: response });
+    sendSuccess(res, response);
   } catch (error) {
     console.error('Get Friendly Match Details Error:', error);
     const message = error instanceof Error ? error.message : 'Failed to retrieve friendly match details';
-    res.status(500).json({ error: message });
+    sendError(res, message);
   }
 };
 
@@ -392,12 +393,12 @@ export const joinFriendlyMatch = async (req: Request, res: Response) => {
   try {
     const userId = req.user?.id;
     if (!userId) {
-      return res.status(401).json({ error: 'Authentication required' });
+      return sendError(res, 'Authentication required', 401);
     }
 
     const { id } = req.params;
     if (!id) {
-      return res.status(400).json({ error: 'Match ID is required' });
+      return sendError(res, 'Match ID is required', 400);
     }
 
     const { asPartner = false, partnerId } = req.body;
@@ -407,11 +408,11 @@ export const joinFriendlyMatch = async (req: Request, res: Response) => {
     // Note: Notifications are handled by friendlyMatchService.joinFriendlyMatch()
     // Do NOT send notifications here to avoid duplicates
 
-    res.json(match);
+    sendSuccess(res, match);
   } catch (error) {
     console.error('Join Friendly Match Error:', error);
     const message = error instanceof Error ? error.message : 'Failed to join friendly match';
-    res.status(400).json({ error: message });
+    sendError(res, message, 400);
   }
 };
 
@@ -423,12 +424,12 @@ export const submitFriendlyResult = async (req: Request, res: Response) => {
   try {
     const userId = req.user?.id;
     if (!userId) {
-      return res.status(401).json({ error: 'Authentication required' });
+      return sendError(res, 'Authentication required', 401);
     }
 
     const { id } = req.params;
     if (!id) {
-      return res.status(400).json({ error: 'Match ID is required' });
+      return sendError(res, 'Match ID is required', 400);
     }
 
     const { setScores, gameScores, comment, evidence, isCasualPlay, teamAssignments } = req.body;
@@ -439,9 +440,7 @@ export const submitFriendlyResult = async (req: Request, res: Response) => {
       // Validate that at least one score type is provided
       if ((!setScores || !Array.isArray(setScores) || setScores.length === 0) &&
           (!gameScores || !Array.isArray(gameScores) || gameScores.length === 0)) {
-        return res.status(400).json({
-          error: 'Either setScores (Tennis/Padel) or gameScores (Pickleball) array is required for Friendly Match mode'
-        });
+        return sendError(res, 'Either setScores (Tennis/Padel) or gameScores (Pickleball) array is required for Friendly Match mode', 400);
       }
     }
 
@@ -449,7 +448,7 @@ export const submitFriendlyResult = async (req: Request, res: Response) => {
     if (teamAssignments) {
       if (!teamAssignments.team1 || !teamAssignments.team2 ||
           !Array.isArray(teamAssignments.team1) || !Array.isArray(teamAssignments.team2)) {
-        return res.status(400).json({ error: 'Invalid teamAssignments format. Expected { team1: string[], team2: string[] }' });
+        return sendError(res, 'Invalid teamAssignments format. Expected { team1: string[], team2: string[] }', 400);
       }
     }
 
@@ -489,11 +488,11 @@ export const submitFriendlyResult = async (req: Request, res: Response) => {
       // Don't fail the request if notification fails
     }
 
-    res.json(match);
+    sendSuccess(res, match);
   } catch (error) {
     console.error('Submit Friendly Result Error:', error);
     const message = error instanceof Error ? error.message : 'Failed to submit result';
-    res.status(400).json({ error: message });
+    sendError(res, message, 400);
   }
 };
 
@@ -505,22 +504,22 @@ export const confirmFriendlyResult = async (req: Request, res: Response) => {
   try {
     const userId = req.user?.id;
     if (!userId) {
-      return res.status(401).json({ error: 'Authentication required' });
+      return sendError(res, 'Authentication required', 401);
     }
 
     const { id } = req.params;
     if (!id) {
-      return res.status(400).json({ error: 'Match ID is required' });
+      return sendError(res, 'Match ID is required', 400);
     }
 
     const { confirmed, disputeReason } = req.body;
 
     if (typeof confirmed !== 'boolean') {
-      return res.status(400).json({ error: 'confirmed (boolean) is required' });
+      return sendError(res, 'confirmed (boolean) is required', 400);
     }
 
     if (!confirmed && !disputeReason) {
-      return res.status(400).json({ error: 'disputeReason is required when not confirming' });
+      return sendError(res, 'disputeReason is required when not confirming', 400);
     }
 
     const match = await friendlyMatchService.confirmFriendlyResult({
@@ -575,11 +574,11 @@ export const confirmFriendlyResult = async (req: Request, res: Response) => {
       // Don't fail the request if notification fails
     }
 
-    res.json(match);
+    sendSuccess(res, match);
   } catch (error) {
     console.error('Confirm Friendly Result Error:', error);
     const message = error instanceof Error ? error.message : 'Failed to confirm result';
-    res.status(400).json({ error: message });
+    sendError(res, message, 400);
   }
 };
 
@@ -591,12 +590,12 @@ export const acceptFriendlyMatchRequest = async (req: Request, res: Response) =>
   try {
     const userId = req.user?.id;
     if (!userId) {
-      return res.status(401).json({ error: 'Authentication required' });
+      return sendError(res, 'Authentication required', 401);
     }
 
     const { id } = req.params;
     if (!id) {
-      return res.status(400).json({ error: 'Match ID is required' });
+      return sendError(res, 'Match ID is required', 400);
     }
 
     const match = await friendlyMatchService.acceptFriendlyMatchRequest(id, userId);
@@ -604,11 +603,11 @@ export const acceptFriendlyMatchRequest = async (req: Request, res: Response) =>
     // Note: Notifications are handled by friendlyMatchService.acceptFriendlyMatchRequest()
     // Do NOT send notifications here to avoid duplicates
 
-    res.json(match);
+    sendSuccess(res, match);
   } catch (error) {
     console.error('Accept Friendly Match Request Error:', error);
     const message = error instanceof Error ? error.message : 'Failed to accept friendly match request';
-    res.status(400).json({ error: message });
+    sendError(res, message, 400);
   }
 };
 
@@ -620,12 +619,12 @@ export const declineFriendlyMatchRequest = async (req: Request, res: Response) =
   try {
     const userId = req.user?.id;
     if (!userId) {
-      return res.status(401).json({ error: 'Authentication required' });
+      return sendError(res, 'Authentication required', 401);
     }
 
     const { id } = req.params;
     if (!id) {
-      return res.status(400).json({ error: 'Match ID is required' });
+      return sendError(res, 'Match ID is required', 400);
     }
 
     const match = await friendlyMatchService.declineFriendlyMatchRequest(id, userId);
@@ -633,11 +632,11 @@ export const declineFriendlyMatchRequest = async (req: Request, res: Response) =
     // Note: Notifications are handled by friendlyMatchService.declineFriendlyMatchRequest()
     // Do NOT send notifications here to avoid duplicates
 
-    res.json(match);
+    sendSuccess(res, match);
   } catch (error) {
     console.error('Decline Friendly Match Request Error:', error);
     const message = error instanceof Error ? error.message : 'Failed to decline friendly match request';
-    res.status(400).json({ error: message });
+    sendError(res, message, 400);
   }
 };
 
@@ -649,12 +648,12 @@ export const cancelFriendlyMatch = async (req: Request, res: Response) => {
   try {
     const userId = req.user?.id;
     if (!userId) {
-      return res.status(401).json({ error: 'Authentication required' });
+      return sendError(res, 'Authentication required', 401);
     }
 
     const { id } = req.params;
     if (!id) {
-      return res.status(400).json({ error: 'Match ID is required' });
+      return sendError(res, 'Match ID is required', 400);
     }
 
     const { comment } = req.body;
@@ -688,11 +687,11 @@ export const cancelFriendlyMatch = async (req: Request, res: Response) => {
       // Don't fail the request if notification fails
     }
 
-    res.json(match);
+    sendSuccess(res, match);
   } catch (error) {
     console.error('Cancel Friendly Match Error:', error);
     const message = error instanceof Error ? error.message : 'Failed to cancel friendly match';
-    res.status(400).json({ error: message });
+    sendError(res, message, 400);
   }
 };
 
@@ -707,18 +706,18 @@ export const cancelFriendlyMatch = async (req: Request, res: Response) => {
 export const getFriendlyMatchComments = async (req: Request, res: Response) => {
   const { id } = req.params;
 
-  if (!id) return res.status(400).json({ error: 'Match ID is required' });
+  if (!id) return sendError(res, 'Match ID is required', 400);
 
   try {
     const commentService = getMatchCommentService();
     const comments = await commentService.getComments(id);
-    res.json(comments);
+    sendSuccess(res, comments);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to get comments';
     if (message === 'Match not found') {
-      return res.status(404).json({ error: message });
+      return sendError(res, message, 404);
     }
-    res.status(500).json({ error: message });
+    sendError(res, message);
   }
 };
 
@@ -731,8 +730,8 @@ export const postFriendlyMatchComment = async (req: Request, res: Response) => {
   const { id } = req.params;
   const { comment } = req.body;
 
-  if (!userId) return res.status(401).json({ error: 'Authentication required' });
-  if (!id) return res.status(400).json({ error: 'Match ID is required' });
+  if (!userId) return sendError(res, 'Authentication required', 401);
+  if (!id) return sendError(res, 'Match ID is required', 400);
 
   try {
     const commentService = getMatchCommentService();
@@ -750,7 +749,7 @@ export const postFriendlyMatchComment = async (req: Request, res: Response) => {
       });
 
       const otherParticipants = await getOtherParticipants(id, userId);
-      
+
       if (otherParticipants.length > 0) {
         await notificationService.createNotification({
           type: 'NEW_MATCH_COMMENT',
@@ -770,24 +769,24 @@ export const postFriendlyMatchComment = async (req: Request, res: Response) => {
       // Don't fail the request if notification fails
     }
 
-    res.status(201).json(newComment);
+    sendSuccess(res, newComment, undefined, 201);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to post comment';
 
     if (message === 'Match not found') {
-      return res.status(404).json({ error: message });
+      return sendError(res, message, 404);
     }
     if (message === 'Only match participants can comment' ||
         message.includes('You can only')) {
-      return res.status(403).json({ error: message });
+      return sendError(res, message, 403);
     }
     if (message.includes('Cannot comment on matches') ||
         message === 'Comment cannot be empty' ||
         message.includes('exceeds maximum length')) {
-      return res.status(400).json({ error: message });
+      return sendError(res, message, 400);
     }
 
-    res.status(500).json({ error: message });
+    sendError(res, message);
   }
 };
 
@@ -800,9 +799,9 @@ export const updateFriendlyMatchComment = async (req: Request, res: Response) =>
   const { id, commentId } = req.params;
   const { comment } = req.body;
 
-  if (!userId) return res.status(401).json({ error: 'Authentication required' });
-  if (!id) return res.status(400).json({ error: 'Match ID is required' });
-  if (!commentId) return res.status(400).json({ error: 'Comment ID is required' });
+  if (!userId) return sendError(res, 'Authentication required', 401);
+  if (!id) return sendError(res, 'Match ID is required', 400);
+  if (!commentId) return sendError(res, 'Comment ID is required', 400);
 
   try {
     const commentService = getMatchCommentService();
@@ -811,22 +810,22 @@ export const updateFriendlyMatchComment = async (req: Request, res: Response) =>
       userId,
       comment,
     });
-    res.json(updatedComment);
+    sendSuccess(res, updatedComment);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to update comment';
 
     if (message === 'Comment not found') {
-      return res.status(404).json({ error: message });
+      return sendError(res, message, 404);
     }
     if (message === 'You can only edit your own comments') {
-      return res.status(403).json({ error: message });
+      return sendError(res, message, 403);
     }
     if (message === 'Comment cannot be empty' ||
         message.includes('exceeds maximum length')) {
-      return res.status(400).json({ error: message });
+      return sendError(res, message, 400);
     }
 
-    res.status(500).json({ error: message });
+    sendError(res, message);
   }
 };
 
@@ -838,9 +837,9 @@ export const deleteFriendlyMatchComment = async (req: Request, res: Response) =>
   const userId = req.user?.id;
   const { id, commentId } = req.params;
 
-  if (!userId) return res.status(401).json({ error: 'Authentication required' });
-  if (!id) return res.status(400).json({ error: 'Match ID is required' });
-  if (!commentId) return res.status(400).json({ error: 'Comment ID is required' });
+  if (!userId) return sendError(res, 'Authentication required', 401);
+  if (!id) return sendError(res, 'Match ID is required', 400);
+  if (!commentId) return sendError(res, 'Comment ID is required', 400);
 
   try {
     const commentService = getMatchCommentService();
@@ -848,18 +847,18 @@ export const deleteFriendlyMatchComment = async (req: Request, res: Response) =>
       commentId,
       userId,
     });
-    res.json({ message: 'Comment deleted successfully' });
+    sendSuccess(res, null, 'Comment deleted successfully');
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to delete comment';
 
     if (message === 'Comment not found') {
-      return res.status(404).json({ error: message });
+      return sendError(res, message, 404);
     }
     if (message === 'You can only delete your own comments') {
-      return res.status(403).json({ error: message });
+      return sendError(res, message, 403);
     }
 
-    res.status(500).json({ error: message });
+    sendError(res, message);
   }
 };
 
@@ -892,12 +891,12 @@ export const getFriendlyMatchesSummary = async (req: Request, res: Response) => 
       })
     ]);
 
-    res.json({
+    sendSuccess(res, {
       count: countResult,
       latestUpdatedAt: latestMatch?.updatedAt?.toISOString() || null
     });
   } catch (error) {
     console.error('Get Friendly Matches Summary Error:', error);
-    res.status(500).json({ error: 'Failed to retrieve friendly matches summary' });
+    sendError(res, 'Failed to retrieve friendly matches summary');
   }
 };
