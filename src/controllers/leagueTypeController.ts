@@ -2,7 +2,7 @@
 // import { Request, Response } from 'express';
 // import { PrismaClient, LeagueTypeType, Gender } from '@prisma/client';
 // import * as leagueTypeService from '../services/leagueTypeService';
-// import { ApiResponse } from '../utils/ApiResponse';
+// import { sendSuccess, sendError } from '../utils/response';
 
 // const prisma = new PrismaClient();
 
