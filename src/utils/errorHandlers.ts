@@ -17,7 +17,8 @@ export const handleControllerError = (
   if (error instanceof AppError) {
     return res.status(error.statusCode).json({
       success: false,
-      error: error.message,
+      data: null,
+      message: error.message,
       ...(error.details && { details: error.details }),
     });
   }
@@ -30,14 +31,16 @@ export const handleControllerError = (
   if (error instanceof Prisma.PrismaClientValidationError) {
     return res.status(400).json({
       success: false,
-      error: 'Invalid data format or validation error',
+      data: null,
+      message: 'Invalid data format or validation error',
     });
   }
 
   // Handle generic errors
   return res.status(500).json({
     success: false,
-    error: error.message || `Failed to ${operation}`,
+    data: null,
+    message: error.message || `Failed to ${operation}`,
   });
 };
 
@@ -52,34 +55,39 @@ export const handlePrismaError = (
     case 'P2002':
       return res.status(409).json({
         success: false,
-        error: 'A record with this unique constraint already exists',
+        data: null,
+        message: 'A record with this unique constraint already exists',
         field: (error.meta?.target as string[])?.join(', '),
       });
 
     case 'P2003':
       return res.status(400).json({
         success: false,
-        error: 'Invalid reference to related record',
+        data: null,
+        message: 'Invalid reference to related record',
         field: error.meta?.field_name,
       });
 
     case 'P2025':
       return res.status(404).json({
         success: false,
-        error: 'Record not found',
+        data: null,
+        message: 'Record not found',
       });
 
     case 'P2014':
       return res.status(400).json({
         success: false,
-        error: 'Invalid relation',
+        data: null,
+        message: 'Invalid relation',
       });
 
     default:
       logger.error('Unhandled Prisma error:', { code: error.code, meta: error.meta });
       return res.status(500).json({
         success: false,
-        error: 'Database operation failed',
+        data: null,
+        message: 'Database operation failed',
       });
   }
 };
