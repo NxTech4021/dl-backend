@@ -6,6 +6,7 @@
 import { Request, Response } from 'express';
 import { getMatchHistoryService } from '../../services/match/matchHistoryService';
 import { MatchStatus, MatchType, SportType } from '@prisma/client';
+import { sendSuccess, sendError } from '../../utils/response';
 
 const matchHistoryService = getMatchHistoryService();
 
@@ -17,7 +18,7 @@ export const getMatchHistory = async (req: Request, res: Response) => {
   try {
     const userId = req.user?.id;
     if (!userId) {
-      return res.status(401).json({ error: 'Authentication required' });
+      return sendError(res, 'Authentication required', 401);
     }
 
     const {
@@ -49,10 +50,10 @@ export const getMatchHistory = async (req: Request, res: Response) => {
 
     const result = await matchHistoryService.getMatchHistory(filters);
 
-    res.json(result);
+    sendSuccess(res, result);
   } catch (error) {
     console.error('Get Match History Error:', error);
-    res.status(500).json({ error: 'Failed to retrieve match history' });
+    sendError(res, 'Failed to retrieve match history');
   }
 };
 
@@ -64,7 +65,7 @@ export const getMatchStats = async (req: Request, res: Response) => {
   try {
     const userId = req.user?.id;
     if (!userId) {
-      return res.status(401).json({ error: 'Authentication required' });
+      return sendError(res, 'Authentication required', 401);
     }
 
     const { seasonId, divisionId } = req.query;
@@ -75,10 +76,10 @@ export const getMatchStats = async (req: Request, res: Response) => {
       divisionId as string
     );
 
-    res.json(stats);
+    sendSuccess(res, stats);
   } catch (error) {
     console.error('Get Match Stats Error:', error);
-    res.status(500).json({ error: 'Failed to retrieve match statistics' });
+    sendError(res, 'Failed to retrieve match statistics');
   }
 };
 
@@ -90,19 +91,19 @@ export const getHeadToHead = async (req: Request, res: Response) => {
   try {
     const userId = req.user?.id;
     if (!userId) {
-      return res.status(401).json({ error: 'Authentication required' });
+      return sendError(res, 'Authentication required', 401);
     }
 
     const { opponentId } = req.params;
     if (!opponentId) {
-      return res.status(400).json({ error: 'opponentId is required' });
+      return sendError(res, 'opponentId is required', 400);
     }
 
     const result = await matchHistoryService.getHeadToHead(userId, opponentId);
-    res.json(result);
+    sendSuccess(res, result);
   } catch (error) {
     console.error('Get Head to Head Error:', error);
-    res.status(500).json({ error: 'Failed to retrieve head-to-head record' });
+    sendError(res, 'Failed to retrieve head-to-head record');
   }
 };
 
@@ -114,7 +115,7 @@ export const getUpcomingMatches = async (req: Request, res: Response) => {
   try {
     const userId = req.user?.id;
     if (!userId) {
-      return res.status(401).json({ error: 'Authentication required' });
+      return sendError(res, 'Authentication required', 401);
     }
 
     const { limit = '5' } = req.query;
@@ -124,10 +125,10 @@ export const getUpcomingMatches = async (req: Request, res: Response) => {
       parseInt(limit as string)
     );
 
-    res.json(matches);
+    sendSuccess(res, matches);
   } catch (error) {
     console.error('Get Upcoming Matches Error:', error);
-    res.status(500).json({ error: 'Failed to retrieve upcoming matches' });
+    sendError(res, 'Failed to retrieve upcoming matches');
   }
 };
 
@@ -139,7 +140,7 @@ export const getRecentResults = async (req: Request, res: Response) => {
   try {
     const userId = req.user?.id;
     if (!userId) {
-      return res.status(401).json({ error: 'Authentication required' });
+      return sendError(res, 'Authentication required', 401);
     }
 
     const { limit = '5' } = req.query;
@@ -149,10 +150,10 @@ export const getRecentResults = async (req: Request, res: Response) => {
       parseInt(limit as string)
     );
 
-    res.json(matches);
+    sendSuccess(res, matches);
   } catch (error) {
     console.error('Get Recent Results Error:', error);
-    res.status(500).json({ error: 'Failed to retrieve recent results' });
+    sendError(res, 'Failed to retrieve recent results');
   }
 };
 
@@ -164,7 +165,7 @@ export const getPendingConfirmationMatches = async (req: Request, res: Response)
   try {
     const userId = req.user?.id;
     if (!userId) {
-      return res.status(401).json({ error: 'Authentication required' });
+      return sendError(res, 'Authentication required', 401);
     }
 
     const { limit = '20' } = req.query;
@@ -174,10 +175,10 @@ export const getPendingConfirmationMatches = async (req: Request, res: Response)
       parseInt(limit as string)
     );
 
-    res.json(matches);
+    sendSuccess(res, matches);
   } catch (error) {
     console.error('Get Pending Confirmation Matches Error:', error);
-    res.status(500).json({ error: 'Failed to retrieve pending confirmation matches' });
+    sendError(res, 'Failed to retrieve pending confirmation matches');
   }
 };
 
@@ -189,7 +190,7 @@ export const getDisputedMatches = async (req: Request, res: Response) => {
   try {
     const userId = req.user?.id;
     if (!userId) {
-      return res.status(401).json({ error: 'Authentication required' });
+      return sendError(res, 'Authentication required', 401);
     }
 
     const { limit = '20' } = req.query;
@@ -199,10 +200,10 @@ export const getDisputedMatches = async (req: Request, res: Response) => {
       parseInt(limit as string)
     );
 
-    res.json(matches);
+    sendSuccess(res, matches);
   } catch (error) {
     console.error('Get Disputed Matches Error:', error);
-    res.status(500).json({ error: 'Failed to retrieve disputed matches' });
+    sendError(res, 'Failed to retrieve disputed matches');
   }
 };
 
@@ -216,7 +217,7 @@ export const getDivisionResults = async (req: Request, res: Response) => {
     const { limit = '3', seasonId } = req.query;
 
     if (!divisionId) {
-      return res.status(400).json({ error: 'divisionId is required' });
+      return sendError(res, 'divisionId is required', 400);
     }
 
     const matches = await matchHistoryService.getDivisionResults(
@@ -225,9 +226,9 @@ export const getDivisionResults = async (req: Request, res: Response) => {
       parseInt(limit as string)
     );
 
-    res.json({ matches });
+    sendSuccess(res, { matches });
   } catch (error) {
     console.error('Get Division Results Error:', error);
-    res.status(500).json({ error: 'Failed to retrieve division results' });
+    sendError(res, 'Failed to retrieve division results');
   }
 };
