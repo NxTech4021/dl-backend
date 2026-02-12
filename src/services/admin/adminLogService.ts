@@ -87,7 +87,8 @@ export async function getAdminLogs(options?: GetAdminLogsOptions) {
     search
   } = options || {};
 
-  const skip = (page - 1) * limit;
+  const safeLimit = Math.min(Math.max(limit, 1), 200);
+  const skip = (page - 1) * safeLimit;
 
   const where: Prisma.AdminLogWhereInput = {};
 
@@ -150,7 +151,7 @@ export async function getAdminLogs(options?: GetAdminLogsOptions) {
       },
       orderBy: { createdAt: 'desc' },
       skip,
-      take: limit
+      take: safeLimit
     }),
     prisma.adminLog.count({ where })
   ]);
@@ -175,9 +176,9 @@ export async function getAdminLogs(options?: GetAdminLogsOptions) {
     })),
     pagination: {
       page,
-      limit,
+      limit: safeLimit,
       total,
-      totalPages: Math.ceil(total / limit)
+      totalPages: Math.ceil(total / safeLimit)
     }
   };
 }
@@ -284,20 +285,19 @@ export async function getAdminActivitySummary(options?: {
     _count: true
   });
 
-  // Get daily counts
-  const logs = await prisma.adminLog.findMany({
-    where,
-    select: { createdAt: true },
-    orderBy: { createdAt: 'asc' }
-  });
+  // Get daily counts via SQL GROUP BY (avoids loading all rows into memory)
+  const adminIdCondition = where.adminId
+    ? Prisma.sql`AND "admin_id" = ${where.adminId}`
+    : Prisma.empty;
 
-  const dailyCounts: Record<string, number> = {};
-  logs.forEach(log => {
-    const dateKey = log.createdAt.toISOString().split('T')[0] ?? '';
-    if (dateKey) {
-      dailyCounts[dateKey] = (dailyCounts[dateKey] || 0) + 1;
-    }
-  });
+  const dailyCountsRaw = await prisma.$queryRaw<Array<{ date: string; count: number }>>`
+    SELECT DATE("created_at")::text as date, COUNT(*)::int as count
+    FROM "admin_log"
+    WHERE "created_at" >= ${startDate}
+    ${adminIdCondition}
+    GROUP BY DATE("created_at")
+    ORDER BY date ASC
+  `;
 
   // Get total count
   const totalActions = await prisma.adminLog.count({ where });
@@ -312,9 +312,9 @@ export async function getAdminActivitySummary(options?: {
       targetType: item.targetType,
       count: item._count
     })),
-    dailyCounts: Object.entries(dailyCounts).map(([date, count]) => ({
-      date,
-      count
+    dailyCounts: dailyCountsRaw.map(row => ({
+      date: row.date,
+      count: row.count
     })),
     period: {
       startDate,
