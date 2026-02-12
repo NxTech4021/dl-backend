@@ -202,6 +202,10 @@ model Admin {
 
   // General admin action logging
   adminLogs AdminLog[] @relation("AdminLogs")
+
+  // Admin status change tracking
+  statusChanges          AdminStatusChange[] @relation("AdminStatusChanges")
+  triggeredStatusChanges AdminStatusChange[] @relation("AdminStatusChangesTriggered")
 }
 
 model AdminInviteToken {
@@ -1638,6 +1642,31 @@ model PlayerStatusChange {
   @@map("player_status_change")
 }
 
+model AdminStatusChange {
+  id      String @id @default(cuid())
+  adminId String
+
+  // Change details
+  previousStatus AdminStatus
+  newStatus      AdminStatus
+  reason         StatusChangeReason
+  notes          String?
+
+  // Trigger
+  triggeredById String?
+
+  createdAt DateTime @default(now())
+
+  // Relations
+  admin       Admin  @relation("AdminStatusChanges", fields: [adminId], references: [id], onDelete: Cascade)
+  triggeredBy Admin? @relation("AdminStatusChangesTriggered", fields: [triggeredById], references: [id])
+
+  @@index([adminId, createdAt(sort: Desc)])
+  @@index([newStatus])
+  @@index([reason])
+  @@map("admin_status_change")
+}
+
 // =============================================
 // END INACTIVITY SYSTEM MODELS
 // =============================================
@@ -2413,6 +2442,11 @@ enum AdminActionType {
   ADMIN_CREATE
   ADMIN_UPDATE
   ADMIN_DELETE
+  ADMIN_SUSPEND
+  ADMIN_ACTIVATE
+  // Payment management
+  PAYMENT_STATUS_UPDATE
+  PAYMENT_BULK_UPDATE
   // Other
   OTHER
 }
@@ -2428,6 +2462,7 @@ enum AdminTargetType {
   SETTINGS
   BUG_REPORT
   ADMIN
+  PAYMENT
   OTHER
 }
 
@@ -2698,6 +2733,8 @@ enum StatusChangeReason {
   ADMIN_BAN
   ADMIN_UNBAN
   ADMIN_DELETE
+  ADMIN_SUSPEND
+  ADMIN_ACTIVATE
   SEASON_START
   SEASON_END
   REGISTRATION
