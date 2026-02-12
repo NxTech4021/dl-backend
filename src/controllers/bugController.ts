@@ -12,6 +12,7 @@ import {
   notifyStatusChange,
 } from "../services/bug/bugNotificationService";
 import { uploadBugScreenshot } from "../config/cloudStorage.config";
+import { sendSuccess, sendError, sendPaginated } from '../utils/response';
 
 // =============================================
 // UTILITY FUNCTIONS
@@ -58,12 +59,12 @@ export const getModulesByApp = async (req: Request, res: Response) => {
         description: true,
       },
     });
-    res.json(modules);
+    sendSuccess(res, modules);
   } catch (err: unknown) {
     console.error("Get Modules Error:", err);
     const errorMessage =
       err instanceof Error ? err.message : "Failed to retrieve modules.";
-    res.status(500).json({ error: errorMessage });
+    sendError(res, errorMessage);
   }
 };
 
@@ -103,17 +104,13 @@ export const createBugReport = async (req: Request, res: Response) => {
 
   // Require either moduleId or module name
   if (!appId || (!moduleId && !moduleName) || !title || !description) {
-    return res
-      .status(400)
-      .json({
-        error: "appId, module/moduleId, title, and description are required.",
-      });
+    return sendError(res, "appId, module/moduleId, title, and description are required.", 400);
   }
 
   try {
     // Verify app exists
     const app = await prisma.app.findUnique({ where: { id: appId } });
-    if (!app) return res.status(404).json({ error: "App not found." });
+    if (!app) return sendError(res, "App not found.", 404);
 
     // Find or create module
     let bugModule;
@@ -122,7 +119,7 @@ export const createBugReport = async (req: Request, res: Response) => {
         where: { id: moduleId },
       });
       if (!bugModule)
-        return res.status(404).json({ error: "Module not found." });
+        return sendError(res, "Module not found.", 404);
     } else {
       // Find by name or create new
       bugModule = await prisma.bugModule.findFirst({
@@ -234,12 +231,12 @@ export const createBugReport = async (req: Request, res: Response) => {
     // Google Sheets sync is handled by the frontend after screenshots are uploaded
     // This avoids race conditions that cause duplicate rows
 
-    res.status(201).json(bugReport);
+    sendSuccess(res, bugReport, undefined, 201);
   } catch (err: unknown) {
     console.error("Create Bug Report Error:", err);
     const errorMessage =
       err instanceof Error ? err.message : "Failed to create bug report.";
-    res.status(500).json({ error: errorMessage });
+    sendError(res, errorMessage);
   }
 };
 
@@ -247,7 +244,7 @@ export const createBugReport = async (req: Request, res: Response) => {
 export const getMyBugReports = async (req: Request, res: Response) => {
   const reporterId = (req as any).user?.id;
   if (!reporterId) {
-    return res.status(401).json({ error: "Authentication required." });
+    return sendError(res, "Authentication required.", 401);
   }
 
   try {
@@ -261,12 +258,12 @@ export const getMyBugReports = async (req: Request, res: Response) => {
         _count: { select: { comments: true, screenshots: true } },
       },
     });
-    res.json(reports);
+    sendSuccess(res, reports);
   } catch (err: unknown) {
     console.error("Get My Bug Reports Error:", err);
     const errorMessage =
       err instanceof Error ? err.message : "Failed to retrieve bug reports.";
-    res.status(500).json({ error: errorMessage });
+    sendError(res, errorMessage);
   }
 };
 
@@ -275,7 +272,7 @@ export const getBugReportById = async (req: Request, res: Response) => {
   const { id } = req.params;
   const userId = (req as any).user?.id;
 
-  if (!id) return res.status(400).json({ error: "Bug report ID is required." });
+  if (!id) return sendError(res, "Bug report ID is required.", 400);
 
   try {
     const report = await prisma.bugReport.findUnique({
@@ -309,11 +306,11 @@ export const getBugReportById = async (req: Request, res: Response) => {
     });
 
     if (!report)
-      return res.status(404).json({ error: "Bug report not found." });
+      return sendError(res, "Bug report not found.", 404);
 
     // Check access: reporter can view, or if public
     if (report.reporterId !== userId && !report.isPublic) {
-      return res.status(403).json({ error: "Access denied." });
+      return sendError(res, "Access denied.", 403);
     }
 
     // Increment view count
@@ -322,12 +319,12 @@ export const getBugReportById = async (req: Request, res: Response) => {
       data: { viewCount: { increment: 1 } },
     });
 
-    res.json(report);
+    sendSuccess(res, report);
   } catch (err: unknown) {
     console.error("Get Bug Report Error:", err);
     const errorMessage =
       err instanceof Error ? err.message : "Failed to retrieve bug report.";
-    res.status(500).json({ error: errorMessage });
+    sendError(res, errorMessage);
   }
 };
 
@@ -338,19 +335,17 @@ export const addComment = async (req: Request, res: Response) => {
   const authorId = (req as any).user?.id;
 
   if (!authorId) {
-    return res.status(401).json({ error: "Authentication required." });
+    return sendError(res, "Authentication required.", 401);
   }
 
   if (!id || !content) {
-    return res
-      .status(400)
-      .json({ error: "Bug report ID and content are required." });
+    return sendError(res, "Bug report ID and content are required.", 400);
   }
 
   try {
     const report = await prisma.bugReport.findUnique({ where: { id } });
     if (!report)
-      return res.status(404).json({ error: "Bug report not found." });
+      return sendError(res, "Bug report not found.", 404);
 
     // Check if user can comment (reporter or admin)
     if (report.reporterId !== authorId) {
@@ -359,7 +354,7 @@ export const addComment = async (req: Request, res: Response) => {
         where: { userId: authorId },
       });
       if (!admin) {
-        return res.status(403).json({ error: "Access denied." });
+        return sendError(res, "Access denied.", 403);
       }
     }
 
@@ -376,12 +371,12 @@ export const addComment = async (req: Request, res: Response) => {
       },
     });
 
-    res.status(201).json(comment);
+    sendSuccess(res, comment, undefined, 201);
   } catch (err: unknown) {
     console.error("Add Comment Error:", err);
     const errorMessage =
       err instanceof Error ? err.message : "Failed to add comment.";
-    res.status(500).json({ error: errorMessage });
+    sendError(res, errorMessage);
   }
 };
 
@@ -400,9 +395,7 @@ export const uploadScreenshot = async (req: Request, res: Response) => {
   } = req.body;
 
   if (!bugReportId || !fileName || !imageUrl) {
-    return res
-      .status(400)
-      .json({ error: "bugReportId, fileName, and imageUrl are required." });
+    return sendError(res, "bugReportId, fileName, and imageUrl are required.", 400);
   }
 
   try {
@@ -410,7 +403,7 @@ export const uploadScreenshot = async (req: Request, res: Response) => {
       where: { id: bugReportId },
     });
     if (!report)
-      return res.status(404).json({ error: "Bug report not found." });
+      return sendError(res, "Bug report not found.", 404);
 
     // Check max screenshots from settings
     const settings = await prisma.bugReportSettings.findUnique({
@@ -422,9 +415,7 @@ export const uploadScreenshot = async (req: Request, res: Response) => {
       where: { bugReportId },
     });
     if (currentCount >= maxScreenshots) {
-      return res
-        .status(400)
-        .json({ error: `Maximum ${maxScreenshots} screenshots allowed.` });
+      return sendError(res, `Maximum ${maxScreenshots} screenshots allowed.`, 400);
     }
 
     const screenshot = await prisma.bugScreenshot.create({
@@ -441,12 +432,12 @@ export const uploadScreenshot = async (req: Request, res: Response) => {
       },
     });
 
-    res.status(201).json(screenshot);
+    sendSuccess(res, screenshot, undefined, 201);
   } catch (err: unknown) {
     console.error("Upload Screenshot Error:", err);
     const errorMessage =
       err instanceof Error ? err.message : "Failed to upload screenshot.";
-    res.status(500).json({ error: errorMessage });
+    sendError(res, errorMessage);
   }
 };
 
@@ -465,25 +456,21 @@ export const uploadScreenshotFile = async (req: Request, res: Response) => {
   const file = req.file;
 
   if (!bugReportId) {
-    return res.status(400).json({ error: "bugReportId is required." });
+    return sendError(res, "bugReportId is required.", 400);
   }
 
   if (!file) {
-    return res.status(400).json({ error: "No file uploaded." });
+    return sendError(res, "No file uploaded.", 400);
   }
 
   // Security: Validate file type on server-side
   if (!ALLOWED_IMAGE_TYPES.includes(file.mimetype)) {
-    return res.status(400).json({
-      error: "Invalid file type. Only JPEG, PNG, GIF, and WebP images are allowed.",
-    });
+    return sendError(res, "Invalid file type. Only JPEG, PNG, GIF, and WebP images are allowed.", 400);
   }
 
   // Security: Validate file size on server-side
   if (file.size > MAX_FILE_SIZE) {
-    return res.status(400).json({
-      error: "File too large. Maximum size is 5MB.",
-    });
+    return sendError(res, "File too large. Maximum size is 5MB.", 400);
   }
 
   try {
@@ -491,7 +478,7 @@ export const uploadScreenshotFile = async (req: Request, res: Response) => {
       where: { id: bugReportId },
     });
     if (!report) {
-      return res.status(404).json({ error: "Bug report not found." });
+      return sendError(res, "Bug report not found.", 404);
     }
 
     // Check max screenshots from settings
@@ -504,9 +491,7 @@ export const uploadScreenshotFile = async (req: Request, res: Response) => {
       where: { bugReportId },
     });
     if (currentCount >= maxScreenshots) {
-      return res
-        .status(400)
-        .json({ error: `Maximum ${maxScreenshots} screenshots allowed.` });
+      return sendError(res, `Maximum ${maxScreenshots} screenshots allowed.`, 400);
     }
 
     // Upload to Google Cloud Storage
@@ -532,12 +517,12 @@ export const uploadScreenshotFile = async (req: Request, res: Response) => {
     // Note: Google Sheets sync is NOT triggered here to avoid race conditions
     // Frontend should call /reports/:id/sync after all screenshots are uploaded
 
-    res.status(201).json(screenshot);
+    sendSuccess(res, screenshot, undefined, 201);
   } catch (err: unknown) {
     console.error("Upload Screenshot File Error:", err);
     const errorMessage =
       err instanceof Error ? err.message : "Failed to upload screenshot.";
-    res.status(500).json({ error: errorMessage });
+    sendError(res, errorMessage);
   }
 };
 
@@ -546,7 +531,7 @@ export const syncBugReport = async (req: Request, res: Response) => {
   const { id } = req.params;
 
   if (!id) {
-    return res.status(400).json({ error: "Bug report ID is required." });
+    return sendError(res, "Bug report ID is required.", 400);
   }
 
   try {
@@ -556,23 +541,24 @@ export const syncBugReport = async (req: Request, res: Response) => {
     });
 
     if (!report) {
-      return res.status(404).json({ error: "Bug report not found." });
+      return sendError(res, "Bug report not found.", 404);
     }
 
     // Trigger sync
-    const success = await syncBugReportToSheet(id);
+    const syncResult = await syncBugReportToSheet(id);
 
-    res.json({
-      success,
-      message: success
+    sendSuccess(
+      res,
+      { synced: syncResult },
+      syncResult
         ? `Bug report ${report.reportNumber} synced to Google Sheets`
-        : "Sync skipped (not configured or disabled)",
-    });
+        : "Sync skipped (not configured or disabled)"
+    );
   } catch (err: unknown) {
     console.error("Sync Bug Report Error:", err);
     const errorMessage =
       err instanceof Error ? err.message : "Failed to sync bug report.";
-    res.status(500).json({ error: errorMessage });
+    sendError(res, errorMessage);
   }
 };
 
@@ -643,20 +629,17 @@ export const getAllBugReports = async (req: Request, res: Response) => {
       prisma.bugReport.count({ where }),
     ]);
 
-    res.json({
-      data: reports,
-      pagination: {
-        page: parseInt(page as string),
-        limit: parseInt(limit as string),
-        total,
-        totalPages: Math.ceil(total / parseInt(limit as string)),
-      },
+    sendPaginated(res, reports, {
+      page: parseInt(page as string),
+      limit: parseInt(limit as string),
+      total,
+      totalPages: Math.ceil(total / parseInt(limit as string)),
     });
   } catch (err: unknown) {
     console.error("Get All Bug Reports Error:", err);
     const errorMessage =
       err instanceof Error ? err.message : "Failed to retrieve bug reports.";
-    res.status(500).json({ error: errorMessage });
+    sendError(res, errorMessage);
   }
 };
 
@@ -664,7 +647,7 @@ export const getAllBugReports = async (req: Request, res: Response) => {
 export const getAdminBugReportById = async (req: Request, res: Response) => {
   const { id } = req.params;
 
-  if (!id) return res.status(400).json({ error: "Bug report ID is required." });
+  if (!id) return sendError(res, "Bug report ID is required.", 400);
 
   try {
     const report = await prisma.bugReport.findUnique({
@@ -702,7 +685,7 @@ export const getAdminBugReportById = async (req: Request, res: Response) => {
     });
 
     if (!report)
-      return res.status(404).json({ error: "Bug report not found." });
+      return sendError(res, "Bug report not found.", 404);
 
     // Increment view count
     await prisma.bugReport.update({
@@ -710,12 +693,12 @@ export const getAdminBugReportById = async (req: Request, res: Response) => {
       data: { viewCount: { increment: 1 } },
     });
 
-    res.json(report);
+    sendSuccess(res, report);
   } catch (err: unknown) {
     console.error("Get Admin Bug Report Error:", err);
     const errorMessage =
       err instanceof Error ? err.message : "Failed to retrieve bug report.";
-    res.status(500).json({ error: errorMessage });
+    sendError(res, errorMessage);
   }
 };
 
@@ -733,12 +716,12 @@ export const updateBugReport = async (req: Request, res: Response) => {
     isPublic,
   } = req.body;
 
-  if (!id) return res.status(400).json({ error: "Bug report ID is required." });
+  if (!id) return sendError(res, "Bug report ID is required.", 400);
 
   try {
     const existingReport = await prisma.bugReport.findUnique({ where: { id } });
     if (!existingReport)
-      return res.status(404).json({ error: "Bug report not found." });
+      return sendError(res, "Bug report not found.", 404);
 
     const updateData: any = {};
     let statusChanged = false;
@@ -820,12 +803,12 @@ export const updateBugReport = async (req: Request, res: Response) => {
     }
     syncBugReportToSheet(id).catch(console.error);
 
-    res.json(report);
+    sendSuccess(res, report);
   } catch (err: unknown) {
     console.error("Update Bug Report Error:", err);
     const errorMessage =
       err instanceof Error ? err.message : "Failed to update bug report.";
-    res.status(500).json({ error: errorMessage });
+    sendError(res, errorMessage);
   }
 };
 
@@ -836,15 +819,13 @@ export const addAdminComment = async (req: Request, res: Response) => {
   const authorId = (req as any).user?.id;
 
   if (!id || !content) {
-    return res
-      .status(400)
-      .json({ error: "Bug report ID and content are required." });
+    return sendError(res, "Bug report ID and content are required.", 400);
   }
 
   try {
     const report = await prisma.bugReport.findUnique({ where: { id } });
     if (!report)
-      return res.status(404).json({ error: "Bug report not found." });
+      return sendError(res, "Bug report not found.", 404);
 
     const comment = await prisma.bugComment.create({
       data: {
@@ -859,12 +840,12 @@ export const addAdminComment = async (req: Request, res: Response) => {
       },
     });
 
-    res.status(201).json(comment);
+    sendSuccess(res, comment, undefined, 201);
   } catch (err: unknown) {
     console.error("Add Admin Comment Error:", err);
     const errorMessage =
       err instanceof Error ? err.message : "Failed to add comment.";
-    res.status(500).json({ error: errorMessage });
+    sendError(res, errorMessage);
   }
 };
 
@@ -875,9 +856,7 @@ export const markAsDuplicate = async (req: Request, res: Response) => {
   const adminUserId = (req as any).user?.id;
 
   if (!id || !duplicateOfId) {
-    return res
-      .status(400)
-      .json({ error: "Bug report ID and duplicateOfId are required." });
+    return sendError(res, "Bug report ID and duplicateOfId are required.", 400);
   }
 
   try {
@@ -887,9 +866,9 @@ export const markAsDuplicate = async (req: Request, res: Response) => {
     ]);
 
     if (!report)
-      return res.status(404).json({ error: "Bug report not found." });
+      return sendError(res, "Bug report not found.", 404);
     if (!duplicateOf)
-      return res.status(404).json({ error: "Duplicate target not found." });
+      return sendError(res, "Duplicate target not found.", 404);
 
     const updatedReport = await prisma.bugReport.update({
       where: { id },
@@ -910,12 +889,12 @@ export const markAsDuplicate = async (req: Request, res: Response) => {
       },
     });
 
-    res.json(updatedReport);
+    sendSuccess(res, updatedReport);
   } catch (err: unknown) {
     console.error("Mark as Duplicate Error:", err);
     const errorMessage =
       err instanceof Error ? err.message : "Failed to mark as duplicate.";
-    res.status(500).json({ error: errorMessage });
+    sendError(res, errorMessage);
   }
 };
 
@@ -923,20 +902,20 @@ export const markAsDuplicate = async (req: Request, res: Response) => {
 export const deleteBugReport = async (req: Request, res: Response) => {
   const { id } = req.params;
 
-  if (!id) return res.status(400).json({ error: "Bug report ID is required." });
+  if (!id) return sendError(res, "Bug report ID is required.", 400);
 
   try {
     const report = await prisma.bugReport.findUnique({ where: { id } });
     if (!report)
-      return res.status(404).json({ error: "Bug report not found." });
+      return sendError(res, "Bug report not found.", 404);
 
     await prisma.bugReport.delete({ where: { id } });
-    res.json({ message: "Bug report deleted successfully." });
+    sendSuccess(res, null, "Bug report deleted successfully.");
   } catch (err: unknown) {
     console.error("Delete Bug Report Error:", err);
     const errorMessage =
       err instanceof Error ? err.message : "Failed to delete bug report.";
-    res.status(500).json({ error: errorMessage });
+    sendError(res, errorMessage);
   }
 };
 
@@ -983,7 +962,7 @@ export const getBugStats = async (req: Request, res: Response) => {
       }),
     ]);
 
-    res.json({
+    sendSuccess(res, {
       total,
       byStatus: byStatus.reduce(
         (acc, item) => ({ ...acc, [item.status]: item._count }),
@@ -1004,7 +983,7 @@ export const getBugStats = async (req: Request, res: Response) => {
     console.error("Get Bug Stats Error:", err);
     const errorMessage =
       err instanceof Error ? err.message : "Failed to retrieve statistics.";
-    res.status(500).json({ error: errorMessage });
+    sendError(res, errorMessage);
   }
 };
 
@@ -1022,12 +1001,12 @@ export const getApps = async (req: Request, res: Response) => {
         _count: { select: { bugReports: true, bugModules: true } },
       },
     });
-    res.json(apps);
+    sendSuccess(res, apps);
   } catch (err: unknown) {
     console.error("Get Apps Error:", err);
     const errorMessage =
       err instanceof Error ? err.message : "Failed to retrieve apps.";
-    res.status(500).json({ error: errorMessage });
+    sendError(res, errorMessage);
   }
 };
 
@@ -1067,7 +1046,7 @@ export const initDLMApp = async (req: Request, res: Response) => {
       },
     });
 
-    res.json({
+    sendSuccess(res, {
       appId: app.id,
       code: app.code,
       displayName: app.displayName,
@@ -1077,7 +1056,7 @@ export const initDLMApp = async (req: Request, res: Response) => {
   } catch (err: unknown) {
     console.error("Init DLM App Error:", err);
     const errorMessage = err instanceof Error ? err.message : "Failed to initialize app.";
-    res.status(500).json({ error: errorMessage });
+    sendError(res, errorMessage);
   }
 };
 
@@ -1117,7 +1096,7 @@ export const initDLAApp = async (req: Request, res: Response) => {
       },
     });
 
-    res.json({
+    sendSuccess(res, {
       appId: app.id,
       code: app.code,
       displayName: app.displayName,
@@ -1127,7 +1106,7 @@ export const initDLAApp = async (req: Request, res: Response) => {
   } catch (err: unknown) {
     console.error("Init DLA App Error:", err);
     const errorMessage = err instanceof Error ? err.message : "Failed to initialize app.";
-    res.status(500).json({ error: errorMessage });
+    sendError(res, errorMessage);
   }
 };
 
@@ -1136,9 +1115,7 @@ export const createApp = async (req: Request, res: Response) => {
   const { code, name, displayName, description, appUrl, logoUrl } = req.body;
 
   if (!code || !name || !displayName) {
-    return res
-      .status(400)
-      .json({ error: "code, name, and displayName are required." });
+    return sendError(res, "code, name, and displayName are required.", 400);
   }
 
   try {
@@ -1152,12 +1129,12 @@ export const createApp = async (req: Request, res: Response) => {
         logoUrl,
       },
     });
-    res.status(201).json(app);
+    sendSuccess(res, app, undefined, 201);
   } catch (err: unknown) {
     console.error("Create App Error:", err);
     const errorMessage =
       err instanceof Error ? err.message : "Failed to create app.";
-    res.status(500).json({ error: errorMessage });
+    sendError(res, errorMessage);
   }
 };
 
@@ -1167,14 +1144,12 @@ export const createModule = async (req: Request, res: Response) => {
   const { name, code, description, sortOrder } = req.body;
 
   if (!appId || !name || !code) {
-    return res
-      .status(400)
-      .json({ error: "appId, name, and code are required." });
+    return sendError(res, "appId, name, and code are required.", 400);
   }
 
   try {
     const app = await prisma.app.findUnique({ where: { id: appId } });
-    if (!app) return res.status(404).json({ error: "App not found." });
+    if (!app) return sendError(res, "App not found.", 404);
 
     const module = await prisma.bugModule.create({
       data: {
@@ -1185,12 +1160,12 @@ export const createModule = async (req: Request, res: Response) => {
         app: { connect: { id: appId } },
       },
     });
-    res.status(201).json(module);
+    sendSuccess(res, module, undefined, 201);
   } catch (err: unknown) {
     console.error("Create Module Error:", err);
     const errorMessage =
       err instanceof Error ? err.message : "Failed to create module.";
-    res.status(500).json({ error: errorMessage });
+    sendError(res, errorMessage);
   }
 };
 
@@ -1199,7 +1174,7 @@ export const getAppSettings = async (req: Request, res: Response) => {
   const { appId } = req.params;
 
   if (!appId) {
-    return res.status(400).json({ error: "App ID is required" });
+    return sendError(res, "App ID is required", 400);
   }
 
   try {
@@ -1224,12 +1199,12 @@ export const getAppSettings = async (req: Request, res: Response) => {
       });
     }
 
-    res.json(settings);
+    sendSuccess(res, settings);
   } catch (err: unknown) {
     console.error("Get App Settings Error:", err);
     const errorMessage =
       err instanceof Error ? err.message : "Failed to retrieve settings.";
-    res.status(500).json({ error: errorMessage });
+    sendError(res, errorMessage);
   }
 };
 
@@ -1238,7 +1213,7 @@ export const updateAppSettings = async (req: Request, res: Response) => {
   const { appId } = req.params;
 
   if (!appId) {
-    return res.status(400).json({ error: "App ID is required" });
+    return sendError(res, "App ID is required", 400);
   }
 
   const {
@@ -1307,11 +1282,11 @@ export const updateAppSettings = async (req: Request, res: Response) => {
       },
     });
 
-    res.json(settings);
+    sendSuccess(res, settings);
   } catch (err: unknown) {
     console.error("Update App Settings Error:", err);
     const errorMessage =
       err instanceof Error ? err.message : "Failed to update settings.";
-    res.status(500).json({ error: errorMessage });
+    sendError(res, errorMessage);
   }
 };

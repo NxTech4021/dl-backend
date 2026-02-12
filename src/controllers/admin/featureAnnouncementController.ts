@@ -5,6 +5,7 @@
 
 import { Request, Response } from 'express';
 import { getFeatureAnnouncementService } from '../../services/featureAnnouncementService';
+import { sendSuccess, sendError } from '../../utils/response';
 
 const announcementService = getFeatureAnnouncementService();
 
@@ -17,7 +18,7 @@ export const createAnnouncement = async (req: Request, res: Response) => {
     const { title, description, featureDetails, releaseDate, targetAudience } = req.body;
 
     if (!title || !description) {
-      return res.status(400).json({ error: 'Title and description are required' });
+      return sendError(res, 'Title and description are required', 400);
     }
 
     const announcement = await announcementService.createAnnouncement({
@@ -28,11 +29,11 @@ export const createAnnouncement = async (req: Request, res: Response) => {
       targetAudience: targetAudience || ['ALL']
     });
 
-    res.status(201).json(announcement);
+    sendSuccess(res, announcement, undefined, 201);
   } catch (error) {
     console.error('Create Announcement Error:', error);
     const message = error instanceof Error ? error.message : 'Failed to create announcement';
-    res.status(400).json({ error: message });
+    sendError(res, message, 400);
   }
 };
 
@@ -61,11 +62,11 @@ export const updateAnnouncement = async (req: Request, res: Response) => {
     }
 
     const announcement = await announcementService.updateAnnouncement(updateData);
-    res.json(announcement);
+    sendSuccess(res, announcement);
   } catch (error) {
     console.error('Update Announcement Error:', error);
     const message = error instanceof Error ? error.message : 'Failed to update announcement';
-    res.status(400).json({ error: message });
+    sendError(res, message, 400);
   }
 };
 
@@ -78,15 +79,15 @@ export const publishAnnouncement = async (req: Request, res: Response) => {
     const { id } = req.params;
 
     if (!id) {
-      return res.status(400).json({ error: 'Announcement ID is required' });
+      return sendError(res, 'Announcement ID is required', 400);
     }
 
     const announcement = await announcementService.publishAnnouncement(id);
-    res.json(announcement);
+    sendSuccess(res, announcement);
   } catch (error) {
     console.error('Publish Announcement Error:', error);
     const message = error instanceof Error ? error.message : 'Failed to publish announcement';
-    res.status(400).json({ error: message });
+    sendError(res, message, 400);
   }
 };
 
@@ -100,11 +101,11 @@ export const sendAppUpdateNotification = async (req: Request, res: Response) => 
 
     await announcementService.sendAppUpdateNotification(targetAudience || ['ALL']);
 
-    res.json({ message: 'App update notification sent successfully' });
+    sendSuccess(res, null, 'App update notification sent successfully');
   } catch (error) {
     console.error('Send App Update Error:', error);
     const message = error instanceof Error ? error.message : 'Failed to send app update notification';
-    res.status(400).json({ error: message });
+    sendError(res, message, 400);
   }
 };
 
@@ -116,11 +117,11 @@ export const getPublishedAnnouncements = async (req: Request, res: Response) => 
   try {
     const limit = req.query.limit ? parseInt(req.query.limit as string) : 10;
     const announcements = await announcementService.getPublishedAnnouncements(limit);
-    res.json(announcements);
+    sendSuccess(res, announcements);
   } catch (error) {
     console.error('Get Announcements Error:', error);
     const message = error instanceof Error ? error.message : 'Failed to retrieve announcements';
-    res.status(400).json({ error: message });
+    sendError(res, message, 400);
   }
 };
 
@@ -133,14 +134,14 @@ export const archiveAnnouncement = async (req: Request, res: Response) => {
     const { id } = req.params;
 
     if (!id) {
-      return res.status(400).json({ error: 'Announcement ID is required' });
+      return sendError(res, 'Announcement ID is required', 400);
     }
 
     const announcement = await announcementService.archiveAnnouncement(id);
-    res.json(announcement);
+    sendSuccess(res, announcement);
   } catch (error) {
     console.error('Archive Announcement Error:', error);
     const message = error instanceof Error ? error.message : 'Failed to archive announcement';
-    res.status(400).json({ error: message });
+    sendError(res, message, 400);
   }
 };

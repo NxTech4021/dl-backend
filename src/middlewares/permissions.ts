@@ -17,6 +17,7 @@
 import { auth } from "../lib/auth"; // your Better Auth instance
 import { prisma } from "../lib/prisma";
 import { toWebHeaders } from "../services/admin/adminSessionService";
+import { sendError } from "../utils/response";
 import type { Request, Response, NextFunction } from "express";
 
 export function requireRole(roles: string[]) {
@@ -24,7 +25,7 @@ export function requireRole(roles: string[]) {
     const session = await auth.api.getSession({ headers: toWebHeaders(req.headers) });
 
     if (!session?.user) {
-      return res.status(401).json({ message: "Unauthorized" });
+      return sendError(res, "Unauthorized", 401);
     }
 
     // Fetch user from database to get role (Better Auth session doesn't include role)
@@ -34,11 +35,11 @@ export function requireRole(roles: string[]) {
     });
 
     if (!user) {
-      return res.status(401).json({ message: "User not found" });
+      return sendError(res, "User not found", 401);
     }
 
     if (!roles.includes(user.role)) {
-      return res.status(403).json({ message: "Forbidden" });
+      return sendError(res, "Forbidden", 403);
     }
 
     (req as any).user = session.user;

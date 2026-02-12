@@ -1,7 +1,7 @@
 import { prisma } from "../lib/prisma";
 import { Request, Response } from 'express';
 import { Prisma, GenderRestriction, GameType, GenderType } from '@prisma/client';
-import { ApiResponse } from '../utils/ApiResponse';
+import { sendSuccess, sendError } from "../utils/response";
 
 interface CreateCategoryBody {
   seasonId?: string;
@@ -16,21 +16,21 @@ interface CreateCategoryBody {
 
 export const createCategory = async (req: Request, res: Response) => {
   try {
-    const { 
-      seasonId, 
-      name, 
-      genderRestriction, 
-      matchFormat, 
-      categoryOrder, 
-      game_type, 
+    const {
+      seasonId,
+      name,
+      genderRestriction,
+      matchFormat,
+      categoryOrder,
+      game_type,
       gender_category,
       isActive,
     } = req.body as CreateCategoryBody;
 
     console.log("Payload received", req.body);
-    
+
     if (!name) {
-      return res.status(400).json(new ApiResponse(false, 400, null, "Category name is required"));
+      return sendError(res, "Category name is required", 400);
     }
 
     // Validate and cast enum types
@@ -103,26 +103,20 @@ export const createCategory = async (req: Request, res: Response) => {
       }
     });
 
-    return res.status(201).json(new ApiResponse(true, 201, newCategory, "Category created successfully"));
+    return sendSuccess(res, newCategory, "Category created successfully", 201);
   } catch (error) {
     console.error("Error creating category:", error);
 
     if (error instanceof Prisma.PrismaClientKnownRequestError) {
       if (error.code === "P2002") {
-        return res.status(409).json(
-          new ApiResponse(false, 409, null, "A category with this name already exists")
-        );
+        return sendError(res, "A category with this name already exists", 409);
       }
       if (error.code === "P2003") {
-        return res.status(400).json(
-          new ApiResponse(false, 400, null, "Season ID is invalid")
-        );
+        return sendError(res, "Season ID is invalid", 400);
       }
     }
 
-    return res.status(500).json(
-      new ApiResponse(false, 500, null, "Error creating category")
-    );
+    return sendError(res, "Error creating category", 500);
   }
 };
 
@@ -142,14 +136,10 @@ export const getAllCategories = async (req: Request, res: Response) => {
       orderBy: { categoryOrder: 'asc' }
     });
 
-    return res.status(200).json(
-      new ApiResponse(true, 200, categories, "Categories fetched successfully")
-    );
+    return sendSuccess(res, categories, "Categories fetched successfully");
   } catch (error) {
     console.error("Error fetching categories:", error);
-    return res.status(500).json(
-      new ApiResponse(false, 500, null, "Error fetching categories")
-    );
+    return sendError(res, "Error fetching categories", 500);
   }
 };
 
@@ -158,9 +148,7 @@ export const getCategoryById = async (req: Request, res: Response) => {
     const { id } = req.params;
 
     if (!id) {
-      return res.status(400).json(
-        new ApiResponse(false, 400, null, "Category ID is required")
-      );
+      return sendError(res, "Category ID is required", 400);
     }
 
     const category = await prisma.category.findUnique({
@@ -176,19 +164,13 @@ export const getCategoryById = async (req: Request, res: Response) => {
     });
 
     if (!category) {
-      return res.status(404).json(
-        new ApiResponse(false, 404, null, "Category not found")
-      );
+      return sendError(res, "Category not found", 404);
     }
 
-    return res.status(200).json(
-      new ApiResponse(true, 200, category, "Category fetched successfully")
-    );
+    return sendSuccess(res, category, "Category fetched successfully");
   } catch (error) {
     console.error("Error fetching category:", error);
-    return res.status(500).json(
-      new ApiResponse(false, 500, null, "Error fetching category")
-    );
+    return sendError(res, "Error fetching category", 500);
   }
 };
 
@@ -209,9 +191,7 @@ export const updateCategory = async (req: Request, res: Response) => {
     const { seasonId, ...data } = req.body as UpdateCategoryBody;
 
     if (!id) {
-      return res.status(400).json(
-        new ApiResponse(false, 400, null, "Category ID is required")
-      );
+      return sendError(res, "Category ID is required", 400);
     }
 
     // Validate and cast enum types
@@ -240,7 +220,7 @@ export const updateCategory = async (req: Request, res: Response) => {
         mappedGenderCategory = null;
       }
     }
-    
+
     if (data.genderRestriction) {
       if (data.genderRestriction === 'MALE') {
         mappedGenderCategory = GenderType.MALE;
@@ -258,7 +238,7 @@ export const updateCategory = async (req: Request, res: Response) => {
     const { gender_category: _, ...updateData } = data;
 
     const updateDataWithRelations: Prisma.CategoryUpdateInput = {};
-    
+
     if (updateData.name !== undefined) updateDataWithRelations.name = updateData.name ?? null;
     if (validatedGenderRestriction !== undefined) updateDataWithRelations.genderRestriction = validatedGenderRestriction;
     if (updateData.matchFormat !== undefined) updateDataWithRelations.matchFormat = updateData.matchFormat ?? null;
@@ -291,28 +271,20 @@ export const updateCategory = async (req: Request, res: Response) => {
       }
     });
 
-    return res.status(200).json(
-      new ApiResponse(true, 200, updatedCategory, "Category updated successfully")
-    );
+    return sendSuccess(res, updatedCategory, "Category updated successfully");
   } catch (error) {
     console.error("Error updating category:", error);
 
     if (error instanceof Prisma.PrismaClientKnownRequestError) {
       if (error.code === "P2025") {
-        return res.status(404).json(
-          new ApiResponse(false, 404, null, "Category not found")
-        );
+        return sendError(res, "Category not found", 404);
       }
       if (error.code === "P2003") {
-        return res.status(400).json(
-          new ApiResponse(false, 400, null, "Season ID is invalid")
-        );
+        return sendError(res, "Season ID is invalid", 400);
       }
     }
 
-    return res.status(500).json(
-      new ApiResponse(false, 500, null, "Error updating category")
-    );
+    return sendError(res, "Error updating category", 500);
   }
 };
 
@@ -321,9 +293,7 @@ export const deleteCategory = async (req: Request, res: Response) => {
     const { id } = req.params;
 
     if (!id) {
-      return res.status(400).json(
-        new ApiResponse(false, 400, null, "Category ID is required")
-      );
+      return sendError(res, "Category ID is required", 400);
     }
 
     const existingCategory = await prisma.category.findUnique({
@@ -340,21 +310,16 @@ export const deleteCategory = async (req: Request, res: Response) => {
 
     if (!existingCategory) {
       console.log("❌ No category found with ID:", id);
-      return res.status(404).json(
-        new ApiResponse(false, 404, null, "Category not found")
-      );
+      return sendError(res, "Category not found", 404);
     }
-    
+
     if (existingCategory.seasons && existingCategory.seasons.length > 0) {
       const season = existingCategory.seasons[0];
       if (season) {
-        return res.status(400).json(
-          new ApiResponse(
-            false,
-            400,
-            null,
-            `Cannot delete category: It is linked to season "${season.name}"`
-          )
+        return sendError(
+          res,
+          `Cannot delete category: It is linked to season "${season.name}"`,
+          400
         );
       }
     }
@@ -363,34 +328,24 @@ export const deleteCategory = async (req: Request, res: Response) => {
       where: { id },
     });
 
-    return res
-      .status(200)
-      .json(new ApiResponse(true, 200, null, "Category deleted successfully"));
+    return sendSuccess(res, null, "Category deleted successfully");
   } catch (error: unknown) {
     console.error("🔥 Error deleting category:", error);
 
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2003") {
       console.log("❌ Prisma foreign key constraint error:", error);
-      return res.status(400).json(
-        new ApiResponse(
-          false,
-          400,
-          null,
-          "Cannot delete category: It is being used by a season"
-        )
+      return sendError(
+        res,
+        "Cannot delete category: It is being used by a season",
+        400
       );
     }
-    
+
     if (error instanceof Prisma.PrismaClientKnownRequestError) {
-      return res.status(500).json(
-        new ApiResponse(false, 500, null, "Database error deleting category")
-      );
+      return sendError(res, "Database error deleting category", 500);
     }
 
     console.log("❌ General server error while deleting category");
-    return res
-      .status(500)
-      .json(new ApiResponse(false, 500, null, "Error deleting category"));
+    return sendError(res, "Error deleting category", 500);
   }
 };
-

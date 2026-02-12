@@ -14,6 +14,7 @@ import {
 } from '../services/teamChangeRequestService';
 import { TeamChangeRequestStatus } from '@prisma/client';
 import { isAdmin } from '../middlewares/auth.middleware';
+import { sendSuccess, sendError } from '../utils/response';
 
 /**
  * Create a new team change request
@@ -24,9 +25,7 @@ export const createRequest = async (req: Request, res: Response) => {
     const { userId, currentDivisionId, requestedDivisionId, seasonId, reason } = req.body;
 
     if (!userId || !currentDivisionId || !requestedDivisionId || !seasonId) {
-      return res.status(400).json({
-        error: 'Missing required fields: userId, currentDivisionId, requestedDivisionId, seasonId'
-      });
+      return sendError(res, 'Missing required fields: userId, currentDivisionId, requestedDivisionId, seasonId', 400);
     }
 
     const request = await createTeamChangeRequest({
@@ -37,12 +36,10 @@ export const createRequest = async (req: Request, res: Response) => {
       reason
     });
 
-    return res.status(201).json(request);
+    return sendSuccess(res, request, undefined, 201);
   } catch (error) {
     console.error('Error creating team change request:', error);
-    return res.status(400).json({
-      error: error instanceof Error ? error.message : 'Failed to create team change request'
-    });
+    return sendError(res, error instanceof Error ? error.message : 'Failed to create team change request', 400);
   }
 };
 
@@ -56,15 +53,11 @@ export const processRequest = async (req: Request, res: Response) => {
     const { status, adminId, adminNotes } = req.body;
 
     if (!id || !status || !adminId) {
-      return res.status(400).json({
-        error: 'Missing required fields: status, adminId'
-      });
+      return sendError(res, 'Missing required fields: status, adminId', 400);
     }
 
     if (status !== 'APPROVED' && status !== 'DENIED') {
-      return res.status(400).json({
-        error: 'Status must be APPROVED or DENIED'
-      });
+      return sendError(res, 'Status must be APPROVED or DENIED', 400);
     }
 
     const request = await processTeamChangeRequest({
@@ -74,12 +67,10 @@ export const processRequest = async (req: Request, res: Response) => {
       adminNotes
     });
 
-    return res.status(200).json(request);
+    return sendSuccess(res, request);
   } catch (error) {
     console.error('Error processing team change request:', error);
-    return res.status(400).json({
-      error: error instanceof Error ? error.message : 'Failed to process team change request'
-    });
+    return sendError(res, error instanceof Error ? error.message : 'Failed to process team change request', 400);
   }
 };
 
@@ -111,12 +102,10 @@ export const getRequests = async (req: Request, res: Response) => {
 
     const requests = await getTeamChangeRequests(filters);
 
-    return res.status(200).json(requests);
+    return sendSuccess(res, requests);
   } catch (error) {
     console.error('Error fetching team change requests:', error);
-    return res.status(500).json({
-      error: error instanceof Error ? error.message : 'Failed to fetch team change requests'
-    });
+    return sendError(res, error instanceof Error ? error.message : 'Failed to fetch team change requests');
   }
 };
 
@@ -129,21 +118,19 @@ export const getRequestById = async (req: Request, res: Response) => {
     const { id } = req.params;
 
     if (!id) {
-      return res.status(400).json({ error: 'Request ID is required' });
+      return sendError(res, 'Request ID is required', 400);
     }
 
     const request = await getTeamChangeRequestById(id);
 
     if (!request) {
-      return res.status(404).json({ error: 'Team change request not found' });
+      return sendError(res, 'Team change request not found', 404);
     }
 
-    return res.status(200).json(request);
+    return sendSuccess(res, request);
   } catch (error) {
     console.error('Error fetching team change request:', error);
-    return res.status(500).json({
-      error: error instanceof Error ? error.message : 'Failed to fetch team change request'
-    });
+    return sendError(res, error instanceof Error ? error.message : 'Failed to fetch team change request');
   }
 };
 
@@ -158,22 +145,20 @@ export const cancelRequest = async (req: Request, res: Response) => {
     const authenticatedUserId = req.user?.id;
 
     if (!id) {
-      return res.status(400).json({ error: 'Request ID is required' });
+      return sendError(res, 'Request ID is required', 400);
     }
 
     if (!authenticatedUserId) {
-      return res.status(401).json({ error: 'Authentication required' });
+      return sendError(res, 'Authentication required', 401);
     }
 
     // Admin can cancel any request, users can only cancel their own
     const request = await cancelTeamChangeRequest(id, authenticatedUserId, isAdmin(req.user));
 
-    return res.status(200).json(request);
+    return sendSuccess(res, request);
   } catch (error) {
     console.error('Error cancelling team change request:', error);
-    return res.status(400).json({
-      error: error instanceof Error ? error.message : 'Failed to cancel team change request'
-    });
+    return sendError(res, error instanceof Error ? error.message : 'Failed to cancel team change request', 400);
   }
 };
 
@@ -185,11 +170,9 @@ export const getPendingCount = async (_req: Request, res: Response) => {
   try {
     const count = await getPendingTeamChangeRequestsCount();
 
-    return res.status(200).json({ count });
+    return sendSuccess(res, { count });
   } catch (error) {
     console.error('Error fetching pending count:', error);
-    return res.status(500).json({
-      error: error instanceof Error ? error.message : 'Failed to fetch pending count'
-    });
+    return sendError(res, error instanceof Error ? error.message : 'Failed to fetch pending count');
   }
 };

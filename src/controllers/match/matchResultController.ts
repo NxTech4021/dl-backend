@@ -9,6 +9,7 @@ import { DisputeCategory, WalkoverReason } from '@prisma/client';
 import { notificationService } from '../../services/notificationService';
 import { matchManagementNotifications } from '../../helpers/notifications/matchManagementNotifications';
 import { prisma } from '../../lib/prisma';
+import { sendSuccess, sendError } from '../../utils/response';
 
 const matchResultService = getMatchResultService();
 
@@ -52,12 +53,12 @@ export const submitResult = async (req: Request, res: Response) => {
   try {
     const userId = req.user?.id;
     if (!userId) {
-      return res.status(401).json({ error: 'Authentication required' });
+      return sendError(res, 'Authentication required', 401);
     }
 
     const { id } = req.params;
     if (!id) {
-      return res.status(400).json({ error: 'Match ID is required' });
+      return sendError(res, 'Match ID is required', 400);
     }
 
     const { setScores, gameScores, comment, evidence, isUnfinished } = req.body;
@@ -65,9 +66,7 @@ export const submitResult = async (req: Request, res: Response) => {
     // Validate that at least one score type is provided
     if ((!setScores || !Array.isArray(setScores) || setScores.length === 0) &&
         (!gameScores || !Array.isArray(gameScores) || gameScores.length === 0)) {
-      return res.status(400).json({
-        error: 'Either setScores (Tennis/Padel) or gameScores (Pickleball) array is required'
-      });
+      return sendError(res, 'Either setScores (Tennis/Padel) or gameScores (Pickleball) array is required', 400);
     }
 
     const match = await matchResultService.submitResult({
@@ -81,7 +80,7 @@ export const submitResult = async (req: Request, res: Response) => {
     });
 
     if (!match) {
-      return res.status(500).json({ error: 'Failed to submit result' });
+      return sendError(res, 'Failed to submit result');
     }
 
     // Notify other participants about score submission
@@ -105,11 +104,11 @@ export const submitResult = async (req: Request, res: Response) => {
       // Don't fail the request if notification fails
     }
 
-    res.json(match);
+    sendSuccess(res, match);
   } catch (error) {
     console.error('Submit Result Error:', error);
     const message = error instanceof Error ? error.message : 'Failed to submit result';
-    res.status(400).json({ error: message });
+    sendError(res, message, 400);
   }
 };
 
@@ -121,22 +120,22 @@ export const confirmResult = async (req: Request, res: Response) => {
   try {
     const userId = req.user?.id;
     if (!userId) {
-      return res.status(401).json({ error: 'Authentication required' });
+      return sendError(res, 'Authentication required', 401);
     }
 
     const { id } = req.params;
     if (!id) {
-      return res.status(400).json({ error: 'Match ID is required' });
+      return sendError(res, 'Match ID is required', 400);
     }
 
     const { confirmed, disputeReason, disputeCategory, disputerScore, evidenceUrl } = req.body;
 
     if (typeof confirmed !== 'boolean') {
-      return res.status(400).json({ error: 'confirmed (boolean) is required' });
+      return sendError(res, 'confirmed (boolean) is required', 400);
     }
 
     if (!confirmed && !disputeReason) {
-      return res.status(400).json({ error: 'disputeReason is required when not confirming' });
+      return sendError(res, 'disputeReason is required when not confirming', 400);
     }
 
     const match = await matchResultService.confirmResult({
@@ -150,7 +149,7 @@ export const confirmResult = async (req: Request, res: Response) => {
     });
 
     if (!match) {
-      return res.status(500).json({ error: 'Failed to confirm result' });
+      return sendError(res, 'Failed to confirm result');
     }
 
     // Send notification based on confirmation status
@@ -194,11 +193,11 @@ export const confirmResult = async (req: Request, res: Response) => {
       // Don't fail the request if notification fails
     }
 
-    res.json(match);
+    sendSuccess(res, match);
   } catch (error) {
     console.error('Confirm Result Error:', error);
     const message = error instanceof Error ? error.message : 'Failed to confirm result';
-    res.status(400).json({ error: message });
+    sendError(res, message, 400);
   }
 };
 
@@ -210,22 +209,22 @@ export const submitWalkover = async (req: Request, res: Response) => {
   try {
     const userId = req.user?.id;
     if (!userId) {
-      return res.status(401).json({ error: 'Authentication required' });
+      return sendError(res, 'Authentication required', 401);
     }
 
     const { id } = req.params;
     if (!id) {
-      return res.status(400).json({ error: 'Match ID is required' });
+      return sendError(res, 'Match ID is required', 400);
     }
 
     const { defaultingUserId, reason, reasonDetail } = req.body;
 
     if (!defaultingUserId) {
-      return res.status(400).json({ error: 'defaultingUserId is required' });
+      return sendError(res, 'defaultingUserId is required', 400);
     }
 
     if (!reason || !['NO_SHOW', 'LATE_CANCELLATION', 'INJURY', 'PERSONAL_EMERGENCY', 'OTHER'].includes(reason)) {
-      return res.status(400).json({ error: 'Valid reason is required' });
+      return sendError(res, 'Valid reason is required', 400);
     }
 
     const match = await matchResultService.submitWalkover({
@@ -237,7 +236,7 @@ export const submitWalkover = async (req: Request, res: Response) => {
     });
 
     if (!match) {
-      return res.status(500).json({ error: 'Failed to submit walkover' });
+      return sendError(res, 'Failed to submit walkover');
     }
 
     // Send walkover notifications to participants
@@ -305,11 +304,11 @@ export const submitWalkover = async (req: Request, res: Response) => {
       // Don't fail the request if notification fails
     }
 
-    res.json(match);
+    sendSuccess(res, match);
   } catch (error) {
     console.error('Submit Walkover Error:', error);
     const message = error instanceof Error ? error.message : 'Failed to submit walkover';
-    res.status(400).json({ error: message });
+    sendError(res, message, 400);
   }
 };
 
@@ -321,18 +320,18 @@ export const getMatchResult = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     if (!id) {
-      return res.status(400).json({ error: 'Match ID is required' });
+      return sendError(res, 'Match ID is required', 400);
     }
 
     const match = await matchResultService.getMatchWithResults(id);
     if (!match) {
-      return res.status(404).json({ error: 'Match not found' });
+      return sendError(res, 'Match not found', 404);
     }
 
-    res.json(match);
+    sendSuccess(res, match);
   } catch (error) {
     console.error('Get Match Result Error:', error);
-    res.status(500).json({ error: 'Failed to retrieve match result' });
+    sendError(res, 'Failed to retrieve match result');
   }
 };
 
@@ -344,19 +343,19 @@ export const getDisputeById = async (req: Request, res: Response) => {
   try {
     const userId = req.user?.id;
     if (!userId) {
-      return res.status(401).json({ error: 'Authentication required' });
+      return sendError(res, 'Authentication required', 401);
     }
 
     const { id } = req.params;
     if (!id) {
-      return res.status(400).json({ error: 'Dispute ID is required' });
+      return sendError(res, 'Dispute ID is required', 400);
     }
 
     const dispute = await matchResultService.getDisputeById(id);
-    res.json(dispute);
+    sendSuccess(res, dispute);
   } catch (error) {
     console.error('Get Dispute Error:', error);
     const message = error instanceof Error ? error.message : 'Failed to get dispute';
-    res.status(404).json({ error: message });
+    sendError(res, message, 404);
   }
 };

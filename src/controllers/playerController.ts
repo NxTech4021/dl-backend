@@ -4,7 +4,7 @@
  */
 
 import { Request, Response } from "express";
-import { ApiResponse } from "../utils/ApiResponse";
+import { sendSuccess, sendPaginated, sendError } from "../utils/response";
 import { AuthenticatedRequest } from "../middlewares/auth.middleware";
 
 // Import all services
@@ -48,19 +48,13 @@ export const getAllPlayers = async (req: Request, res: Response) => {
     const result = await searchService.getAllPlayers(pageNum, limitNum);
 
     if (result.data.length === 0) {
-      return res
-        .status(200)
-        .json(new ApiResponse(true, 200, result, "No players found"));
+      return sendPaginated(res, result.data, result.pagination, "No players found");
     }
 
-    return res
-      .status(200)
-      .json(new ApiResponse(true, 200, result, "Players fetched successfully"));
+    return sendPaginated(res, result.data, result.pagination, "Players fetched successfully");
   } catch (error) {
     console.error("Error fetching players:", error);
-    return res
-      .status(500)
-      .json(new ApiResponse(false, 500, null, "Failed to fetch players"));
+    return sendError(res, "Failed to fetch players");
   }
 };
 
@@ -71,14 +65,10 @@ export const getAllPlayers = async (req: Request, res: Response) => {
 export const getPlayerStats = async (req: Request, res: Response) => {
   try {
     const stats = await statsService.getPlayerStats();
-    return res
-      .status(200)
-      .json(new ApiResponse(true, 200, stats, "Player stats fetched successfully"));
+    return sendSuccess(res, stats, "Player stats fetched successfully");
   } catch (error) {
     console.error("Error fetching player stats:", error);
-    return res
-      .status(500)
-      .json(new ApiResponse(false, 500, null, "Failed to fetch player stats"));
+    return sendError(res, "Failed to fetch player stats");
   }
 };
 
@@ -89,29 +79,21 @@ export const getPlayerStats = async (req: Request, res: Response) => {
 export const getPlayerById = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    
+
     if (!id) {
-      return res
-        .status(400)
-        .json(new ApiResponse(false, 400, null, "Player ID is required"));
+      return sendError(res, "Player ID is required", 400);
     }
 
     const player = await statsService.getPlayerById(id);
 
     if (!player) {
-      return res
-        .status(404)
-        .json(new ApiResponse(false, 404, null, "Player not found"));
+      return sendError(res, "Player not found", 404);
     }
 
-    return res
-      .status(200)
-      .json(new ApiResponse(true, 200, player, "Player found successfully"));
+    return sendSuccess(res, player, "Player found successfully");
   } catch (error) {
     console.error("Error fetching player:", error);
-    return res
-      .status(500)
-      .json(new ApiResponse(false, 500, null, "Failed to fetch player"));
+    return sendError(res, "Failed to fetch player");
   }
 };
 
@@ -124,21 +106,15 @@ export const getPlayerProfile = async (req: AuthenticatedRequest, res: Response)
     const userId = req.user?.id;
 
     if (!userId) {
-      return res
-        .status(401)
-        .json(new ApiResponse(false, 401, null, "Authentication required"));
+      return sendError(res, "Authentication required", 401);
     }
 
     const profileData = await profileService.getPlayerProfile(userId);
-    return res
-      .status(200)
-      .json(new ApiResponse(true, 200, profileData, "Player profile fetched successfully"));
+    return sendSuccess(res, profileData, "Player profile fetched successfully");
   } catch (error: unknown) {
     console.error("❌ getPlayerProfile: Error fetching player profile:", error);
     const errorMessage = error instanceof Error ? error.message : "Failed to fetch player profile";
-    return res
-      .status(500)
-      .json(new ApiResponse(false, 500, null, errorMessage));
+    return sendError(res, errorMessage);
   }
 };
 
@@ -152,9 +128,7 @@ export const getPlayerRatingHistory = async (req: AuthenticatedRequest, res: Res
     const userId = req.user?.id;
 
     if (!userId) {
-      return res
-        .status(401)
-        .json(new ApiResponse(false, 401, null, "Authentication required"));
+      return sendError(res, "Authentication required", 401);
     }
 
     const { sport, gameType, limit } = req.query;
@@ -166,15 +140,11 @@ export const getPlayerRatingHistory = async (req: AuthenticatedRequest, res: Res
       limit ? Number(limit) : 20
     );
 
-    return res
-      .status(200)
-      .json(new ApiResponse(true, 200, history, "Rating history fetched successfully"));
+    return sendSuccess(res, history, "Rating history fetched successfully");
   } catch (error: unknown) {
     console.error("❌ getPlayerRatingHistory: Error fetching rating history:", error);
     const errorMessage = error instanceof Error ? error.message : "Failed to fetch rating history";
-    return res
-      .status(500)
-      .json(new ApiResponse(false, 500, null, errorMessage));
+    return sendError(res, errorMessage);
   }
 };
 
@@ -187,9 +157,7 @@ export const getPlayerMatchHistory = async (req: AuthenticatedRequest, res: Resp
     const userId = req.user?.id;
 
     if (!userId) {
-      return res
-        .status(401)
-        .json(new ApiResponse(false, 401, null, "Authentication required"));
+      return sendError(res, "Authentication required", 401);
     }
 
     const {
@@ -231,14 +199,10 @@ export const getPlayerMatchHistory = async (req: AuthenticatedRequest, res: Resp
 
     const responseData = await matchHistoryService.getPlayerMatchHistory(userId, options);
 
-    return res
-      .status(200)
-      .json(new ApiResponse(true, 200, responseData, "Match history fetched successfully"));
+    return sendSuccess(res, responseData, "Match history fetched successfully");
   } catch (error) {
     console.error("Error fetching match history:", error);
-    return res
-      .status(500)
-      .json(new ApiResponse(false, 500, null, "Failed to fetch match history"));
+    return sendError(res, "Failed to fetch match history");
   }
 };
 
@@ -252,41 +216,29 @@ export const getMatchDetails = async (req: AuthenticatedRequest, res: Response) 
     const { matchId } = req.params;
 
     if (!userId) {
-      return res
-        .status(401)
-        .json(new ApiResponse(false, 401, null, "Authentication required"));
+      return sendError(res, "Authentication required", 401);
     }
 
     if (!matchId) {
-      return res
-        .status(400)
-        .json(new ApiResponse(false, 400, null, "Match ID is required"));
+      return sendError(res, "Match ID is required", 400);
     }
 
     const detailedMatch = await matchHistoryService.getMatchDetails(matchId, userId);
-    return res
-      .status(200)
-      .json(new ApiResponse(true, 200, detailedMatch, "Match details fetched successfully"));
+    return sendSuccess(res, detailedMatch, "Match details fetched successfully");
   } catch (error: unknown) {
     console.error("Error fetching match details:", error);
 
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
 
     if (errorMessage === 'Match not found') {
-      return res
-        .status(404)
-        .json(new ApiResponse(false, 404, null, "Match not found"));
+      return sendError(res, "Match not found", 404);
     }
 
     if (errorMessage === 'Access denied') {
-      return res
-        .status(403)
-        .json(new ApiResponse(false, 403, null, "Access denied"));
+      return sendError(res, "Access denied", 403);
     }
 
-    return res
-      .status(500)
-      .json(new ApiResponse(false, 500, null, "Failed to fetch match details"));
+    return sendError(res, "Failed to fetch match details");
   }
 };
 
@@ -297,11 +249,9 @@ export const getMatchDetails = async (req: AuthenticatedRequest, res: Response) 
 export const updatePlayerProfile = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const userId = req.user?.id;
-    
+
     if (!userId) {
-      return res
-        .status(401)
-        .json(new ApiResponse(false, 401, null, "Authentication required"));
+      return sendError(res, "Authentication required", 401);
     }
 
     const { name, username, email, location, image, phoneNumber, bio, dateOfBirth } = req.body as UpdatePlayerProfileBody;
@@ -319,22 +269,12 @@ export const updatePlayerProfile = async (req: AuthenticatedRequest, res: Respon
 
     const updatedUser = await profileService.updatePlayerProfile(userId, updateData);
 
-    return res.json({
-      success: true,
-      status: 200,
-      data: updatedUser,
-      message: 'Profile updated successfully'
-    });
+    return sendSuccess(res, updatedUser, 'Profile updated successfully');
   } catch (error: unknown) {
     console.error('Error updating player profile:', error);
     const errorMessage = error instanceof Error ? error.message : 'Failed to update profile';
     const statusCode = errorMessage.includes('already taken') ? 400 : 500;
-    return res.status(statusCode).json({
-      success: false,
-      status: statusCode,
-      data: null,
-      message: errorMessage
-    });
+    return sendError(res, errorMessage, statusCode);
   }
 };
 
@@ -345,40 +285,26 @@ export const updatePlayerProfile = async (req: AuthenticatedRequest, res: Respon
 export const changePlayerPassword = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const userId = req.user?.id;
-    
+
     if (!userId) {
-      return res
-        .status(401)
-        .json(new ApiResponse(false, 401, null, "Authentication required"));
+      return sendError(res, "Authentication required", 401);
     }
 
     const { currentPassword, newPassword } = req.body as ChangePlayerPasswordBody;
 
     if (!currentPassword || !newPassword) {
-      return res
-        .status(400)
-        .json(new ApiResponse(false, 400, null, "Current password and new password are required"));
+      return sendError(res, "Current password and new password are required", 400);
     }
 
     await profileService.changePlayerPassword(userId, currentPassword, newPassword, req.headers);
 
-    return res.json({
-      success: true,
-      status: 200,
-      data: null,
-      message: 'Password changed successfully'
-    });
+    return sendSuccess(res, null, 'Password changed successfully');
   } catch (error: unknown) {
     console.error('❌ Error changing password:', error);
     const errorMessage = error instanceof Error ? error.message : 'Failed to change password';
     const isClientError = errorMessage.includes('required') || errorMessage.includes('incorrect') || errorMessage.includes('8 characters');
     const statusCode = isClientError ? 400 : 500;
-    return res.status(statusCode).json({
-      success: false,
-      status: statusCode,
-      data: null,
-      message: errorMessage
-    });
+    return sendError(res, errorMessage, statusCode);
   }
 };
 
@@ -389,29 +315,17 @@ export const changePlayerPassword = async (req: AuthenticatedRequest, res: Respo
 export const getPlayerAchievements = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const userId = req.user?.id;
-    
+
     if (!userId) {
-      return res
-        .status(401)
-        .json(new ApiResponse(false, 401, null, "Authentication required"));
+      return sendError(res, "Authentication required", 401);
     }
 
     const result = await profileService.getPlayerAchievements(userId);
 
-    return res.json({
-      data: result,
-      success: true,
-      status: 200,
-      message: result.count > 0 ? 'Achievements retrieved successfully' : 'No achievements yet'
-    });
+    return sendSuccess(res, result, result.count > 0 ? 'Achievements retrieved successfully' : 'No achievements yet');
   } catch (error) {
     console.error('Error fetching player achievements:', error);
-    return res.status(500).json({
-      success: false,
-      status: 500,
-      data: null,
-      message: 'Failed to fetch achievements'
-    });
+    return sendError(res, 'Failed to fetch achievements');
   }
 };
 
@@ -425,31 +339,16 @@ export const uploadProfileImage = async (req: AuthenticatedRequest, res: Respons
     const userId = req.user?.id;
 
     if (!userId) {
-      return res.status(401).json({
-        success: false,
-        status: 401,
-        data: null,
-        message: 'User not authenticated'
-      });
+      return sendError(res, 'User not authenticated', 401);
     }
 
     if (!req.file) {
-      return res.status(400).json({
-        success: false,
-        status: 400,
-        data: null,
-        message: 'No image file provided'
-      });
+      return sendError(res, 'No image file provided', 400);
     }
 
     // Verify file has buffer (from memory storage)
     if (!req.file.buffer) {
-      return res.status(400).json({
-        success: false,
-        status: 400,
-        data: null,
-        message: 'File buffer not available'
-      });
+      return sendError(res, 'File buffer not available', 400);
     }
 
     const result = await profileService.uploadProfileImage(userId, {
@@ -458,21 +357,11 @@ export const uploadProfileImage = async (req: AuthenticatedRequest, res: Respons
       mimetype: req.file.mimetype
     });
 
-    return res.status(200).json({
-      success: true,
-      status: 200,
-      data: result,
-      message: 'Profile image uploaded successfully'
-    });
+    return sendSuccess(res, result, 'Profile image uploaded successfully');
   } catch (error) {
     console.error('Error uploading profile image:', error);
 
-    return res.status(500).json({
-      success: false,
-      status: 500,
-      data: null,
-      message: 'Failed to upload profile image'
-    });
+    return sendError(res, 'Failed to upload profile image');
   }
 };
 
@@ -491,14 +380,10 @@ export const searchPlayers = async (req: AuthenticatedRequest, res: Response) =>
       currentUserId
     );
 
-    return res.status(200).json(
-      new ApiResponse(true, 200, filteredPlayers, 'Players found successfully')
-    );
+    return sendSuccess(res, filteredPlayers, 'Players found successfully');
   } catch (error) {
     console.error('Error searching players:', error);
-    return res.status(500).json(
-      new ApiResponse(false, 500, null, 'Failed to search players')
-    );
+    return sendError(res, 'Failed to search players');
   }
 };
 
@@ -513,15 +398,11 @@ export const getAvailablePlayersForSeason = async (req: AuthenticatedRequest, re
     const currentUserId = req.user?.id;
 
     if (!seasonId) {
-      return res.status(400).json(
-        new ApiResponse(false, 400, null, 'Season ID is required')
-      );
+      return sendError(res, 'Season ID is required', 400);
     }
 
     if (!currentUserId) {
-      return res.status(401).json(
-        new ApiResponse(false, 401, null, 'User not authenticated')
-      );
+      return sendError(res, 'User not authenticated', 401);
     }
 
     const result = await searchService.getAvailablePlayersForSeason(
@@ -530,25 +411,19 @@ export const getAvailablePlayersForSeason = async (req: AuthenticatedRequest, re
       searchQuery as string | undefined
     );
 
-    return res.status(200).json(
-      new ApiResponse(true, 200, result, result.usedFallback
-        ? (searchQuery ? 'Showing search results' : 'No friends available')
-        : 'Available friends retrieved successfully')
-    );
+    return sendSuccess(res, result, result.usedFallback
+      ? (searchQuery ? 'Showing search results' : 'No friends available')
+      : 'Available friends retrieved successfully');
   } catch (error: unknown) {
     console.error('Error getting available players:', error);
 
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
 
     if (errorMessage === 'User not found' || errorMessage === 'Season not found') {
-      return res.status(404).json(
-        new ApiResponse(false, 404, null, errorMessage)
-      );
+      return sendError(res, errorMessage, 404);
     }
 
-    return res.status(500).json(
-      new ApiResponse(false, 500, null, 'Failed to get available players')
-    );
+    return sendError(res, 'Failed to get available players');
   }
 };
 
@@ -561,21 +436,15 @@ export const getFavorites = async (req: AuthenticatedRequest, res: Response) => 
     const userId = req.user?.id;
 
     if (!userId) {
-      return res.status(401).json(
-        new ApiResponse(false, 401, null, 'Unauthorized')
-      );
+      return sendError(res, 'Unauthorized', 401);
     }
 
     const favoritesWithDetails = await favoritesService.getFavorites(userId);
 
-    return res.status(200).json(
-      new ApiResponse(true, 200, favoritesWithDetails, 'Favorites retrieved successfully')
-    );
+    return sendSuccess(res, favoritesWithDetails, 'Favorites retrieved successfully');
   } catch (error) {
     console.error('Error getting favorites:', error);
-    return res.status(500).json(
-      new ApiResponse(false, 500, null, 'Failed to get favorites')
-    );
+    return sendError(res, 'Failed to get favorites');
   }
 };
 
@@ -589,30 +458,22 @@ export const addFavorite = async (req: AuthenticatedRequest, res: Response) => {
     const { userId: favoritedId } = req.params;
 
     if (!userId) {
-      return res.status(401).json(
-        new ApiResponse(false, 401, null, 'Unauthorized')
-      );
+      return sendError(res, 'Unauthorized', 401);
     }
 
     if (!favoritedId) {
-      return res.status(400).json(
-        new ApiResponse(false, 400, null, 'User ID is required')
-      );
+      return sendError(res, 'User ID is required', 400);
     }
 
     const favorite = await favoritesService.addFavorite(userId, favoritedId);
 
-    return res.status(201).json(
-      new ApiResponse(true, 201, favorite, 'User added to favorites successfully')
-    );
+    return sendSuccess(res, favorite, 'User added to favorites successfully', 201);
   } catch (error: unknown) {
     console.error('Error adding favorite:', error);
 
     const errorMessage = error instanceof Error ? error.message : 'Failed to add favorite';
     const statusCode = errorMessage === 'User not found' ? 404 : 400;
-    return res.status(statusCode).json(
-      new ApiResponse(false, statusCode, null, errorMessage)
-    );
+    return sendError(res, errorMessage, statusCode);
   }
 };
 
@@ -626,30 +487,22 @@ export const removeFavorite = async (req: AuthenticatedRequest, res: Response) =
     const { userId: favoritedId } = req.params;
 
     if (!userId) {
-      return res.status(401).json(
-        new ApiResponse(false, 401, null, 'Unauthorized')
-      );
+      return sendError(res, 'Unauthorized', 401);
     }
 
     if (!favoritedId) {
-      return res.status(400).json(
-        new ApiResponse(false, 400, null, 'User ID is required')
-      );
+      return sendError(res, 'User ID is required', 400);
     }
 
     await favoritesService.removeFavorite(userId, favoritedId);
 
-    return res.status(200).json(
-      new ApiResponse(true, 200, null, 'User removed from favorites successfully')
-    );
+    return sendSuccess(res, null, 'User removed from favorites successfully');
   } catch (error: unknown) {
     console.error('Error removing favorite:', error);
 
     const errorMessage = error instanceof Error ? error.message : 'Failed to remove favorite';
     const statusCode = errorMessage === 'Favorite not found' ? 404 : 500;
-    return res.status(statusCode).json(
-      new ApiResponse(false, statusCode, null, errorMessage)
-    );
+    return sendError(res, errorMessage, statusCode);
   }
 };
 
@@ -663,24 +516,18 @@ export const getPublicPlayerProfile = async (req: AuthenticatedRequest, res: Res
     const currentUserId = req.user?.id;
 
     if (!userId) {
-      return res.status(400).json(
-        new ApiResponse(false, 400, null, 'User ID is required')
-      );
+      return sendError(res, 'User ID is required', 400);
     }
 
     const profileData = await profileService.getPublicPlayerProfile(userId, currentUserId);
 
-    return res.status(200).json(
-      new ApiResponse(true, 200, profileData, 'Player profile retrieved successfully')
-    );
+    return sendSuccess(res, profileData, 'Player profile retrieved successfully');
   } catch (error: unknown) {
     console.error('Error getting public player profile:', error);
 
     const errorMessage = error instanceof Error ? error.message : 'Failed to get player profile';
     const statusCode = errorMessage === 'Player not found' ? 404 : 500;
-    return res.status(statusCode).json(
-      new ApiResponse(false, statusCode, null, errorMessage)
-    );
+    return sendError(res, errorMessage, statusCode);
   }
 };
 
@@ -691,26 +538,20 @@ export const getPublicPlayerProfile = async (req: AuthenticatedRequest, res: Res
 export const getPlayerLeagueHistory = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    
+
     if (!id) {
-      return res.status(400).json(
-        new ApiResponse(false, 400, null, 'Player ID is required')
-      );
+      return sendError(res, 'Player ID is required', 400);
     }
 
     const result = await competitionHistoryService.getPlayerLeagueHistory(id);
 
-    return res.status(200).json(
-      new ApiResponse(true, 200, result, 'Player league history retrieved successfully')
-    );
+    return sendSuccess(res, result, 'Player league history retrieved successfully');
   } catch (error: unknown) {
     console.error('Error getting player league history:', error);
 
     const errorMessage = error instanceof Error ? error.message : 'Failed to fetch player league history';
     const statusCode = errorMessage === 'Player not found' ? 404 : 500;
-    return res.status(statusCode).json(
-      new ApiResponse(false, statusCode, null, errorMessage)
-    );
+    return sendError(res, errorMessage, statusCode);
   }
 };
 
@@ -721,26 +562,20 @@ export const getPlayerLeagueHistory = async (req: Request, res: Response) => {
 export const getPlayerSeasonHistory = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    
+
     if (!id) {
-      return res.status(400).json(
-        new ApiResponse(false, 400, null, 'Player ID is required')
-      );
+      return sendError(res, 'Player ID is required', 400);
     }
 
     const result = await competitionHistoryService.getPlayerSeasonHistory(id);
 
-    return res.status(200).json(
-      new ApiResponse(true, 200, result, 'Player season history retrieved successfully')
-    );
+    return sendSuccess(res, result, 'Player season history retrieved successfully');
   } catch (error: unknown) {
     console.error('Error getting player season history:', error);
 
     const errorMessage = error instanceof Error ? error.message : 'Failed to fetch player season history';
     const statusCode = errorMessage === 'Player not found' ? 404 : 500;
-    return res.status(statusCode).json(
-      new ApiResponse(false, statusCode, null, errorMessage)
-    );
+    return sendError(res, errorMessage, statusCode);
   }
 };
 
@@ -751,26 +586,20 @@ export const getPlayerSeasonHistory = async (req: Request, res: Response) => {
 export const getPlayerDivisionHistory = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    
+
     if (!id) {
-      return res.status(400).json(
-        new ApiResponse(false, 400, null, 'Player ID is required')
-      );
+      return sendError(res, 'Player ID is required', 400);
     }
 
     const result = await competitionHistoryService.getPlayerDivisionHistory(id);
 
-    return res.status(200).json(
-      new ApiResponse(true, 200, result, 'Player division history retrieved successfully')
-    );
+    return sendSuccess(res, result, 'Player division history retrieved successfully');
   } catch (error: unknown) {
     console.error('Error getting player division history:', error);
 
     const errorMessage = error instanceof Error ? error.message : 'Failed to fetch player division history';
     const statusCode = errorMessage === 'Player not found' ? 404 : 500;
-    return res.status(statusCode).json(
-      new ApiResponse(false, statusCode, null, errorMessage)
-    );
+    return sendError(res, errorMessage, statusCode);
   }
 };
 
@@ -781,25 +610,19 @@ export const getPlayerDivisionHistory = async (req: Request, res: Response) => {
 export const getPlayerMatchHistoryAdmin = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    
+
     if (!id) {
-      return res.status(400).json(
-        new ApiResponse(false, 400, null, 'Player ID is required')
-      );
+      return sendError(res, 'Player ID is required', 400);
     }
 
     const result = await matchHistoryService.getPlayerMatchHistoryAdmin(id);
 
-    return res.status(200).json(
-      new ApiResponse(true, 200, result, 'Player match history retrieved successfully')
-    );
+    return sendSuccess(res, result, 'Player match history retrieved successfully');
   } catch (error: unknown) {
     console.error('Error getting player match history:', error);
 
     const errorMessage = error instanceof Error ? error.message : 'Failed to fetch player match history';
     const statusCode = errorMessage === 'Player not found' ? 404 : 500;
-    return res.status(statusCode).json(
-      new ApiResponse(false, statusCode, null, errorMessage)
-    );
+    return sendError(res, errorMessage, statusCode);
   }
 };

@@ -1,12 +1,13 @@
 import { prisma } from "../lib/prisma";
 import { PrismaClient, Prisma } from '@prisma/client';
 import { Request, Response } from "express";
+import { sendSuccess, sendError } from '../utils/response';
 
 export const createPromoCode = async (req: Request, res: Response) => {
     const { code, discountValue, isPercentage, expiresAt, description, seasonIds } = req.body;
 
     if (!code || !discountValue) {
-        return res.status(400).json({ error: "Missing required fields: code and discountValue." });
+        return sendError(res, "Missing required fields: code and discountValue.", 400);
     }
 
     try {
@@ -32,20 +33,20 @@ export const createPromoCode = async (req: Request, res: Response) => {
         const newPromoCode = await prisma.promoCode.create({
             data,
         });
-        res.status(201).json(newPromoCode);
+        sendSuccess(res, newPromoCode, undefined, 201);
     } catch (error: any) {
         console.error('Error creating promo code:', error);
 
         if (error instanceof Prisma.PrismaClientKnownRequestError) {
             // P2002: Unique constraint failed (e.g., if code is duplicated)
             if (error.code === 'P2002') {
-                return res.status(409).json({ error: `Promo code '${code}' already exists.` });
+                return sendError(res, `Promo code '${code}' already exists.`, 409);
             }
         }
         if (error instanceof Prisma.PrismaClientValidationError) {
-            return res.status(400).json({ error: "Invalid data format or type for promo code creation." });
+            return sendError(res, "Invalid data format or type for promo code creation.", 400);
         }
-        res.status(500).json({ error: 'Failed to create promo code.' });
+        sendError(res, 'Failed to create promo code.');
     }
 };
 
@@ -57,8 +58,8 @@ export const linkPromoCodeToSeason = async (req: any, res: any) => {
         const season = await prisma.season.findUnique({ where: { id: seasonId } });
         const promoCode = await prisma.promoCode.findUnique({ where: { code: code } });
 
-        if (!season) return res.status(404).json({ error: "Season not found." });
-        if (!promoCode) return res.status(404).json({ error: "Promo Code not found." });
+        if (!season) return sendError(res, "Season not found.", 404);
+        if (!promoCode) return sendError(res, "Promo Code not found.", 404);
 
         // 2. Link them using the many-to-many relationship
         const updatedSeason = await prisma.season.update({
@@ -72,9 +73,9 @@ export const linkPromoCodeToSeason = async (req: any, res: any) => {
             include: { promoCodes: true }
         });
 
-        res.status(200).json(updatedSeason);
+        sendSuccess(res, updatedSeason);
     } catch (error: any) {
         console.error(`Error linking promo code ${code} to season ${seasonId}:`, error);
-        res.status(500).json({ error: 'Failed to link promo code.' });
+        sendError(res, 'Failed to link promo code.');
     }
 };

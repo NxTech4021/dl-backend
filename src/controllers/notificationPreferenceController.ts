@@ -11,6 +11,7 @@ import {
   NotificationPreferenceInput
 } from '../services/notification/notificationPreferenceService';
 import { logger } from '../utils/logger';
+import { sendSuccess, sendError } from '../utils/response';
 
 /**
  * Get current user's notification preferences
@@ -21,18 +22,15 @@ export async function getPreferences(req: Request, res: Response) {
     const userId = authReq.user?.id;
 
     if (!userId) {
-      return res.status(401).json({ error: 'Unauthorized' });
+      return sendError(res, 'Unauthorized', 401);
     }
 
     const preferences = await getUserPreferences(userId);
 
-    return res.status(200).json({
-      success: true,
-      data: preferences
-    });
+    return sendSuccess(res, preferences);
   } catch (error) {
     logger.error('Error getting notification preferences', {}, error as Error);
-    return res.status(500).json({ error: 'Failed to get notification preferences' });
+    return sendError(res, 'Failed to get notification preferences', 500);
   }
 }
 
@@ -45,7 +43,7 @@ export async function updatePreferences(req: Request, res: Response) {
     const userId = authReq.user?.id;
 
     if (!userId) {
-      return res.status(401).json({ error: 'Unauthorized' });
+      return sendError(res, 'Unauthorized', 401);
     }
 
     const preferences: NotificationPreferenceInput = req.body;
@@ -61,23 +59,19 @@ export async function updatePreferences(req: Request, res: Response) {
 
     for (const [key, value] of Object.entries(preferences)) {
       if (!validKeys.includes(key)) {
-        return res.status(400).json({ error: `Invalid preference key: ${key}` });
+        return sendError(res, `Invalid preference key: ${key}`, 400);
       }
       if (typeof value !== 'boolean') {
-        return res.status(400).json({ error: `Preference ${key} must be a boolean` });
+        return sendError(res, `Preference ${key} must be a boolean`, 400);
       }
     }
 
     const updated = await updateUserPreferences(userId, preferences);
 
-    return res.status(200).json({
-      success: true,
-      message: 'Notification preferences updated',
-      data: updated
-    });
+    return sendSuccess(res, updated, 'Notification preferences updated');
   } catch (error) {
     logger.error('Error updating notification preferences', {}, error as Error);
-    return res.status(500).json({ error: 'Failed to update notification preferences' });
+    return sendError(res, 'Failed to update notification preferences', 500);
   }
 }
 
@@ -90,7 +84,7 @@ export async function resetPreferences(req: Request, res: Response) {
     const userId = authReq.user?.id;
 
     if (!userId) {
-      return res.status(401).json({ error: 'Unauthorized' });
+      return sendError(res, 'Unauthorized', 401);
     }
 
     // Update all to defaults
@@ -118,13 +112,9 @@ export async function resetPreferences(req: Request, res: Response) {
 
     const updated = await updateUserPreferences(userId, defaultPreferences);
 
-    return res.status(200).json({
-      success: true,
-      message: 'Notification preferences reset to defaults',
-      data: updated
-    });
+    return sendSuccess(res, updated, 'Notification preferences reset to defaults');
   } catch (error) {
     logger.error('Error resetting notification preferences', {}, error as Error);
-    return res.status(500).json({ error: 'Failed to reset notification preferences' });
+    return sendError(res, 'Failed to reset notification preferences', 500);
   }
 }

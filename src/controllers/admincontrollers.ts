@@ -4,7 +4,7 @@ import * as adminInviteService from "../services/admin/adminInviteService";
 import * as adminRegistrationService from "../services/admin/adminRegistrationService";
 import * as adminProfileService from "../services/admin/adminProfileService";
 import * as adminSessionService from "../services/admin/adminSessionService";
-import { ApiResponse } from "../utils/ApiResponse";
+import { sendSuccess, sendError } from "../utils/response";
 import { Request, Response } from "express";
 
 interface CreateSuperadminBody {
@@ -22,9 +22,7 @@ export const createSuperadmin = async (req: Request, res: Response) => {
     console.log("ASDAS");
 
     if (!name || !username || !email || !password) {
-      return res.status(400).json({
-        error: "Please provide name, username, email, and password.",
-      });
+      return sendError(res, "Please provide name, username, email, and password.", 400);
     }
 
     const result = await superadminService.createSuperadmin({
@@ -34,11 +32,7 @@ export const createSuperadmin = async (req: Request, res: Response) => {
       password,
     });
 
-    res.status(201).json({
-      message: "Superadmin user created successfully!",
-      user: result.user,
-      admin: result.admin,
-    });
+    return sendSuccess(res, { user: result.user, admin: result.admin }, "Superadmin user created successfully!", 201);
   } catch (error: unknown) {
     console.error("Error creating superadmin:", error);
     const errorMessage =
@@ -46,9 +40,7 @@ export const createSuperadmin = async (req: Request, res: Response) => {
         ? error.message
         : "An internal server error occurred.";
     const status = errorMessage.includes("already exists") ? 409 : 500;
-    res.status(status).json({
-      error: errorMessage,
-    });
+    return sendError(res, errorMessage, status);
   }
 };
 
@@ -56,21 +48,10 @@ export const fetchAdmins = async (req: Request, res: Response) => {
   try {
     const getAllAdmins = await adminProfileService.fetchAllAdmins();
 
-    res
-      .status(200)
-      .json(
-        new ApiResponse(
-          true,
-          200,
-          { getAllAdmins },
-          "Admins fetched successfully"
-        )
-      );
+    return sendSuccess(res, { getAllAdmins }, "Admins fetched successfully");
   } catch (error) {
     console.error("Fetch admins error:", error);
-    return res
-      .status(500)
-      .json(new ApiResponse(false, 500, null, "Something went wrong"));
+    return sendError(res, "Something went wrong", 500);
   }
 };
 
@@ -90,7 +71,7 @@ export const updateAdmin = async (req: Request, res: Response) => {
       req.body as UpdateAdminBody;
 
     if (!adminId) {
-      return res.status(400).json({ message: "Admin ID is required" });
+      return sendError(res, "Admin ID is required", 400);
     }
 
     const updatePayload: {
@@ -117,31 +98,26 @@ export const updateAdmin = async (req: Request, res: Response) => {
     const { updatedUser, updatedAdmin } =
       await adminProfileService.updateAdminProfile(updatePayload);
 
-    return res.status(200).json({
-      message: "Admin updated successfully",
-      status: "SUCCESS",
-      user: updatedUser,
-      admin: updatedAdmin,
-    });
+    return sendSuccess(res, { user: updatedUser, admin: updatedAdmin }, "Admin updated successfully");
   } catch (error: unknown) {
     console.error("Error updating admin:", error);
 
     if (error && typeof error === "object" && "body" in error) {
       const errorBody = error.body as { code?: string };
       if (errorBody.code === "USERNAME_IS_INVALID") {
-        return res.status(400).json({ message: "Invalid username" });
+        return sendError(res, "Invalid username", 400);
       }
       if (errorBody.code === "USERNAME_ALREADY_EXISTS") {
-        return res.status(400).json({ message: "Username already taken" });
+        return sendError(res, "Username already taken", 400);
       }
       if (errorBody.code === "EMAIL_ALREADY_EXISTS") {
-        return res.status(400).json({ message: "Email already registered" });
+        return sendError(res, "Email already registered", 400);
       }
     }
 
     const errorMessage =
       error instanceof Error ? error.message : "Something went wrong";
-    return res.status(400).json({ message: errorMessage });
+    return sendError(res, errorMessage, 400);
   }
 };
 
@@ -150,18 +126,18 @@ export const getInviteEmail = async (req: Request, res: Response) => {
     const { token } = req.query;
 
     if (!token) {
-      return res.status(400).json({ message: "Token is required" });
+      return sendError(res, "Token is required", 400);
     }
 
     const result = await adminInviteService.validateInviteToken(
       token as string
     );
-    res.json({ email: result.email });
+    return sendSuccess(res, { email: result.email });
   } catch (err: unknown) {
     console.error(err);
     const errorMessage =
       err instanceof Error ? err.message : "Something went wrong";
-    res.status(400).json({ message: errorMessage });
+    return sendError(res, errorMessage, 400);
   }
 };
 
@@ -177,9 +153,7 @@ export const registerAdmin = async (req: Request, res: Response) => {
     const { token, name, username, password } = req.body as RegisterAdminBody;
 
     if (!token || !name || !username || !password) {
-      return res
-        .status(400)
-        .json({ message: "All fields are required", status: "FAILED" });
+      return sendError(res, "All fields are required", 400);
     }
 
     const result = await adminRegistrationService.registerAdminFromInvite({
@@ -189,11 +163,7 @@ export const registerAdmin = async (req: Request, res: Response) => {
       password,
     });
 
-    res.status(201).json({
-      message: "Admin registered successfully",
-      status: "SUCCESS",
-      newadmin: result.admin,
-    });
+    return sendSuccess(res, { newadmin: result.admin }, "Admin registered successfully", 201);
   } catch (error: unknown) {
     console.error("Error registering admin:", error);
 
@@ -202,19 +172,19 @@ export const registerAdmin = async (req: Request, res: Response) => {
 
     // Map specific errors to appropriate status codes
     if (errorMessage.includes("already used")) {
-      return res.status(401).json({ message: errorMessage, status: "FAILED" });
+      return sendError(res, errorMessage, 401);
     }
     if (errorMessage.includes("expired")) {
-      return res.status(400).json({ message: errorMessage, status: "FAILED" });
+      return sendError(res, errorMessage, 400);
     }
     if (errorMessage.includes("already registered")) {
-      return res.status(400).json({ message: errorMessage, status: "FAILED" });
+      return sendError(res, errorMessage, 400);
     }
     if (errorMessage.includes("already taken")) {
-      return res.status(400).json({ message: errorMessage, status: "FAILED" });
+      return sendError(res, errorMessage, 400);
     }
 
-    res.status(400).json({ message: "Something went wrong", status: "FAILED" });
+    return sendError(res, "Something went wrong", 400);
   }
 };
 
@@ -239,25 +209,21 @@ export const sendAdminInvite = async (req: Request, res: Response) => {
       });
 
       if (!admin) {
-        return res.status(404).json({ error: "Admin not found." });
+        return sendError(res, "Admin not found.", 404);
       }
 
       if (admin.status !== "PENDING") {
-        return res
-          .status(400)
-          .json({
-            error: "Cannot resend invite to active or suspended admin.",
-          });
+        return sendError(res, "Cannot resend invite to active or suspended admin.", 400);
       }
 
       targetEmail = admin.user?.email ?? admin.invite?.email ?? "";
       if (!targetEmail) {
-        return res.status(400).json({ error: "Admin email not found." });
+        return sendError(res, "Admin email not found.", 400);
       }
       inviteLink = await adminInviteService.resendAdminInvite(adminId);
     } else {
       if (!email || !name) {
-        return res.status(400).json({ error: "Email and name are required." });
+        return sendError(res, "Email and name are required.", 400);
       }
 
       targetEmail = email;
@@ -271,14 +237,12 @@ export const sendAdminInvite = async (req: Request, res: Response) => {
       !!adminId
     );
 
-    res
-      .status(200)
-      .json({ message: "Invite sent successfully!", status: "SUCCESS" });
+    return sendSuccess(res, null, "Invite sent successfully!");
   } catch (err: unknown) {
     console.error("Error sending invite:", err);
     const errorMessage =
       err instanceof Error ? err.message : "Failed to send invite.";
-    res.status(400).json({ error: errorMessage, status: "FAILED" });
+    return sendError(res, errorMessage, 400);
   }
 };
 
@@ -287,11 +251,7 @@ export const getAdminSession = async (req: Request, res: Response) => {
     const headers = adminSessionService.toWebHeaders(req.headers);
     const result = await adminSessionService.getAdminSession(headers);
 
-    return res
-      .status(200)
-      .json(
-        new ApiResponse(true, 200, result, "Session retrieved successfully")
-      );
+    return sendSuccess(res, result, "Session retrieved successfully");
   } catch (error: unknown) {
     console.error("❌ Session error:", error);
 
@@ -304,9 +264,7 @@ export const getAdminSession = async (req: Request, res: Response) => {
         ? 403
         : 500;
 
-    return res
-      .status(status)
-      .json(new ApiResponse(false, status, null, errorMessage));
+    return sendError(res, errorMessage, status);
   }
 };
 
@@ -321,16 +279,7 @@ export const updatePassword = async (req: Request, res: Response) => {
     const { oldPassword, newPassword } = req.body as UpdatePasswordBody;
 
     if (!oldPassword || !newPassword) {
-      return res
-        .status(400)
-        .json(
-          new ApiResponse(
-            false,
-            400,
-            null,
-            "Both old and new password are required"
-          )
-        );
+      return sendError(res, "Both old and new password are required", 400);
     }
 
     await adminSessionService.updateAdminPassword(
@@ -339,16 +288,12 @@ export const updatePassword = async (req: Request, res: Response) => {
       newPassword
     );
 
-    return res
-      .status(200)
-      .json(new ApiResponse(true, 200, null, "Password changed successfully"));
+    return sendSuccess(res, null, "Password changed successfully");
   } catch (error: unknown) {
     console.error("❌ Change password error:", error);
     const errorMessage =
       error instanceof Error ? error.message : "Password change failed";
-    return res
-      .status(400)
-      .json(new ApiResponse(false, 400, null, errorMessage));
+    return sendError(res, errorMessage, 400);
   }
 };
 
@@ -357,21 +302,17 @@ export const getAdminById = async (req: Request, res: Response) => {
     const { id } = req.params;
 
     if (!id) {
-      return res.status(400).json({
-        message: "Admin ID is required",
-      });
+      return sendError(res, "Admin ID is required", 400);
     }
 
     const admin = await adminProfileService.getAdminByUserId(id);
-    return res.json(admin);
+    return sendSuccess(res, admin);
   } catch (error: unknown) {
     console.error("Error fetching admin:", error);
     const errorMessage =
       error instanceof Error ? error.message : "Internal server error";
     const status = errorMessage === "Admin not found" ? 404 : 500;
-    return res.status(status).json({
-      message: errorMessage,
-    });
+    return sendError(res, errorMessage, status);
   }
 };
 
@@ -380,7 +321,7 @@ export const trackLogin = async (req: Request, res: Response) => {
     const { userId } = req.body;
 
     if (!userId) {
-      return res.status(400).json({ error: "Missing userId" });
+      return sendError(res, "Missing userId", 400);
     }
 
     await prisma.user.update({
@@ -391,9 +332,9 @@ export const trackLogin = async (req: Request, res: Response) => {
       },
     });
 
-    return res.json({ success: true });
+    return sendSuccess(res, null);
   } catch (err) {
     console.error("Failed updating login time:", err);
-    return res.status(500).json({ error: "Server error" });
+    return sendError(res, "Server error", 500);
   }
 };

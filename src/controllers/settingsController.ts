@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { getUserSettings, updateUserSettings, updateSportSkillLevels } from '../services/player/settingsService';
 import { SkillLevel } from '@prisma/client';
+import { sendSuccess, sendError } from '../utils/response';
 
 /**
  * GET /api/player/settings
@@ -11,21 +12,15 @@ export async function getSettings(req: Request, res: Response) {
     const userId = req.user?.id;
 
     if (!userId) {
-      return res.status(401).json({ error: 'Unauthorized' });
+      return sendError(res, 'Unauthorized', 401);
     }
 
     const settings = await getUserSettings(userId);
 
-    return res.status(200).json({
-      success: true,
-      data: settings,
-    });
+    return sendSuccess(res, settings);
   } catch (error: any) {
     console.error('Error fetching settings:', error);
-    return res.status(500).json({
-      success: false,
-      error: error.message || 'Failed to fetch settings',
-    });
+    return sendError(res, error.message || 'Failed to fetch settings', 500);
   }
 }
 
@@ -38,7 +33,7 @@ export async function updateSettings(req: Request, res: Response) {
     const userId = req.user?.id;
 
     if (!userId) {
-      return res.status(401).json({ error: 'Unauthorized' });
+      return sendError(res, 'Unauthorized', 401);
     }
 
     const { notifications, matchReminders, locationServices, hapticFeedback } = req.body;
@@ -50,17 +45,10 @@ export async function updateSettings(req: Request, res: Response) {
       hapticFeedback,
     });
 
-    return res.status(200).json({
-      success: true,
-      message: 'Settings updated successfully',
-      data: updatedSettings,
-    });
+    return sendSuccess(res, updatedSettings, 'Settings updated successfully');
   } catch (error: any) {
     console.error('Error updating settings:', error);
-    return res.status(500).json({
-      success: false,
-      error: error.message || 'Failed to update settings',
-    });
+    return sendError(res, error.message || 'Failed to update settings', 500);
   }
 }
 
@@ -73,7 +61,7 @@ export async function updateSkillLevels(req: Request, res: Response) {
     const userId = req.user?.id;
 
     if (!userId) {
-      return res.status(401).json({ error: 'Unauthorized' });
+      return sendError(res, 'Unauthorized', 401);
     }
 
     const { tennisSkillLevel, pickleballSkillLevel, padelSkillLevel } = req.body;
@@ -82,22 +70,13 @@ export async function updateSkillLevels(req: Request, res: Response) {
     const validSkillLevels = Object.values(SkillLevel);
 
     if (tennisSkillLevel && !validSkillLevels.includes(tennisSkillLevel)) {
-      return res.status(400).json({
-        success: false,
-        error: `Invalid tennis skill level. Must be one of: ${validSkillLevels.join(', ')}`,
-      });
+      return sendError(res, `Invalid tennis skill level. Must be one of: ${validSkillLevels.join(', ')}`, 400);
     }
     if (pickleballSkillLevel && !validSkillLevels.includes(pickleballSkillLevel)) {
-      return res.status(400).json({
-        success: false,
-        error: `Invalid pickleball skill level. Must be one of: ${validSkillLevels.join(', ')}`,
-      });
+      return sendError(res, `Invalid pickleball skill level. Must be one of: ${validSkillLevels.join(', ')}`, 400);
     }
     if (padelSkillLevel && !validSkillLevels.includes(padelSkillLevel)) {
-      return res.status(400).json({
-        success: false,
-        error: `Invalid padel skill level. Must be one of: ${validSkillLevels.join(', ')}`,
-      });
+      return sendError(res, `Invalid padel skill level. Must be one of: ${validSkillLevels.join(', ')}`, 400);
     }
 
     const updatedSettings = await updateSportSkillLevels(userId, {
@@ -106,16 +85,9 @@ export async function updateSkillLevels(req: Request, res: Response) {
       padelSkillLevel,
     });
 
-    return res.status(200).json({
-      success: true,
-      message: 'Sport skill levels updated successfully',
-      data: updatedSettings,
-    });
+    return sendSuccess(res, updatedSettings, 'Sport skill levels updated successfully');
   } catch (error: any) {
     console.error('Error updating skill levels:', error);
-    return res.status(500).json({
-      success: false,
-      error: error.message || 'Failed to update skill levels',
-    });
+    return sendError(res, error.message || 'Failed to update skill levels', 500);
   }
 }

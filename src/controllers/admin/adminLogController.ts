@@ -10,6 +10,7 @@ import {
   getAdminActivitySummary
 } from '../../services/admin/adminLogService';
 import { AdminActionType, AdminTargetType } from '@prisma/client';
+import { sendSuccess, sendError, sendPaginated } from '../../utils/response';
 
 /**
  * Get admin logs with filtering and pagination
@@ -41,17 +42,10 @@ export const getLogs = async (req: Request, res: Response) => {
       search: search as string | undefined
     });
 
-    return res.json({
-      success: true,
-      data: result.logs,
-      pagination: result.pagination
-    });
+    return sendPaginated(res, result.logs, result.pagination);
   } catch (error: any) {
     console.error('Failed to fetch admin logs:', error);
-    return res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to fetch admin logs'
-    });
+    return sendError(res, error.message || 'Failed to fetch admin logs');
   }
 };
 
@@ -66,18 +60,12 @@ export const getLogsForTarget = async (req: Request, res: Response) => {
 
     // Validate target type
     if (!Object.values(AdminTargetType).includes(targetType as AdminTargetType)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid target type'
-      });
+      return sendError(res, 'Invalid target type', 400);
     }
 
     // Validate targetId
     if (!targetId) {
-      return res.status(400).json({
-        success: false,
-        message: 'Target ID is required'
-      });
+      return sendError(res, 'Target ID is required', 400);
     }
 
     const result = await getTargetLogs(
@@ -89,17 +77,10 @@ export const getLogsForTarget = async (req: Request, res: Response) => {
       }
     );
 
-    return res.json({
-      success: true,
-      data: result.logs,
-      pagination: result.pagination
-    });
+    return sendPaginated(res, result.logs, result.pagination);
   } catch (error: any) {
     console.error('Failed to fetch target logs:', error);
-    return res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to fetch target logs'
-    });
+    return sendError(res, error.message || 'Failed to fetch target logs');
   }
 };
 
@@ -116,16 +97,10 @@ export const getActivitySummary = async (req: Request, res: Response) => {
       adminId: adminId as string | undefined
     });
 
-    return res.json({
-      success: true,
-      data: summary
-    });
+    return sendSuccess(res, summary);
   } catch (error: any) {
     console.error('Failed to fetch activity summary:', error);
-    return res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to fetch activity summary'
-    });
+    return sendError(res, error.message || 'Failed to fetch activity summary');
   }
 };
 
@@ -140,16 +115,10 @@ export const getActionTypes = async (_req: Request, res: Response) => {
       label: type.replace(/_/g, ' ').toLowerCase().replace(/^\w/, c => c.toUpperCase())
     }));
 
-    return res.json({
-      success: true,
-      data: actionTypes
-    });
+    return sendSuccess(res, actionTypes);
   } catch (error: any) {
     console.error('Failed to fetch action types:', error);
-    return res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to fetch action types'
-    });
+    return sendError(res, error.message || 'Failed to fetch action types');
   }
 };
 
@@ -164,15 +133,9 @@ export const getTargetTypes = async (_req: Request, res: Response) => {
       label: type.replace(/_/g, ' ').toLowerCase().replace(/^\w/, c => c.toUpperCase())
     }));
 
-    return res.json({
-      success: true,
-      data: targetTypes
-    });
+    return sendSuccess(res, targetTypes);
   } catch (error: any) {
     console.error('Failed to fetch target types:', error);
-    return res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to fetch target types'
-    });
+    return sendError(res, error.message || 'Failed to fetch target types');
   }
 };

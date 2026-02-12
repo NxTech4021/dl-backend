@@ -4,7 +4,7 @@
 // import { Request, Response } from 'express';
 // import { PrismaClient } from '@prisma/client';
 // import * as teamService from '../services/teamService';
-// import { ApiResponse } from '../utils/ApiResponse';
+// import { sendSuccess, sendError } from '../utils/response';
 
 
 // export const getTeams = async (req: Request, res: Response) => {

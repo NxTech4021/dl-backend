@@ -1529,11 +1529,12 @@ export class AdminMatchService {
   async convertToWalkover(input: {
     matchId: string;
     adminId: string;
+    userId: string;
     winnerId: string;
     reason: string;
     walkoverReason?: string;
   }) {
-    const { matchId, adminId, winnerId, reason, walkoverReason } = input;
+    const { matchId, adminId, userId, winnerId, reason, walkoverReason } = input;
 
     const match = await prisma.match.findUnique({
       where: { id: matchId },
@@ -1608,7 +1609,7 @@ export class AdminMatchService {
           walkoverReasonDetail: reason,
           defaultingPlayerId: loserParticipant.userId,
           winningPlayerId: winnerId,
-          reportedBy: adminId, // Admin reporting
+          reportedBy: userId, // User ID of admin (FK references User table)
           adminVerified: true,
           adminVerifiedBy: adminId,
           adminVerifiedAt: new Date()

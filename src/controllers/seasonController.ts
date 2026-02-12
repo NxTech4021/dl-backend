@@ -2,7 +2,7 @@ import { Request, Response } from "express";
 import { prisma } from "../lib/prisma";
 import { Prisma, PaymentStatus } from "@prisma/client";
 import { AuthenticatedRequest } from "../middlewares/auth.middleware";
-import { ApiResponse } from "../utils/ApiResponse";
+import { sendSuccess, sendPaginated, sendError } from "../utils/response";
 
 import {
   getActiveSeasonService,
@@ -32,9 +32,9 @@ import {
 } from "../services/season/seasonWithdrawalService";
 
 // Formatters
-import { 
+import {
   formatSeasonWithRelations,
-  formatMembershipResponse 
+  formatMembershipResponse
 } from "../services/season/utils/formatters";
 
 import { notificationService } from '../services/notificationService';
@@ -126,17 +126,11 @@ export const createSeason = async (req: Request, res: Response) => {
   // Validate required fields
   // Note: entryFee can be 0 (free seasons), so check for undefined/null instead of falsy
   if (!name || !startDate || !endDate || entryFee === undefined || entryFee === null || !leagueIds || !categoryId) {
-    return res.status(400).json({
-      success: false,
-      error: "Missing required fields: name, startDate, endDate, entryFee, leagueIds, and categoryId are required"
-    });
+    return sendError(res, "Missing required fields: name, startDate, endDate, entryFee, leagueIds, and categoryId are required", 400);
   }
 
   if (!Array.isArray(leagueIds) || leagueIds.length === 0) {
-    return res.status(400).json({
-      success: false,
-      error: "At least one league ID is required"
-    });
+    return sendError(res, "At least one league ID is required", 400);
   }
 
   try {
@@ -148,7 +142,7 @@ export const createSeason = async (req: Request, res: Response) => {
       leagueIds,
       categoryId,
     };
-    
+
     if (regiDeadline !== undefined) seasonData.regiDeadline = regiDeadline;
     if (description !== undefined) seasonData.description = description;
     if (isActive !== undefined) seasonData.isActive = isActive;
@@ -181,8 +175,8 @@ export const createSeason = async (req: Request, res: Response) => {
         });
 
         if (seasonWithLeagues && seasonWithLeagues.leagues.length > 0) {
-          const league = seasonWithLeagues.leagues[0]; // needs to be updated 
-          
+          const league = seasonWithLeagues.leagues[0]; // needs to be updated
+
           // Only proceed if we have valid league data
           if (league && league.location && league.sportType) {
             const notificationData = leagueLifecycleNotifications.newSeasonAnnouncement(
@@ -214,7 +208,7 @@ export const createSeason = async (req: Request, res: Response) => {
       const startDateObj = new Date(startDate);
       const now = new Date();
       const daysDifference = Math.ceil((startDateObj.getTime() - now.getTime()) / (1000 * 3600 * 24));
-      
+
       if (daysDifference <= 7 && daysDifference > 0) {
         // Get all registered users for this season
         const registeredUsers = await prisma.seasonMembership.findMany({
@@ -236,31 +230,21 @@ export const createSeason = async (req: Request, res: Response) => {
       }
     }
 
-    return res.status(201).json({
-      success: true,
-      message: "Season created successfully",
-      data: season,
-    });
+    return sendSuccess(res, season, "Season created successfully", 201);
   } catch (error: unknown) {
     console.error("Error creating season:", error);
-    
+
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
 
     // Handle validation errors
     if (errorMessage.includes("Missing required fields") ||
         errorMessage.includes("At least one league")) {
-      return res.status(400).json({
-        success: false,
-        error: errorMessage,
-      });
+      return sendError(res, errorMessage, 400);
     }
 
     // Handle duplicate season name
     if (errorMessage.includes("already exists")) {
-      return res.status(409).json({
-        success: false,
-        error: errorMessage,
-      });
+      return sendError(res, errorMessage, 409);
     }
 
     return handlePrismaError(error, res, "Failed to create season. Please try again later.");
@@ -274,41 +258,35 @@ export const getSeasons = async (req: Request, res: Response) => {
     if (id) {
       const season = await getSeasonByIdService(id as string);
       if (!season) {
-        return res.status(404).json({ error: "Season not found." });
+        return sendError(res, "Season not found.", 404);
       }
 
       const result = formatSeasonWithRelations(season);
-      return res.status(200).json(result);
+      return sendSuccess(res, result);
     }
 
     // Get active season
     if (active === "true") {
       const activeSeason = await getActiveSeasonService();
       if (!activeSeason) {
-        return res.status(404).json({ error: "No active season found." });
+        return sendError(res, "No active season found.", 404);
       }
-      return res.status(200).json(activeSeason);
+      return sendSuccess(res, activeSeason);
     }
 
     // Get all seasons with pagination
     const pageNum = page ? parseInt(page as string, 10) : 1;
     const limitNum = limit ? parseInt(limit as string, 10) : 20;
     const result = await getAllSeasonsService(pageNum, limitNum);
-    return res.status(200).json(
-      new ApiResponse(true, 200, result, `Found ${result.pagination.total} season(s)`)
-    );
+    return sendPaginated(res, result.data, result.pagination, `Found ${result.pagination.total} season(s)`);
   } catch (error: unknown) {
     console.error("Error fetching seasons:", error);
 
     if (error instanceof Prisma.PrismaClientValidationError) {
-      return res.status(400).json({
-        error: "Invalid query parameters or field selection."
-      });
+      return sendError(res, "Invalid query parameters or field selection.", 400);
     }
 
-    return res.status(500).json({
-      error: "Failed to fetch seasons. Try again later."
-    });
+    return sendError(res, "Failed to fetch seasons. Try again later.", 500);
   }
 };
 
@@ -316,20 +294,20 @@ export const getSeasonById = async (req: Request, res: Response) => {
   const { id } = req.params;
 
   if (!id) {
-    return res.status(400).json({ error: "Season ID is required." });
+    return sendError(res, "Season ID is required.", 400);
   }
 
   try {
     const season = await getSeasonByIdService(id);
     if (!season) {
-      return res.status(404).json({ error: "Season not found." });
+      return sendError(res, "Season not found.", 404);
     }
 
     const result = formatSeasonWithRelations(season);
-    return res.status(200).json(result);
+    return sendSuccess(res, result);
   } catch (error: unknown) {
     console.error(`Error fetching season ${id}:`, error);
-    return res.status(500).json({ error: "Failed to retrieve season details." });
+    return sendError(res, "Failed to retrieve season details.", 500);
   }
 };
 
@@ -352,7 +330,7 @@ export const updateSeason = async (req: Request, res: Response) => {
   } = req.body as UpdateSeasonBody;
 
   if (!id) {
-    return res.status(400).json({ error: "Season ID is required." });
+    return sendError(res, "Season ID is required.", 400);
   }
 
   try {
@@ -362,7 +340,7 @@ export const updateSeason = async (req: Request, res: Response) => {
     });
 
     const seasonData: Parameters<typeof updateSeasonService>[1] = {};
-    
+
     if (name !== undefined) seasonData.name = name;
     if (startDate !== undefined) seasonData.startDate = startDate;
     if (endDate !== undefined) seasonData.endDate = endDate;
@@ -380,6 +358,11 @@ export const updateSeason = async (req: Request, res: Response) => {
     if (paymentRequired !== undefined) seasonData.paymentRequired = paymentRequired;
     if (promoCodeSupported !== undefined) seasonData.promoCodeSupported = promoCodeSupported;
     if (withdrawalEnabled !== undefined) seasonData.withdrawalEnabled = withdrawalEnabled;
+
+    // Auto-disable payment for free seasons
+    if (entryFee !== undefined && Number(entryFee) === 0) {
+      seasonData.paymentRequired = false;
+    }
 
     const season = await updateSeasonService(id, seasonData);
 
@@ -413,11 +396,7 @@ export const updateSeason = async (req: Request, res: Response) => {
       }
     }
 
-    return res.status(200).json({
-      success: true,
-      message: "Season updated successfully",
-      data: season
-    });
+    return sendSuccess(res, season, "Season updated successfully");
   } catch (error: unknown) {
     console.error("Error updating season:", error);
     return handlePrismaError(error, res, "Failed to update season");
@@ -428,12 +407,12 @@ export const updateSeasonStatus = async (req: Request, res: Response) => {
   const { id } = req.params;
 
   if (!id) {
-    return res.status(400).json({ error: "Season ID is required." });
+    return sendError(res, "Season ID is required.", 400);
   }
 
   try {
     const { status, isActive } = req.body as UpdateSeasonStatusBody;
-    
+
     const statusUpdate: Parameters<typeof updateSeasonStatusService>[1] = {};
     if (status !== undefined) {
       if (status && ["UPCOMING", "ACTIVE", "FINISHED", "CANCELLED"].includes(status)) {
@@ -441,13 +420,9 @@ export const updateSeasonStatus = async (req: Request, res: Response) => {
       }
     }
     if (isActive !== undefined) statusUpdate.isActive = isActive;
-    
+
     const season = await updateSeasonStatusService(id, statusUpdate);
-    return res.status(200).json({
-      success: true,
-      message: "Season status updated successfully",
-      data: season
-    });
+    return sendSuccess(res, season, "Season status updated successfully");
   } catch (error: unknown) {
     console.error("Error updating season status:", error);
     return handlePrismaError(error, res, "Failed to update season status");
@@ -458,32 +433,26 @@ export const deleteSeason = async (req: Request, res: Response) => {
   const { id } = req.params;
 
   if (!id) {
-    return res.status(400).json({ 
-      error: "Season ID is required for deletion." 
-    });
+    return sendError(res, "Season ID is required for deletion.", 400);
   }
 
   try {
     const deletedSeason = await deleteSeasonService(id);
-    return res.status(200).json({
-      success: true,
-      message: `Season "${deletedSeason.name}" deleted successfully.`,
-      data: deletedSeason,
-    });
+    return sendSuccess(res, deletedSeason, `Season "${deletedSeason.name}" deleted successfully.`);
   } catch (error: unknown) {
     console.error("Error deleting season:", error);
-    
+
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
 
     if (errorMessage.includes("Cannot delete season")) {
-      return res.status(400).json({ error: errorMessage });
+      return sendError(res, errorMessage, 400);
     }
 
     if (errorMessage.includes("not found")) {
-      return res.status(404).json({ error: errorMessage });
+      return sendError(res, errorMessage, 404);
     }
 
-    return res.status(500).json({ error: "Failed to delete season." });
+    return sendError(res, "Failed to delete season.", 500);
   }
 };
 
@@ -491,18 +460,18 @@ export const submitWithdrawalRequest = async (req: AuthenticatedRequest, res: Re
   const userId = req.user?.id;
 
   if (!userId) {
-    return res.status(401).json({ error: "Unauthorized" });
+    return sendError(res, "Unauthorized", 401);
   }
 
   const validation = validateWithdrawalRequest(req.body);
   if (!validation.isValid) {
-    return res.status(400).json({ error: validation.error });
+    return sendError(res, validation.error!, 400);
   }
 
   const { seasonId, reason, partnershipId } = req.body as SubmitWithdrawalRequestBody;
 
   if (!seasonId || !reason) {
-    return res.status(400).json({ error: "seasonId and reason are required" });
+    return sendError(res, "seasonId and reason are required", 400);
   }
 
   try {
@@ -511,7 +480,7 @@ export const submitWithdrawalRequest = async (req: AuthenticatedRequest, res: Re
       seasonId,
       reason,
     };
-    
+
     if (partnershipId !== undefined) {
       withdrawalData.partnershipId = partnershipId;
     }
@@ -552,7 +521,7 @@ export const submitWithdrawalRequest = async (req: AuthenticatedRequest, res: Re
       });
     }
 
-    return res.status(201).json(withdrawalRequest);
+    return sendSuccess(res, withdrawalRequest, undefined, 201);
   } catch (error: unknown) {
     console.error("Error submitting withdrawal request:", error);
 
@@ -561,14 +530,14 @@ export const submitWithdrawalRequest = async (req: AuthenticatedRequest, res: Re
     if (errorMessage.includes("not found") ||
         errorMessage.includes("not part of this partnership") ||
         errorMessage.includes("not active")) {
-      return res.status(400).json({ error: errorMessage });
+      return sendError(res, errorMessage, 400);
     }
 
     if (error instanceof Prisma.PrismaClientValidationError) {
-      return res.status(400).json({ error: "Invalid data format or type for withdrawal request." });
+      return sendError(res, "Invalid data format or type for withdrawal request.", 400);
     }
 
-    return res.status(500).json({ error: "Failed to submit withdrawal request." });
+    return sendError(res, "Failed to submit withdrawal request.", 500);
   }
 };
 
@@ -578,15 +547,15 @@ export const processWithdrawalRequest = async (req: AuthenticatedRequest, res: R
   const { status } = req.body as ProcessWithdrawalRequestBody;
 
   if (!processedByAdminId) {
-    return res.status(401).json({ error: "Unauthorized" });
+    return sendError(res, "Unauthorized", 401);
   }
 
   if (!id) {
-    return res.status(400).json({ error: "Withdrawal request ID is required." });
+    return sendError(res, "Withdrawal request ID is required.", 400);
   }
 
   if (!status || !["APPROVED", "REJECTED"].includes(status)) {
-    return res.status(400).json({ error: "Invalid status. Must be 'APPROVED' or 'REJECTED'." });
+    return sendError(res, "Invalid status. Must be 'APPROVED' or 'REJECTED'.", 400);
   }
 
   try {
@@ -631,7 +600,7 @@ export const processWithdrawalRequest = async (req: AuthenticatedRequest, res: R
       });
     }
 
-    return res.status(200).json(result);
+    return sendSuccess(res, result);
   } catch (error: unknown) {
     console.error(`Error processing withdrawal request ${id}:`, error);
 
@@ -639,16 +608,16 @@ export const processWithdrawalRequest = async (req: AuthenticatedRequest, res: R
 
     if (errorMessage.includes("not found") ||
         errorMessage.includes("already processed")) {
-      return res.status(400).json({ error: errorMessage });
+      return sendError(res, errorMessage, 400);
     }
 
     if (error instanceof Prisma.PrismaClientKnownRequestError) {
       if (error.code === "P2025") {
-        return res.status(404).json({ error: "Withdrawal request not found." });
+        return sendError(res, "Withdrawal request not found.", 404);
       }
     }
 
-    return res.status(500).json({ error: "Failed to process withdrawal request." });
+    return sendError(res, "Failed to process withdrawal request.", 500);
   }
 };
 
@@ -656,7 +625,7 @@ export const registerPlayerToSeason = async (req: Request, res: Response) => {
   const { userId, seasonId, payLater } = req.body as RegisterPlayerToSeasonBody;
 
   if (!userId || !seasonId) {
-    return res.status(400).json({ error: "userId and seasonId are required." });
+    return sendError(res, "userId and seasonId are required.", 400);
   }
 
   try {
@@ -683,9 +652,7 @@ export const registerPlayerToSeason = async (req: Request, res: Response) => {
       const partnerId = partnership.partnerId;
 
       if (!partnerId) {
-        return res.status(400).json(
-          new ApiResponse(false, 400, null, 'Partnership has no partner assigned')
-        );
+        return sendError(res, "Partnership has no partner assigned", 400);
       }
 
       // If payLater is true (development only), set payment status to COMPLETED
@@ -825,18 +792,14 @@ export const registerPlayerToSeason = async (req: Request, res: Response) => {
         }
       }
 
-      return res.status(201).json({
-        message: "Team registered successfully",
-        partnership: result.partnership,
-        memberships: result.memberships
-      });
+      return sendSuccess(res, { partnership: result.partnership, memberships: result.memberships }, "Team registered successfully", 201);
 
     } else {
       // ✅ SINGLES REGISTRATION: Create new membership
       console.log(`🎾 Singles registration for user ${userId}`);
-      
+
       const membership = await registerMembershipService({ userId, seasonId, payLater: payLater === true });
-      
+
       // 🆕 Send registration confirmation notification
       const season = await prisma.season.findUnique({
         where: { id: seasonId },
@@ -868,15 +831,12 @@ export const registerPlayerToSeason = async (req: Request, res: Response) => {
         division: null,
       };
 
-      return res.status(201).json({
-        message: "User registered successfully",
-        membership: result
-      });
+      return sendSuccess(res, { membership: result }, "User registered successfully", 201);
     }
   } catch (error: unknown) {
     console.error("Error registering to season:", error);
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    return res.status(400).json({ error: errorMessage });
+    return sendError(res, errorMessage, 400);
   }
 };
 
@@ -884,9 +844,7 @@ export const assignPlayerToDivision = async (req: Request, res: Response) => {
   const { membershipId, divisionId } = req.body as AssignPlayerToDivisionBody;
 
   if (!membershipId || !divisionId) {
-    return res.status(400).json({ 
-      error: "membershipId and divisionId are required." 
-    });
+    return sendError(res, "membershipId and divisionId are required.", 400);
   }
 
   try {
@@ -910,14 +868,11 @@ export const assignPlayerToDivision = async (req: Request, res: Response) => {
         : null
     };
 
-    return res.status(200).json({ 
-      message: "Player assigned to division successfully", 
-      membership: result 
-    });
+    return sendSuccess(res, { membership: result }, "Player assigned to division successfully");
   } catch (error: unknown) {
     console.error("Error assigning player to division:", error);
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    return res.status(400).json({ error: errorMessage });
+    return sendError(res, errorMessage, 400);
   }
 };
 
@@ -925,13 +880,11 @@ export const updatePaymentStatus = async (req: Request, res: Response) => {
   const { membershipId, paymentStatus } = req.body as UpdatePaymentStatusBody;
 
   if (!membershipId || !paymentStatus) {
-    return res.status(400).json({ 
-      error: "membershipId and paymentStatus are required." 
-    });
+    return sendError(res, "membershipId and paymentStatus are required.", 400);
   }
 
   if (!Object.values(PaymentStatus).includes(paymentStatus as PaymentStatus)) {
-    return res.status(400).json({ error: "Invalid paymentStatus value." });
+    return sendError(res, "Invalid paymentStatus value.", 400);
   }
 
   try {
@@ -976,14 +929,11 @@ export const updatePaymentStatus = async (req: Request, res: Response) => {
     }
 
     const result = formatMembershipResponse(membership);
-    return res.status(200).json({ 
-      message: "Payment status updated", 
-      membership: result 
-    });
+    return sendSuccess(res, { membership: result }, "Payment status updated");
   } catch (error: unknown) {
     console.error("Error updating payment status:", error);
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    return res.status(400).json({ error: errorMessage });
+    return sendError(res, errorMessage, 400);
   }
 };
 

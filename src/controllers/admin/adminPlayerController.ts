@@ -8,6 +8,7 @@ import { UserStatus, StatusChangeReason, AdminActionType } from '@prisma/client'
 import * as adminPlayerService from '../../services/admin/adminPlayerService';
 import { logPlayerAction } from '../../services/admin/adminLogService';
 import { logger } from '../../utils/logger';
+import { sendSuccess, sendError, sendPaginated } from '../../utils/response';
 
 /**
  * Ban a player
@@ -20,24 +21,15 @@ export const banPlayer = async (req: Request, res: Response) => {
     const { reason, notes } = req.body;
 
     if (!adminId) {
-      return res.status(401).json({
-        success: false,
-        message: 'Admin not authenticated'
-      });
+      return sendError(res, 'Admin not authenticated', 401);
     }
 
     if (!playerId) {
-      return res.status(400).json({
-        success: false,
-        message: 'Player ID is required'
-      });
+      return sendError(res, 'Player ID is required', 400);
     }
 
     if (!reason || typeof reason !== 'string' || reason.trim().length === 0) {
-      return res.status(400).json({
-        success: false,
-        message: 'Ban reason is required'
-      });
+      return sendError(res, 'Ban reason is required', 400);
     }
 
     const result = await adminPlayerService.banPlayer({
@@ -58,18 +50,14 @@ export const banPlayer = async (req: Request, res: Response) => {
       { notes: notes?.trim() }
     );
 
-    return res.status(200).json({
-      success: true,
-      data: {
-        player: {
-          id: result.player.id,
-          status: result.player.status
-        },
-        previousStatus: result.previousStatus,
-        statusChangeId: result.statusChange.id
+    return sendSuccess(res, {
+      player: {
+        id: result.player.id,
+        status: result.player.status
       },
-      message: 'Player banned successfully'
-    });
+      previousStatus: result.previousStatus,
+      statusChangeId: result.statusChange.id
+    }, 'Player banned successfully');
   } catch (error: any) {
     logger.error('Ban player error:', error);
 
@@ -79,10 +67,7 @@ export const banPlayer = async (req: Request, res: Response) => {
       error.message.includes('already banned') || error.message.includes('deleted player') ? 400 :
       500;
 
-    return res.status(statusCode).json({
-      success: false,
-      message: error.message || 'Failed to ban player'
-    });
+    return sendError(res, error.message || 'Failed to ban player', statusCode);
   }
 };
 
@@ -97,17 +82,11 @@ export const unbanPlayer = async (req: Request, res: Response) => {
     const { notes } = req.body;
 
     if (!adminId) {
-      return res.status(401).json({
-        success: false,
-        message: 'Admin not authenticated'
-      });
+      return sendError(res, 'Admin not authenticated', 401);
     }
 
     if (!playerId) {
-      return res.status(400).json({
-        success: false,
-        message: 'Player ID is required'
-      });
+      return sendError(res, 'Player ID is required', 400);
     }
 
     const result = await adminPlayerService.unbanPlayer({
@@ -127,18 +106,14 @@ export const unbanPlayer = async (req: Request, res: Response) => {
       { notes: notes?.trim() }
     );
 
-    return res.status(200).json({
-      success: true,
-      data: {
-        player: {
-          id: result.player.id,
-          status: result.player.status
-        },
-        previousStatus: result.previousStatus,
-        statusChangeId: result.statusChange.id
+    return sendSuccess(res, {
+      player: {
+        id: result.player.id,
+        status: result.player.status
       },
-      message: 'Player unbanned successfully'
-    });
+      previousStatus: result.previousStatus,
+      statusChangeId: result.statusChange.id
+    }, 'Player unbanned successfully');
   } catch (error: any) {
     logger.error('Unban player error:', error);
 
@@ -148,10 +123,7 @@ export const unbanPlayer = async (req: Request, res: Response) => {
       error.message.includes('not banned') ? 400 :
       500;
 
-    return res.status(statusCode).json({
-      success: false,
-      message: error.message || 'Failed to unban player'
-    });
+    return sendError(res, error.message || 'Failed to unban player', statusCode);
   }
 };
 
@@ -166,24 +138,15 @@ export const deletePlayer = async (req: Request, res: Response) => {
     const { reason, hardDelete } = req.body;
 
     if (!adminId) {
-      return res.status(401).json({
-        success: false,
-        message: 'Admin not authenticated'
-      });
+      return sendError(res, 'Admin not authenticated', 401);
     }
 
     if (!playerId) {
-      return res.status(400).json({
-        success: false,
-        message: 'Player ID is required'
-      });
+      return sendError(res, 'Player ID is required', 400);
     }
 
     if (!reason || typeof reason !== 'string' || reason.trim().length === 0) {
-      return res.status(400).json({
-        success: false,
-        message: 'Deletion reason is required'
-      });
+      return sendError(res, 'Deletion reason is required', 400);
     }
 
     const result = await adminPlayerService.deletePlayer({
@@ -204,21 +167,17 @@ export const deletePlayer = async (req: Request, res: Response) => {
       { hardDelete: result.hardDelete }
     );
 
-    return res.status(200).json({
-      success: true,
-      data: {
-        deleted: result.deleted,
-        hardDelete: result.hardDelete,
-        previousStatus: result.previousStatus,
-        player: result.player ? {
-          id: result.player.id,
-          status: result.player.status
-        } : null
-      },
-      message: result.hardDelete
-        ? 'Player permanently deleted'
-        : 'Player marked as deleted'
-    });
+    return sendSuccess(res, {
+      deleted: result.deleted,
+      hardDelete: result.hardDelete,
+      previousStatus: result.previousStatus,
+      player: result.player ? {
+        id: result.player.id,
+        status: result.player.status
+      } : null
+    }, result.hardDelete
+      ? 'Player permanently deleted'
+      : 'Player marked as deleted');
   } catch (error: any) {
     logger.error('Delete player error:', error);
 
@@ -228,10 +187,7 @@ export const deletePlayer = async (req: Request, res: Response) => {
       error.message.includes('already deleted') ? 400 :
       500;
 
-    return res.status(statusCode).json({
-      success: false,
-      message: error.message || 'Failed to delete player'
-    });
+    return sendError(res, error.message || 'Failed to delete player', statusCode);
   }
 };
 
@@ -246,24 +202,15 @@ export const updatePlayerStatus = async (req: Request, res: Response) => {
     const { status, reason, notes } = req.body;
 
     if (!adminId) {
-      return res.status(401).json({
-        success: false,
-        message: 'Admin not authenticated'
-      });
+      return sendError(res, 'Admin not authenticated', 401);
     }
 
     if (!playerId) {
-      return res.status(400).json({
-        success: false,
-        message: 'Player ID is required'
-      });
+      return sendError(res, 'Player ID is required', 400);
     }
 
     if (!status || !Object.values(UserStatus).includes(status)) {
-      return res.status(400).json({
-        success: false,
-        message: `Invalid status. Must be one of: ${Object.values(UserStatus).join(', ')}`
-      });
+      return sendError(res, `Invalid status. Must be one of: ${Object.values(UserStatus).join(', ')}`, 400);
     }
 
     // Map status to appropriate reason
@@ -298,18 +245,14 @@ export const updatePlayerStatus = async (req: Request, res: Response) => {
       { reason: notes?.trim() || reason?.trim() }
     );
 
-    return res.status(200).json({
-      success: true,
-      data: {
-        player: {
-          id: result.player.id,
-          status: result.player.status
-        },
-        previousStatus: result.previousStatus,
-        statusChangeId: result.statusChange.id
+    return sendSuccess(res, {
+      player: {
+        id: result.player.id,
+        status: result.player.status
       },
-      message: `Player status updated to ${status}`
-    });
+      previousStatus: result.previousStatus,
+      statusChangeId: result.statusChange.id
+    }, `Player status updated to ${status}`);
   } catch (error: any) {
     logger.error('Update player status error:', error);
 
@@ -319,10 +262,7 @@ export const updatePlayerStatus = async (req: Request, res: Response) => {
       error.message.includes('already') ? 400 :
       500;
 
-    return res.status(statusCode).json({
-      success: false,
-      message: error.message || 'Failed to update player status'
-    });
+    return sendError(res, error.message || 'Failed to update player status', statusCode);
   }
 };
 
@@ -335,28 +275,18 @@ export const getPlayerStatusHistory = async (req: Request, res: Response) => {
     const { id: playerId } = req.params;
 
     if (!playerId) {
-      return res.status(400).json({
-        success: false,
-        message: 'Player ID is required'
-      });
+      return sendError(res, 'Player ID is required', 400);
     }
 
     const history = await adminPlayerService.getPlayerStatusHistory(playerId);
 
-    return res.status(200).json({
-      success: true,
-      data: history,
-      message: 'Status history retrieved successfully'
-    });
+    return sendSuccess(res, history, 'Status history retrieved successfully');
   } catch (error: any) {
     logger.error('Get player status history error:', error);
 
     const statusCode = error.message === 'Player not found' ? 404 : 500;
 
-    return res.status(statusCode).json({
-      success: false,
-      message: error.message || 'Failed to get status history'
-    });
+    return sendError(res, error.message || 'Failed to get status history', statusCode);
   }
 };
 
@@ -381,19 +311,11 @@ export const getPlayers = async (req: Request, res: Response) => {
       search: searchStr
     });
 
-    return res.status(200).json({
-      success: true,
-      data: result.players,
-      pagination: result.pagination,
-      message: 'Players retrieved successfully'
-    });
+    return sendPaginated(res, result.players, result.pagination, 'Players retrieved successfully');
   } catch (error: any) {
     logger.error('Get players error:', error);
 
-    return res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to get players'
-    });
+    return sendError(res, error.message || 'Failed to get players');
   }
 };
 
@@ -408,17 +330,11 @@ export const updatePlayer = async (req: Request, res: Response) => {
     const { name, email, phoneNumber, area, bio, gender, dateOfBirth } = req.body;
 
     if (!adminId) {
-      return res.status(401).json({
-        success: false,
-        message: 'Admin not authenticated'
-      });
+      return sendError(res, 'Admin not authenticated', 401);
     }
 
     if (!playerId) {
-      return res.status(400).json({
-        success: false,
-        message: 'Player ID is required'
-      });
+      return sendError(res, 'Player ID is required', 400);
     }
 
     const updatedPlayer = await adminPlayerService.adminUpdatePlayer({
@@ -443,11 +359,7 @@ export const updatePlayer = async (req: Request, res: Response) => {
       { name, email, phoneNumber, area, bio, gender, dateOfBirth }
     );
 
-    return res.status(200).json({
-      success: true,
-      data: updatedPlayer,
-      message: 'Player updated successfully'
-    });
+    return sendSuccess(res, updatedPlayer, 'Player updated successfully');
   } catch (error: any) {
     logger.error('Update player error:', error);
 
@@ -457,10 +369,7 @@ export const updatePlayer = async (req: Request, res: Response) => {
       error.message.includes('already in use') ? 400 :
       500;
 
-    return res.status(statusCode).json({
-      success: false,
-      message: error.message || 'Failed to update player'
-    });
+    return sendError(res, error.message || 'Failed to update player', statusCode);
   }
 };
 
@@ -473,27 +382,17 @@ export const getPlayerDetails = async (req: Request, res: Response) => {
     const { id: playerId } = req.params;
 
     if (!playerId) {
-      return res.status(400).json({
-        success: false,
-        message: 'Player ID is required'
-      });
+      return sendError(res, 'Player ID is required', 400);
     }
 
     const player = await adminPlayerService.getPlayerDetailsForAdmin(playerId);
 
-    return res.status(200).json({
-      success: true,
-      data: player,
-      message: 'Player details retrieved successfully'
-    });
+    return sendSuccess(res, player, 'Player details retrieved successfully');
   } catch (error: any) {
     logger.error('Get player details error:', error);
 
     const statusCode = error.message === 'Player not found' ? 404 : 500;
 
-    return res.status(statusCode).json({
-      success: false,
-      message: error.message || 'Failed to get player details'
-    });
+    return sendError(res, error.message || 'Failed to get player details', statusCode);
   }
 };

@@ -5,6 +5,7 @@
 
 import { Request, Response } from 'express';
 import { getAdminReportService, DateRangeFilter } from '../../services/admin/adminReportService';
+import { sendSuccess, sendError } from '../../utils/response';
 
 const reportService = getAdminReportService();
 
@@ -33,10 +34,10 @@ export const getPlayerRegistrationStats = async (req: Request, res: Response) =>
 
     const stats = await reportService.getPlayerRegistrationStats(filters);
 
-    res.json({ success: true, data: stats });
+    return sendSuccess(res, stats);
   } catch (error) {
     console.error('Get Player Registration Stats Error:', error);
-    res.status(500).json({ success: false, error: 'Failed to retrieve player registration statistics' });
+    return sendError(res, 'Failed to retrieve player registration statistics', 500);
   }
 };
 
@@ -51,10 +52,10 @@ export const getPlayerRetentionStats = async (req: Request, res: Response) => {
 
     const stats = await reportService.getPlayerRetentionStats(filters);
 
-    res.json({ success: true, data: stats });
+    return sendSuccess(res, stats);
   } catch (error) {
     console.error('Get Player Retention Stats Error:', error);
-    res.status(500).json({ success: false, error: 'Failed to retrieve player retention statistics' });
+    return sendError(res, 'Failed to retrieve player retention statistics', 500);
   }
 };
 
@@ -68,10 +69,10 @@ export const getSeasonPerformanceStats = async (req: Request, res: Response) => 
 
     const stats = await reportService.getSeasonPerformanceStats(seasonId as string);
 
-    res.json({ success: true, data: stats });
+    return sendSuccess(res, stats);
   } catch (error) {
     console.error('Get Season Performance Stats Error:', error);
-    res.status(500).json({ success: false, error: 'Failed to retrieve season performance statistics' });
+    return sendError(res, 'Failed to retrieve season performance statistics', 500);
   }
 };
 
@@ -86,10 +87,10 @@ export const getDisputeAnalysisStats = async (req: Request, res: Response) => {
 
     const stats = await reportService.getDisputeAnalysisStats(filters);
 
-    res.json({ success: true, data: stats });
+    return sendSuccess(res, stats);
   } catch (error) {
     console.error('Get Dispute Analysis Stats Error:', error);
-    res.status(500).json({ success: false, error: 'Failed to retrieve dispute analysis statistics' });
+    return sendError(res, 'Failed to retrieve dispute analysis statistics', 500);
   }
 };
 
@@ -104,10 +105,10 @@ export const getRevenueStats = async (req: Request, res: Response) => {
 
     const stats = await reportService.getRevenueStats(filters);
 
-    res.json({ success: true, data: stats });
+    return sendSuccess(res, stats);
   } catch (error) {
     console.error('Get Revenue Stats Error:', error);
-    res.status(500).json({ success: false, error: 'Failed to retrieve revenue statistics' });
+    return sendError(res, 'Failed to retrieve revenue statistics', 500);
   }
 };
 
@@ -122,9 +123,9 @@ export const getMembershipStats = async (req: Request, res: Response) => {
 
     const stats = await reportService.getMembershipStats(filters);
 
-    res.json({ success: true, data: stats });
+    return sendSuccess(res, stats);
   } catch (error) {
     console.error('Get Membership Stats Error:', error);
-    res.status(500).json({ success: false, error: 'Failed to retrieve membership statistics' });
+    return sendError(res, 'Failed to retrieve membership statistics', 500);
   }
 };

@@ -5,6 +5,7 @@ import {
   getDissolvedPartnerships,
   getDissolvedPartnershipById,
 } from "../../services/admin/partnershipAdminService";
+import { sendSuccess, sendError } from '../../utils/response';
 
 /**
  * GET /api/admin/partnerships/withdrawal-requests
@@ -29,10 +30,10 @@ export const getWithdrawalRequestsHandler = async (
 
     const requests = await getAllWithdrawalRequests(filters);
 
-    return res.status(200).json(requests);
+    return sendSuccess(res, requests);
   } catch (error) {
     console.error("Error fetching withdrawal requests:", error);
-    return res.status(500).json({ error: "Failed to fetch withdrawal requests" });
+    return sendError(res, "Failed to fetch withdrawal requests");
   }
 };
 
@@ -46,10 +47,10 @@ export const getWithdrawalRequestStatsHandler = async (
 ) => {
   try {
     const stats = await getWithdrawalRequestStats();
-    return res.status(200).json(stats);
+    return sendSuccess(res, stats);
   } catch (error) {
     console.error("Error fetching withdrawal request stats:", error);
-    return res.status(500).json({ error: "Failed to fetch stats" });
+    return sendError(res, "Failed to fetch stats");
   }
 };
 
@@ -76,10 +77,10 @@ export const getDissolvedPartnershipsHandler = async (
 
     const partnerships = await getDissolvedPartnerships(filters);
 
-    return res.status(200).json(partnerships);
+    return sendSuccess(res, partnerships);
   } catch (error) {
     console.error("Error fetching dissolved partnerships:", error);
-    return res.status(500).json({ error: "Failed to fetch dissolved partnerships" });
+    return sendError(res, "Failed to fetch dissolved partnerships");
   }
 };
 
@@ -95,18 +96,18 @@ export const getDissolvedPartnershipByIdHandler = async (
     const { id } = req.params;
 
     if (!id) {
-      return res.status(400).json({ error: "Partnership ID is required" });
+      return sendError(res, "Partnership ID is required", 400);
     }
 
     const partnership = await getDissolvedPartnershipById(id);
 
     if (!partnership) {
-      return res.status(404).json({ error: "Partnership not found" });
+      return sendError(res, "Partnership not found", 404);
     }
 
-    return res.status(200).json(partnership);
+    return sendSuccess(res, partnership);
   } catch (error) {
     console.error("Error fetching dissolved partnership:", error);
-    return res.status(500).json({ error: "Failed to fetch partnership" });
+    return sendError(res, "Failed to fetch partnership");
   }
 };

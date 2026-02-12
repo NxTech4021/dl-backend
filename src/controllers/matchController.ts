@@ -2,6 +2,7 @@ import { prisma } from "../lib/prisma";
 import { Request, Response } from "express";
 import { Prisma, MatchType } from "@prisma/client";
 import { getMatchCommentService } from "../services/match/matchCommentService";
+import { sendSuccess, sendError } from '../utils/response';
 
 type MatchFeeType = 'FREE' | 'SPLIT' | 'FIXED';
 
@@ -41,12 +42,12 @@ export const createMatch = async (req: Request, res: Response) => {
   const { divisionId, sport, matchType, playerScore, opponentScore, outcome, matchDate, location, notes, duration, courtBooked, fee, feeAmount } = req.body as CreateMatchBody;
 
   if (!divisionId || !sport || !matchType) {
-    return res.status(400).json({ error: "divisionId, sport, and matchType are required." });
+    return sendError(res, "divisionId, sport, and matchType are required.", 400);
   }
 
   try {
     const division = await prisma.division.findUnique({ where: { id: divisionId } });
-    if (!division) return res.status(404).json({ error: "Division not found." });
+    if (!division) return sendError(res, "Division not found.", 404);
 
     const matchData: Prisma.MatchCreateInput = {
       division: { connect: { id: divisionId } },
@@ -68,11 +69,11 @@ export const createMatch = async (req: Request, res: Response) => {
       data: matchData,
       include: { participants: true },
     });
-    res.status(201).json(match);
+    sendSuccess(res, match, undefined, 201);
   } catch (err: unknown) {
     console.error("Create Match Error:", err);
     const errorMessage = err instanceof Error ? err.message : "Failed to create match.";
-    res.status(500).json({ error: errorMessage });
+    sendError(res, errorMessage);
   }
 };
 
@@ -82,17 +83,17 @@ export const getMatches = async (req: Request, res: Response) => {
       include: { division: true, participants: { include: { user: true } } },
       orderBy: { matchDate: "desc" },
     });
-    res.json(matches);
+    sendSuccess(res, matches);
   } catch (err: unknown) {
     console.error("Get Matches Error:", err);
     const errorMessage = err instanceof Error ? err.message : "Failed to retrieve matches.";
-    res.status(500).json({ error: errorMessage });
+    sendError(res, errorMessage);
   }
 };
 
 export const getMatchById = async (req: Request, res: Response) => {
   const { id } = req.params;
-  if (!id) return res.status(400).json({ error: "Match ID is required." });
+  if (!id) return sendError(res, "Match ID is required.", 400);
 
   try {
     const match = await prisma.match.findUnique({
@@ -119,7 +120,7 @@ export const getMatchById = async (req: Request, res: Response) => {
         }
       },
     });
-    if (!match) return res.status(404).json({ error: "Match not found." });
+    if (!match) return sendError(res, "Match not found.", 404);
 
     // Transform disputes array to single dispute object for frontend convenience
     const response = {
@@ -127,11 +128,11 @@ export const getMatchById = async (req: Request, res: Response) => {
       dispute: match.disputes?.[0] || null,
     };
 
-    res.json(response);
+    sendSuccess(res, response);
   } catch (err: unknown) {
     console.error("Get Match By ID Error:", err);
     const errorMessage = err instanceof Error ? err.message : "Failed to retrieve match.";
-    res.status(500).json({ error: errorMessage });
+    sendError(res, errorMessage);
   }
 };
 
@@ -139,11 +140,11 @@ export const updateMatch = async (req: Request, res: Response) => {
   const { id } = req.params;
   const { divisionId, sport, matchType, playerScore, opponentScore, outcome, matchDate, location, notes, duration, courtBooked, fee, feeAmount } = req.body as UpdateMatchBody;
 
-  if (!id) return res.status(400).json({ error: "Match ID is required." });
+  if (!id) return sendError(res, "Match ID is required.", 400);
 
   try {
     const existingMatch = await prisma.match.findUnique({ where: { id } });
-    if (!existingMatch) return res.status(404).json({ error: "Match not found." });
+    if (!existingMatch) return sendError(res, "Match not found.", 404);
 
     const updateData: Prisma.MatchUpdateInput = {};
     
@@ -168,28 +169,28 @@ export const updateMatch = async (req: Request, res: Response) => {
       data: updateData,
       include: { participants: true },
     });
-    res.json(match);
+    sendSuccess(res, match);
   } catch (err: unknown) {
     console.error("Update Match Error:", err);
     const errorMessage = err instanceof Error ? err.message : "Failed to update match.";
-    res.status(500).json({ error: errorMessage });
+    sendError(res, errorMessage);
   }
 };
 
 export const deleteMatch = async (req: Request, res: Response) => {
   const { id } = req.params;
-  if (!id) return res.status(400).json({ error: "Match ID is required." });
+  if (!id) return sendError(res, "Match ID is required.", 400);
 
   try {
     const existingMatch = await prisma.match.findUnique({ where: { id } });
-    if (!existingMatch) return res.status(404).json({ error: "Match not found." });
+    if (!existingMatch) return sendError(res, "Match not found.", 404);
 
     await prisma.match.delete({ where: { id } });
-    res.json({ message: "Match deleted successfully." });
+    sendSuccess(res, null, "Match deleted successfully.");
   } catch (err: unknown) {
     console.error("Delete Match Error:", err);
     const errorMessage = err instanceof Error ? err.message : "Failed to delete match.";
-    res.status(500).json({ error: errorMessage });
+    sendError(res, errorMessage);
   }
 };
 
@@ -203,18 +204,18 @@ export const deleteMatch = async (req: Request, res: Response) => {
 export const getMatchComments = async (req: Request, res: Response) => {
   const { id } = req.params;
 
-  if (!id) return res.status(400).json({ error: 'Match ID is required' });
+  if (!id) return sendError(res, 'Match ID is required', 400);
 
   try {
     const commentService = getMatchCommentService();
     const comments = await commentService.getComments(id);
-    res.json(comments);
+    sendSuccess(res, comments);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to get comments';
     if (message === 'Match not found') {
-      return res.status(404).json({ error: message });
+      return sendError(res, message, 404);
     }
-    res.status(500).json({ error: message });
+    sendError(res, message);
   }
 };
 
@@ -226,8 +227,8 @@ export const postMatchComment = async (req: Request, res: Response) => {
   const { id } = req.params;
   const { comment } = req.body;
 
-  if (!userId) return res.status(401).json({ error: 'Authentication required' });
-  if (!id) return res.status(400).json({ error: 'Match ID is required' });
+  if (!userId) return sendError(res, 'Authentication required', 401);
+  if (!id) return sendError(res, 'Match ID is required', 400);
 
   try {
     const commentService = getMatchCommentService();
@@ -236,24 +237,24 @@ export const postMatchComment = async (req: Request, res: Response) => {
       userId,
       comment,
     });
-    res.status(201).json(newComment);
+    sendSuccess(res, newComment, undefined, 201);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to post comment';
 
     if (message === 'Match not found') {
-      return res.status(404).json({ error: message });
+      return sendError(res, message, 404);
     }
     if (message === 'Only match participants can comment' ||
         message.includes('You can only')) {
-      return res.status(403).json({ error: message });
+      return sendError(res, message, 403);
     }
     if (message.includes('Cannot comment on matches') ||
         message === 'Comment cannot be empty' ||
         message.includes('exceeds maximum length')) {
-      return res.status(400).json({ error: message });
+      return sendError(res, message, 400);
     }
 
-    res.status(500).json({ error: message });
+    sendError(res, message);
   }
 };
 
@@ -265,9 +266,9 @@ export const updateMatchComment = async (req: Request, res: Response) => {
   const { id, commentId } = req.params;
   const { comment } = req.body;
 
-  if (!userId) return res.status(401).json({ error: 'Authentication required' });
-  if (!id) return res.status(400).json({ error: 'Match ID is required' });
-  if (!commentId) return res.status(400).json({ error: 'Comment ID is required' });
+  if (!userId) return sendError(res, 'Authentication required', 401);
+  if (!id) return sendError(res, 'Match ID is required', 400);
+  if (!commentId) return sendError(res, 'Comment ID is required', 400);
 
   try {
     const commentService = getMatchCommentService();
@@ -276,22 +277,22 @@ export const updateMatchComment = async (req: Request, res: Response) => {
       userId,
       comment,
     });
-    res.json(updatedComment);
+    sendSuccess(res, updatedComment);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to update comment';
 
     if (message === 'Comment not found') {
-      return res.status(404).json({ error: message });
+      return sendError(res, message, 404);
     }
     if (message === 'You can only edit your own comments') {
-      return res.status(403).json({ error: message });
+      return sendError(res, message, 403);
     }
     if (message === 'Comment cannot be empty' ||
         message.includes('exceeds maximum length')) {
-      return res.status(400).json({ error: message });
+      return sendError(res, message, 400);
     }
 
-    res.status(500).json({ error: message });
+    sendError(res, message);
   }
 };
 
@@ -302,9 +303,9 @@ export const deleteMatchComment = async (req: Request, res: Response) => {
   const userId = req.user?.id;
   const { id, commentId } = req.params;
 
-  if (!userId) return res.status(401).json({ error: 'Authentication required' });
-  if (!id) return res.status(400).json({ error: 'Match ID is required' });
-  if (!commentId) return res.status(400).json({ error: 'Comment ID is required' });
+  if (!userId) return sendError(res, 'Authentication required', 401);
+  if (!id) return sendError(res, 'Match ID is required', 400);
+  if (!commentId) return sendError(res, 'Comment ID is required', 400);
 
   try {
     const commentService = getMatchCommentService();
@@ -312,18 +313,18 @@ export const deleteMatchComment = async (req: Request, res: Response) => {
       commentId,
       userId,
     });
-    res.json({ message: 'Comment deleted successfully' });
+    sendSuccess(res, null, 'Comment deleted successfully');
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to delete comment';
 
     if (message === 'Comment not found') {
-      return res.status(404).json({ error: message });
+      return sendError(res, message, 404);
     }
     if (message === 'You can only delete your own comments') {
-      return res.status(403).json({ error: message });
+      return sendError(res, message, 403);
     }
 
-    res.status(500).json({ error: message });
+    sendError(res, message);
   }
 };
 
@@ -334,7 +335,7 @@ export const deleteMatchComment = async (req: Request, res: Response) => {
  */
 export const getMatchDetails = async (req: Request, res: Response) => {
   const { id } = req.params;
-  if (!id) return res.status(400).json({ error: "Match ID is required." });
+  if (!id) return sendError(res, "Match ID is required.", 400);
 
   try {
     const match = await prisma.match.findUnique({
@@ -389,7 +390,7 @@ export const getMatchDetails = async (req: Request, res: Response) => {
       },
     });
 
-    if (!match) return res.status(404).json({ error: "Match not found." });
+    if (!match) return sendError(res, "Match not found.", 404);
 
     // Format match date and time
     const matchDate = match.matchDate ? new Date(match.matchDate) : null;
@@ -499,10 +500,10 @@ export const getMatchDetails = async (req: Request, res: Response) => {
       createdBy: match.createdBy,
     };
 
-    res.json({ data: response });
+    sendSuccess(res, response);
   } catch (err: unknown) {
     console.error("Get Match Details Error:", err);
     const errorMessage = err instanceof Error ? err.message : "Failed to retrieve match details.";
-    res.status(500).json({ error: errorMessage });
+    sendError(res, errorMessage);
   }
 };

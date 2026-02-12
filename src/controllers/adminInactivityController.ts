@@ -12,6 +12,7 @@ import {
 } from '../services/admin/adminInactivityService';
 import { getInactivityService } from '../services/inactivityService';
 import { NotificationService } from '../services/notificationService';
+import { sendSuccess, sendError } from '../utils/response';
 import { logger } from '../utils/logger';
 
 /**
@@ -29,30 +30,21 @@ export async function getSettings(req: Request, res: Response) {
 
     if (!settings) {
       // Return defaults if no settings configured
-      return res.status(200).json({
-        success: true,
-        data: {
-          inactivityThresholdDays: Number(process.env.INACTIVITY_THRESHOLD_DAYS) || 30,
-          warningThresholdDays: Number(process.env.INACTIVITY_WARNING_DAYS) || 21,
-          autoMarkInactive: true,
-          excludeFromPairing: true,
-          sendReminderEmail: true,
-          reminderDaysBefore: 3,
-          isDefault: true
-        }
+      return sendSuccess(res, {
+        inactivityThresholdDays: Number(process.env.INACTIVITY_THRESHOLD_DAYS) || 30,
+        warningThresholdDays: Number(process.env.INACTIVITY_WARNING_DAYS) || 21,
+        autoMarkInactive: true,
+        excludeFromPairing: true,
+        sendReminderEmail: true,
+        reminderDaysBefore: 3,
+        isDefault: true
       });
     }
 
-    return res.status(200).json({
-      success: true,
-      data: settings
-    });
+    return sendSuccess(res, settings);
   } catch (error: any) {
     logger.error('Get inactivity settings error:', error);
-    return res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to get inactivity settings'
-    });
+    return sendError(res, error.message || 'Failed to get inactivity settings');
   }
 }
 
@@ -64,16 +56,10 @@ export async function getAllSettings(req: Request, res: Response) {
   try {
     const settings = await getAllInactivitySettings();
 
-    return res.status(200).json({
-      success: true,
-      data: settings
-    });
+    return sendSuccess(res, settings);
   } catch (error: any) {
     logger.error('Get all inactivity settings error:', error);
-    return res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to get all inactivity settings'
-    });
+    return sendError(res, error.message || 'Failed to get all inactivity settings');
   }
 }
 
@@ -87,10 +73,7 @@ export async function updateSettings(req: Request, res: Response) {
     const adminId = (req as any).user?.adminId;
 
     if (!adminId) {
-      return res.status(401).json({
-        success: false,
-        message: 'Admin not authenticated or no admin record found'
-      });
+      return sendError(res, 'Admin not authenticated or no admin record found', 401);
     }
 
     const {
@@ -106,10 +89,7 @@ export async function updateSettings(req: Request, res: Response) {
 
     // Validate required field
     if (!inactivityThresholdDays || typeof inactivityThresholdDays !== 'number') {
-      return res.status(400).json({
-        success: false,
-        message: 'inactivityThresholdDays is required and must be a number'
-      });
+      return sendError(res, 'inactivityThresholdDays is required and must be a number', 400);
     }
 
     const settings = await setInactivitySettings({
@@ -124,26 +104,16 @@ export async function updateSettings(req: Request, res: Response) {
       adminId
     });
 
-    return res.status(200).json({
-      success: true,
-      message: 'Inactivity settings updated successfully',
-      data: settings
-    });
+    return sendSuccess(res, settings, 'Inactivity settings updated successfully');
   } catch (error: any) {
     logger.error('Update inactivity settings error:', error);
 
     // Handle validation errors
     if (error.message.includes('must be') || error.message.includes('cannot')) {
-      return res.status(400).json({
-        success: false,
-        message: error.message
-      });
+      return sendError(res, error.message, 400);
     }
 
-    return res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to update inactivity settings'
-    });
+    return sendError(res, error.message || 'Failed to update inactivity settings');
   }
 }
 
@@ -158,28 +128,19 @@ export async function removeSettings(req: Request, res: Response) {
     const { settingsId } = req.params;
 
     if (!adminId) {
-      return res.status(401).json({
-        success: false,
-        message: 'Admin not authenticated or no admin record found'
-      });
+      return sendError(res, 'Admin not authenticated or no admin record found', 401);
     }
 
     if (!settingsId) {
-      return res.status(400).json({ error: 'Settings ID is required' });
+      return sendError(res, 'Settings ID is required', 400);
     }
 
     await deleteInactivitySettings(settingsId, adminId);
 
-    return res.status(200).json({
-      success: true,
-      message: 'Inactivity settings deleted, reverted to defaults'
-    });
+    return sendSuccess(res, null, 'Inactivity settings deleted, reverted to defaults');
   } catch (error: any) {
     logger.error('Delete inactivity settings error:', error);
-    return res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to delete inactivity settings'
-    });
+    return sendError(res, error.message || 'Failed to delete inactivity settings');
   }
 }
 
@@ -193,10 +154,7 @@ export async function triggerInactivityCheck(req: Request, res: Response) {
     const adminId = (req as any).user?.adminId || (req as any).user?.id;
 
     if (!adminId) {
-      return res.status(401).json({
-        success: false,
-        message: 'Admin not authenticated'
-      });
+      return sendError(res, 'Admin not authenticated', 401);
     }
 
     const notificationService = new NotificationService();
@@ -212,17 +170,10 @@ export async function triggerInactivityCheck(req: Request, res: Response) {
       duration: results.duration
     });
 
-    return res.status(200).json({
-      success: true,
-      message: 'Inactivity check completed',
-      data: results
-    });
+    return sendSuccess(res, results, 'Inactivity check completed');
   } catch (error: any) {
     logger.error('Trigger inactivity check error:', error);
-    return res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to run inactivity check'
-    });
+    return sendError(res, error.message || 'Failed to run inactivity check');
   }
 }
 
@@ -254,20 +205,14 @@ export async function getInactivityStats(req: Request, res: Response) {
       })
     ]);
 
-    return res.status(200).json({
-      success: true,
-      data: {
-        active: activeCount,
-        inactive: inactiveCount,
-        atRisk: atRiskCount,
-        total: activeCount + inactiveCount
-      }
+    return sendSuccess(res, {
+      active: activeCount,
+      inactive: inactiveCount,
+      atRisk: atRiskCount,
+      total: activeCount + inactiveCount
     });
   } catch (error: any) {
     logger.error('Get inactivity stats error:', error);
-    return res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to get inactivity stats'
-    });
+    return sendError(res, error.message || 'Failed to get inactivity stats');
   }
 }

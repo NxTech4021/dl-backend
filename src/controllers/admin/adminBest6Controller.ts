@@ -8,6 +8,7 @@ import { Best6EventHandler } from '../../services/match/best6/best6EventHandler'
 import { Best6AlgorithmService } from '../../services/match/best6/best6AlgorithmService';
 import { StandingsV2Service } from '../../services/rating/standingsV2Service';
 import { prisma } from '../../lib/prisma';
+import { sendSuccess, sendError } from '../../utils/response';
 import { logger } from '../../utils/logger';
 
 /**
@@ -20,10 +21,7 @@ export async function recalculatePlayerBest6(req: Request, res: Response) {
     const { divisionId, seasonId } = req.body;
 
     if (!userId || !divisionId || !seasonId) {
-      return res.status(400).json({
-        success: false,
-        message: 'Missing required fields: userId, divisionId, seasonId'
-      });
+      return sendError(res, 'Missing required fields: userId, divisionId, seasonId', 400);
     }
 
     // Recalculate for single player only
@@ -36,16 +34,10 @@ export async function recalculatePlayerBest6(req: Request, res: Response) {
       seasonId
     });
 
-    return res.status(200).json({
-      success: true,
-      message: 'Best 6 recalculated successfully for player'
-    });
+    return sendSuccess(res, null, 'Best 6 recalculated successfully for player');
   } catch (error: any) {
     logger.error('Recalculate player Best 6 error:', error);
-    return res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to recalculate Best 6'
-    });
+    return sendError(res, error.message || 'Failed to recalculate Best 6');
   }
 }
 
@@ -59,10 +51,7 @@ export async function recalculateDivisionBest6(req: Request, res: Response) {
     const { seasonId } = req.body;
 
     if (!divisionId || !seasonId) {
-      return res.status(400).json({
-        success: false,
-        message: 'Missing required fields: divisionId, seasonId'
-      });
+      return sendError(res, 'Missing required fields: divisionId, seasonId', 400);
     }
 
     const best6Handler = new Best6EventHandler();
@@ -73,16 +62,10 @@ export async function recalculateDivisionBest6(req: Request, res: Response) {
       seasonId
     });
 
-    return res.status(200).json({
-      success: true,
-      message: 'Best 6 recalculated successfully for division'
-    });
+    return sendSuccess(res, null, 'Best 6 recalculated successfully for division');
   } catch (error: any) {
     logger.error('Recalculate division Best 6 error:', error);
-    return res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to recalculate Best 6'
-    });
+    return sendError(res, error.message || 'Failed to recalculate Best 6');
   }
 }
 
@@ -96,10 +79,7 @@ export async function recalculateDivisionStandings(req: Request, res: Response) 
     const { seasonId } = req.body;
 
     if (!divisionId || !seasonId) {
-      return res.status(400).json({
-        success: false,
-        message: 'Missing required fields: divisionId, seasonId'
-      });
+      return sendError(res, 'Missing required fields: divisionId, seasonId', 400);
     }
 
     const standingsService = new StandingsV2Service();
@@ -110,16 +90,10 @@ export async function recalculateDivisionStandings(req: Request, res: Response) 
       seasonId
     });
 
-    return res.status(200).json({
-      success: true,
-      message: 'Standings recalculated successfully'
-    });
+    return sendSuccess(res, null, 'Standings recalculated successfully');
   } catch (error: any) {
     logger.error('Recalculate division standings error:', error);
-    return res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to recalculate standings'
-    });
+    return sendError(res, error.message || 'Failed to recalculate standings');
   }
 }
 
@@ -133,10 +107,7 @@ export async function getPlayerBest6(req: Request, res: Response) {
     const { divisionId, seasonId } = req.query;
 
     if (!userId || !divisionId || !seasonId) {
-      return res.status(400).json({
-        success: false,
-        message: 'Missing required query params: divisionId, seasonId'
-      });
+      return sendError(res, 'Missing required query params: divisionId, seasonId', 400);
     }
 
     // Get all match results with Best 6 info
@@ -173,39 +144,33 @@ export async function getPlayerBest6(req: Request, res: Response) {
     const best6 = allResults.filter(r => r.countsForStandings);
     const notCounted = allResults.filter(r => !r.countsForStandings);
 
-    return res.status(200).json({
-      success: true,
-      data: {
-        totalMatches: allResults.length,
-        best6Count: best6.length,
-        best6Results: best6.map(r => ({
-          matchId: r.matchId,
-          sequence: r.resultSequence,
-          datePlayed: r.datePlayed,
-          opponent: r.opponent.name,
-          isWin: r.isWin,
-          matchPoints: r.matchPoints,
-          margin: r.margin,
-          score: `${r.setsWon}-${r.setsLost}`,
-          gamesScore: `${r.gamesWon}-${r.gamesLost}`
-        })),
-        notCountedResults: notCounted.map(r => ({
-          matchId: r.matchId,
-          datePlayed: r.datePlayed,
-          opponent: r.opponent.name,
-          isWin: r.isWin,
-          matchPoints: r.matchPoints,
-          margin: r.margin,
-          score: `${r.setsWon}-${r.setsLost}`
-        }))
-      }
+    return sendSuccess(res, {
+      totalMatches: allResults.length,
+      best6Count: best6.length,
+      best6Results: best6.map(r => ({
+        matchId: r.matchId,
+        sequence: r.resultSequence,
+        datePlayed: r.datePlayed,
+        opponent: r.opponent.name,
+        isWin: r.isWin,
+        matchPoints: r.matchPoints,
+        margin: r.margin,
+        score: `${r.setsWon}-${r.setsLost}`,
+        gamesScore: `${r.gamesWon}-${r.gamesLost}`
+      })),
+      notCountedResults: notCounted.map(r => ({
+        matchId: r.matchId,
+        datePlayed: r.datePlayed,
+        opponent: r.opponent.name,
+        isWin: r.isWin,
+        matchPoints: r.matchPoints,
+        margin: r.margin,
+        score: `${r.setsWon}-${r.setsLost}`
+      }))
     });
   } catch (error: any) {
     logger.error('Get player Best 6 error:', error);
-    return res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to get Best 6 composition'
-    });
+    return sendError(res, error.message || 'Failed to get Best 6 composition');
   }
 }
 
@@ -218,24 +183,15 @@ export async function getDivisionStandings(req: Request, res: Response) {
     const { divisionId } = req.params;
 
     if (!divisionId) {
-      return res.status(400).json({
-        success: false,
-        message: 'Division ID is required'
-      });
+      return sendError(res, 'Division ID is required', 400);
     }
 
     const standingsService = new StandingsV2Service();
     const standings = await standingsService.getDivisionStandings(divisionId);
 
-    return res.status(200).json({
-      success: true,
-      data: standings
-    });
+    return sendSuccess(res, standings);
   } catch (error: any) {
     logger.error('Get division standings error:', error);
-    return res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to get division standings'
-    });
+    return sendError(res, error.message || 'Failed to get division standings');
   }
 }
