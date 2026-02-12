@@ -5,8 +5,9 @@
  */
 
 import { prisma } from '../../lib/prisma';
-import { PaymentStatus, MembershipStatus, Prisma } from '@prisma/client';
+import { PaymentStatus, MembershipStatus, Prisma, AdminActionType } from '@prisma/client';
 import { logger } from '../../utils/logger';
+import { logPaymentAction } from './adminLogService';
 
 interface PaymentFilters {
   search?: string | undefined;
@@ -302,6 +303,17 @@ export async function updatePaymentStatus(input: UpdatePaymentStatusInput) {
     `Payment status updated for membership ${membershipId}: ${previousStatus} -> ${paymentStatus} by admin ${adminId}`
   );
 
+  // Log to admin audit trail
+  logPaymentAction(
+    adminId,
+    AdminActionType.PAYMENT_STATUS_UPDATE,
+    membershipId,
+    `Payment status changed from ${previousStatus} to ${paymentStatus} for ${membership.user.name} in ${membership.season.name}`,
+    { paymentStatus: previousStatus },
+    { paymentStatus },
+    { notes, userName: membership.user.name, seasonName: membership.season.name }
+  );
+
   return {
     membership: {
       id: updatedMembership.id,
@@ -370,6 +382,16 @@ export async function bulkUpdatePaymentStatus(input: BulkUpdatePaymentStatusInpu
       `Bulk payment status update: ${membershipIds.length} memberships updated to ${paymentStatus} by admin ${adminId}`
     );
 
+    logPaymentAction(
+      adminId,
+      AdminActionType.PAYMENT_BULK_UPDATE,
+      membershipIds[0]!,
+      `Bulk updated ${membershipIds.length} payments to ${paymentStatus}`,
+      { count: membershipIds.length },
+      { paymentStatus },
+      { notes, membershipIds }
+    );
+
     return {
       updated: results.length,
       paymentStatus
@@ -384,6 +406,16 @@ export async function bulkUpdatePaymentStatus(input: BulkUpdatePaymentStatusInpu
 
   logger.info(
     `Bulk payment status update: ${result.count} memberships updated to ${paymentStatus} by admin ${adminId}`
+  );
+
+  logPaymentAction(
+    adminId,
+    AdminActionType.PAYMENT_BULK_UPDATE,
+    membershipIds[0]!,
+    `Bulk updated ${membershipIds.length} payments to ${paymentStatus}`,
+    { count: membershipIds.length },
+    { paymentStatus },
+    { notes, membershipIds }
   );
 
   return {
