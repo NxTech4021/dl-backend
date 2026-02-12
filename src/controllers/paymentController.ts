@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-import { Prisma, PaymentStatus } from "@prisma/client";
+import { Prisma, PaymentStatus, UserActionType } from "@prisma/client";
 import { prisma } from "../lib/prisma";
 import * as paymentService from "../services/paymentService";
 import { sendSuccess, sendPaginated, sendError } from "../utils/response";
@@ -11,6 +11,7 @@ import {
   resolvePaymentStatus,
   verifyNotificationSignature,
 } from "../services/payment/fiuuGateway";
+import { logPaymentActivity } from '../services/userActivityLogService';
 
 
 export const getPayments = async (req: Request, res: Response) => {
@@ -205,6 +206,8 @@ export const markPaymentAsPaid = async (req: Request, res: Response) => {
 
     // Use service for business logic
     const updatedPayment = await paymentService.markPaymentAsPaid(id);
+
+    void logPaymentActivity(req.user?.id ?? '', UserActionType.PAYMENT_COMPLETE, id, {}, req.ip);
 
     return sendSuccess(res, updatedPayment, "Payment marked as paid successfully");
   } catch (error: any) {
@@ -566,6 +569,14 @@ async function updatePaymentFromGateway(
       where: { id: paymentId },
       data: updateData,
     });
+
+    if (status === PaymentStatus.COMPLETED) {
+      void logPaymentActivity(payment.userId ?? '', UserActionType.PAYMENT_COMPLETE, paymentId, { transactionId: (payload.tranID as string) || (payload.transaction_id as string) }, undefined);
+    }
+
+    if (status === PaymentStatus.FAILED) {
+      void logPaymentActivity(payment.userId ?? '', UserActionType.PAYMENT_FAIL, paymentId, { reason: (payload.errdesc as string) || (payload.error_desc as string) }, undefined);
+    }
 
     // If membership is not yet linked and payment is completed, create it now.
     let membershipId = payment.seasonMembershipId;
