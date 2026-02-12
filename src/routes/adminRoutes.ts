@@ -24,6 +24,7 @@ import adminBest6Routes from "./admin/adminBest6Routes";
 import adminDashboardRoutes from "./adminDashboardRoutes";
 import adminSystemRoutes from "./admin/systemRoutes";
 import partnershipAdminRoutes from "./admin/partnershipAdminRoutes";
+import adminStatusRoutes from "./admin/adminStatusRoutes";
 
 const adminRouter = Router();
 
@@ -79,5 +80,8 @@ adminRouter.use("/system", adminSystemRoutes);
 
 // Admin Partnership Management Routes (withdrawal requests, dissolved partnerships)
 adminRouter.use("/partnerships", partnershipAdminRoutes);
+
+// Admin Status Management Routes (suspend, activate, status history)
+adminRouter.use("/admins", adminStatusRoutes);
 
 export default adminRouter;
