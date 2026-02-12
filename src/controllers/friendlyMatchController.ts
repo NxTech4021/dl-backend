@@ -7,13 +7,14 @@ import { Request, Response } from 'express';
 import { getFriendlyMatchService } from '../services/match/friendlyMatchService';
 import { getMatchCommentService } from '../services/match/matchCommentService';
 import { sendSuccess, sendError } from '../utils/response';
-import { MatchType, MatchFormat, MatchStatus, GenderRestriction, SportType } from '@prisma/client';
+import { MatchType, MatchFormat, MatchStatus, GenderRestriction, SportType, UserActionType } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import dayjs from 'dayjs';
 import utc from 'dayjs/plugin/utc';
 import timezone from 'dayjs/plugin/timezone';
 import { notificationService } from '../services/notificationService';
 import { matchManagementNotifications } from '../helpers/notifications/matchManagementNotifications';
+import { logMatchActivity } from '../services/userActivityLogService';
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
@@ -141,6 +142,7 @@ export const createFriendlyMatch = async (req: Request, res: Response) => {
     // Note: Notifications are handled by friendlyMatchService.createFriendlyMatch()
     // Do NOT send notifications here to avoid duplicates
 
+    void logMatchActivity(userId, UserActionType.MATCH_CREATE, match.id, { isFriendly: true }, req.ip);
     sendSuccess(res, match, undefined, 201);
   } catch (error) {
     console.error('Create Friendly Match Error:', error);
@@ -408,6 +410,7 @@ export const joinFriendlyMatch = async (req: Request, res: Response) => {
     // Note: Notifications are handled by friendlyMatchService.joinFriendlyMatch()
     // Do NOT send notifications here to avoid duplicates
 
+    void logMatchActivity(userId, UserActionType.MATCH_JOIN, id, {}, req.ip);
     sendSuccess(res, match);
   } catch (error) {
     console.error('Join Friendly Match Error:', error);
@@ -488,6 +491,7 @@ export const submitFriendlyResult = async (req: Request, res: Response) => {
       // Don't fail the request if notification fails
     }
 
+    void logMatchActivity(userId, UserActionType.SCORE_SUBMIT, id, {}, req.ip);
     sendSuccess(res, match);
   } catch (error) {
     console.error('Submit Friendly Result Error:', error);
@@ -574,6 +578,7 @@ export const confirmFriendlyResult = async (req: Request, res: Response) => {
       // Don't fail the request if notification fails
     }
 
+    void logMatchActivity(userId, UserActionType.SCORE_CONFIRM, id, {}, req.ip);
     sendSuccess(res, match);
   } catch (error) {
     console.error('Confirm Friendly Result Error:', error);
