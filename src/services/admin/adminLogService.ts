@@ -191,7 +191,8 @@ export async function getTargetLogs(targetType: AdminTargetType, targetId: strin
   limit?: number | undefined;
 }) {
   const { page = 1, limit = 20 } = options || {};
-  const skip = (page - 1) * limit;
+  const safeLimit = Math.min(Math.max(limit, 1), 200);
+  const skip = (page - 1) * safeLimit;
 
   const [logs, total] = await prisma.$transaction([
     prisma.adminLog.findMany({
@@ -214,7 +215,7 @@ export async function getTargetLogs(targetType: AdminTargetType, targetId: strin
       },
       orderBy: { createdAt: 'desc' },
       skip,
-      take: limit
+      take: safeLimit
     }),
     prisma.adminLog.count({
       where: {
@@ -239,9 +240,9 @@ export async function getTargetLogs(targetType: AdminTargetType, targetId: strin
     })),
     pagination: {
       page,
-      limit,
+      limit: safeLimit,
       total,
-      totalPages: Math.ceil(total / limit)
+      totalPages: Math.ceil(total / safeLimit)
     }
   };
 }
