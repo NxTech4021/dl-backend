@@ -1,5 +1,7 @@
 import { Request, Response } from 'express';
 import { sendSuccess, sendError } from '../utils/response';
+import { logPairingActivity } from '../services/userActivityLogService';
+import { UserActionType } from '@prisma/client';
 import {
   sendPairRequest as sendPairRequestService,
   acceptPairRequest as acceptPairRequestService,
@@ -44,6 +46,8 @@ export const sendPairRequest = async (req: Request, res: Response) => {
       return sendError(res, result.message, 400);
     }
 
+    void logPairingActivity(userId, UserActionType.PAIR_REQUEST_SEND, result.data?.id ?? '', { recipientId, seasonId }, req.ip);
+
     return sendSuccess(res, result.data, result.message, 201);
   } catch (error) {
     console.error('Error in sendPairRequest controller:', error);
@@ -74,6 +78,8 @@ export const acceptPairRequest = async (req: Request, res: Response) => {
       return sendError(res, result.message, 400);
     }
 
+    void logPairingActivity(userId, UserActionType.PAIR_REQUEST_ACCEPT, requestId, {}, req.ip);
+
     return sendSuccess(res, result.data, result.message);
   } catch (error) {
     console.error('Error in acceptPairRequest controller:', error);
@@ -103,6 +109,8 @@ export const denyPairRequest = async (req: Request, res: Response) => {
     if (!result.success) {
       return sendError(res, result.message, 400);
     }
+
+    void logPairingActivity(userId, UserActionType.PAIR_REQUEST_DENY, requestId, {}, req.ip);
 
     return sendSuccess(res, result.data, result.message);
   } catch (error) {
@@ -317,6 +325,8 @@ export const inviteReplacementPartner = async (req: Request, res: Response) => {
       return sendError(res, result.message, 400);
     }
 
+    void logPairingActivity(userId, UserActionType.PAIR_REQUEST_SEND, partnershipId, { isReplacement: true }, req.ip);
+
     return sendSuccess(res, result.data, result.message, 201);
   } catch (error) {
     console.error('Error in inviteReplacementPartner controller:', error);
@@ -346,6 +356,8 @@ export const acceptReplacementInvite = async (req: Request, res: Response) => {
     if (!result.success) {
       return sendError(res, result.message, 400);
     }
+
+    void logPairingActivity(userId, UserActionType.PAIR_REQUEST_ACCEPT, requestId, {}, req.ip);
 
     return sendSuccess(res, result.data, result.message);
   } catch (error) {
