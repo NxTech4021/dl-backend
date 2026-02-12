@@ -520,7 +520,7 @@ export const respondToInvitation = async (req: Request, res: Response) => {
       declineReason
     });
 
-    void logMatchActivity(userId, accept ? UserActionType.INVITATION_RESPOND_ACCEPT : UserActionType.INVITATION_RESPOND_DECLINE, id, {}, req.ip);
+    void logMatchActivity(userId, accept ? UserActionType.INVITATION_RESPOND_ACCEPT : UserActionType.INVITATION_RESPOND_DECLINE, match.id ?? id, {}, req.ip);
 
     sendSuccess(res, match);
   } catch (error) {
