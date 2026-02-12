@@ -5,12 +5,13 @@
 
 import { Request, Response } from 'express';
 import { getMatchInvitationService } from '../../services/match/matchInvitationService';
-import { MatchType, MatchFormat, MatchStatus, MembershipStatus, ParticipantRole, InvitationStatus, JoinRequestStatus, MessageType } from '@prisma/client';
+import { MatchType, MatchFormat, MatchStatus, MembershipStatus, ParticipantRole, InvitationStatus, JoinRequestStatus, MessageType, UserActionType } from '@prisma/client';
 import { prisma } from '../../lib/prisma';
 import { NotificationService } from '../../services/notificationService';
 import { NOTIFICATION_TYPES } from '../../types/notificationTypes';
 import { matchManagementNotifications } from '../../helpers/notifications/matchManagementNotifications';
 import { sendSuccess, sendError } from '../../utils/response';
+import { logMatchActivity } from '../../services/userActivityLogService';
 import dayjs from 'dayjs';
 import utc from 'dayjs/plugin/utc';
 import timezone from 'dayjs/plugin/timezone';
@@ -221,6 +222,8 @@ export const createMatch = async (req: Request, res: Response) => {
       // Don't fail the request if notification fails
     }
 
+
+    void logMatchActivity(userId, UserActionType.MATCH_CREATE, match.id, { matchType }, req.ip);
 
     sendSuccess(res, match, undefined, 201);
   } catch (error) {
@@ -477,6 +480,9 @@ export const joinMatch = async (req: Request, res: Response) => {
     const { asPartner = false, partnerId } = req.body;
 
     const match = await matchInvitationService.joinMatch(id, userId, asPartner, partnerId);
+
+    void logMatchActivity(userId, UserActionType.MATCH_JOIN, id, {}, req.ip);
+
     sendSuccess(res, match);
   } catch (error) {
     console.error('Join Match Error:', error);
@@ -513,6 +519,8 @@ export const respondToInvitation = async (req: Request, res: Response) => {
       accept,
       declineReason
     });
+
+    void logMatchActivity(userId, accept ? UserActionType.INVITATION_RESPOND_ACCEPT : UserActionType.INVITATION_RESPOND_DECLINE, id, {}, req.ip);
 
     sendSuccess(res, match);
   } catch (error) {
