@@ -578,7 +578,7 @@ export const confirmFriendlyResult = async (req: Request, res: Response) => {
       // Don't fail the request if notification fails
     }
 
-    void logMatchActivity(userId, UserActionType.SCORE_CONFIRM, id, {}, req.ip);
+    void logMatchActivity(userId, confirmed ? UserActionType.SCORE_CONFIRM : UserActionType.SCORE_DISPUTE, id, {}, req.ip);
     sendSuccess(res, match);
   } catch (error) {
     console.error('Confirm Friendly Result Error:', error);
