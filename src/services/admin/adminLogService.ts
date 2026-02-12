@@ -420,3 +420,27 @@ export function logSettingsAction(
     metadata
   });
 }
+
+/**
+ * Log a payment action
+ */
+export function logPaymentAction(
+  adminId: string,
+  actionType: AdminActionType,
+  membershipId: string,
+  description: string,
+  oldValue?: Record<string, unknown>,
+  newValue?: Record<string, unknown>,
+  metadata?: Record<string, unknown>
+) {
+  return createAdminLog({
+    adminId,
+    actionType,
+    targetType: AdminTargetType.PAYMENT,
+    targetId: membershipId,
+    description,
+    oldValue,
+    newValue,
+    metadata
+  });
+}
