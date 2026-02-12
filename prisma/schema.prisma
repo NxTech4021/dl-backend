@@ -120,6 +120,9 @@ model User {
   feedLikes    FeedLike[]    @relation("FeedLikeUser")
   feedComments FeedComment[] @relation("FeedCommentAuthor")
 
+  // User activity logs
+  activityLogs UserActivityLog[] @relation("UserActivityLogs")
+
   @@index([email])
   @@index([lastMatchDate])
   @@index([username])
@@ -239,6 +242,25 @@ model AdminLog {
   @@index([targetType, targetId])
   @@index([createdAt(sort: Desc)])
   @@map("admin_log")
+}
+
+model UserActivityLog {
+  id         Int            @id @default(autoincrement())
+  userId     String
+  actionType UserActionType
+  targetType UserTargetType
+  targetId   String?
+  metadata   Json?
+  ipAddress  String?
+  createdAt  DateTime       @default(now())
+
+  user User @relation("UserActivityLogs", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([targetId, createdAt(sort: Desc)])
+  @@index([actionType, createdAt(sort: Desc)])
+  @@index([createdAt(sort: Desc)])
+  @@map("user_activity_log")
 }
 
 model Account {
@@ -2464,6 +2486,36 @@ enum AdminTargetType {
   ADMIN
   PAYMENT
   OTHER
+}
+
+enum UserActionType {
+  MATCH_CREATE
+  MATCH_JOIN
+  MATCH_CANCEL
+  MATCH_LEAVE
+  SCORE_SUBMIT
+  SCORE_CONFIRM
+  SCORE_DISPUTE
+  WALKOVER_REPORT
+  WALKOVER_CONFIRM
+  PAIR_REQUEST_SEND
+  PAIR_REQUEST_ACCEPT
+  PAIR_REQUEST_DENY
+  PARTNERSHIP_DISSOLVE
+  SEASON_REGISTER
+  SEASON_WITHDRAW
+  INVITATION_RESPOND_ACCEPT
+  INVITATION_RESPOND_DECLINE
+  PAYMENT_COMPLETE
+  PAYMENT_FAIL
+}
+
+enum UserTargetType {
+  MATCH
+  SEASON
+  PARTNERSHIP
+  INVITATION
+  PAYMENT
 }
 
 enum SeasonStatus {
