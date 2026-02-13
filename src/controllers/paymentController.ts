@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-import { Prisma, PaymentStatus } from "@prisma/client";
+import { Prisma, PaymentStatus, UserActionType } from "@prisma/client";
 import { prisma } from "../lib/prisma";
 import * as paymentService from "../services/paymentService";
 import { sendSuccess, sendPaginated, sendError } from "../utils/response";
@@ -11,6 +11,7 @@ import {
   resolvePaymentStatus,
   verifyNotificationSignature,
 } from "../services/payment/fiuuGateway";
+import { logPaymentActivity } from '../services/userActivityLogService';
 
 
 export const getPayments = async (req: Request, res: Response) => {
@@ -205,6 +206,8 @@ export const markPaymentAsPaid = async (req: Request, res: Response) => {
 
     // Use service for business logic
     const updatedPayment = await paymentService.markPaymentAsPaid(id);
+
+    void logPaymentActivity(req.user?.id ?? '', UserActionType.PAYMENT_COMPLETE, id, {}, req.ip);
 
     return sendSuccess(res, updatedPayment, "Payment marked as paid successfully");
   } catch (error: any) {
@@ -525,10 +528,10 @@ async function updatePaymentFromGateway(
   verified: boolean,
 ) {
   // Use interactive transaction to ensure atomicity of all payment and membership updates
-  await prisma.$transaction(async (tx) => {
+  const txResult = await prisma.$transaction(async (tx) => {
     const payment = await tx.payment.findUnique({ where: { id: paymentId } });
     if (!payment) {
-      return;
+      return null;
     }
 
     const existingMetadata = (payment.metadata as Prisma.JsonObject | undefined) || {};
@@ -598,7 +601,7 @@ async function updatePaymentFromGateway(
       membershipId = membership.id;
     }
 
-    if (!membershipId) return;
+    if (!membershipId) return payment.userId;
 
     const membershipUpdate: Prisma.SeasonMembershipUpdateInput = {
       paymentStatus:
@@ -617,5 +620,17 @@ async function updatePaymentFromGateway(
       where: { id: membershipId },
       data: membershipUpdate,
     });
+
+    return payment.userId;
   });
+
+  // Log activity outside the transaction to avoid phantom logs on rollback
+  if (txResult) {
+    if (status === PaymentStatus.COMPLETED) {
+      void logPaymentActivity(txResult, UserActionType.PAYMENT_COMPLETE, paymentId, { transactionId: (payload.tranID as string) || (payload.transaction_id as string) }, undefined);
+    }
+    if (status === PaymentStatus.FAILED) {
+      void logPaymentActivity(txResult, UserActionType.PAYMENT_FAIL, paymentId, { reason: (payload.errdesc as string) || (payload.error_desc as string) }, undefined);
+    }
+  }
 }

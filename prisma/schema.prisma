@@ -120,6 +120,9 @@ model User {
   feedLikes    FeedLike[]    @relation("FeedLikeUser")
   feedComments FeedComment[] @relation("FeedCommentAuthor")
 
+  // User activity logs
+  activityLogs UserActivityLog[] @relation("UserActivityLogs")
+
   @@index([email])
   @@index([lastMatchDate])
   @@index([username])
@@ -202,6 +205,10 @@ model Admin {
 
   // General admin action logging
   adminLogs AdminLog[] @relation("AdminLogs")
+
+  // Admin status change tracking
+  statusChanges          AdminStatusChange[] @relation("AdminStatusChanges")
+  triggeredStatusChanges AdminStatusChange[] @relation("AdminStatusChangesTriggered")
 }
 
 model AdminInviteToken {
@@ -235,6 +242,25 @@ model AdminLog {
   @@index([targetType, targetId])
   @@index([createdAt(sort: Desc)])
   @@map("admin_log")
+}
+
+model UserActivityLog {
+  id         Int            @id @default(autoincrement())
+  userId     String
+  actionType UserActionType
+  targetType UserTargetType
+  targetId   String?
+  metadata   Json?
+  ipAddress  String?
+  createdAt  DateTime       @default(now())
+
+  user User @relation("UserActivityLogs", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([targetId, createdAt(sort: Desc)])
+  @@index([actionType, createdAt(sort: Desc)])
+  @@index([createdAt(sort: Desc)])
+  @@map("user_activity_log")
 }
 
 model Account {
@@ -1638,6 +1664,31 @@ model PlayerStatusChange {
   @@map("player_status_change")
 }
 
+model AdminStatusChange {
+  id      String @id @default(cuid())
+  adminId String
+
+  // Change details
+  previousStatus AdminStatus
+  newStatus      AdminStatus
+  reason         StatusChangeReason
+  notes          String?
+
+  // Trigger
+  triggeredById String?
+
+  createdAt DateTime @default(now())
+
+  // Relations
+  admin       Admin  @relation("AdminStatusChanges", fields: [adminId], references: [id], onDelete: Cascade)
+  triggeredBy Admin? @relation("AdminStatusChangesTriggered", fields: [triggeredById], references: [id])
+
+  @@index([adminId, createdAt(sort: Desc)])
+  @@index([newStatus])
+  @@index([reason])
+  @@map("admin_status_change")
+}
+
 // =============================================
 // END INACTIVITY SYSTEM MODELS
 // =============================================
@@ -2413,6 +2464,11 @@ enum AdminActionType {
   ADMIN_CREATE
   ADMIN_UPDATE
   ADMIN_DELETE
+  ADMIN_SUSPEND
+  ADMIN_ACTIVATE
+  // Payment management
+  PAYMENT_STATUS_UPDATE
+  PAYMENT_BULK_UPDATE
   // Other
   OTHER
 }
@@ -2428,7 +2484,38 @@ enum AdminTargetType {
   SETTINGS
   BUG_REPORT
   ADMIN
+  PAYMENT
   OTHER
+}
+
+enum UserActionType {
+  MATCH_CREATE
+  MATCH_JOIN
+  MATCH_CANCEL
+  MATCH_LEAVE
+  SCORE_SUBMIT
+  SCORE_CONFIRM
+  SCORE_DISPUTE
+  WALKOVER_REPORT
+  WALKOVER_CONFIRM
+  PAIR_REQUEST_SEND
+  PAIR_REQUEST_ACCEPT
+  PAIR_REQUEST_DENY
+  PARTNERSHIP_DISSOLVE
+  SEASON_REGISTER
+  SEASON_WITHDRAW
+  INVITATION_RESPOND_ACCEPT
+  INVITATION_RESPOND_DECLINE
+  PAYMENT_COMPLETE
+  PAYMENT_FAIL
+}
+
+enum UserTargetType {
+  MATCH
+  SEASON
+  PARTNERSHIP
+  INVITATION
+  PAYMENT
 }
 
 enum SeasonStatus {
@@ -2698,6 +2785,8 @@ enum StatusChangeReason {
   ADMIN_BAN
   ADMIN_UNBAN
   ADMIN_DELETE
+  ADMIN_SUSPEND
+  ADMIN_ACTIVATE
   SEASON_START
   SEASON_END
   REGISTRATION

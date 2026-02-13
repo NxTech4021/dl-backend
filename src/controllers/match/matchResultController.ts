@@ -10,6 +10,8 @@ import { notificationService } from '../../services/notificationService';
 import { matchManagementNotifications } from '../../helpers/notifications/matchManagementNotifications';
 import { prisma } from '../../lib/prisma';
 import { sendSuccess, sendError } from '../../utils/response';
+import { logMatchActivity } from '../../services/userActivityLogService';
+import { UserActionType } from '@prisma/client';
 
 const matchResultService = getMatchResultService();
 
@@ -104,6 +106,8 @@ export const submitResult = async (req: Request, res: Response) => {
       // Don't fail the request if notification fails
     }
 
+    void logMatchActivity(userId, UserActionType.SCORE_SUBMIT, id, {}, req.ip);
+
     sendSuccess(res, match);
   } catch (error) {
     console.error('Submit Result Error:', error);
@@ -192,6 +196,8 @@ export const confirmResult = async (req: Request, res: Response) => {
       console.error('Failed to send confirmation notification:', notifError);
       // Don't fail the request if notification fails
     }
+
+    void logMatchActivity(userId, confirmed ? UserActionType.SCORE_CONFIRM : UserActionType.SCORE_DISPUTE, id, {}, req.ip);
 
     sendSuccess(res, match);
   } catch (error) {
@@ -303,6 +309,8 @@ export const submitWalkover = async (req: Request, res: Response) => {
       console.error('Failed to send walkover notification:', notifError);
       // Don't fail the request if notification fails
     }
+
+    void logMatchActivity(userId, UserActionType.WALKOVER_REPORT, id, { defaultingUserId, reason }, req.ip);
 
     sendSuccess(res, match);
   } catch (error) {

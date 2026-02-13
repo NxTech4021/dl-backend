@@ -16,6 +16,7 @@ import adminMatchRoutes from "./admin/adminMatchRoutes";
 import bracketRoutes from "./admin/bracketRoutes";
 import adminPlayerRoutes from "./admin/adminPlayerRoutes";
 import adminLogRoutes from "./admin/adminLogRoutes";
+import userActivityLogRoutes from "./admin/userActivityLogRoutes";
 import adminReportRoutes from "./admin/adminReportRoutes";
 import adminPaymentRoutes from "./admin/adminPaymentRoutes";
 import adminRatingRoutes from "./adminRatingRoutes";
@@ -24,6 +25,7 @@ import adminBest6Routes from "./admin/adminBest6Routes";
 import adminDashboardRoutes from "./adminDashboardRoutes";
 import adminSystemRoutes from "./admin/systemRoutes";
 import partnershipAdminRoutes from "./admin/partnershipAdminRoutes";
+import adminStatusRoutes from "./admin/adminStatusRoutes";
 
 const adminRouter = Router();
 
@@ -68,6 +70,9 @@ adminRouter.use("/players", adminPlayerRoutes);
 // Admin Action Logs Routes
 adminRouter.use("/logs", adminLogRoutes);
 
+// User Activity Logs Routes
+adminRouter.use("/user-activity", userActivityLogRoutes);
+
 // Admin Reports Routes
 adminRouter.use("/reports", adminReportRoutes);
 
@@ -79,5 +84,8 @@ adminRouter.use("/system", adminSystemRoutes);
 
 // Admin Partnership Management Routes (withdrawal requests, dissolved partnerships)
 adminRouter.use("/partnerships", partnershipAdminRoutes);
+
+// Admin Status Management Routes (suspend, activate, status history)
+adminRouter.use("/admins", adminStatusRoutes);
 
 export default adminRouter;

@@ -11,6 +11,7 @@ import {
 } from '../../services/admin/adminLogService';
 import { AdminActionType, AdminTargetType } from '@prisma/client';
 import { sendSuccess, sendError, sendPaginated } from '../../utils/response';
+import { logger } from '../../utils/logger';
 
 /**
  * Get admin logs with filtering and pagination
@@ -30,9 +31,29 @@ export const getLogs = async (req: Request, res: Response) => {
       search
     } = req.query;
 
+    // Validate actionType if provided
+    if (actionType && !Object.values(AdminActionType).includes(actionType as AdminActionType)) {
+      return sendError(res, 'Invalid action type', 400);
+    }
+
+    // Validate targetType if provided
+    if (targetType && !Object.values(AdminTargetType).includes(targetType as AdminTargetType)) {
+      return sendError(res, 'Invalid target type', 400);
+    }
+
+    // Validate dates if provided
+    if (startDate && isNaN(Date.parse(startDate as string))) {
+      return sendError(res, 'Invalid start date', 400);
+    }
+    if (endDate && isNaN(Date.parse(endDate as string))) {
+      return sendError(res, 'Invalid end date', 400);
+    }
+
+    const safeLimit = Math.min(Math.max(parseInt(limit as string) || 50, 1), 200);
+
     const result = await getAdminLogs({
       page: page ? parseInt(page as string) : undefined,
-      limit: limit ? parseInt(limit as string) : undefined,
+      limit: safeLimit,
       adminId: adminId as string | undefined,
       actionType: actionType as AdminActionType | undefined,
       targetType: targetType as AdminTargetType | undefined,
@@ -43,9 +64,9 @@ export const getLogs = async (req: Request, res: Response) => {
     });
 
     return sendPaginated(res, result.logs, result.pagination);
-  } catch (error: any) {
-    console.error('Failed to fetch admin logs:', error);
-    return sendError(res, error.message || 'Failed to fetch admin logs');
+  } catch (error: unknown) {
+    logger.error('Failed to fetch admin logs:', { error: error instanceof Error ? error.message : String(error) });
+    return sendError(res, error instanceof Error ? error.message : 'Failed to fetch admin logs');
   }
 };
 
@@ -78,9 +99,9 @@ export const getLogsForTarget = async (req: Request, res: Response) => {
     );
 
     return sendPaginated(res, result.logs, result.pagination);
-  } catch (error: any) {
-    console.error('Failed to fetch target logs:', error);
-    return sendError(res, error.message || 'Failed to fetch target logs');
+  } catch (error: unknown) {
+    logger.error('Failed to fetch target logs:', { error: error instanceof Error ? error.message : String(error) });
+    return sendError(res, error instanceof Error ? error.message : 'Failed to fetch target logs');
   }
 };
 
@@ -98,9 +119,9 @@ export const getActivitySummary = async (req: Request, res: Response) => {
     });
 
     return sendSuccess(res, summary);
-  } catch (error: any) {
-    console.error('Failed to fetch activity summary:', error);
-    return sendError(res, error.message || 'Failed to fetch activity summary');
+  } catch (error: unknown) {
+    logger.error('Failed to fetch activity summary:', { error: error instanceof Error ? error.message : String(error) });
+    return sendError(res, error instanceof Error ? error.message : 'Failed to fetch activity summary');
   }
 };
 
@@ -116,9 +137,9 @@ export const getActionTypes = async (_req: Request, res: Response) => {
     }));
 
     return sendSuccess(res, actionTypes);
-  } catch (error: any) {
-    console.error('Failed to fetch action types:', error);
-    return sendError(res, error.message || 'Failed to fetch action types');
+  } catch (error: unknown) {
+    logger.error('Failed to fetch action types:', { error: error instanceof Error ? error.message : String(error) });
+    return sendError(res, error instanceof Error ? error.message : 'Failed to fetch action types');
   }
 };
 
@@ -134,8 +155,8 @@ export const getTargetTypes = async (_req: Request, res: Response) => {
     }));
 
     return sendSuccess(res, targetTypes);
-  } catch (error: any) {
-    console.error('Failed to fetch target types:', error);
-    return sendError(res, error.message || 'Failed to fetch target types');
+  } catch (error: unknown) {
+    logger.error('Failed to fetch target types:', { error: error instanceof Error ? error.message : String(error) });
+    return sendError(res, error instanceof Error ? error.message : 'Failed to fetch target types');
   }
 };
