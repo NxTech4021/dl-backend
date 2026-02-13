@@ -1940,34 +1940,51 @@ model BugReportSettings {
 // =============================================
 
 model Achievement {
-  id               String            @id @default(cuid())
-  title            String
-  description      String
-  icon             String?
-  category         String
-  requirement      Json?
-  points           Int               @default(0)
-  isActive         Boolean           @default(true)
+  id          String              @id @default(cuid())
+  title       String
+  description String
+  icon        String              // Ionicons name (e.g., "trophy", "flame", "star")
+
+  // Classification
+  category AchievementCategory
+  tier     TierType             @default(BRONZE)
+  scope    AchievementScope     @default(LIFETIME)
+
+  // Evaluation
+  evaluatorKey   String          // maps to hard-coded evaluator function name
+  threshold      Int             @default(1) // target value (e.g., 10 for "Win 10 matches")
+  sportFilter    SportType?      // null = all sports, or specific sport
+  gameTypeFilter GameType?       // null = all, SINGLES, or DOUBLES
+
+  // Display
+  sortOrder Int     @default(0) // ordering within category
+  isHidden  Boolean @default(false) // hidden until earned (surprise achievements)
+  points    Int     @default(0)
+  isActive  Boolean @default(true)
+
   createdAt        DateTime          @default(now())
   updatedAt        DateTime          @updatedAt
   userAchievements UserAchievement[]
 
+  @@unique([evaluatorKey, sportFilter, gameTypeFilter, threshold])
   @@index([category])
   @@index([isActive])
+  @@index([scope])
 }
 
 model UserAchievement {
-  id            String      @id @default(cuid())
+  id            String    @id @default(cuid())
   userId        String
   achievementId String
-  unlockedAt    DateTime    @default(now())
-  progress      Json?
-  isCompleted   Boolean     @default(true)
-  achievement   Achievement @relation(fields: [achievementId], references: [id], onDelete: Cascade)
-  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  progress      Int       @default(0) // current value toward threshold
+  isCompleted   Boolean   @default(false)
+  unlockedAt    DateTime? // null until completed
+
+  achievement Achievement @relation(fields: [achievementId], references: [id], onDelete: Cascade)
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, achievementId])
-  @@index([userId])
+  @@index([userId, isCompleted])
   @@index([achievementId])
 }
 
@@ -2605,6 +2622,19 @@ enum TierType {
   SILVER
   GOLD
   PLATINUM
+}
+
+enum AchievementCategory {
+  COMPETITION // wins, streaks, match milestones
+  RATING // DMR rating milestones
+  SEASON // division champion, top 3, participation
+  SOCIAL // partnerships, multi-sport, community
+}
+
+enum AchievementScope {
+  MATCH // evaluate after each match completion
+  SEASON // evaluate at season end / standings update
+  LIFETIME // evaluate on any relevant event
 }
 
 enum FriendshipStatus {
