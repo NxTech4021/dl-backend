@@ -2194,130 +2194,10 @@ async function seedRatingsAndStandings(
 // SEED ACHIEVEMENTS
 // =============================================
 
-async function seedAchievements(users: User[]) {
-  const achievements = [
-    {
-      title: "First Match",
-      description: "Complete your first match",
-      category: "Beginner",
-      points: 10,
-    },
-    {
-      title: "5 Matches",
-      description: "Complete 5 matches",
-      category: "Beginner",
-      points: 25,
-    },
-    {
-      title: "10 Matches",
-      description: "Complete 10 matches",
-      category: "Intermediate",
-      points: 50,
-    },
-    {
-      title: "25 Matches",
-      description: "Complete 25 matches",
-      category: "Advanced",
-      points: 100,
-    },
-    {
-      title: "First Win",
-      description: "Win your first match",
-      category: "Beginner",
-      points: 15,
-    },
-    {
-      title: "5 Wins",
-      description: "Win 5 matches",
-      category: "Intermediate",
-      points: 30,
-    },
-    {
-      title: "Win Streak 3",
-      description: "Win 3 matches in a row",
-      category: "Intermediate",
-      points: 40,
-    },
-    {
-      title: "Win Streak 5",
-      description: "Win 5 matches in a row",
-      category: "Advanced",
-      points: 75,
-    },
-    {
-      title: "First League",
-      description: "Complete your first league season",
-      category: "Beginner",
-      points: 50,
-    },
-    {
-      title: "Division Champion",
-      description: "Finish 1st in your division",
-      category: "Champion",
-      points: 200,
-    },
-    {
-      title: "Top 3 Finish",
-      description: "Finish in top 3 of your division",
-      category: "Advanced",
-      points: 100,
-    },
-    {
-      title: "Perfect Attendance",
-      description: "Play all 9 scheduled matches in a season",
-      category: "Dedication",
-      points: 75,
-    },
-  ];
-
-  const createdAchievements = [];
-  const activeUsers = users.filter(
-    (u) => u.status === UserStatus.ACTIVE && u.completedOnboarding
-  );
-
-  for (const ach of achievements) {
-    let achievement = await prisma.achievement.findFirst({
-      where: { title: ach.title },
-    });
-
-    if (!achievement) {
-      achievement = await prisma.achievement.create({
-        data: {
-          title: ach.title,
-          description: ach.description,
-          category: ach.category,
-          points: ach.points,
-          isActive: true,
-        },
-      });
-    }
-
-    createdAchievements.push(achievement);
-
-    // Award some achievements to users
-    const usersToAward = activeUsers.slice(0, randomInt(3, 8));
-    for (const user of usersToAward) {
-      const existing = await prisma.userAchievement.findFirst({
-        where: { userId: user.id, achievementId: achievement.id },
-      });
-
-      if (!existing) {
-        await prisma.userAchievement.create({
-          data: {
-            userId: user.id,
-            achievementId: achievement.id,
-            unlockedAt: randomDate(
-              new Date(Date.now() - 60 * 24 * 60 * 60 * 1000),
-              new Date()
-            ),
-            isCompleted: true,
-          },
-        });
-      }
-    }
-  }
-
-  return createdAchievements;
+async function seedAchievementsLocal() {
+  // Delegate to the dedicated achievement seed file
+  const { seedAchievements: seedAchievementDefinitions } = await import("./seeds/achievements.seed");
+  return seedAchievementDefinitions();
 }
 
 // =============================================
@@ -4361,8 +4241,8 @@ async function main() {
 
     // 17. Seed achievements
     console.log("🏅 Seeding achievements...");
-    const achievements = await seedAchievements(users);
-    console.log(`   ✅ Created ${achievements.length} achievements\n`);
+    const achievementResult = await seedAchievementsLocal();
+    console.log(`   ✅ Created ${achievementResult.count} achievements\n`);
 
     // 18. Seed promo codes
     console.log("🎟️ Seeding promo codes...");
