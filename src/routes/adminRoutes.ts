@@ -24,6 +24,7 @@ import adminInactivityRoutes from "./adminInactivityRoutes";
 import adminBest6Routes from "./admin/adminBest6Routes";
 import adminDashboardRoutes from "./adminDashboardRoutes";
 import adminSystemRoutes from "./admin/systemRoutes";
+import adminAchievementRoutes from "./admin/adminAchievementRoutes";
 import partnershipAdminRoutes from "./admin/partnershipAdminRoutes";
 import adminStatusRoutes from "./admin/adminStatusRoutes";
 
@@ -81,6 +82,9 @@ adminRouter.use("/payments", adminPaymentRoutes);
 
 // Admin System Routes
 adminRouter.use("/system", adminSystemRoutes);
+
+// Admin Achievement Routes
+adminRouter.use("/achievements", adminAchievementRoutes);
 
 // Admin Partnership Management Routes (withdrawal requests, dissolved partnerships)
 adminRouter.use("/partnerships", partnershipAdminRoutes);
