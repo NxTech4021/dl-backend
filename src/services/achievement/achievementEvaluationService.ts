@@ -274,15 +274,24 @@ export async function finalizeSeasonAchievements(
 
     logger.info(`Finalizing season achievements for ${userDivisions.size} players in season ${seasonId}`);
 
-    for (const [userId, divisionIds] of userDivisions) {
-      for (const divisionId of divisionIds) {
-        void evaluateSeasonAchievementsSafe(userId, {
-          userId,
-          seasonId,
-          divisionId,
-        });
-      }
+    // Process in batches of 5 to avoid overwhelming the database
+    const entries = Array.from(userDivisions.entries());
+    const BATCH_SIZE = 5;
+
+    for (let i = 0; i < entries.length; i += BATCH_SIZE) {
+      const batch = entries.slice(i, i + BATCH_SIZE);
+      await Promise.all(
+        batch.map(([userId, divisionIds]) =>
+          evaluateSeasonAchievementsSafe(userId, {
+            userId,
+            seasonId,
+            divisionId: divisionIds[0],
+          })
+        )
+      );
     }
+
+    logger.info(`Completed season achievement finalization for season ${seasonId}`);
   } catch (error: unknown) {
     logger.error('Failed to finalize season achievements:', {
       error: error instanceof Error ? error.message : String(error),
