@@ -24,6 +24,7 @@ import { ScoreValidationService } from './validation/scoreValidationService';
 import { MatchResultCreationService } from './calculation/matchResultCreationService';
 import { Best6EventHandler } from './best6/best6EventHandler';
 import { StandingsV2Service } from '../rating/standingsV2Service';
+import { evaluateMatchAchievementsSafe } from '../achievement/achievementEvaluationService';
 
 // Types
 export interface SubmitResultInput {
@@ -493,6 +494,19 @@ export class MatchResultService {
         await handlePostMatchCreation(matchId);
       } catch (error) {
         logger.error(`Failed post-match actions for match ${matchId}`, {}, error as Error);
+      }
+
+      // Step 8: Evaluate achievements for all participants (fire-and-forget)
+      const participantUserIds = match.participants.map(p => p.userId);
+      for (const playerId of participantUserIds) {
+        void evaluateMatchAchievementsSafe(playerId, {
+          userId: playerId,
+          matchId,
+          seasonId: match.seasonId ?? undefined,
+          divisionId: match.divisionId ?? undefined,
+          sportType: match.sport as SportType,
+          gameType: match.matchType as GameType,
+        });
       }
 
       logger.info(`Match ${matchId} processing completed successfully`);

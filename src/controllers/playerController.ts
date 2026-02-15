@@ -322,10 +322,31 @@ export const getPlayerAchievements = async (req: AuthenticatedRequest, res: Resp
 
     const result = await profileService.getPlayerAchievements(userId);
 
-    return sendSuccess(res, result, result.count > 0 ? 'Achievements retrieved successfully' : 'No achievements yet');
+    return sendSuccess(res, result, result.completedCount > 0 ? 'Achievements retrieved successfully' : 'No achievements yet');
   } catch (error) {
     console.error('Error fetching player achievements:', error);
     return sendError(res, 'Failed to fetch achievements');
+  }
+};
+
+/**
+ * Get completed achievements only (for profile preview card)
+ * GET /api/player/profile/achievements/completed
+ */
+export const getCompletedAchievements = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const userId = req.user?.id;
+
+    if (!userId) {
+      return sendError(res, "Authentication required", 401);
+    }
+
+    const result = await profileService.getCompletedPlayerAchievements(userId);
+
+    return sendSuccess(res, result);
+  } catch (error) {
+    console.error('Error fetching completed achievements:', error);
+    return sendError(res, 'Failed to fetch completed achievements');
   }
 };
 

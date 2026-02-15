@@ -836,47 +836,19 @@ export async function changePlayerPassword(
 }
 
 /**
- * Get player achievements
- * Original: playerController.ts lines 914-972
+ * Get player achievements — returns ALL active achievements with user progress.
+ * Used by the full achievements screen. For profile card preview, use getCompletedAchievements.
  */
 export async function getPlayerAchievements(userId: string) {
-  // Get user's achievements with achievement details
-  const userAchievements = await prisma.userAchievement.findMany({
-    where: {
-      userId: userId,
-    },
-    include: {
-      achievement: {
-        select: {
-          id: true,
-          title: true,
-          description: true,
-          icon: true,
-          category: true,
-          points: true,
-        }
-      }
-    },
-    orderBy: {
-      unlockedAt: 'desc'
-    }
-  });
+  // Delegates to the achievement CRUD service which handles the merge logic
+  const { getPlayerAchievements: getAll } = await import('../achievement/achievementCrudService');
+  return getAll(userId);
+}
 
-  // Format the response
-  const achievements = userAchievements.map(userAchievement => ({
-    id: userAchievement.achievement.id,
-    title: userAchievement.achievement.title,
-    description: userAchievement.achievement.description,
-    icon: userAchievement.achievement.icon,
-    category: userAchievement.achievement.category,
-    points: userAchievement.achievement.points,
-    unlockedAt: userAchievement.unlockedAt,
-    isCompleted: userAchievement.isCompleted,
-  }));
-
-  return {
-    achievements,
-    totalPoints: achievements.reduce((sum, achievement) => sum + achievement.points, 0),
-    count: achievements.length
-  };
+/**
+ * Get only completed achievements for profile card preview (lighter payload).
+ */
+export async function getCompletedPlayerAchievements(userId: string) {
+  const { getCompletedAchievements } = await import('../achievement/achievementCrudService');
+  return getCompletedAchievements(userId);
 }

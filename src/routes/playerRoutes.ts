@@ -11,6 +11,7 @@ import {
   getPlayerMatchHistory,
   getMatchDetails,
   getPlayerAchievements,
+  getCompletedAchievements,
   changePlayerPassword,
   uploadProfileImage,
   upload,
@@ -49,6 +50,7 @@ playerRouter.put('/profile/me', verifyAuth, updatePlayerProfile as any);
 playerRouter.put('/profile/password', verifyAuth, changePlayerPassword as any);
 playerRouter.get('/profile/matches', verifyAuth, getPlayerMatchHistory as any);
 playerRouter.get('/profile/achievements', verifyAuth, getPlayerAchievements as any);
+playerRouter.get('/profile/achievements/completed', verifyAuth, getCompletedAchievements as any);
 playerRouter.get('/profile/rating-history', verifyAuth, getPlayerRatingHistory as any);
 playerRouter.post('/profile/upload-image', verifyAuth, upload.single('image'), uploadProfileImage as any);
 playerRouter.get('/matches/:matchId', verifyAuth, getMatchDetails as any);
