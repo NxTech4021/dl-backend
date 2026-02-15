@@ -80,7 +80,7 @@ export async function getAchievementDetail(req: Request, res: Response) {
  */
 export async function createAchievementHandler(req: Request, res: Response) {
   try {
-    const { title, description, icon, category, tier, scope, evaluatorKey, threshold, sportFilter, gameTypeFilter, sortOrder, isHidden, points } = req.body;
+    const { title, description, icon, category, tier, scope, evaluatorKey, threshold, sportFilter, gameTypeFilter, sortOrder, isHidden, points, isActive } = req.body;
 
     if (!title || !description || !icon || !category || !evaluatorKey) {
       return sendError(res, 'Missing required fields: title, description, icon, category, evaluatorKey', 400);
@@ -106,6 +106,7 @@ export async function createAchievementHandler(req: Request, res: Response) {
       sortOrder,
       isHidden,
       points,
+      isActive,
     });
 
     return sendSuccess(res, achievement, 'Achievement created successfully', 201);

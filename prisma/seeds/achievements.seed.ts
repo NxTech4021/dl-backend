@@ -274,29 +274,55 @@ const ACHIEVEMENTS = [
 export async function seedAchievements() {
   logSection("Seeding Achievements");
 
-  // Clear existing achievements (and cascade to UserAchievement)
-  await prisma.userAchievement.deleteMany();
-  await prisma.achievement.deleteMany();
+  let created = 0;
+  let updated = 0;
 
   for (const achievement of ACHIEVEMENTS) {
-    await prisma.achievement.create({
-      data: {
-        title: achievement.title,
-        description: achievement.description,
-        icon: achievement.icon,
-        category: achievement.category,
-        tier: achievement.tier,
-        scope: achievement.scope,
+    const existing = await prisma.achievement.findFirst({
+      where: {
         evaluatorKey: achievement.evaluatorKey,
         threshold: achievement.threshold,
-        sortOrder: achievement.sortOrder,
-        isHidden: achievement.isHidden ?? false,
-        points: achievement.points,
-        isActive: true,
       },
     });
+
+    if (existing) {
+      await prisma.achievement.update({
+        where: { id: existing.id },
+        data: {
+          title: achievement.title,
+          description: achievement.description,
+          icon: achievement.icon,
+          category: achievement.category,
+          tier: achievement.tier,
+          scope: achievement.scope,
+          sortOrder: achievement.sortOrder,
+          isHidden: achievement.isHidden ?? false,
+          points: achievement.points,
+          isActive: true,
+        },
+      });
+      updated++;
+    } else {
+      await prisma.achievement.create({
+        data: {
+          title: achievement.title,
+          description: achievement.description,
+          icon: achievement.icon,
+          category: achievement.category,
+          tier: achievement.tier,
+          scope: achievement.scope,
+          evaluatorKey: achievement.evaluatorKey,
+          threshold: achievement.threshold,
+          sortOrder: achievement.sortOrder,
+          isHidden: achievement.isHidden ?? false,
+          points: achievement.points,
+          isActive: true,
+        },
+      });
+      created++;
+    }
   }
 
-  logSuccess(`Seeded ${ACHIEVEMENTS.length} achievements`);
+  logSuccess(`Seeded achievements: ${created} created, ${updated} updated`);
   return { count: ACHIEVEMENTS.length };
 }

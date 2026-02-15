@@ -1293,6 +1293,19 @@ export class MatchResultService {
 
           // NOTE: V2 standings already recalculated above (line 1248) - removed duplicate call
 
+          // Evaluate achievements for all participants (fire-and-forget)
+          const participantUserIds = match.participants.map(p => p.userId);
+          for (const playerId of participantUserIds) {
+            void evaluateMatchAchievementsSafe(playerId, {
+              userId: playerId,
+              matchId: match.id,
+              seasonId: match.seasonId ?? undefined,
+              divisionId: match.divisionId ?? undefined,
+              sportType: match.sport as SportType,
+              gameType: match.matchType as GameType,
+            });
+          }
+
           // Notify all participants
           const participantIds = match.participants.map(p => p.userId);
           await this.notificationService.createNotification({

@@ -141,7 +141,7 @@ async function comebackWins(
 
   let count = 0;
   for (const r of results) {
-    const setScores = r.match.setScores as Array<{ team1Score: number; team2Score: number }> | null;
+    const setScores = r.match.setScores as Array<{ team1Games: number; team2Games: number }> | null;
     if (!setScores || setScores.length === 0) continue;
 
     // Determine which team the player is on
@@ -154,8 +154,8 @@ async function comebackWins(
 
     // Check if player lost the first set
     const lostFirstSet = playerTeam === 'team1'
-      ? firstSet.team1Score < firstSet.team2Score
-      : firstSet.team2Score < firstSet.team1Score;
+      ? firstSet.team1Games < firstSet.team2Games
+      : firstSet.team2Games < firstSet.team1Games;
 
     if (lostFirstSet) count++;
   }
