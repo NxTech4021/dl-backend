@@ -15,6 +15,7 @@
  * - 180 disputes, 100 penalties, 150 walkovers
  * - 500+ user ratings, standings for all divisions
  * - 75 bug reports, 40 feature requests
+ * - 30 achievement definitions across 5 categories
  *
  * All data is spread over 12 months for realistic time-series charts.
  */
@@ -29,6 +30,7 @@ import { seedRatingsAndStandings } from "./ratings.seed";
 import { seedDMRRatings } from "./dmr-ratings.seed";
 import { seedBugsAndFeedback } from "./bugs.seed";
 import { seedAdminActivityLogs } from "./admin-logs.seed";
+import { seedAchievements } from "./achievements.seed";
 
 // =============================================
 // MAIN SEED FUNCTION
@@ -131,6 +133,13 @@ async function main() {
     const adminLogData = await seedAdminActivityLogs(admins);
 
     // =========================================
+    // PHASE 10: ACHIEVEMENTS
+    // =========================================
+    logSection("═══ PHASE 10: ACHIEVEMENTS ═══");
+
+    const achievementData = await seedAchievements();
+
+    // =========================================
     // SUMMARY
     // =========================================
     const endTime = Date.now();
@@ -157,6 +166,7 @@ async function main() {
     console.log(`║  • Rating Adjustments: ${ratingData.adjustmentCount}                                       ║`);
     console.log(`║  • Bug Reports: ${bugData.bugCount}                                              ║`);
     console.log(`║  • Admin Logs: ${adminLogData.logCount}                                              ║`);
+    console.log(`║  • Achievements: ${achievementData.count}                                            ║`);
     console.log("╠══════════════════════════════════════════════════════════════╣");
     console.log("║  TEST CREDENTIALS:                                           ║");
     console.log("║  • superadmin@dleague.com / Admin@123 (SUPERADMIN)           ║");
