@@ -204,7 +204,21 @@ export async function getDivisionAssignments(
 
   const skip = (Number(page) - 1) * Number(limit);
 
-  const [assignments, totalCount, division] = await Promise.all([
+  // Fetch division first to get seasonId for rating lookup
+  const divisionInfo = await prisma.division.findUnique({
+    where: { id: divisionId },
+    select: {
+      name: true,
+      seasonId: true,
+      gameType: true,
+      maxSinglesPlayers: true,
+      maxDoublesTeams: true,
+      currentSinglesCount: true,
+      currentDoublesCount: true,
+    }
+  });
+
+  const [assignments, totalCount] = await Promise.all([
     prisma.divisionAssignment.findMany({
       where: { divisionId },
       include: {
@@ -214,7 +228,15 @@ export async function getDivisionAssignments(
             name: true,
             username: true,
             image: true,
-            email: true
+            email: true,
+            playerRatings: divisionInfo?.seasonId ? {
+              where: {
+                seasonId: divisionInfo.seasonId,
+                gameType: divisionInfo.gameType,
+              },
+              select: { currentRating: true },
+              take: 1,
+            } : false,
           }
         },
         assignedByAdmin: {
@@ -229,23 +251,31 @@ export async function getDivisionAssignments(
       take: Number(limit)
     }),
     prisma.divisionAssignment.count({ where: { divisionId } }),
-    prisma.division.findUnique({
-      where: { id: divisionId },
-      select: {
-        name: true,
-        maxSinglesPlayers: true,
-        maxDoublesTeams: true,
-        currentSinglesCount: true,
-        currentDoublesCount: true,
-        gameType: true
-      }
-    })
   ]);
+
+  const division = divisionInfo ? {
+    name: divisionInfo.name,
+    maxSinglesPlayers: divisionInfo.maxSinglesPlayers,
+    maxDoublesTeams: divisionInfo.maxDoublesTeams,
+    currentSinglesCount: divisionInfo.currentSinglesCount,
+    currentDoublesCount: divisionInfo.currentDoublesCount,
+    gameType: divisionInfo.gameType,
+  } : null;
+
+  // Flatten playerRatings into a single rating field on each user
+  const enrichedAssignments = assignments.map((a) => ({
+    ...a,
+    user: a.user ? {
+      ...a.user,
+      rating: (a.user as any).playerRatings?.[0]?.currentRating ?? null,
+      playerRatings: undefined,
+    } : a.user,
+  }));
 
   console.log(`✅ Found ${assignments.length} assignments for division ${divisionId}`);
 
   return {
-    assignments,
+    assignments: enrichedAssignments,
     division,
     pagination: {
       page: Number(page),
