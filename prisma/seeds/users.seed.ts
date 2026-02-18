@@ -7,6 +7,7 @@ import {
   Role,
   UserStatus,
   AdminStatus,
+  SkillLevel,
   User,
   GenderType,
 } from "@prisma/client";
@@ -14,7 +15,10 @@ import {
   prisma,
   randomDate,
   randomElement,
+  randomElements,
   randomInt,
+  randomBoolean,
+  weightedRandom,
   monthsAgo,
   daysAgo,
   MALAYSIAN_FIRST_NAMES,
@@ -280,30 +284,36 @@ export async function seedUsers(): Promise<User[]> {
     });
 
     // Add questionnaire responses and initial ratings for completed users
+    // Give each user 1-3 sports (weighted: 40% one, 40% two, 20% three)
     if (config.completedOnboarding) {
-      const sport = randomElement(["PICKLEBALL", "TENNIS", "PADEL"]);
-      const response = await prisma.questionnaireResponse.create({
-        data: {
-          userId: user.id,
-          sport: sport,
-          qVersion: 1,
-          qHash: `hash-${user.id}`,
-          answersJson: { answers: ["option1", "option2", "option3"] },
-          completedAt: createdAt,
-        },
-      });
+      const allSports = ["PICKLEBALL", "TENNIS", "PADEL"];
+      const sportCount = weightedRandom([1, 2, 3], [40, 40, 20]);
+      const userSports = randomElements(allSports, sportCount);
 
-      const doublesRating = 1200 + randomInt(-200, 400);
-      await prisma.initialRatingResult.create({
-        data: {
-          responseId: response.id,
-          source: "questionnaire",
-          doubles: doublesRating,
-          singles: doublesRating - randomInt(0, 100),
-          rd: 150 + randomInt(-30, 30),
-          confidence: randomElement(["LOW", "MEDIUM", "HIGH"]),
-        },
-      });
+      for (const sport of userSports) {
+        const response = await prisma.questionnaireResponse.create({
+          data: {
+            userId: user.id,
+            sport: sport,
+            qVersion: 1,
+            qHash: `hash-${user.id}-${sport.toLowerCase()}`,
+            answersJson: { answers: ["option1", "option2", "option3"] },
+            completedAt: createdAt,
+          },
+        });
+
+        const doublesRating = 1200 + randomInt(-200, 400);
+        await prisma.initialRatingResult.create({
+          data: {
+            responseId: response.id,
+            source: "questionnaire",
+            doubles: doublesRating,
+            singles: doublesRating - randomInt(0, 100),
+            rd: 150 + randomInt(-30, 30),
+            confidence: randomElement(["LOW", "MEDIUM", "HIGH"]),
+          },
+        });
+      }
     }
 
     userIndex++;
@@ -335,7 +345,7 @@ export async function seedUsers(): Promise<User[]> {
     const user = await createUser({
       status: UserStatus.ACTIVE,
       completedOnboarding: false,
-      createdAtRange: [daysAgo(30), daysAgo(1)],
+      createdAtRange: [monthsAgo(12), daysAgo(1)],
     });
     if (user) createdUsers.push(user);
   }
@@ -513,4 +523,62 @@ export async function seedUserPushTokens(users: User[]): Promise<void> {
   }
 
   logSuccess(`Created ${created} user push tokens`);
+}
+
+// =============================================
+// SEED USER SETTINGS
+// =============================================
+
+export async function seedUserSettings(users: User[]): Promise<void> {
+  logSection("⚙️ Seeding user settings...");
+
+  const SKILL_LEVELS: SkillLevel[] = [
+    SkillLevel.BEGINNER,
+    SkillLevel.IMPROVER,
+    SkillLevel.INTERMEDIATE,
+    SkillLevel.UPPER_INTERMEDIATE,
+    SkillLevel.ADVANCED,
+    SkillLevel.EXPERT,
+  ];
+
+  const activeUsers = users.filter(
+    (u) => u.status === UserStatus.ACTIVE && u.completedOnboarding
+  );
+  let created = 0;
+
+  for (const user of activeUsers) {
+    const existing = await prisma.userSettings.findUnique({
+      where: { userId: user.id },
+    });
+    if (existing) continue;
+
+    // Fetch user's sports from questionnaire to set matching skill levels
+    const responses = await prisma.questionnaireResponse.findMany({
+      where: { userId: user.id },
+      select: { sport: true },
+    });
+    const sports = new Set(responses.map((r) => r.sport.toUpperCase()));
+
+    await prisma.userSettings.create({
+      data: {
+        userId: user.id,
+        notifications: true,
+        matchReminders: randomBoolean(0.9),
+        locationServices: randomBoolean(0.3),
+        hapticFeedback: randomBoolean(0.7),
+        tennisSkillLevel: sports.has("TENNIS")
+          ? randomElement(SKILL_LEVELS)
+          : null,
+        pickleballSkillLevel: sports.has("PICKLEBALL")
+          ? randomElement(SKILL_LEVELS)
+          : null,
+        padelSkillLevel: sports.has("PADEL")
+          ? randomElement(SKILL_LEVELS)
+          : null,
+      },
+    });
+    created++;
+  }
+
+  logSuccess(`Created ${created} user settings`);
 }
