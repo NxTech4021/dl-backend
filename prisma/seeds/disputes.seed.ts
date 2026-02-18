@@ -552,19 +552,29 @@ export async function seedWithdrawalRequests(users: User[], admins: SeededAdmin[
   let created = 0;
   const targetRequests = 50;
 
-  // Get season memberships
-  const memberships = await prisma.seasonMembership.findMany({
+  // Prioritize memberships whose users have partnerships (for realistic display)
+  const membershipsWithPartnership = await prisma.seasonMembership.findMany({
     where: {
-      season: {
-        status: { in: ["ACTIVE", "UPCOMING", "FINISHED"] },
+      season: { status: { in: ["ACTIVE", "UPCOMING", "FINISHED"] } },
+      user: {
+        OR: [
+          { captainPartnerships: { some: {} } },
+          { partnerPartnerships: { some: {} } },
+        ],
       },
     },
-    include: {
-      user: true,
-      season: true,
-    },
-    take: 100,
+    include: { user: true, season: true },
+    take: 60,
   });
+  const remainingMemberships = await prisma.seasonMembership.findMany({
+    where: {
+      season: { status: { in: ["ACTIVE", "UPCOMING", "FINISHED"] } },
+      userId: { notIn: membershipsWithPartnership.map(m => m.userId) },
+    },
+    include: { user: true, season: true },
+    take: 40,
+  });
+  const memberships = [...membershipsWithPartnership, ...remainingMemberships];
 
   if (memberships.length < 10) {
     logProgress("   Not enough memberships for withdrawals, skipping...");
@@ -613,10 +623,22 @@ export async function seedWithdrawalRequests(users: User[], admins: SeededAdmin[
     const isProcessed = selectedStatus !== WithdrawalStatus.PENDING;
     const admin = isProcessed && admins.length > 0 ? randomElement(admins) : null;
 
+    // Find the user's partnership in this season (as captain or partner)
+    const partnership = await prisma.partnership.findFirst({
+      where: {
+        seasonId: membership.seasonId,
+        OR: [
+          { captainId: membership.userId },
+          { partnerId: membership.userId },
+        ],
+      },
+    });
+
     await prisma.withdrawalRequest.create({
       data: {
         userId: membership.userId,
         seasonId: membership.seasonId,
+        partnershipId: partnership?.id ?? null,
         reason: randomElement(WITHDRAWAL_REASONS),
         status: selectedStatus,
         processedByAdminId: admin ? admin.userId : null,
@@ -628,6 +650,137 @@ export async function seedWithdrawalRequests(users: User[], admins: SeededAdmin[
   }
 
   logSuccess(`Created ${created} withdrawal requests`);
+  return created;
+}
+
+// =============================================
+// SEED DISPUTE ADMIN NOTES
+// =============================================
+
+const ADMIN_NOTE_TEXTS = [
+  "Reviewed evidence submitted by both parties",
+  "Contacted both players for their side of the story",
+  "Score discrepancy confirmed after checking match logs",
+  "Waiting for additional evidence from reporter",
+  "Escalated to senior admin for review",
+  "Player has previous history of similar disputes",
+  "Witness statements corroborate the report",
+  "Evidence is inconclusive, requesting video proof",
+  "Decision made based on available evidence",
+  "Both parties notified of the resolution",
+  "Applied standard penalty as per rules",
+  "No further action required",
+];
+
+export async function seedDisputeAdminNotes(admins: SeededAdmin[]): Promise<number> {
+  logSection("📝 Seeding dispute admin notes...");
+
+  if (admins.length === 0) return 0;
+
+  const disputes = await prisma.matchDispute.findMany({
+    where: { status: { not: DisputeStatus.OPEN } },
+    select: { id: true, submittedAt: true },
+  });
+
+  if (disputes.length === 0) {
+    logProgress("   No reviewed disputes found, skipping admin notes...");
+    return 0;
+  }
+
+  let created = 0;
+
+  // Add 1-3 notes per dispute for ~60 disputes
+  const disputesToNote = disputes.sort(() => 0.5 - Math.random()).slice(0, 60);
+
+  for (const dispute of disputesToNote) {
+    const noteCount = randomInt(1, 3);
+    for (let n = 0; n < noteCount; n++) {
+      await prisma.disputeAdminNote.create({
+        data: {
+          disputeId: dispute.id,
+          adminId: randomElement(admins).adminId,
+          note: randomElement(ADMIN_NOTE_TEXTS),
+          isInternalOnly: randomBoolean(0.7),
+          createdAt: new Date(
+            dispute.submittedAt.getTime() + randomInt(1, 72) * 60 * 60 * 1000
+          ),
+        },
+      });
+      created++;
+    }
+  }
+
+  logSuccess(`Created ${created} dispute admin notes`);
+  return created;
+}
+
+// =============================================
+// SEED DISPUTE COMMENTS
+// =============================================
+
+const DISPUTE_COMMENT_TEXTS = [
+  "The score was 6-4, not 6-3 as reported",
+  "I have a screenshot of the scoreboard",
+  "My opponent didn't show up at the agreed time",
+  "I waited 30 minutes at the court",
+  "The score entry was a mistake, I apologize",
+  "I can confirm the actual score was correct",
+  "We agreed to replay the disputed set",
+  "I have witnesses who saw the match",
+  "The app crashed when I was entering the score",
+  "I disagree with the opponent's version of events",
+  "Can we settle this amicably?",
+  "I have video evidence of the final score",
+  "The tiebreak score was entered incorrectly",
+  "I'd like to provide additional context",
+];
+
+export async function seedDisputeComments(users: User[]): Promise<number> {
+  logSection("💬 Seeding dispute comments...");
+
+  const disputes = await prisma.matchDispute.findMany({
+    include: {
+      match: {
+        include: {
+          participants: { select: { userId: true } },
+        },
+      },
+    },
+    take: 100,
+  });
+
+  if (disputes.length === 0) {
+    logProgress("   No disputes found for comments, skipping...");
+    return 0;
+  }
+
+  let created = 0;
+
+  for (const dispute of disputes) {
+    const commentCount = randomInt(1, 4);
+    const participantIds = dispute.match?.participants.map(p => p.userId) || [];
+
+    for (let c = 0; c < commentCount; c++) {
+      // Comments come from match participants (or the dispute raiser)
+      const senderId = participantIds.length > 0
+        ? randomElement(participantIds)
+        : dispute.raisedByUserId;
+
+      await prisma.disputeComment.create({
+        data: {
+          disputeId: dispute.id,
+          senderId,
+          comment: randomElement(DISPUTE_COMMENT_TEXTS),
+          createdAt: new Date(
+            dispute.submittedAt.getTime() + randomInt(30, 4320) * 60 * 1000
+          ),
+        },
+      });
+      created++;
+    }
+  }
+
+  logSuccess(`Created ${created} dispute comments`);
   return created;
 }
 
