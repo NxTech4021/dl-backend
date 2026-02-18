@@ -5,6 +5,8 @@
 
 import {
   User,
+  Season,
+  League,
   SportType,
   GameType,
   RatingChangeReason,
@@ -376,6 +378,102 @@ export async function seedRecalculations(admins: SeededAdmin[]): Promise<number>
   }
 
   logSuccess(`Created ${created} rating recalculations`);
+  return created;
+}
+
+// =============================================
+// SEED RATING PARAMETERS
+// =============================================
+
+export async function seedRatingParameters(leagues: any[], seasons: any[], admins: SeededAdmin[]): Promise<number> {
+  logSection("⚙️ Seeding rating parameters...");
+
+  if (admins.length === 0) {
+    logProgress("   No admins found, skipping rating parameters...");
+    return 0;
+  }
+
+  const adminId = admins[0]!.adminId;
+  let created = 0;
+
+  // 1. Global default parameters
+  await prisma.ratingParameters.create({
+    data: {
+      initialRating: 1500,
+      initialRD: 350,
+      kFactorNew: 40,
+      kFactorEstablished: 20,
+      kFactorThreshold: 30,
+      singlesWeight: 1.0,
+      doublesWeight: 1.0,
+      oneSetMatchWeight: 0.5,
+      walkoverWinImpact: 0.5,
+      walkoverLossImpact: 1.0,
+      provisionalThreshold: 10,
+      version: 1,
+      effectiveFrom: monthsAgo(12),
+      isActive: true,
+      createdByAdminId: adminId,
+      notes: "Global default rating parameters",
+    },
+  });
+  created++;
+
+  // 2-3. League-specific parameters for competitive leagues
+  for (const league of leagues.slice(0, 2)) {
+    await prisma.ratingParameters.create({
+      data: {
+        leagueId: league.id,
+        initialRating: 1400,
+        initialRD: 300,
+        kFactorNew: 32,
+        kFactorEstablished: 16,
+        kFactorThreshold: 25,
+        singlesWeight: 1.2,
+        doublesWeight: 0.8,
+        oneSetMatchWeight: 0.4,
+        walkoverWinImpact: 0.3,
+        walkoverLossImpact: 1.2,
+        provisionalThreshold: 15,
+        version: 1,
+        effectiveFrom: monthsAgo(6),
+        isActive: true,
+        createdByAdminId: adminId,
+        notes: `Custom parameters for ${league.name || "competitive league"}`,
+      },
+    });
+    created++;
+  }
+
+  // 4-5. Season-specific parameters
+  const activeSeasons = seasons.filter((s: any) => s.status === "ACTIVE" || s.status === "FINISHED");
+  for (const season of activeSeasons.slice(0, 2)) {
+    await prisma.ratingParameters.create({
+      data: {
+        seasonId: season.id,
+        initialRating: 1500,
+        initialRD: 350,
+        kFactorNew: 48,
+        kFactorEstablished: 24,
+        kFactorThreshold: 20,
+        singlesWeight: 1.0,
+        doublesWeight: 1.0,
+        oneSetMatchWeight: 0.6,
+        walkoverWinImpact: 0.5,
+        walkoverLossImpact: 0.8,
+        provisionalThreshold: 8,
+        version: 1,
+        effectiveFrom: season.startDate || monthsAgo(3),
+        effectiveUntil: season.endDate || null,
+        isActive: season.status === "ACTIVE",
+        createdByAdminId: adminId,
+        notes: `Season-specific parameters for ${season.name || "season"}`,
+      },
+    });
+    created++;
+  }
+
+  logSuccess(`Created ${created} rating parameter sets`);
   return created;
 }
 
