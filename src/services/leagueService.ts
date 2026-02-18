@@ -232,6 +232,17 @@ export class LeagueService {
       return sum + memberships;
     }, 0) || 0;
 
+    // Calculate unique player count across all seasons (distinct userId)
+    const seasonIds = league.seasons?.map((s: any) => s.id) || [];
+    const uniquePlayers = seasonIds.length > 0
+      ? await this.prisma.seasonMembership.findMany({
+          where: { seasonId: { in: seasonIds } },
+          select: { userId: true },
+          distinct: ['userId'],
+        })
+      : [];
+    const uniquePlayerCount = uniquePlayers.length;
+
     // Flatten memberships from all seasons into a single array for the frontend
     // Get up to 6 unique memberships across all seasons
     const allMemberships: any[] = [];
@@ -275,6 +286,7 @@ export class LeagueService {
     return {
       ...league,
       totalSeasonMemberships,
+      uniquePlayerCount,
       memberships: allMemberships,
       categories,
       _count: {
