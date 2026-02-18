@@ -13,6 +13,9 @@ import {
   SeasonStatus,
   DivisionLevel,
   TierType,
+  PartnershipStatus,
+  PairRequestStatus,
+  SeasonInvitationStatus,
   Season,
   Division,
   User,
@@ -24,6 +27,8 @@ import {
   prisma,
   randomDate,
   randomElement,
+  randomElements,
+  randomDecimal,
   randomInt,
   randomBoolean,
   monthsAgo,
@@ -85,18 +90,18 @@ export async function seedSponsorships(adminId?: string) {
   logSection("💰 Seeding sponsorships...");
 
   const sponsorships = [
-    { packageTier: TierType.PLATINUM, contractAmount: 50000, sponsoredName: "Wilson Sports" },
-    { packageTier: TierType.PLATINUM, contractAmount: 45000, sponsoredName: "Nike Athletics" },
-    { packageTier: TierType.GOLD, contractAmount: 25000, sponsoredName: "Adidas Malaysia" },
-    { packageTier: TierType.GOLD, contractAmount: 22000, sponsoredName: "Head Rackets" },
-    { packageTier: TierType.GOLD, contractAmount: 20000, sponsoredName: "Babolat" },
-    { packageTier: TierType.SILVER, contractAmount: 12000, sponsoredName: "Yonex" },
-    { packageTier: TierType.SILVER, contractAmount: 10000, sponsoredName: "Prince Sports" },
-    { packageTier: TierType.SILVER, contractAmount: 8000, sponsoredName: "Dunlop" },
-    { packageTier: TierType.BRONZE, contractAmount: 5000, sponsoredName: "Local Sports Shop" },
-    { packageTier: TierType.BRONZE, contractAmount: 4000, sponsoredName: "KL Sports Equipment" },
-    { packageTier: TierType.BRONZE, contractAmount: 3500, sponsoredName: "Court Masters" },
-    { packageTier: TierType.BRONZE, contractAmount: 3000, sponsoredName: "Racket Pro" },
+    { packageTier: TierType.PLATINUM, contractAmount: 50000, sponsorRevenue: 42000, sponsoredName: "Wilson Sports" },
+    { packageTier: TierType.PLATINUM, contractAmount: 45000, sponsorRevenue: 38500, sponsoredName: "Nike Athletics" },
+    { packageTier: TierType.GOLD, contractAmount: 25000, sponsorRevenue: 19500, sponsoredName: "Adidas Malaysia" },
+    { packageTier: TierType.GOLD, contractAmount: 22000, sponsorRevenue: 17600, sponsoredName: "Head Rackets" },
+    { packageTier: TierType.GOLD, contractAmount: 20000, sponsorRevenue: 15000, sponsoredName: "Babolat" },
+    { packageTier: TierType.SILVER, contractAmount: 12000, sponsorRevenue: 9600, sponsoredName: "Yonex" },
+    { packageTier: TierType.SILVER, contractAmount: 10000, sponsorRevenue: 7500, sponsoredName: "Prince Sports" },
+    { packageTier: TierType.SILVER, contractAmount: 8000, sponsorRevenue: 6000, sponsoredName: "Dunlop" },
+    { packageTier: TierType.BRONZE, contractAmount: 5000, sponsorRevenue: 3500, sponsoredName: "Local Sports Shop" },
+    { packageTier: TierType.BRONZE, contractAmount: 4000, sponsorRevenue: 2800, sponsoredName: "KL Sports Equipment" },
+    { packageTier: TierType.BRONZE, contractAmount: 3500, sponsorRevenue: 2100, sponsoredName: "Court Masters" },
+    { packageTier: TierType.BRONZE, contractAmount: 3000, sponsorRevenue: 1800, sponsoredName: "Racket Pro" },
   ];
 
   const createdSponsorships = [];
@@ -110,6 +115,7 @@ export async function seedSponsorships(adminId?: string) {
       data: {
         packageTier: sponsor.packageTier,
         contractAmount: new Prisma.Decimal(sponsor.contractAmount),
+        sponsorRevenue: new Prisma.Decimal(sponsor.sponsorRevenue),
         sponsoredName: sponsor.sponsoredName,
         createdById: adminId,
       },
@@ -175,6 +181,19 @@ export async function seedLeaguesAndSeasons(adminId: string, categories: any[], 
       });
     }
     createdLeagues.push(league);
+
+    // Connect 1-3 sponsorships to this league (round-robin from available sponsorships)
+    if (sponsorships.length > 0) {
+      const sponsorCount = 1 + (i % 3); // 1, 2, or 3 sponsors per league
+      const leagueSponsorIds = [];
+      for (let s = 0; s < sponsorCount; s++) {
+        leagueSponsorIds.push({ id: sponsorships[(i + s) % sponsorships.length].id });
+      }
+      await prisma.league.update({
+        where: { id: league.id },
+        data: { sponsorships: { connect: leagueSponsorIds } },
+      });
+    }
 
     // Create 4 seasons per league with different statuses
     // Distribution: 1 ACTIVE, 1 UPCOMING, 1-2 FINISHED, 0-1 CANCELLED
@@ -292,18 +311,52 @@ export async function seedSeasonMemberships(users: User[], seasons: Season[], di
     const seasonDivisions = divisions.filter(d => d.seasonId === season.id);
     if (seasonDivisions.length === 0) continue;
 
-    // 30-50 members per active season, 20-40 for finished
-    const memberCount = season.status === SeasonStatus.ACTIVE
+    // Calculate total capacity across all divisions in this season
+    // For doubles: maxDoublesTeams is team count, each team has 2 players
+    const totalCapacity = seasonDivisions.reduce((sum, d) => {
+      const cap = d.gameType === "SINGLES"
+        ? (d.maxSinglesPlayers ?? 16)
+        : (d.maxDoublesTeams ?? 8) * 2;
+      return sum + cap;
+    }, 0);
+
+    // Member count respects total capacity (leave some room)
+    const rawMemberCount = season.status === SeasonStatus.ACTIVE
       ? randomInt(30, 50)
       : randomInt(20, 40);
+    const memberCount = Math.min(rawMemberCount, totalCapacity);
 
     const selectedUsers = activeUsers
       .sort(() => 0.5 - Math.random())
       .slice(0, Math.min(memberCount, activeUsers.length));
 
+    // Track active assignment counts per division to respect capacity
+    // Initialize from existing DB counts for idempotency
+    const divisionActiveCount = new Map<string, number>();
+    for (const d of seasonDivisions) {
+      const existingCount = await prisma.divisionAssignment.count({
+        where: { divisionId: d.id },
+      });
+      divisionActiveCount.set(d.id, existingCount);
+    }
+
     for (let i = 0; i < selectedUsers.length; i++) {
       const user = selectedUsers[i]!;
-      const division = seasonDivisions[i % seasonDivisions.length];
+      // Find a division that still has capacity (round-robin, skip full ones)
+      let division: typeof seasonDivisions[0] | undefined;
+      for (let attempt = 0; attempt < seasonDivisions.length; attempt++) {
+        const candidate = seasonDivisions[(i + attempt) % seasonDivisions.length]!;
+        const maxCap = candidate.gameType === "SINGLES"
+          ? (candidate.maxSinglesPlayers ?? 16)
+          : (candidate.maxDoublesTeams ?? 8) * 2;
+        const currentCount = divisionActiveCount.get(candidate.id) ?? 0;
+        if (currentCount < maxCap) {
+          division = candidate;
+          break;
+        }
+      }
+      // All divisions full — skip this user
+      if (!division) continue;
 
       const existing = await prisma.seasonMembership.findFirst({
         where: { userId: user.id, seasonId: season.id },
@@ -349,12 +402,121 @@ export async function seedSeasonMemberships(users: User[], seasons: Season[], di
             notes: "Assigned during registration",
           },
         });
+        // Track active count to enforce capacity
+        divisionActiveCount.set(division.id, (divisionActiveCount.get(division.id) ?? 0) + 1);
       }
     }
   }
 
   logSuccess(`Created ${memberships.length} season memberships`);
+
+  // Update denormalized division capacity counters
+  logProgress("   Updating division capacity counters...");
+  let updatedDivisions = 0;
+
+  for (const division of divisions) {
+    const assignmentCount = await prisma.divisionAssignment.count({
+      where: { divisionId: division.id },
+    });
+
+    if (assignmentCount > 0) {
+      await prisma.division.update({
+        where: { id: division.id },
+        data: division.gameType === "SINGLES"
+          ? { currentSinglesCount: assignmentCount }
+          : { currentDoublesCount: assignmentCount },
+      });
+      updatedDivisions++;
+    }
+  }
+
+  logSuccess(`Updated capacity counters for ${updatedDivisions} divisions`);
+
+  // Update registeredUserCount on each season
+  logProgress("   Updating season registered user counts...");
+  for (const season of activeAndFinishedSeasons) {
+    const count = await prisma.seasonMembership.count({
+      where: { seasonId: season.id },
+    });
+    if (count > 0) {
+      await prisma.season.update({
+        where: { id: season.id },
+        data: { registeredUserCount: count },
+      });
+    }
+  }
+  logSuccess(`Updated registered user counts for ${activeAndFinishedSeasons.length} seasons`);
+
   return memberships;
+}
+
+// =============================================
+// SEED PARTNERSHIPS (for doubles seasons)
+// =============================================
+
+export async function seedPartnerships(seasons: Season[], divisions: Division[]) {
+  logSection("👥 Seeding partnerships for doubles seasons...");
+
+  // Find doubles seasons (seasons linked to leagues with gameType DOUBLES)
+  const doublesSeasons = await prisma.season.findMany({
+    where: {
+      id: { in: seasons.map(s => s.id) },
+      leagues: { some: { gameType: GameType.DOUBLES } },
+      status: { in: [SeasonStatus.ACTIVE, SeasonStatus.FINISHED] },
+    },
+  });
+
+  let partnershipCount = 0;
+
+  for (const season of doublesSeasons) {
+    // Get active memberships grouped by division
+    const memberships = await prisma.seasonMembership.findMany({
+      where: {
+        seasonId: season.id,
+        status: MembershipStatus.ACTIVE,
+        divisionId: { not: null },
+      },
+      select: { userId: true, divisionId: true },
+      orderBy: { joinedAt: "asc" },
+    });
+
+    // Group by division
+    const byDivision = new Map<string, string[]>();
+    for (const m of memberships) {
+      if (!m.divisionId) continue;
+      const arr = byDivision.get(m.divisionId) || [];
+      arr.push(m.userId);
+      byDivision.set(m.divisionId, arr);
+    }
+
+    // Pair users within each division
+    for (const [divisionId, userIds] of byDivision) {
+      for (let i = 0; i + 1 < userIds.length; i += 2) {
+        const captainId = userIds[i];
+        const partnerId = userIds[i + 1];
+
+        // Check if partnership already exists
+        const existing = await prisma.partnership.findFirst({
+          where: { captainId, partnerId, seasonId: season.id },
+        });
+        if (existing) continue;
+
+        await prisma.partnership.create({
+          data: {
+            captainId,
+            partnerId,
+            seasonId: season.id,
+            divisionId,
+            status: PartnershipStatus.ACTIVE,
+            createdAt: randomDate(monthsAgo(6), monthsAgo(1)),
+          },
+        });
+        partnershipCount++;
+      }
+    }
+  }
+
+  logSuccess(`Created ${partnershipCount} partnerships`);
 }
 
 // =============================================
@@ -550,4 +712,246 @@ export async function seedSeasonLocks(seasons: Season[], adminId: string) {
   }
 
   logSuccess(`Created ${created} season locks`);
+}
+
+// =============================================
+// SEED PAIR REQUESTS
+// =============================================
+
+const PAIR_REQUEST_MESSAGES = [
+  "Want to team up this season?",
+  "Looking for a doubles partner!",
+  "Let's play together!",
+  "I've seen your matches, great skills!",
+  "Interested in partnering up?",
+  "Available for doubles this season?",
+  null,
+  null,
+];
+
+export async function seedPairRequests(seasons: Season[], users: User[]): Promise<number> {
+  logSection("🤝 Seeding pair requests...");
+
+  const doublesSeasons = await prisma.season.findMany({
+    where: {
+      id: { in: seasons.map(s => s.id) },
+      leagues: { some: { gameType: GameType.DOUBLES } },
+      status: { in: [SeasonStatus.ACTIVE, SeasonStatus.FINISHED] },
+    },
+  });
+
+  const activeUsers = users.filter(u => u.status === UserStatus.ACTIVE && u.completedOnboarding);
+  let created = 0;
+  const target = 80;
+
+  // Get existing partnerships to avoid creating requests for already-partnered users
+  const partnerships = await prisma.partnership.findMany({
+    select: { captainId: true, partnerId: true, seasonId: true },
+  });
+  const partneredKeys = new Set(
+    partnerships.flatMap(p => [
+      `${p.captainId}-${p.seasonId}`,
+      ...(p.partnerId ? [`${p.partnerId}-${p.seasonId}`] : []),
+    ])
+  );
+
+  const usedPairs = new Set<string>();
+
+  for (let i = 0; i < target && i < doublesSeasons.length * 20; i++) {
+    const season = randomElement(doublesSeasons);
+    const requester = randomElement(activeUsers);
+    const recipient = randomElement(activeUsers);
+
+    if (requester.id === recipient.id) continue;
+
+    const pairKey = `${requester.id}-${recipient.id}-${season.id}`;
+    if (usedPairs.has(pairKey)) continue;
+    usedPairs.add(pairKey);
+
+    // Skip if either user is already partnered in this season
+    if (partneredKeys.has(`${requester.id}-${season.id}`) || partneredKeys.has(`${recipient.id}-${season.id}`)) continue;
+
+    // Status distribution
+    const statusRoll = Math.random() * 100;
+    let status: PairRequestStatus;
+    if (statusRoll < 40) status = PairRequestStatus.ACCEPTED;
+    else if (statusRoll < 60) status = PairRequestStatus.PENDING;
+    else if (statusRoll < 75) status = PairRequestStatus.DENIED;
+    else if (statusRoll < 85) status = PairRequestStatus.CANCELLED;
+    else if (statusRoll < 95) status = PairRequestStatus.EXPIRED;
+    else status = PairRequestStatus.AUTO_DENIED;
+
+    const createdAt = randomDate(monthsAgo(8), daysAgo(1));
+    const hasResponded = status !== PairRequestStatus.PENDING;
+
+    await prisma.pairRequest.create({
+      data: {
+        requesterId: requester.id,
+        recipientId: recipient.id,
+        seasonId: season.id,
+        message: randomElement(PAIR_REQUEST_MESSAGES),
+        status,
+        createdAt,
+        respondedAt: hasResponded ? randomDate(createdAt, new Date()) : null,
+        expiresAt: status === PairRequestStatus.PENDING
+          ? daysFromNow(randomInt(3, 14))
+          : new Date(createdAt.getTime() + randomInt(3, 14) * 24 * 60 * 60 * 1000),
+      },
+    });
+    created++;
+  }
+
+  logSuccess(`Created ${created} pair requests`);
+  return created;
+}
+
+// =============================================
+// SEED SEASON INVITATIONS
+// =============================================
+
+const SEASON_INVITATION_MESSAGES = [
+  "Join this season with me!",
+  "This league looks great, want to play?",
+  "Let's compete together this season!",
+  "I'm signing up, you should too!",
+  "Great season coming up, join us!",
+  null,
+  null,
+];
+
+export async function seedSeasonInvitations(seasons: Season[], users: User[]): Promise<number> {
+  logSection("✉️ Seeding season invitations...");
+
+  const upcomingAndActive = seasons.filter(
+    s => s.status === SeasonStatus.UPCOMING || s.status === SeasonStatus.ACTIVE
+  );
+
+  if (upcomingAndActive.length === 0) {
+    logProgress("   No upcoming/active seasons for invitations, skipping...");
+    return 0;
+  }
+
+  const activeUsers = users.filter(u => u.status === UserStatus.ACTIVE && u.completedOnboarding);
+  let created = 0;
+  const target = 60;
+  const usedCombinations = new Set<string>();
+
+  for (let i = 0; i < target * 2 && created < target; i++) {
+    const season = randomElement(upcomingAndActive);
+    const sender = randomElement(activeUsers);
+    const recipient = randomElement(activeUsers);
+
+    if (sender.id === recipient.id) continue;
+
+    // Respect @@unique([senderId, recipientId, seasonId])
+    const key = `${sender.id}-${recipient.id}-${season.id}`;
+    if (usedCombinations.has(key)) continue;
+    usedCombinations.add(key);
+
+    const statusRoll = Math.random() * 100;
+    let status: SeasonInvitationStatus;
+    if (statusRoll < 35) status = SeasonInvitationStatus.ACCEPTED;
+    else if (statusRoll < 60) status = SeasonInvitationStatus.PENDING;
+    else if (statusRoll < 80) status = SeasonInvitationStatus.DENIED;
+    else if (statusRoll < 90) status = SeasonInvitationStatus.CANCELLED;
+    else status = SeasonInvitationStatus.EXPIRED;
+
+    const createdAt = randomDate(monthsAgo(4), daysAgo(1));
+    const hasResponded = status !== SeasonInvitationStatus.PENDING;
+
+    try {
+      await prisma.seasonInvitation.create({
+        data: {
+          senderId: sender.id,
+          recipientId: recipient.id,
+          seasonId: season.id,
+          message: randomElement(SEASON_INVITATION_MESSAGES),
+          status,
+          createdAt,
+          respondedAt: hasResponded ? randomDate(createdAt, new Date()) : null,
+          expiresAt: status === SeasonInvitationStatus.PENDING
+            ? daysFromNow(randomInt(7, 30))
+            : new Date(createdAt.getTime() + randomInt(7, 30) * 24 * 60 * 60 * 1000),
+        },
+      });
+      created++;
+    } catch {
+      // Skip unique constraint violations
+    }
+  }
+
+  logSuccess(`Created ${created} season invitations`);
+  return created;
+}
+
+// =============================================
+// SEED PAYMENTS
+// =============================================
+
+export async function seedPayments(seasons: Season[], users: User[]): Promise<number> {
+  logSection("💳 Seeding payments...");
+
+  // Get season memberships that should have payments
+  const memberships = await prisma.seasonMembership.findMany({
+    where: {
+      paymentStatus: { in: [PaymentStatus.COMPLETED, PaymentStatus.PENDING, PaymentStatus.FAILED] },
+    },
+    include: { season: true },
+    take: 300,
+  });
+
+  if (memberships.length === 0) {
+    logProgress("   No memberships for payments, skipping...");
+    return 0;
+  }
+
+  let created = 0;
+  const fiuuChannels = ["fpx", "card", "ewallet", "online_banking"];
+
+  for (let i = 0; i < memberships.length; i++) {
+    const membership = memberships[i]!;
+    const entryFee = membership.season?.entryFee ? Number(membership.season.entryFee) : 50 + randomInt(0, 150);
+
+    // Map membership payment status to payment status
+    let paymentStatus: "PENDING" | "COMPLETED" | "FAILED" | "CANCELLED" | "REFUNDED";
+    if (membership.paymentStatus === PaymentStatus.COMPLETED) {
+      const roll = Math.random() * 100;
+      paymentStatus = roll < 95 ? "COMPLETED" : roll < 98 ? "REFUNDED" : "COMPLETED";
+    } else if (membership.paymentStatus === PaymentStatus.PENDING) {
+      paymentStatus = "PENDING";
+    } else {
+      paymentStatus = "FAILED";
+    }
+
+    const createdAt = membership.joinedAt || randomDate(monthsAgo(10), daysAgo(1));
+    const isCompleted = paymentStatus === "COMPLETED" || paymentStatus === "REFUNDED";
+
+    await prisma.payment.create({
+      data: {
+        orderId: `ORD-${Date.now()}-${i.toString().padStart(4, "0")}`,
+        amount: new Prisma.Decimal(entryFee),
+        currency: "MYR",
+        paymentMethod: isCompleted ? randomElement(["fpx", "credit_card", "debit_card", "ewallet"]) : null,
+        status: paymentStatus,
+        paidAt: isCompleted ? randomDate(createdAt, new Date()) : null,
+        userId: membership.userId,
+        seasonId: membership.seasonId,
+        seasonMembershipId: membership.id,
+        fiuuTransactionId: isCompleted ? `FIUU-${Date.now()}-${randomInt(10000, 99999)}` : null,
+        fiuuChannel: isCompleted ? randomElement(fiuuChannels) : null,
+        fiuuStatusCode: isCompleted ? "00" : paymentStatus === "FAILED" ? "11" : null,
+        fiuuMessage: isCompleted ? "Payment successful" : paymentStatus === "FAILED" ? "Payment declined" : null,
+        notes: paymentStatus === "REFUNDED" ? "Refund processed for withdrawal" : null,
+        createdAt,
+      },
+    });
+    created++;
+
+    if (created % 50 === 0) {
+      logProgress(`   Payments: ${created}/${memberships.length}`);
+    }
+  }
+
+  logSuccess(`Created ${created} payments`);
+  return created;
 }
