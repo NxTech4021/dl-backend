@@ -5,6 +5,7 @@
 
 import {
   User,
+  Role,
   FriendshipStatus,
   NotificationCategory,
   MessageType,
@@ -267,6 +268,63 @@ export async function seedThreads(users: User[]): Promise<{ threadCount: number;
 
     if (threadCount % 30 === 0) {
       logProgress(`   Threads: ${threadCount}/${targetThreads}`);
+    }
+  }
+
+  // Ensure admin users each get 5-8 threads with random players
+  const adminUsers = activeUsers.filter(u => u.role === Role.SUPERADMIN || u.role === Role.ADMIN);
+  const playerUsers = activeUsers.filter(u => u.role === Role.USER);
+
+  if (adminUsers.length > 0 && playerUsers.length > 0) {
+    logProgress(`Creating threads for ${adminUsers.length} admin users...`);
+    for (const admin of adminUsers) {
+      const threadTarget = randomInt(5, 8);
+      for (let i = 0; i < threadTarget; i++) {
+        const player = randomElement(playerUsers);
+        const pairKey = [admin.id, player.id].sort().join("-");
+        if (usedPairs.has(pairKey)) continue;
+        usedPairs.add(pairKey);
+
+        const threadCreatedAt = randomDate(monthsAgo(6), daysAgo(3));
+        const thread = await prisma.thread.create({
+          data: {
+            isGroup: false,
+            createdAt: threadCreatedAt,
+            updatedAt: threadCreatedAt,
+            members: {
+              create: [
+                { userId: admin.id, joinedAt: threadCreatedAt },
+                { userId: player.id, joinedAt: threadCreatedAt },
+              ],
+            },
+          },
+        });
+        threadCount++;
+
+        const msgCount = randomInt(3, 12);
+        let lastMessageTime = threadCreatedAt;
+        for (let j = 0; j < msgCount; j++) {
+          const sender = j % 2 === 0 ? admin : player;
+          const messageTime = randomDate(lastMessageTime, daysAgo(1));
+          lastMessageTime = messageTime;
+          await prisma.message.create({
+            data: {
+              threadId: thread.id,
+              senderId: sender.id,
+              content: randomElement(CHAT_MESSAGES),
+              messageType: MessageType.TEXT,
+              createdAt: messageTime,
+              updatedAt: messageTime,
+            },
+          });
+          messageCount++;
+        }
+
+        await prisma.thread.update({
+          where: { id: thread.id },
+          data: { updatedAt: lastMessageTime },
+        });
+      }
     }
   }
 
