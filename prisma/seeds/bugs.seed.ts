@@ -309,6 +309,219 @@ export async function seedBugReports(users: User[], admins: SeededAdmin[], appId
 }
 
 // =============================================
+// SEED BUG COMMENTS
+// =============================================
+
+const BUG_COMMENT_TEXTS = [
+  "Can you provide steps to reproduce this?",
+  "This happens on iOS only, works fine on Android",
+  "I can reproduce this consistently on version 2.4.0",
+  "Fixed in the latest build, please verify",
+  "Looks like a backend issue, forwarding to API team",
+  "Is this still happening after the update?",
+  "Adding more context: this only occurs with large datasets",
+  "Same issue here, started after the last deployment",
+  "The error log shows a null pointer exception",
+  "Workaround: clearing the cache resolves it temporarily",
+  "This is related to the authentication flow changes",
+  "Screenshots attached showing the exact error message",
+  "Priority increased based on user impact assessment",
+  "Deployed hotfix to staging for testing",
+  "Confirmed fixed in production, closing this report",
+];
+
+export async function seedBugComments(users: User[], admins: SeededAdmin[]): Promise<number> {
+  logSection("💬 Seeding bug comments...");
+
+  const bugs = await prisma.bugReport.findMany({
+    select: { id: true, reporterId: true, createdAt: true },
+  });
+
+  if (bugs.length === 0) {
+    logProgress("   No bug reports found for comments, skipping...");
+    return 0;
+  }
+
+  const adminUserIds = await prisma.admin.findMany({
+    where: { status: "ACTIVE" },
+    select: { userId: true },
+  });
+  const adminIds = adminUserIds.map(a => a.userId);
+
+  let created = 0;
+  const bugsToComment = bugs.sort(() => 0.5 - Math.random()).slice(0, 45);
+  const previousCommentIds: Record<string, string[]> = {};
+
+  for (const bug of bugsToComment) {
+    const commentCount = randomInt(2, 4);
+    previousCommentIds[bug.id] = [];
+
+    for (let c = 0; c < commentCount; c++) {
+      // Alternate between reporter and admin
+      const isAdmin = c % 2 === 1 && adminIds.length > 0;
+      const authorId = isAdmin ? randomElement(adminIds) : bug.reporterId;
+
+      // ~20% chance of being a reply to a previous comment
+      const parentId = previousCommentIds[bug.id]!.length > 0 && randomBoolean(0.2)
+        ? randomElement(previousCommentIds[bug.id]!)
+        : null;
+
+      const comment = await prisma.bugComment.create({
+        data: {
+          bugReportId: bug.id,
+          authorId,
+          content: randomElement(BUG_COMMENT_TEXTS),
+          isInternal: isAdmin && randomBoolean(0.4),
+          parentId,
+          createdAt: new Date(
+            bug.createdAt.getTime() + randomInt(1, 168) * 60 * 60 * 1000 * (c + 1)
+          ),
+        },
+      });
+      previousCommentIds[bug.id]!.push(comment.id);
+      created++;
+    }
+  }
+
+  logSuccess(`Created ${created} bug comments`);
+  return created;
+}
+
+// =============================================
+// SEED BUG STATUS CHANGES
+// =============================================
+
+const BUG_STATUS_CHANGE_NOTES = [
+  "Triaged and assigned to development team",
+  "Working on fix",
+  "Root cause identified",
+  "Fix deployed to staging",
+  "Verified fix on staging environment",
+  "Deployed to production",
+  "Closing as resolved",
+  "Marked as duplicate of existing report",
+  "Will not fix - expected behavior",
+  "Needs more information from reporter",
+  "Moved back to in progress after regression",
+  "Priority updated based on user feedback",
+];
+
+export async function seedBugStatusChanges(admins: SeededAdmin[]): Promise<number> {
+  logSection("📊 Seeding bug status changes...");
+
+  const bugs = await prisma.bugReport.findMany({
+    select: { id: true, status: true, priority: true, createdAt: true },
+  });
+
+  if (bugs.length === 0 || admins.length === 0) {
+    logProgress("   No bugs or admins found, skipping status changes...");
+    return 0;
+  }
+
+  // Get admin user IDs for changedById
+  const adminUserIds = await prisma.admin.findMany({
+    where: { status: "ACTIVE" },
+    select: { userId: true },
+  });
+  const changerIds = adminUserIds.map(a => a.userId);
+
+  let created = 0;
+
+  // Status lifecycle paths
+  const statusPaths: Record<string, string[]> = {
+    NEW: ["NEW"],
+    TRIAGED: ["NEW", "TRIAGED"],
+    IN_PROGRESS: ["NEW", "TRIAGED", "IN_PROGRESS"],
+    NEEDS_INFO: ["NEW", "TRIAGED", "NEEDS_INFO"],
+    IN_REVIEW: ["NEW", "TRIAGED", "IN_PROGRESS", "IN_REVIEW"],
+    RESOLVED: ["NEW", "TRIAGED", "IN_PROGRESS", "IN_REVIEW", "RESOLVED"],
+    CLOSED: ["NEW", "TRIAGED", "IN_PROGRESS", "RESOLVED", "CLOSED"],
+    WONT_FIX: ["NEW", "TRIAGED", "WONT_FIX"],
+    DUPLICATE: ["NEW", "DUPLICATE"],
+  };
+
+  const priorities: BugPriority[] = [BugPriority.LOW, BugPriority.NORMAL, BugPriority.HIGH, BugPriority.URGENT];
+
+  for (const bug of bugs) {
+    const path = statusPaths[bug.status] || ["NEW"];
+
+    for (let i = 1; i < path.length; i++) {
+      const previousStatus = path[i - 1] as BugStatus;
+      const newStatus = path[i] as BugStatus;
+
+      // Occasional priority change (~30%)
+      const hasPriorityChange = randomBoolean(0.3);
+
+      await prisma.bugStatusChange.create({
+        data: {
+          bugReportId: bug.id,
+          previousStatus,
+          newStatus,
+          previousPriority: hasPriorityChange ? randomElement(priorities) : null,
+          newPriority: hasPriorityChange ? randomElement(priorities) : null,
+          changedById: changerIds.length > 0 ? randomElement(changerIds) : null,
+          notes: randomElement(BUG_STATUS_CHANGE_NOTES),
+          createdAt: new Date(
+            bug.createdAt.getTime() + randomInt(1, 72) * 60 * 60 * 1000 * i
+          ),
+        },
+      });
+      created++;
+    }
+  }
+
+  logSuccess(`Created ${created} bug status changes`);
+  return created;
+}
+
+// =============================================
+// SEED BUG REPORT SETTINGS
+// =============================================
+
+export async function seedBugReportSettings(admins: SeededAdmin[]): Promise<number> {
+  logSection("⚙️ Seeding bug report settings...");
+
+  const apps = await prisma.app.findMany();
+  if (apps.length === 0) {
+    logProgress("   No apps found, skipping bug report settings...");
+    return 0;
+  }
+
+  // Get first active admin for default assignee
+  const firstAdmin = admins.length > 0 ? admins[0] : null;
+
+  let created = 0;
+
+  for (const app of apps) {
+    const existing = await prisma.bugReportSettings.findUnique({
+      where: { appId: app.id },
+    });
+    if (existing) continue;
+
+    await prisma.bugReportSettings.create({
+      data: {
+        appId: app.id,
+        enableScreenshots: true,
+        enableAutoCapture: true,
+        enableConsoleCapture: true,
+        enableNetworkCapture: app.code === "dl-admin",
+        maxScreenshots: 5,
+        maxFileSize: 5242880,
+        notifyEmails: ["dev-team@dleague.com", "support@dleague.com"],
+        notifyOnNew: true,
+        notifyOnStatusChange: true,
+        defaultAssigneeId: firstAdmin?.adminId || null,
+        defaultPriority: "NORMAL",
+      },
+    });
+    created++;
+  }
+
+  logSuccess(`Created ${created} bug report settings`);
+  return created;
+}
+
+// =============================================
 // MAIN BUG SEEDING FUNCTION
 // =============================================
 
