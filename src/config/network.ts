@@ -1,3 +1,4 @@
+import { execSync } from "child_process";
 import { networkInterfaces } from "os";
 
 /**
@@ -21,6 +22,33 @@ export function getLocalIPAddress(): string {
 
   // Fallback to localhost if no external IP found
   return "localhost";
+}
+
+/**
+ * Resolve the host machine's LAN IP when running inside Docker.
+ * Uses host.docker.internal DNS (available on Docker Desktop).
+ * Returns null if not in Docker or resolution fails.
+ */
+function resolveHostIPSync(): string | null {
+  // Quick check: if DATABASE_URL uses host.docker.internal, we're in Docker
+  const inDocker = process.env.DATABASE_URL?.includes("host.docker.internal");
+  if (!inDocker) return null;
+
+  try {
+    // Use nslookup (available on Alpine) since getent is not
+    const result: string = execSync(
+      "nslookup host.docker.internal 2>/dev/null | grep 'Address' | tail -1",
+      { timeout: 2000 }
+    ).toString().trim();
+    // nslookup output: "Address: 192.168.1.4" or "Address 1: 192.168.1.4"
+    const match = result.match(/(\d+\.\d+\.\d+\.\d+)/);
+    if (match?.[1]) {
+      return match[1];
+    }
+  } catch {
+    // nslookup not available or resolution failed
+  }
+  return null;
 }
 
 /**
@@ -72,6 +100,20 @@ export function getTrustedOrigins(): string[] {
       `http://${localIP}:82`,
       `http://${localIP}:3030`
     );
+  }
+
+  // In Docker, also add the host machine's LAN IP (what mobile devices actually use)
+  const hostIP = resolveHostIPSync();
+  if (hostIP && hostIP !== localIP) {
+    baseOrigins.push(
+      `http://${hostIP}:3001`,
+      `http://${hostIP}:8081`,
+      `http://${hostIP}:82`,
+      `http://${hostIP}:3030`
+    );
+    if (process.env.NODE_ENV !== "production") {
+      console.log(`🐳 Docker detected — added host LAN IP ${hostIP} to trusted origins`);
+    }
   }
 
   // Add origins from BETTER_AUTH_URL (without path) if provided
