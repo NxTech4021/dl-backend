@@ -9,7 +9,14 @@ import {
   AchievementScope,
   TierType,
 } from "@prisma/client";
-import { prisma, logSection, logSuccess } from "./utils";
+import {
+  prisma,
+  randomDate,
+  monthsAgo,
+  logSection,
+  logSuccess,
+  logProgress,
+} from "./utils";
 
 // =============================================
 // Types
@@ -495,4 +502,172 @@ export async function seedAchievements() {
 
   logSuccess(`Seeded achievements: ${created} created, ${updated} updated`);
   return { count: ACHIEVEMENTS.length };
+}
+
+// =============================================
+// SEED USER ACHIEVEMENTS (evaluate from actual data)
+// =============================================
+
+export async function seedUserAchievements(): Promise<number> {
+  logSection("🏅 Evaluating user achievements from seeded data...");
+
+  const achievements = await prisma.achievement.findMany({
+    where: { isActive: true },
+  });
+  const activeUsers = await prisma.user.findMany({
+    where: { status: "ACTIVE", completedOnboarding: true },
+    select: { id: true },
+  });
+
+  if (achievements.length === 0 || activeUsers.length === 0) {
+    logProgress("   No achievements or users found, skipping...");
+    return 0;
+  }
+
+  // Pre-fetch aggregated data for all users in bulk
+  const userIds = activeUsers.map((u) => u.id);
+
+  // Match counts per player
+  const matchCounts = await prisma.matchResult.groupBy({
+    by: ["playerId"],
+    where: { playerId: { in: userIds } },
+    _count: { id: true },
+  });
+  const matchCountMap = new Map(
+    matchCounts.map((r) => [r.playerId, r._count.id])
+  );
+
+  // Win counts per player
+  const winCounts = await prisma.matchResult.groupBy({
+    by: ["playerId"],
+    where: { playerId: { in: userIds }, isWin: true },
+    _count: { id: true },
+  });
+  const winCountMap = new Map(
+    winCounts.map((r) => [r.playerId, r._count.id])
+  );
+
+  // Season memberships for FINISHED seasons
+  const finishedMemberships = await prisma.seasonMembership.findMany({
+    where: {
+      userId: { in: userIds },
+      status: "ACTIVE",
+      season: { status: "FINISHED" },
+    },
+    select: { userId: true },
+  });
+  const seasonCountMap = new Map<string, number>();
+  for (const m of finishedMemberships) {
+    seasonCountMap.set(m.userId, (seasonCountMap.get(m.userId) || 0) + 1);
+  }
+
+  // Sports per user from questionnaire responses
+  const questionnaireData = await prisma.questionnaireResponse.findMany({
+    where: { userId: { in: userIds } },
+    select: { userId: true, sport: true },
+  });
+  const sportMap = new Map<string, Set<string>>();
+  for (const r of questionnaireData) {
+    if (!sportMap.has(r.userId)) sportMap.set(r.userId, new Set());
+    sportMap.get(r.userId)!.add(r.sport);
+  }
+
+  // Win streak: fetch ordered results for top 100 most active players
+  const topPlayers = [...matchCountMap.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 100)
+    .map(([id]) => id);
+
+  const winStreakMap = new Map<string, number>();
+  for (const playerId of topPlayers) {
+    const results = await prisma.matchResult.findMany({
+      where: { playerId },
+      orderBy: { datePlayed: "asc" },
+      select: { isWin: true },
+    });
+
+    let maxStreak = 0;
+    let currentStreak = 0;
+    for (const r of results) {
+      if (r.isWin) {
+        currentStreak++;
+        if (currentStreak > maxStreak) maxStreak = currentStreak;
+      } else {
+        currentStreak = 0;
+      }
+    }
+    if (maxStreak > 0) winStreakMap.set(playerId, maxStreak);
+  }
+
+  // Group achievements by evaluatorKey for efficient lookup
+  const achievementsByKey = new Map<string, typeof achievements>();
+  for (const a of achievements) {
+    const arr = achievementsByKey.get(a.evaluatorKey) || [];
+    arr.push(a);
+    achievementsByKey.set(a.evaluatorKey, arr);
+  }
+
+  let created = 0;
+
+  for (const user of activeUsers) {
+    const userId = user.id;
+    const matchCount = matchCountMap.get(userId) || 0;
+    const winCount = winCountMap.get(userId) || 0;
+    const seasonCount = seasonCountMap.get(userId) || 0;
+    const sportCount = sportMap.get(userId)?.size || 0;
+    const winStreak = winStreakMap.get(userId) || 0;
+
+    // Evaluate each evaluator key
+    const evaluations: Array<{ key: string; progress: number }> = [
+      { key: "total_matches", progress: matchCount },
+      { key: "total_wins", progress: winCount },
+      { key: "seasons_completed", progress: seasonCount },
+      { key: "multi_sport", progress: sportCount },
+      { key: "win_streak", progress: winStreak },
+    ];
+
+    for (const { key, progress } of evaluations) {
+      if (progress === 0) continue;
+
+      const keyAchievements = achievementsByKey.get(key);
+      if (!keyAchievements) continue;
+
+      for (const achievement of keyAchievements) {
+        const isCompleted = progress >= achievement.threshold;
+
+        await prisma.userAchievement.upsert({
+          where: {
+            userId_achievementId: {
+              userId,
+              achievementId: achievement.id,
+            },
+          },
+          update: {
+            progress,
+            isCompleted,
+            unlockedAt: isCompleted
+              ? randomDate(monthsAgo(6), new Date())
+              : null,
+          },
+          create: {
+            userId,
+            achievementId: achievement.id,
+            progress,
+            isCompleted,
+            unlockedAt: isCompleted
+              ? randomDate(monthsAgo(6), new Date())
+              : null,
+          },
+        });
+        created++;
+      }
+    }
+
+    if (created % 500 === 0 && created > 0) {
+      logProgress(`   User achievements: ${created}`);
+    }
+  }
+
+  logSuccess(`Created ${created} user achievements`);
+  return created;
 }
