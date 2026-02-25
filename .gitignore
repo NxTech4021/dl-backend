@@ -41,3 +41,4 @@ build/
 coverage/
 
 .backups
+google-services.json
