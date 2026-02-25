@@ -65,7 +65,8 @@ async function evaluateAchievements(
       },
     });
 
-    if (existing?.isCompleted) continue;
+    // Skip already-completed non-revocable achievements
+    if (existing?.isCompleted && !achievement.isRevocable) continue;
 
     // 3. Get the evaluator function
     const evaluator = getEvaluator(achievement.evaluatorKey);
@@ -84,9 +85,54 @@ async function evaluateAchievements(
 
     result.evaluated++;
 
-    // 5. Upsert progress
+    // 5. Handle revocable achievements
     const isNowComplete = evalResult.isComplete;
+    const wasComplete = existing?.isCompleted ?? false;
 
+    // Revocation: was complete but no longer qualifies
+    if (wasComplete && !isNowComplete && achievement.isRevocable) {
+      await prisma.userAchievement.update({
+        where: {
+          userId_achievementId: { userId, achievementId: achievement.id },
+        },
+        data: {
+          progress: evalResult.currentValue,
+          isCompleted: false,
+          unlockedAt: null,
+        },
+      });
+
+      // Emit revocation event
+      try {
+        if (io) {
+          io.to(userId).emit('achievement_revoked', {
+            achievementId: achievement.id,
+            title: achievement.title,
+            category: achievement.category,
+          });
+        }
+      } catch (err) {
+        logger.warn('Failed to emit achievement_revoked socket event:', {
+          error: err instanceof Error ? err.message : String(err),
+          achievementId: achievement.id,
+          userId,
+        });
+      }
+      continue;
+    }
+
+    // Already complete and still complete (revocable re-eval) — just update progress
+    if (wasComplete && isNowComplete) {
+      await prisma.userAchievement.update({
+        where: {
+          userId_achievementId: { userId, achievementId: achievement.id },
+        },
+        data: { progress: evalResult.currentValue },
+      });
+      continue;
+    }
+
+    // Standard upsert for new or in-progress achievements
     await prisma.userAchievement.upsert({
       where: {
         userId_achievementId: { userId, achievementId: achievement.id },
@@ -100,14 +146,14 @@ async function evaluateAchievements(
       },
       update: {
         progress: evalResult.currentValue,
-        ...(isNowComplete && !existing?.isCompleted
+        ...(isNowComplete && !wasComplete
           ? { isCompleted: true, unlockedAt: new Date() }
           : {}),
       },
     });
 
     // 6. If newly completed, send notification
-    if (isNowComplete && !existing?.isCompleted) {
+    if (isNowComplete && !wasComplete) {
       result.newlyUnlocked.push({
         id: achievement.id,
         title: achievement.title,

@@ -1962,6 +1962,10 @@ model Achievement {
   points    Int     @default(0)
   isActive  Boolean @default(true)
 
+  // Live badges & revocation
+  isRevocable Boolean @default(false) // if true, can be un-completed (e.g. match streak)
+  badgeGroup  String?                 // groups live counter badges (e.g. "match_counter", "match_streak")
+
   createdAt        DateTime          @default(now())
   updatedAt        DateTime          @updatedAt
   userAchievements UserAchievement[]
@@ -2618,6 +2622,7 @@ enum SkillLevel {
 }
 
 enum TierType {
+  NONE
   BRONZE
   SILVER
   GOLD
@@ -2625,10 +2630,11 @@ enum TierType {
 }
 
 enum AchievementCategory {
-  COMPETITION // wins, streaks, match milestones
-  RATING // DMR rating milestones
-  SEASON // division champion, top 3, participation
-  SOCIAL // partnerships, multi-sport, community
+  MATCH_COUNTER // live match count badge
+  LEAGUE_SEASON // season participation, full division, consecutive
+  WINNING       // wins, streaks, champions
+  MULTI_SPORT   // cross-sport participation
+  MATCH_STREAK  // weekly activity streak
 }
 
 enum AchievementScope {

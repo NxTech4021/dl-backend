@@ -9,6 +9,7 @@ import { sendEmail } from "../config/nodemailer";
 import {
   getBackendBaseURL,
   getAuthBasePath,
+  getTrustedOrigins as getNetworkTrustedOrigins,
 } from "../config/network";
 
 // Debug environment variables
@@ -40,23 +41,15 @@ const sessionExpirySeconds = process.env.SESSION_EXPIRY_SECONDS
     : 60 * 60 * 24 * 7; // 7 days for development
 console.log(`   BETTER_AUTH_BASE_PATH: ${authBasePath}`);
 
-// Get trusted origins from environment with sensible defaults
-const getTrustedOrigins = (): string[] => {
-  // Get from environment variable (comma-separated)
-  const envOrigins = process.env.TRUSTED_ORIGINS?.split(',').map(o => o.trim()).filter(Boolean) || [];
-
-  // Default development origins (only used if no env var set)
-  const devOrigins = process.env.NODE_ENV !== 'production' ? [
-    'http://localhost:3000',
-    'http://localhost:3001',
-    'http://localhost:8081',
-    'http://localhost:8082',
-  ] : [];
-
-  return [...envOrigins, ...devOrigins];
-};
-
-const trustedOrigins = getTrustedOrigins();
+// Trusted origins: uses auto-detected LAN IP from network.ts + env overrides
+// No need to hardcode IPs — they're detected at startup
+const trustedOrigins = [
+  ...getNetworkTrustedOrigins(),
+  // Expo native app deep link scheme
+  'deuceleague://',
+  // Merge any extra origins from TRUSTED_ORIGINS env (e.g. staging domain)
+  ...(process.env.TRUSTED_ORIGINS?.split(',').map(o => o.trim()).filter(Boolean) || []),
+];
 
 // Test database connection
 prisma
@@ -243,7 +236,7 @@ export const auth = betterAuth({
   // Security: Environment-aware settings - secure in production, permissive in development
   advanced: {
     useSecureCookies: isProduction,
-    // disableOriginCheck: true, // Need to remove for prod
+    disableOriginCheck: !isProduction,
     crossSubDomainCookies: {
       enabled: false, // Disable for mobile apps
     },

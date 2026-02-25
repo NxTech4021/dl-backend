@@ -1137,6 +1137,56 @@ export function schedulePushTokenCleanup(): void {
 }
 
 /**
+ * Weekly match streak re-evaluation.
+ * Runs every Monday at 00:05 UTC — catches streaks that broke from inactivity
+ * (no match played in the previous week).
+ */
+export function scheduleMatchStreakReEvaluation(): void {
+  cron.schedule('5 0 * * 1', async () => {
+    try {
+      logger.info('Running weekly match streak re-evaluation');
+
+      // Find all users who have completed revocable achievements
+      const usersWithRevocable = await prisma.userAchievement.findMany({
+        where: {
+          isCompleted: true,
+          achievement: { isRevocable: true, isActive: true },
+        },
+        select: { userId: true },
+        distinct: ['userId'],
+      });
+
+      if (usersWithRevocable.length === 0) {
+        logger.info('No users with revocable achievements to re-evaluate');
+        return;
+      }
+
+      // Lazy import to avoid circular dependency
+      const { evaluateMatchAchievementsSafe } = await import('../services/achievement/achievementEvaluationService');
+
+      const BATCH_SIZE = 10;
+      let processed = 0;
+
+      for (let i = 0; i < usersWithRevocable.length; i += BATCH_SIZE) {
+        const batch = usersWithRevocable.slice(i, i + BATCH_SIZE);
+        await Promise.all(
+          batch.map(({ userId }) =>
+            evaluateMatchAchievementsSafe(userId, { userId })
+          )
+        );
+        processed += batch.length;
+      }
+
+      logger.info(`Match streak re-evaluation complete: ${processed} users processed`);
+    } catch (error) {
+      logger.error('Failed to run match streak re-evaluation', {}, error as Error);
+    }
+  });
+
+  logger.info('Match streak re-evaluation job scheduled (Mon 00:05 UTC)');
+}
+
+/**
  * Initialize all notification jobs
  */
 export function initializeNotificationJobs(): void {
@@ -1159,11 +1209,14 @@ export function initializeNotificationJobs(): void {
   scheduleRegistrationClosing24h();
   scheduleLastMatchDeadline48h();
   schedulePushTokenCleanup();
-  
+
   // Doubles team registration reminders
   scheduleTeamRegistrationReminder2h();
   scheduleTeamRegistrationReminder24h();
   scheduleRegistrationDeadlineCaptain();
+
+  // Achievement streak checks
+  scheduleMatchStreakReEvaluation();
 
   logger.info("✅ All notification jobs initialized successfully");
 }

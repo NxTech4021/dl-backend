@@ -28,6 +28,8 @@ interface CreateAchievementInput {
   isHidden?: boolean | undefined;
   points?: number | undefined;
   isActive?: boolean | undefined;
+  isRevocable?: boolean | undefined;
+  badgeGroup?: string | null | undefined;
 }
 
 interface UpdateAchievementInput extends Partial<CreateAchievementInput> {}
@@ -48,6 +50,8 @@ interface AchievementWithStats {
   isHidden: boolean;
   points: number;
   isActive: boolean;
+  isRevocable: boolean;
+  badgeGroup: string | null;
   createdAt: Date;
   updatedAt: Date;
   unlockCount: number;
@@ -111,6 +115,8 @@ export async function getAchievementsAdmin(filters?: AdminListFilters): Promise<
     isHidden: a.isHidden,
     points: a.points,
     isActive: a.isActive,
+    isRevocable: a.isRevocable,
+    badgeGroup: a.badgeGroup,
     createdAt: a.createdAt,
     updatedAt: a.updatedAt,
     unlockCount: a._count.userAchievements,
@@ -164,6 +170,8 @@ export async function createAchievement(input: CreateAchievementInput) {
       isHidden: input.isHidden ?? false,
       points: input.points ?? 0,
       isActive: input.isActive ?? true,
+      isRevocable: input.isRevocable ?? false,
+      badgeGroup: input.badgeGroup ?? null,
     },
   });
 }
@@ -263,6 +271,8 @@ export async function getPlayerAchievements(userId: string) {
       sortOrder: a.sortOrder,
       isHidden: a.isHidden,
       points: a.points,
+      isRevocable: a.isRevocable,
+      badgeGroup: a.badgeGroup,
       progress: ua?.progress ?? 0,
       isCompleted: ua?.isCompleted ?? false,
       unlockedAt: ua?.unlockedAt ?? null,

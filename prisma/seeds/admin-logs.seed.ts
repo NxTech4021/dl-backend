@@ -11,6 +11,7 @@ import {
   prisma,
   randomDate,
   randomElement,
+  randomElements,
   randomInt,
   randomBoolean,
   monthsAgo,
@@ -416,6 +417,98 @@ export async function seedAdminLogs(admins: SeededAdmin[]): Promise<number> {
   }
 
   logSuccess(`Created ${created} admin activity logs`);
+  return created;
+}
+
+// =============================================
+// SEED ADMIN MESSAGE LOGS
+// =============================================
+
+const ADMIN_MESSAGE_SUBJECTS = [
+  "Season Registration Reminder",
+  "Maintenance Notice",
+  "Match Rescheduling Update",
+  "Policy Update",
+  "Important: Rules Change",
+  "Season Results Published",
+  "Welcome to the New Season",
+  "Court Schedule Changes",
+  "Rating System Update",
+  "Holiday Schedule Notice",
+];
+
+const ADMIN_MESSAGE_BODIES = [
+  "Dear players, please remember to complete your season registration before the deadline. Late registrations will not be accepted.",
+  "We will be performing system maintenance this weekend. The app may be unavailable for a short period.",
+  "Due to weather conditions, several matches have been rescheduled. Please check your match schedule for updates.",
+  "We have updated our fair play policy. Please review the changes in the rules section of the app.",
+  "Congratulations to all participants! Season results have been published. Check your standings now.",
+  "Welcome to the new season! We're excited to have you. Please set up your profile if you haven't already.",
+  "Please note the court schedule changes effective next week. Some time slots have been adjusted.",
+  "We've made improvements to the rating calculation system. Your ratings may show slight adjustments.",
+  "Please review the holiday schedule for upcoming court closures and match postponements.",
+  "Thank you for your feedback! We've implemented several requested improvements in this update.",
+];
+
+export async function seedAdminMessageLogs(admins: SeededAdmin[]): Promise<number> {
+  logSection("📧 Seeding admin message logs...");
+
+  if (admins.length === 0) {
+    logProgress("   No admins found, skipping message logs...");
+    return 0;
+  }
+
+  const users = await prisma.user.findMany({
+    where: { status: "ACTIVE" },
+    select: { id: true },
+    take: 200,
+  });
+
+  const matches = await prisma.match.findMany({
+    where: { status: "COMPLETED" },
+    select: { id: true },
+    take: 20,
+  });
+
+  const seasons = await prisma.season.findMany({
+    select: { id: true },
+    take: 10,
+  });
+
+  let created = 0;
+  const target = 30;
+
+  for (let i = 0; i < target; i++) {
+    const admin = randomElement(admins);
+    const recipientCount = randomInt(5, 50);
+    const recipients = randomElements(users, Math.min(recipientCount, users.length));
+    const recipientIds = recipients.map(u => u.id);
+
+    const sendEmail = randomBoolean(0.4);
+    const sendPush = randomBoolean(0.6);
+
+    await prisma.adminMessageLog.create({
+      data: {
+        adminId: admin.adminId,
+        matchId: randomBoolean(0.3) && matches.length > 0 ? randomElement(matches).id : null,
+        seasonId: randomBoolean(0.4) && seasons.length > 0 ? randomElement(seasons).id : null,
+        subject: randomElement(ADMIN_MESSAGE_SUBJECTS),
+        message: randomElement(ADMIN_MESSAGE_BODIES),
+        recipientIds,
+        sendEmail,
+        sendPush,
+        inAppCount: recipientIds.length,
+        emailCount: sendEmail ? Math.floor(recipientIds.length * 0.85) : 0,
+        emailSkipped: sendEmail ? Math.ceil(recipientIds.length * 0.15) : 0,
+        pushCount: sendPush ? Math.floor(recipientIds.length * 0.75) : 0,
+        pushSkipped: sendPush ? Math.ceil(recipientIds.length * 0.25) : 0,
+        createdAt: randomDate(monthsAgo(10), daysAgo(1)),
+      },
+    });
+    created++;
+  }
+
+  logSuccess(`Created ${created} admin message logs`);
   return created;
 }
 

@@ -57,6 +57,17 @@ export async function seedMatches(
 
   const createdMatches: Match[] = [];
 
+  // Pre-load division assignments so matches use the correct players
+  const divisionUserMap = new Map<string, string[]>();
+  const allAssignments = await prisma.divisionAssignment.findMany({
+    select: { divisionId: true, userId: true },
+  });
+  for (const a of allAssignments) {
+    const arr = divisionUserMap.get(a.divisionId) || [];
+    arr.push(a.userId);
+    divisionUserMap.set(a.divisionId, arr);
+  }
+
   // Match configurations - weighted for realistic distribution
   // Total: ~2500 league matches spread over 12 months
   const matchConfigs = [
@@ -108,11 +119,22 @@ export async function seedMatches(
         continue;
       }
 
-      // Select different players for each match
-      const player1Index = (matchIndex * 2) % activeUsers.length;
-      const player2Index = (matchIndex * 2 + 1) % activeUsers.length;
-      const player1 = activeUsers[player1Index]!;
-      const player2 = activeUsers[player2Index]!;
+      // Select players from division assignments (fall back to random if not enough)
+      const divUsers = divisionUserMap.get(division.id) || [];
+      let player1: User;
+      let player2: User;
+      if (divUsers.length >= 2) {
+        const idx1 = (matchIndex * 2) % divUsers.length;
+        let idx2 = (matchIndex * 2 + 1) % divUsers.length;
+        if (idx2 === idx1) idx2 = (idx1 + 1) % divUsers.length;
+        const p1 = activeUsers.find(u => u.id === divUsers[idx1]);
+        const p2 = activeUsers.find(u => u.id === divUsers[idx2]);
+        player1 = p1 || activeUsers[(matchIndex * 2) % activeUsers.length]!;
+        player2 = p2 || activeUsers[(matchIndex * 2 + 1) % activeUsers.length]!;
+      } else {
+        player1 = activeUsers[(matchIndex * 2) % activeUsers.length]!;
+        player2 = activeUsers[(matchIndex * 2 + 1) % activeUsers.length]!;
+      }
 
       // Determine match date based on status - spread over 12 months
       let matchDate: Date;
@@ -224,11 +246,22 @@ export async function seedMatches(
       });
 
       // Add partners for doubles matches
-      if (division.gameType === "DOUBLES" && activeUsers.length > player2Index + 2) {
-        const partner1Index = (player1Index + Math.floor(activeUsers.length / 2)) % activeUsers.length;
-        const partner2Index = (player2Index + Math.floor(activeUsers.length / 2)) % activeUsers.length;
-        const partner1 = activeUsers[partner1Index]!;
-        const partner2 = activeUsers[partner2Index]!;
+      if (division.gameType === "DOUBLES") {
+        // Pick partners from division users (different from player1/player2)
+        const otherDivUsers = divUsers.filter(id => id !== player1.id && id !== player2.id);
+        let partner1: User;
+        let partner2: User;
+        if (otherDivUsers.length >= 2) {
+          const pIdx1 = matchIndex % otherDivUsers.length;
+          const pIdx2 = (matchIndex + 1) % otherDivUsers.length;
+          partner1 = activeUsers.find(u => u.id === otherDivUsers[pIdx1]) || activeUsers[(matchIndex * 3) % activeUsers.length]!;
+          partner2 = activeUsers.find(u => u.id === otherDivUsers[pIdx2 === pIdx1 ? (pIdx1 + 1) % otherDivUsers.length : pIdx2]) || activeUsers[(matchIndex * 3 + 1) % activeUsers.length]!;
+        } else {
+          const partner1Index = (matchIndex * 3) % activeUsers.length;
+          const partner2Index = (matchIndex * 3 + 1) % activeUsers.length;
+          partner1 = activeUsers[partner1Index]!;
+          partner2 = activeUsers[partner2Index]!;
+        }
 
         await prisma.matchParticipant.createMany({
           data: [
@@ -629,4 +662,83 @@ function generateSetScores(playerSets: number, opponentSets: number): { sets: { 
   }
 
   return { sets };
+}
+
+// =============================================
+// SEED MATCH COMMENTS
+// =============================================
+
+const MATCH_COMMENT_TEXTS = [
+  "Good game!",
+  "That last set was intense!",
+  "Rematch soon?",
+  "Nice serve!",
+  "Well played!",
+  "Close match!",
+  "Your backhand is getting better!",
+  "Great rally in the second set",
+  "Thanks for the game!",
+  "Courts were in good condition today",
+  "We should play again next week",
+  "That tiebreak was nerve-wracking!",
+  "Tough loss but good effort",
+  "My best match this season!",
+  "Need to work on my returns",
+  "Fun match, see you next time!",
+  "The wind made it tricky today",
+  "Good sportsmanship out there",
+  "Let's warm up together before next match",
+  "That drop shot was unreal!",
+];
+
+export async function seedMatchComments(matches: Match[], users: User[]): Promise<number> {
+  logSection("💬 Seeding match comments...");
+
+  const completedMatches = matches.filter(m => m.status === MatchStatus.COMPLETED && !m.isWalkover);
+  const activeUsers = users.filter(u => u.status === UserStatus.ACTIVE && u.completedOnboarding);
+
+  // Take ~200 random matches to comment on
+  const matchesToComment = completedMatches
+    .sort(() => 0.5 - Math.random())
+    .slice(0, 200);
+
+  let created = 0;
+
+  for (const match of matchesToComment) {
+    const commentCount = randomInt(1, 4);
+
+    // Get match participants
+    const participants = await prisma.matchParticipant.findMany({
+      where: { matchId: match.id },
+      select: { userId: true },
+    });
+    const participantIds = participants.map(p => p.userId);
+
+    for (let c = 0; c < commentCount; c++) {
+      // 60% chance comment is from a participant, 40% from random user
+      const isParticipant = randomBoolean(0.6) && participantIds.length > 0;
+      const userId = isParticipant
+        ? randomElement(participantIds)
+        : randomElement(activeUsers).id;
+
+      await prisma.matchComment.create({
+        data: {
+          matchId: match.id,
+          userId,
+          comment: randomElement(MATCH_COMMENT_TEXTS),
+          createdAt: new Date(
+            match.matchDate.getTime() + randomInt(10, 1440) * 60 * 1000
+          ),
+        },
+      });
+      created++;
+    }
+
+    if (created % 100 === 0) {
+      logProgress(`   Match comments: ${created}`);
+    }
+  }
+
+  logSuccess(`Created ${created} match comments`);
+  return created;
 }
