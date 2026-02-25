@@ -40,4 +40,5 @@ build/
 # Test coverage output
 coverage/
 
-.backupsgoogle-services.json
+.backups
+google-services.json
