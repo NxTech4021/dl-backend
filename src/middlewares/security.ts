@@ -52,39 +52,7 @@ export const generalLimiter = rateLimit({
   legacyHeaders: false, // Disable the `X-RateLimit-*` headers
   keyGenerator: (req: Request) => {
     // Use IP address for rate limiting
-    return req.ip || req.connection.remoteAddress || 'unknown';
-  },
-});
-
-// Auth rate limiter: 5 requests per 15 minutes for authentication endpoints
-export const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 5, // 5 requests per 15 minutes
-  message: {
-    error: 'Too many authentication attempts, please try again later',
-    code: 'AUTH_RATE_LIMIT_EXCEEDED',
-    success: false
-  },
-  standardHeaders: true,
-  legacyHeaders: false,
-  keyGenerator: (req: Request) => {
-    return req.ip || req.connection.remoteAddress || 'unknown';
-  },
-});
-
-// Strict rate limiter: 10 requests per minute for sensitive endpoints
-export const strictLimiter = rateLimit({
-  windowMs: 60 * 1000, // 1 minute
-  max: 10, // 10 requests per minute
-  message: {
-    error: 'Too many requests to sensitive endpoint, please try again later',
-    code: 'STRICT_RATE_LIMIT_EXCEEDED',
-    success: false
-  },
-  standardHeaders: true,
-  legacyHeaders: false,
-  keyGenerator: (req: Request) => {
-    return req.ip || req.connection.remoteAddress || 'unknown';
+    return req.ip || 'unknown';
   },
 });
 
@@ -208,7 +176,7 @@ export const requestSizeLimiter = (req: Request, res: Response, next: NextFuncti
         code: 'PAYLOAD_TOO_LARGE',
         success: false
       });
-      req.connection.destroy();
+      req.socket.destroy();
     }
   });
 
@@ -241,7 +209,7 @@ const blockedIPs = new Set<string>();
 const suspiciousActivity = new Map<string, number>();
 
 export const ipBlocker = (req: Request, res: Response, next: NextFunction) => {
-  const ip = req.ip || req.connection.remoteAddress || '';
+  const ip = req.ip || '';
 
   if (blockedIPs.has(ip)) {
     return res.status(403).json({
