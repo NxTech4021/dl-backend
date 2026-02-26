@@ -15,21 +15,29 @@ import rateLimit from 'express-rate-limit';
  * Build a tiny Express app with one limiter and one route.
  * The x-test-ip header overrides the IP so each test can use a unique IP
  * and avoid counter bleed between tests.
+ * statusCode defaults to 200; pass a non-2xx value (e.g. 401) to make
+ * authLimiter (skipSuccessfulRequests: true) count the request as a failure.
  */
-function makeApp(limiter: ReturnType<typeof rateLimit>) {
+function makeApp(limiter: ReturnType<typeof rateLimit>, statusCode = 200) {
   const app = express();
   app.set('trust proxy', false);
 
-  // Allow tests to spoof IP via header
+  // Allow tests to spoof IP via header.
+  // Must use Object.defineProperty because req.ip is a getter-only property
+  // on the Express Request prototype — direct assignment throws in strict mode.
   app.use((req: Request, _res: Response, next) => {
     if (req.headers['x-test-ip']) {
-      (req as any).ip = req.headers['x-test-ip'] as string;
+      Object.defineProperty(req, 'ip', {
+        value: req.headers['x-test-ip'] as string,
+        writable: true,
+        configurable: true,
+      });
     }
     next();
   });
 
   app.get('/test', limiter, (_req: Request, res: Response) => {
-    res.json({ ok: true });
+    res.status(statusCode).json({ ok: true });
   });
 
   return app;
@@ -67,16 +75,16 @@ describe('Rate Limiter — 429 response shape', () => {
    * No limiter should return a plain string body.
    */
 
-  const limitersToTest = [
-    { name: 'authLimiter', limiter: authLimiter, max: 5, ip: '10.0.0.1' },
+  const limitersToTest: Array<{ name: string; limiter: ReturnType<typeof rateLimit>; max: number; ip: string; statusCode?: number }> = [
+    { name: 'authLimiter', limiter: authLimiter, max: 5, ip: '10.0.0.1', statusCode: 401 },
     { name: 'questionnaireLimiter', limiter: questionnaireLimiter, max: 10, ip: '10.0.0.2' },
     { name: 'onboardingLimiter', limiter: onboardingLimiter, max: 60, ip: '10.0.0.3' },
     { name: 'pushTokenLimiter', limiter: pushTokenLimiter, max: 10, ip: '10.0.0.4' },
   ];
 
-  for (const { name, limiter, max, ip } of limitersToTest) {
+  for (const { name, limiter, max, ip, statusCode } of limitersToTest) {
     it(`${name}: 429 body has success=false, code, message, retryAfter as number`, async () => {
-      const app = makeApp(limiter);
+      const app = makeApp(limiter, statusCode);
       const responses = await fireRequests(app, max + 1, ip);
       const blocked = responses[responses.length - 1];
 
@@ -113,12 +121,12 @@ describe('Rate Limiter — availability check limiter', () => {
   });
 
   it('authLimiter still blocks at 5 (brute-force protection stays)', async () => {
-    const app = makeApp(authLimiter);
+    const app = makeApp(authLimiter, 401);  // 401 so requests count as failures
     const responses = await fireRequests(app, 6, '10.1.0.2');
 
     // First 5 should pass
     for (let i = 0; i < 5; i++) {
-      expect(responses[i].status).toBe(200);
+      expect(responses[i].status).toBe(401);
     }
     // 6th should be blocked
     expect(responses[5].status).toBe(429);
@@ -142,8 +150,13 @@ describe('Rate Limiter — onboarding limiter keys by user ID', () => {
       if (userId) {
         (req as any).user = { id: userId };
       }
-      // Fix IP to same value for both users
-      (req as any).ip = '10.2.0.1';
+      // Fix IP to same value for both users using Object.defineProperty
+      // because req.ip is a getter-only property on the Express prototype.
+      Object.defineProperty(req, 'ip', {
+        value: '10.2.0.1',
+        writable: true,
+        configurable: true,
+      });
       next();
     });
 
