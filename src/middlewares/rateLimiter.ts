@@ -29,7 +29,9 @@ export function userKeyGenerator(req: Request): string {
 
 // ── Strict auth limiter — brute force protection ────────────────────────────
 // Applied to: POST /auth/verify-reset-otp
-// 5 failed attempts per 15 minutes per IP.
+// 5 requests per 15 minutes per IP.
+// Only failed attempts count — a successful OTP verification should not
+// burn one of the 5 allowed attempts.
 export const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 5,
@@ -38,7 +40,7 @@ export const authLimiter = rateLimit({
   legacyHeaders: false,
   handler: makeHandler(
     'AUTH_RATE_LIMIT_EXCEEDED',
-    'Too many failed authentication attempts. Please try again later.'
+    'Too many authentication attempts. Please try again later.'
   ),
 });
 
