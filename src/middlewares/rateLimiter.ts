@@ -8,7 +8,7 @@ function makeHandler(code: string, message: string) {
     const resetTime = req.rateLimit?.resetTime;
     const retryAfter = resetTime
       ? Math.ceil((resetTime.getTime() - Date.now()) / 1000)
-      : 60;
+      : 60; // fallback if resetTime is absent; 60s is a safe conservative default
 
     res.status(429).json({
       success: false,
@@ -48,6 +48,7 @@ export const authLimiter = rateLimit({
 // Applied to: POST /auth/check-email, POST /auth/check-username
 // The signup form calls these as the user types. 5/15 min is too low.
 // 50/15 min gives ~3 checks per minute comfortably.
+// Intentionally IP-keyed: these endpoints are pre-authentication so no user ID is available.
 export const availabilityCheckLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 50,
@@ -98,6 +99,7 @@ export const pushTokenLimiter = rateLimit({
   max: 10,
   standardHeaders: true,
   legacyHeaders: false,
+  keyGenerator: userKeyGenerator,
   handler: makeHandler(
     'PUSH_TOKEN_RATE_LIMIT_EXCEEDED',
     'Too many push token registrations. Please try again later.'
