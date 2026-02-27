@@ -80,6 +80,7 @@ describe('Rate Limiter — 429 response shape', () => {
     { name: 'questionnaireLimiter', limiter: questionnaireLimiter, max: 10, ip: '10.0.0.2' },
     { name: 'onboardingLimiter', limiter: onboardingLimiter, max: 60, ip: '10.0.0.3' },
     { name: 'pushTokenLimiter', limiter: pushTokenLimiter, max: 10, ip: '10.0.0.4' },
+    { name: 'availabilityCheckLimiter', limiter: availabilityCheckLimiter, max: 50, ip: '10.0.0.5' },
   ];
 
   for (const { name, limiter, max, ip, statusCode } of limitersToTest) {
