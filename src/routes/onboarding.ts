@@ -156,7 +156,7 @@ declare global {
 // to prevent "step" from being matched as a sport name
 
 // Update user's current onboarding step
-router.put("/step/:userId", onboardingLimiter, verifyAuth, validateOwnUserOrAdmin, async (req, res) => {
+router.put("/step/:userId", verifyAuth, onboardingLimiter, validateOwnUserOrAdmin, async (req, res) => {
   const startTime = Date.now();
   const requestId = req.requestId!;
   const userId = req.params.userId!; // Validated by validateOwnUserOrAdmin middleware
@@ -617,7 +617,7 @@ router.post("/:sport/submit", questionnaireLimiter, verifyAuth, validateSportPar
 });
 
 // Get user's questionnaire responses with validation
-router.get("/responses/:userId", onboardingLimiter, verifyAuth, validateOwnUserOrAdmin, async (req, res) => {
+router.get("/responses/:userId", verifyAuth, onboardingLimiter, validateOwnUserOrAdmin, async (req, res) => {
   const startTime = Date.now();
   const requestId = req.requestId!;
   const userId = req.params.userId!; // Validated by validateOwnUserOrAdmin middleware
@@ -683,7 +683,7 @@ router.get("/responses/:userId", onboardingLimiter, verifyAuth, validateOwnUserO
 });
 
 // Get specific sport response for user with validation
-router.get("/responses/:userId/:sport", onboardingLimiter, verifyAuth, validateOwnUserOrAdmin, async (req, res) => {
+router.get("/responses/:userId/:sport", verifyAuth, onboardingLimiter, validateOwnUserOrAdmin, async (req, res) => {
   const startTime = Date.now();
   const requestId = req.requestId!;
   const userId = req.params.userId!; // Validated by validateOwnUserOrAdmin middleware
@@ -775,7 +775,7 @@ router.get("/responses/:userId/:sport", onboardingLimiter, verifyAuth, validateO
 });
 
 // Update user profile information (name, gender, dateOfBirth)
-router.put("/profile/:userId", onboardingLimiter, verifyAuth, validateOwnUserOrAdmin, async (req, res) => {
+router.put("/profile/:userId", verifyAuth, onboardingLimiter, validateOwnUserOrAdmin, async (req, res) => {
   const startTime = Date.now();
   const requestId = req.requestId!;
   const userId = req.params.userId!; // Validated by validateOwnUserOrAdmin middleware
@@ -919,7 +919,7 @@ router.put("/profile/:userId", onboardingLimiter, verifyAuth, validateOwnUserOrA
 });
 
 // Mark onboarding as completed for a user
-router.post("/complete/:userId", onboardingLimiter, verifyAuth, validateOwnUserOrAdmin, async (req, res) => {
+router.post("/complete/:userId", verifyAuth, onboardingLimiter, validateOwnUserOrAdmin, async (req, res) => {
   const startTime = Date.now();
   const requestId = req.requestId!;
   const userId = req.params.userId!; // Validated by validateOwnUserOrAdmin middleware
@@ -998,7 +998,7 @@ router.post("/complete/:userId", onboardingLimiter, verifyAuth, validateOwnUserO
 });
 
 // Check if user has completed any sport assessments
-router.get("/assessment-status/:userId", onboardingLimiter, verifyAuth, validateOwnUserOrAdmin, async (req, res) => {
+router.get("/assessment-status/:userId", verifyAuth, onboardingLimiter, validateOwnUserOrAdmin, async (req, res) => {
   const startTime = Date.now();
   const requestId = req.requestId!;
   const userId = req.params.userId!; // Validated by validateOwnUserOrAdmin middleware
@@ -1092,7 +1092,7 @@ router.get("/assessment-status/:userId", onboardingLimiter, verifyAuth, validate
 });
 
 // Check if user has completed onboarding
-router.get("/status/:userId", onboardingLimiter, verifyAuth, validateOwnUserOrAdmin, async (req, res) => {
+router.get("/status/:userId", verifyAuth, onboardingLimiter, validateOwnUserOrAdmin, async (req, res) => {
   const startTime = Date.now();
   const requestId = req.requestId!;
   const userId = req.params.userId!; // Validated by validateOwnUserOrAdmin middleware
@@ -1191,7 +1191,7 @@ router.get("/status/:userId", onboardingLimiter, verifyAuth, validateOwnUserOrAd
 });
 
 // Save user sports selection
-router.post("/sports/:userId", onboardingLimiter, verifyAuth, validateOwnUserOrAdmin, async (req, res) => {
+router.post("/sports/:userId", verifyAuth, onboardingLimiter, validateOwnUserOrAdmin, async (req, res) => {
   const startTime = Date.now();
   const requestId = req.requestId!;
   const userId = req.params.userId!; // Validated by validateOwnUserOrAdmin middleware
@@ -1324,7 +1324,7 @@ router.post("/sports/:userId", onboardingLimiter, verifyAuth, validateOwnUserOrA
 });
 
 // Save user location information
-router.post("/location/:userId", onboardingLimiter, verifyAuth, validateOwnUserOrAdmin, async (req, res) => {
+router.post("/location/:userId", verifyAuth, onboardingLimiter, validateOwnUserOrAdmin, async (req, res) => {
   const startTime = Date.now();
   const requestId = req.requestId!;
   const userId = req.params.userId!; // Validated by validateOwnUserOrAdmin middleware
@@ -1604,7 +1604,7 @@ router.get("/locations/search", async (req, res) => {
 });
 
 // Save user sport skill levels (self-assessed during onboarding)
-router.put("/skill-levels/:userId", onboardingLimiter, verifyAuth, validateOwnUserOrAdmin, async (req, res) => {
+router.put("/skill-levels/:userId", verifyAuth, onboardingLimiter, validateOwnUserOrAdmin, async (req, res) => {
   const startTime = Date.now();
   const requestId = req.requestId!;
   const userId = req.params.userId!; // Validated by validateOwnUserOrAdmin middleware
@@ -1759,7 +1759,7 @@ router.put("/skill-levels/:userId", onboardingLimiter, verifyAuth, validateOwnUs
 });
 
 // Get user profile information
-router.get("/profile/:userId", onboardingLimiter, verifyAuth, validateOwnUserOrAdmin, async (req, res) => {
+router.get("/profile/:userId", verifyAuth, onboardingLimiter, validateOwnUserOrAdmin, async (req, res) => {
   const startTime = Date.now();
   const requestId = req.requestId!;
   const userId = req.params.userId!; // Validated by validateOwnUserOrAdmin middleware
