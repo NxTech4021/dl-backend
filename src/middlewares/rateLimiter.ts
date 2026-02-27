@@ -63,6 +63,8 @@ export const availabilityCheckLimiter = rateLimit({
 // ── Onboarding limiter — authenticated, user-ID keyed ──────────────────────
 // Applied to: 11 routes in /api/onboarding/* (all behind verifyAuth)
 // Keyed by user ID so users on shared IPs don't block each other.
+// NOTE: Must be placed AFTER verifyAuth in the middleware chain so
+// userKeyGenerator can read req.user.id instead of falling back to IP.
 // 60 requests per 5 minutes is generous for multi-step onboarding flows.
 export const onboardingLimiter = rateLimit({
   windowMs: 5 * 60 * 1000,
