@@ -101,6 +101,13 @@ export const getMatchById = async (req: Request, res: Response) => {
       include: {
         division: true,
         participants: { include: { user: true } },
+        //Easier to differentiate in the backend via game/set scores 
+        scores: {
+          orderBy: { setNumber: 'asc' }
+        },
+        pickleballScores: {
+          orderBy: { gameNumber: 'asc' }
+        },
         disputes: {
           include: {
             raisedByUser: {
@@ -370,6 +377,10 @@ export const getMatchDetails = async (req: Request, res: Response) => {
         scores: {
           orderBy: { setNumber: 'asc' }
         },
+        //Easier to differentiate in the backend via game/set scores 
+        pickleballScores: {
+          orderBy: { gameNumber: 'asc' }
+        },
         disputes: {
           include: {
             raisedByUser: {
@@ -478,6 +489,7 @@ export const getMatchDetails = async (req: Request, res: Response) => {
       playerScore: match.playerScore,
       opponentScore: match.opponentScore,
       scores: match.scores || [],
+      pickleballScores: match.pickleballScores || [],
 
       // Result submission info
       createdById: match.createdById,
