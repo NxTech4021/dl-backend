@@ -6,7 +6,7 @@ import {
   checkEmailAvailability, 
   checkUsernameAvailability 
 } from "../controllers/authController";
-import { authLimiter } from "../middlewares/rateLimiter";
+import { authLimiter, availabilityCheckLimiter } from "../middlewares/rateLimiter";
 
 const router = express.Router();
 
@@ -16,8 +16,8 @@ router.post("/verify-reset-otp", authLimiter, verifyResetOtp);
 
 // Email and username availability checks
 // Rate limited to prevent abuse
-router.post("/check-email", authLimiter, checkEmailAvailability);
-router.post("/check-username", authLimiter, checkUsernameAvailability);
+router.post("/check-email", availabilityCheckLimiter, checkEmailAvailability);
+router.post("/check-username", availabilityCheckLimiter, checkUsernameAvailability);
 
 // router.get("/me", getMyData)
 

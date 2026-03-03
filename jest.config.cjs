@@ -23,6 +23,7 @@ module.exports = {
   // API tests are excluded due to better-auth ESM compatibility issues
   testMatch: [
     '<rootDir>/tests/integration/services/**/*.test.ts',
+    '<rootDir>/tests/unit/**/*.test.ts',
   ],
 
   // Ignore patterns
