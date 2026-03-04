@@ -1,10 +1,7 @@
 import nodemailer from "nodemailer";
 import dotenv from "dotenv";
-import { Resend } from "resend";
 
 dotenv.config();
-
-const resend = new Resend("re_4WKNJbCW_Q3ERonrPhkQ9HMQyeoeyWZFM");
 
 export const transporter = nodemailer.createTransport({
   service: "Gmail",
@@ -15,25 +12,26 @@ export const transporter = nodemailer.createTransport({
 });
 
 export const sendEmail = async (to: string, subject: string, html: string) => {
-  console.log("Sending email:", to, subject, html);
+  console.log("Sending email to:", to);
+  console.log("Using EMAIL_USER:", process.env.EMAIL_USER);
+  console.log("EMAIL_PASS length:", process.env.EMAIL_PASS?.length);
 
-  const { data, error } = await resend.emails.send({
-    from: "Deuce League <no-reply@staging.appdevelopers.my>",
-    to,
-    subject,
-    html: html,
-  });
-
-  if (error) {
-    throw new Error(error.message);
+  try {
+    const info = await transporter.sendMail({
+      from: `"Deuce League" <${process.env.EMAIL_USER}>`,
+      to,
+      subject,
+      html,
+    });
+    
+    console.log("Email sent successfully!");
+    console.log("Message ID:", info.messageId);
+    console.log("Response:", info.response);
+    
+    return { id: info.messageId };
+  } catch (error: any) {
+    console.error("Gmail SMTP Error:", error.message);
+    console.error("Full error:", error);
+    throw error;
   }
-
-  return data;
-
-  // await transporter.sendMail({
-  //   from: `"DeuceLeague" <${process.env.EMAIL_USER}>`,
-  //   to,
-  //   subject,
-  //   html,
-  // });
 };
