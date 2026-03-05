@@ -812,7 +812,7 @@ export class MatchInvitationService {
       }
     });
 
-    if (!match) {
+    if (!match || match.isFriendly) {
       throw new Error('Match not found');
     }
 
@@ -916,36 +916,54 @@ export class MatchInvitationService {
       }
     }
 
-    // Determine role and team
-    let role: ParticipantRole = ParticipantRole.OPPONENT;
-    let team: string | null = null;
-
-    if (match.matchType === MatchType.SINGLES) {
-      // For singles: joiner is always team2 (creator is team1)
-      team = 'team2';
-    } else if (match.matchType === MatchType.DOUBLES) {
-      // For doubles, partnerId is REQUIRED - players must be in an established partnership
-      if (!partnerId) {
-        throw new Error('You must join with your partner. Solo joining is not allowed for doubles matches.');
-      }
-
-      // Find which team needs players
-      const team1Count = match.participants.filter(p => p.team === 'team1').length;
-      const team2Count = match.participants.filter(p => p.team === 'team2').length;
-
-      // Both players need a team with 0 players (space for 2)
-      if (team1Count === 0) {
-        team = 'team1';
-        role = ParticipantRole.OPPONENT;
-      } else if (team2Count === 0) {
-        team = 'team2';
-        role = ParticipantRole.OPPONENT;
-      } else {
-        throw new Error('This match is already full. Both teams have players.');
-      }
+    // Doubles-specific validation (static check — doesn't need transaction)
+    if (match.matchType === MatchType.DOUBLES && !partnerId) {
+      throw new Error('You must join with your partner. Solo joining is not allowed for doubles matches.');
     }
 
     await prisma.$transaction(async (tx) => {
+      // Re-fetch match with fresh participant data inside transaction
+      // to prevent race condition where two concurrent joins both pass the guard
+      const freshMatch = await tx.match.findUnique({
+        where: { id: matchId },
+        include: { participants: true }
+      });
+
+      if (!freshMatch) {
+        throw new Error('Match not found');
+      }
+
+      // Determine role and team using fresh data
+      let role: ParticipantRole = ParticipantRole.OPPONENT;
+      let team: string | null = null;
+
+      if (freshMatch.matchType === MatchType.SINGLES) {
+        // Guard: singles match can only have 2 participants (1 per team)
+        const acceptedCount = freshMatch.participants.filter(
+          p => p.invitationStatus === InvitationStatus.ACCEPTED
+        ).length;
+        if (acceptedCount >= 2) {
+          throw new Error('This match is already full');
+        }
+        // For singles: joiner is always team2 (creator is team1)
+        team = 'team2';
+      } else if (freshMatch.matchType === MatchType.DOUBLES) {
+        // Find which team needs players
+        const team1Count = freshMatch.participants.filter(p => p.team === 'team1').length;
+        const team2Count = freshMatch.participants.filter(p => p.team === 'team2').length;
+
+        // Both players need a team with 0 players (space for 2)
+        if (team1Count === 0) {
+          team = 'team1';
+          role = ParticipantRole.OPPONENT;
+        } else if (team2Count === 0) {
+          team = 'team2';
+          role = ParticipantRole.OPPONENT;
+        } else {
+          throw new Error('This match is already full. Both teams have players.');
+        }
+      }
+
       // Add user as participant
       await tx.matchParticipant.create({
         data: {
@@ -959,7 +977,7 @@ export class MatchInvitationService {
       });
 
       // For doubles matches, add partner with PENDING status and create invitation
-      if (partnerId && match.matchType === MatchType.DOUBLES && team) {
+      if (partnerId && freshMatch.matchType === MatchType.DOUBLES && team) {
         // Add partner as PENDING participant
         await tx.matchParticipant.create({
           data: {
