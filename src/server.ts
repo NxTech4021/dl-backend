@@ -17,6 +17,7 @@ import { getMatchReminderService } from "./services/notification/matchReminderSe
 import { initializeNotificationJobs } from "./jobs/notificationJobs";
 import { getMatchInvitationService } from "./services/match/matchInvitationService";
 import { getMatchResultService } from "./services/match/matchResultService";
+import { logger } from "./utils/logger";
 // import pino from "pino";
 
 // // Create server logger
@@ -108,34 +109,31 @@ httpServer.listen(PORT, () => {
 //   }
 // });
 
-// // Run match invitation expiration check every hour
-// cron.schedule("0 * * * *", async () => {
-//   try {
-//     const matchInvitationService = getMatchInvitationService();
-//     const expirationResults =
-//       await matchInvitationService.checkExpiredInvitations();
-//     const declinedResults =
-//       await matchInvitationService.handleFullyDeclinedMatches();
+// Run match invitation expiration check every hour
+cron.schedule("0 * * * *", async () => {
+  try {
+    const matchInvitationService = getMatchInvitationService();
+    const expirationResults =
+      await matchInvitationService.checkExpiredInvitations();
+    const declinedResults =
+      await matchInvitationService.handleFullyDeclinedMatches();
 
-//     const totalExpired =
-//       expirationResults.invitationsExpired +
-//       expirationResults.matchesMovedToDraft +
-//       declinedResults.matchesMovedToDraft;
-//     if (totalExpired > 0) {
-//       log.info(
-//         {
-//           invitationsExpired: expirationResults.invitationsExpired,
-//           matchesMovedToDraft:
-//             expirationResults.matchesMovedToDraft +
-//             declinedResults.matchesMovedToDraft,
-//         },
-//         "Cron: Match invitation cleanup"
-//       );
-//     }
-//   } catch (error) {
-//     log.error({ err: error }, "Cron: Failed match invitation check");
-//   }
-// });
+    const totalExpired =
+      expirationResults.invitationsExpired +
+      expirationResults.matchesMovedToDraft +
+      declinedResults.matchesMovedToDraft;
+    if (totalExpired > 0) {
+      logger.info("Cron: Match invitation cleanup", {
+        invitationsExpired: expirationResults.invitationsExpired,
+        matchesMovedToDraft:
+          expirationResults.matchesMovedToDraft +
+          declinedResults.matchesMovedToDraft,
+      });
+    }
+  } catch (error) {
+    logger.error("Cron: Failed match invitation check", {}, error instanceof Error ? error : new Error(String(error)));
+  }
+});
 
 // // Run auto-approval check for match results every hour
 // cron.schedule("0 * * * *", async () => {
