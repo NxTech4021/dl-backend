@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { verifyAuth } from "../middlewares/auth.middleware";
+import { matchJoinLimiter } from '../middlewares/rateLimiter';
 import {
   updateMatch,
   deleteMatch,
@@ -77,8 +78,8 @@ matchRoutes.get('/:id', getMatchById);
 matchRoutes.put('/:id', updateMatch);
 matchRoutes.delete('/delete/:id', deleteMatch);
 
-// Join match
-matchRoutes.post('/:id/join', joinMatch);
+// Join match (rate limited to prevent concurrent/duplicate joins)
+matchRoutes.post('/:id/join', matchJoinLimiter, joinMatch);
 
 // Invitations
 matchRoutes.get('/invitations/pending', getPendingInvitations);
