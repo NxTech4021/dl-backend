@@ -31,12 +31,14 @@ export {
 // Match factories
 export {
   createTestMatch,
+  createTestFriendlyMatch,
   createMatchWithOpponent,
   createMatchWithSubmittedScores,
   createCompletedMatch,
   createDisputedMatch,
   createWalkoverMatch,
   type CreateMatchOptions,
+  type CreateFriendlyMatchOptions,
 } from './matchFactory';
 
 // Notification factories
