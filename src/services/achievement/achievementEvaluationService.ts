@@ -59,151 +59,151 @@ async function evaluateAchievements(
 
   for (const achievement of achievements) {
     try {
-    // 2. Check if already completed
-    const existing = await prisma.userAchievement.findUnique({
-      where: {
-        userId_achievementId: { userId, achievementId: achievement.id },
-      },
-    });
-
-    // Skip already-completed non-revocable achievements
-    if (existing?.isCompleted && !achievement.isRevocable) continue;
-
-    // 3. Get the evaluator function
-    const evaluator = getEvaluator(achievement.evaluatorKey);
-    if (!evaluator) {
-      logger.warn(`No evaluator found for key: ${achievement.evaluatorKey}`);
-      continue;
-    }
-
-    // 4. Run the evaluator
-    const evalResult = await evaluator(
-      context,
-      achievement.threshold,
-      achievement.sportFilter as SportType | null,
-      achievement.gameTypeFilter as GameType | null
-    );
-
-    result.evaluated++;
-
-    // 5. Handle revocable achievements
-    const isNowComplete = evalResult.isComplete;
-    const wasComplete = existing?.isCompleted ?? false;
-
-    // Revocation: was complete but no longer qualifies
-    if (wasComplete && !isNowComplete && achievement.isRevocable) {
-      await prisma.userAchievement.update({
+      // 2. Check if already completed
+      const existing = await prisma.userAchievement.findUnique({
         where: {
           userId_achievementId: { userId, achievementId: achievement.id },
         },
-        data: {
+      });
+
+      // Skip already-completed non-revocable achievements
+      if (existing?.isCompleted && !achievement.isRevocable) continue;
+
+      // 3. Get the evaluator function
+      const evaluator = getEvaluator(achievement.evaluatorKey);
+      if (!evaluator) {
+        logger.warn(`No evaluator found for key: ${achievement.evaluatorKey}`);
+        continue;
+      }
+
+      // 4. Run the evaluator
+      const evalResult = await evaluator(
+        context,
+        achievement.threshold,
+        achievement.sportFilter as SportType | null,
+        achievement.gameTypeFilter as GameType | null
+      );
+
+      result.evaluated++;
+
+      // 5. Handle revocable achievements
+      const isNowComplete = evalResult.isComplete;
+      const wasComplete = existing?.isCompleted ?? false;
+
+      // Revocation: was complete but no longer qualifies
+      if (wasComplete && !isNowComplete && achievement.isRevocable) {
+        await prisma.userAchievement.update({
+          where: {
+            userId_achievementId: { userId, achievementId: achievement.id },
+          },
+          data: {
+            progress: evalResult.currentValue,
+            isCompleted: false,
+            unlockedAt: null,
+          },
+        });
+
+        // Emit revocation event
+        try {
+          if (io) {
+            io.to(userId).emit('achievement_revoked', {
+              achievementId: achievement.id,
+              title: achievement.title,
+              category: achievement.category,
+            });
+          }
+        } catch (err) {
+          logger.warn('Failed to emit achievement_revoked socket event:', {
+            error: err instanceof Error ? err.message : String(err),
+            achievementId: achievement.id,
+            userId,
+          });
+        }
+        continue;
+      }
+
+      // Already complete and still complete (revocable re-eval) — just update progress
+      if (wasComplete && isNowComplete) {
+        await prisma.userAchievement.update({
+          where: {
+            userId_achievementId: { userId, achievementId: achievement.id },
+          },
+          data: { progress: evalResult.currentValue },
+        });
+        continue;
+      }
+
+      // Standard upsert for new or in-progress achievements
+      await prisma.userAchievement.upsert({
+        where: {
+          userId_achievementId: { userId, achievementId: achievement.id },
+        },
+        create: {
+          userId,
+          achievementId: achievement.id,
           progress: evalResult.currentValue,
-          isCompleted: false,
-          unlockedAt: null,
+          isCompleted: isNowComplete,
+          unlockedAt: isNowComplete ? new Date() : null,
+        },
+        update: {
+          progress: evalResult.currentValue,
+          ...(isNowComplete && !wasComplete
+            ? { isCompleted: true, unlockedAt: new Date() }
+            : {}),
         },
       });
 
-      // Emit revocation event
-      try {
-        if (io) {
-          io.to(userId).emit('achievement_revoked', {
+      // 6. If newly completed, send notification
+      if (isNowComplete && !wasComplete) {
+        result.newlyUnlocked.push({
+          id: achievement.id,
+          title: achievement.title,
+          description: achievement.description,
+          icon: achievement.icon,
+          tier: achievement.tier,
+          category: achievement.category,
+          points: achievement.points,
+        });
+
+        // Send in-app notification (fire-and-forget)
+        try {
+          const notificationService = new NotificationService();
+          const payload = accountNotifications.achievementUnlocked(achievement.title);
+          await notificationService.createNotification({
+            ...payload,
+            userIds: userId,
             achievementId: achievement.id,
-            title: achievement.title,
-            category: achievement.category,
+          });
+        } catch (err) {
+          logger.error('Failed to send achievement notification:', {
+            error: err instanceof Error ? err.message : String(err),
+            achievementId: achievement.id,
+            userId,
           });
         }
-      } catch (err) {
-        logger.warn('Failed to emit achievement_revoked socket event:', {
-          error: err instanceof Error ? err.message : String(err),
-          achievementId: achievement.id,
-          userId,
-        });
-      }
-      continue;
-    }
 
-    // Already complete and still complete (revocable re-eval) — just update progress
-    if (wasComplete && isNowComplete) {
-      await prisma.userAchievement.update({
-        where: {
-          userId_achievementId: { userId, achievementId: achievement.id },
-        },
-        data: { progress: evalResult.currentValue },
-      });
-      continue;
-    }
-
-    // Standard upsert for new or in-progress achievements
-    await prisma.userAchievement.upsert({
-      where: {
-        userId_achievementId: { userId, achievementId: achievement.id },
-      },
-      create: {
-        userId,
-        achievementId: achievement.id,
-        progress: evalResult.currentValue,
-        isCompleted: isNowComplete,
-        unlockedAt: isNowComplete ? new Date() : null,
-      },
-      update: {
-        progress: evalResult.currentValue,
-        ...(isNowComplete && !wasComplete
-          ? { isCompleted: true, unlockedAt: new Date() }
-          : {}),
-      },
-    });
-
-    // 6. If newly completed, send notification
-    if (isNowComplete && !wasComplete) {
-      result.newlyUnlocked.push({
-        id: achievement.id,
-        title: achievement.title,
-        description: achievement.description,
-        icon: achievement.icon,
-        tier: achievement.tier,
-        category: achievement.category,
-        points: achievement.points,
-      });
-
-      // Send in-app notification (fire-and-forget)
-      try {
-        const notificationService = new NotificationService();
-        const payload = accountNotifications.achievementUnlocked(achievement.title);
-        await notificationService.createNotification({
-          ...payload,
-          userIds: userId,
-          achievementId: achievement.id,
-        });
-      } catch (err) {
-        logger.error('Failed to send achievement notification:', {
-          error: err instanceof Error ? err.message : String(err),
-          achievementId: achievement.id,
-          userId,
-        });
-      }
-
-      // Emit real-time socket event for celebration UI (fire-and-forget)
-      try {
-        if (io) {
-          io.to(userId).emit('achievement_unlocked', {
+        // Emit real-time socket event for celebration UI (fire-and-forget)
+        try {
+          if (io) {
+            io.to(userId).emit('achievement_unlocked', {
+              achievementId: achievement.id,
+              title: achievement.title,
+              description: achievement.description,
+              icon: achievement.icon,
+              tier: achievement.tier,
+              category: achievement.category,
+              points: achievement.points,
+            });
+            logger.debug(`Emitted achievement_unlocked to user ${userId} for achievement ${achievement.id}`);
+          }
+        } catch (err) {
+          logger.warn('Failed to emit achievement_unlocked socket event:', {
+            error: err instanceof Error ? err.message : String(err),
             achievementId: achievement.id,
-            title: achievement.title,
-            description: achievement.description,
-            icon: achievement.icon,
-            tier: achievement.tier,
-            category: achievement.category,
-            points: achievement.points,
+            userId,
           });
-          logger.debug(`Emitted achievement_unlocked to user ${userId} for achievement ${achievement.id}`);
         }
-      } catch (err) {
-        logger.warn('Failed to emit achievement_unlocked socket event:', {
-          error: err instanceof Error ? err.message : String(err),
-          achievementId: achievement.id,
-          userId,
-        });
       }
-    }
     } catch (err) {
       logger.error(`Evaluator failed for achievement ${achievement.id} (${achievement.evaluatorKey})`, {
         error: err instanceof Error ? err.message : String(err),
