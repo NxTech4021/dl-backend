@@ -58,6 +58,7 @@ async function evaluateAchievements(
   const result: EvaluationResult = { evaluated: 0, newlyUnlocked: [] };
 
   for (const achievement of achievements) {
+    try {
     // 2. Check if already completed
     const existing = await prisma.userAchievement.findUnique({
       where: {
@@ -202,6 +203,14 @@ async function evaluateAchievements(
           userId,
         });
       }
+    }
+    } catch (err) {
+      logger.error(`Evaluator failed for achievement ${achievement.id} (${achievement.evaluatorKey})`, {
+        error: err instanceof Error ? err.message : String(err),
+        userId,
+        achievementId: achievement.id,
+      });
+      continue;
     }
   }
 
