@@ -331,7 +331,7 @@ const ACHIEVEMENTS: AchievementSeedData[] = [
     description: "Finish #1 in your division after tiebreakers",
     icon: "medal",
     category: AchievementCategory.WINNING,
-    tier: TierType.GOLD,
+    tier: TierType.SILVER,
     scope: AchievementScope.SEASON,
     evaluatorKey: "division_champion",
     threshold: 1,
