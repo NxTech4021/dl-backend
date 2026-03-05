@@ -3,6 +3,7 @@ import { prisma } from "../lib/prisma";
 import { Request, Response, NextFunction, RequestHandler } from "express";
 import { auth } from "../lib/auth";
 import { sendError } from "../utils/response";
+import { logger } from "../utils/logger";
 import { Role } from "@prisma/client";
 
 // Extend the Express Request interface instead of creating a new one
@@ -36,31 +37,22 @@ export interface AuthenticatedRequest extends Request {
 // Better Auth middleware for authentication
 export const verifyAuth: RequestHandler = async (req, res, next) => {
   try {
-    // Debug logging
-    console.log('🔐 verifyAuth: Headers received:', {
-      cookie: req.headers.cookie ? 'Cookie present' : 'No cookie',
-      authorization: req.headers.authorization ? 'Auth header present' : 'No auth header',
-    });
-    
     let userId: string | undefined;
     let authMethod = 'none';
 
     try {
-      // First try: Authenticate via better-auth session cookie
+      // Authenticate via better-auth session cookie
       const session = await auth.api.getSession({ headers: req.headers });
-      console.log('🔐 verifyAuth: Session result:', session ? 'Valid session found' : 'No session found');
-      
+
       if (session?.user?.id) {
         userId = session.user.id;
         authMethod = 'cookie';
-        console.log('🔐 verifyAuth: Valid session for user:', session.user.id);
       }
-    } catch (sessionError) {
-      console.log('🔐 verifyAuth: Session validation failed:', sessionError.message);
+    } catch (sessionError: any) {
+      logger.debug('verifyAuth: Session validation failed', { error: sessionError.message });
     }
 
     if (!userId) {
-      console.log('🔐 verifyAuth: No valid authentication method found');
       return sendError(res, "Unauthorized", 401);
     }
 
@@ -78,7 +70,7 @@ export const verifyAuth: RequestHandler = async (req, res, next) => {
     });
 
     if (!user) {
-      console.log('🔐 verifyAuth: User not found in database:', userId);
+      logger.warn('verifyAuth: User not found in database', { userId });
       return sendError(res, "Unauthorized", 401);
     }
 
@@ -96,10 +88,10 @@ export const verifyAuth: RequestHandler = async (req, res, next) => {
       adminId,
     };
 
-    console.log(`🔐 verifyAuth: Authentication successful via ${authMethod} for user: ${user.id}`);
+    logger.debug(`verifyAuth: Authenticated via ${authMethod}`, { userId: user.id });
     next();
   } catch (error) {
-    console.error("🔐 verifyAuth: Authentication error:", error);
+    logger.error("verifyAuth: Authentication error", { error: error instanceof Error ? error.message : String(error) });
     return sendError(res, "Invalid authentication", 401);
   }
 };
@@ -145,7 +137,7 @@ export const optionalAuth: RequestHandler = async (req, res, next) => {
     next();
   } catch (error) {
     // Log error but continue - don't block anonymous access
-    console.warn("Optional auth check failed:", error);
+    logger.warn("optionalAuth: Session check failed", { error: error instanceof Error ? error.message : String(error) });
     next();
   }
 };
