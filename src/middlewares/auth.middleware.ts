@@ -40,7 +40,6 @@ export const verifyAuth: RequestHandler = async (req, res, next) => {
     console.log('🔐 verifyAuth: Headers received:', {
       cookie: req.headers.cookie ? 'Cookie present' : 'No cookie',
       authorization: req.headers.authorization ? 'Auth header present' : 'No auth header',
-      'x-user-id': req.headers['x-user-id'] || 'No x-user-id'
     });
     
     let userId: string | undefined;
@@ -58,13 +57,6 @@ export const verifyAuth: RequestHandler = async (req, res, next) => {
       }
     } catch (sessionError) {
       console.log('🔐 verifyAuth: Session validation failed:', sessionError.message);
-    }
-
-    // Fallback: If no valid session from cookie, try x-user-id header (temporary compatibility)
-    if (!userId && req.headers['x-user-id']) {
-      userId = req.headers['x-user-id'] as string;
-      authMethod = 'x-user-id';
-      console.log('🔐 verifyAuth: Falling back to x-user-id:', userId);
     }
 
     if (!userId) {
