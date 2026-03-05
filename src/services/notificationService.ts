@@ -85,6 +85,28 @@ export class NotificationService {
         ...entityIds
       } = data;
 
+      // Enrich metadata with match info when matchId is present
+      // This ensures push/in-app notifications include isFriendly and matchType
+      // so the frontend knows which endpoint to use when navigating from notifications
+      let enrichedMetadata: Record<string, any> = metadata ? { ...metadata } : {};
+      if (entityIds.matchId) {
+        try {
+          const matchInfo = await this.prisma.match.findUnique({
+            where: { id: String(entityIds.matchId) },
+            select: { isFriendly: true, matchType: true },
+          });
+          if (matchInfo) {
+            enrichedMetadata.isFriendly = String(matchInfo.isFriendly);
+            enrichedMetadata.matchType = matchInfo.matchType;
+          }
+        } catch (err) {
+          logger.warn('Failed to enrich notification metadata with match info', {
+            matchId: String(entityIds.matchId),
+            error: err instanceof Error ? err.message : String(err),
+          });
+        }
+      }
+
       // Conditions for push & in-app
       const deliveryType = type ? getNotificationDeliveryType(type) : "UNKNOWN";
       const willSendPush = type ? shouldSendPushNotification(type) : false;
@@ -136,9 +158,9 @@ export class NotificationService {
                 .filter(([_, v]) => v !== undefined)
                 .map(([k, v]) => [k, String(v)])
             ),
-            // Include metadata in push payload (sport, location, seasonName, etc.)
-            ...(metadata && Object.fromEntries(
-              Object.entries(metadata)
+            // Include enriched metadata in push payload (sport, location, isFriendly, matchType, etc.)
+            ...(Object.keys(enrichedMetadata).length > 0 && Object.fromEntries(
+              Object.entries(enrichedMetadata)
                 .filter(([_, v]) => v !== undefined && v !== null)
                 .map(([k, v]) => [k, String(v)])
             )),
@@ -213,7 +235,7 @@ export class NotificationService {
             archive: false,
             createdAt: notification.createdAt,
             metadata: {
-              ...metadata,
+              ...enrichedMetadata,
               ...validEntityIds,
             },
             readAt: undefined,
@@ -238,7 +260,7 @@ export class NotificationService {
           createdAt: notification.createdAt,
           readAt: undefined,
           metadata: {
-            ...metadata,
+            ...enrichedMetadata,
             ...validEntityIds,
           },
         }));
