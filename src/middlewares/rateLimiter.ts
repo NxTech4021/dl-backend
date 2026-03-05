@@ -93,6 +93,22 @@ export const questionnaireLimiter = rateLimit({
   ),
 });
 
+// ── Match join limiter — prevent rapid duplicate/concurrent joins ────────────
+// Applied to: POST /api/match/:id/join, POST /api/friendly/:id/join
+// 10 joins per 5 minutes per user is generous for normal usage.
+// Prevents abuse and reduces race condition risk on concurrent joins.
+export const matchJoinLimiter = rateLimit({
+  windowMs: 5 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: userKeyGenerator,
+  handler: makeHandler(
+    'MATCH_JOIN_RATE_LIMIT_EXCEEDED',
+    'Too many join attempts. Please try again in a few minutes.'
+  ),
+});
+
 // ── Push token limiter ──────────────────────────────────────────────────────
 // Applied to: POST /api/notifications/push-token
 // 10 registrations per hour is plenty — tokens only change on reinstall.
