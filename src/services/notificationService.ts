@@ -82,6 +82,7 @@ export class NotificationService {
         title,
         message,
         metadata,
+        skipDuplicateWithinMs,
         ...entityIds
       } = data;
 
@@ -121,9 +122,41 @@ export class NotificationService {
       // });
 
       // Normalize userIds to array
-      const userIdArray = Array.isArray(userIds) ? userIds : [userIds];
+      let userIdArray = Array.isArray(userIds) ? userIds : [userIds];
       if (userIdArray.length === 0) {
         throw new AppError("At least one user ID is required", 400);
+      }
+
+      // Dedup guard: skip users who already received this notification recently
+      if (skipDuplicateWithinMs && type) {
+        const entityFilter: Record<string, string> = {};
+        if (entityIds.matchId) entityFilter.matchId = String(entityIds.matchId);
+        if (entityIds.seasonId) entityFilter.seasonId = String(entityIds.seasonId);
+        if (entityIds.divisionId) entityFilter.divisionId = String(entityIds.divisionId);
+        if (entityIds.partnershipId) entityFilter.partnershipId = String(entityIds.partnershipId);
+
+        const cutoff = new Date(Date.now() - skipDuplicateWithinMs);
+        const alreadySent = await this.prisma.userNotification.findMany({
+          where: {
+            userId: { in: userIdArray },
+            notification: {
+              type,
+              ...entityFilter,
+              createdAt: { gte: cutoff },
+            },
+          },
+          select: { userId: true },
+          distinct: ['userId'],
+        });
+
+        if (alreadySent.length > 0) {
+          const sentSet = new Set(alreadySent.map(n => n.userId));
+          userIdArray = userIdArray.filter(id => !sentSet.has(id));
+          logger.debug('Dedup: filtered duplicate notifications', {
+            type, skipped: sentSet.size, remaining: userIdArray.length,
+          });
+          if (userIdArray.length === 0) return [];
+        }
       }
 
       // Validate users exist
