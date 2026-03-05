@@ -13,8 +13,7 @@ import { expireOldRequests } from "./services/pairingService";
 import { getInactivityService } from "./services/inactivityService";
 import { NotificationService } from "./services/notificationService";
 import { INACTIVITY_CONFIG } from "./config/inactivity.config";
-import { getMatchReminderService } from "./services/notification/matchReminderService";
-import { initializeNotificationJobs } from "./jobs/notificationJobs";
+import { initializeNotificationJobs, schedulePushTokenCleanup, scheduleMatchStreakReEvaluation } from "./jobs/notificationJobs";
 import { getMatchInvitationService } from "./services/match/matchInvitationService";
 import { getMatchResultService } from "./services/match/matchResultService";
 import { logger } from "./utils/logger";
@@ -60,19 +59,18 @@ httpServer.listen(PORT, () => {
 // SCHEDULED TASKS (CRON JOBS)
 // ==========================================
 
+const CRON_TZ = { timezone: "Asia/Kuala_Lumpur" };
+
 // // Run daily at midnight to expire old invitations and pair requests
 // cron.schedule("0 0 * * *", async () => {
 //   try {
 //     const expiredInvitations = await expireOldSeasonInvitations();
 //     const expiredRequests = await expireOldRequests();
-//     log.info(
-//       { expiredInvitations, expiredRequests },
-//       "Cron: Expired old invitations"
-//     );
+//     logger.info("Cron: Expired old invitations", { expiredInvitations, expiredRequests });
 //   } catch (error) {
-//     log.error({ err: error }, "Cron: Failed to expire invitations");
+//     logger.error("Cron: Failed to expire invitations", {}, error instanceof Error ? error : new Error(String(error)));
 //   }
-// });
+// }, CRON_TZ);
 
 // // Run inactivity check at configured time (default: daily at 2:00 AM)
 // cron.schedule(INACTIVITY_CONFIG.CRON_SCHEDULE, async () => {
@@ -80,34 +78,14 @@ httpServer.listen(PORT, () => {
 //     const notificationService = new NotificationService();
 //     const inactivityService = getInactivityService(notificationService);
 //     const results = await inactivityService.checkAndUpdateInactivity();
-//     log.info(
-//       { markedInactive: results.markedInactive, warnings: results.warnings },
-//       "Cron: Inactivity check complete"
-//     );
+//     logger.info("Cron: Inactivity check complete", { markedInactive: results.markedInactive, warnings: results.warnings });
 //   } catch (error) {
-//     log.error({ err: error }, "Cron: Failed inactivity check");
+//     logger.error("Cron: Failed inactivity check", {}, error instanceof Error ? error : new Error(String(error)));
 //   }
-// });
+// }, CRON_TZ);
 
-// // Run match reminder check every hour
-// cron.schedule("0 * * * *", async () => {
-//   try {
-//     const notificationService = new NotificationService();
-//     const matchReminderService = getMatchReminderService(notificationService);
-//     const results = await matchReminderService.sendUpcomingMatchReminders();
-//     if (results.remindersSent > 0) {
-//       log.info(
-//         {
-//           matchesChecked: results.matchesChecked,
-//           remindersSent: results.remindersSent,
-//         },
-//         "Cron: Match reminders sent"
-//       );
-//     }
-//   } catch (error) {
-//     log.error({ err: error }, "Cron: Failed match reminder check");
-//   }
-// });
+// Legacy match reminder deleted — superseded by notificationJobs.ts
+// (scheduleMatch24hReminders, scheduleMatch2hReminders, scheduleMatchMorningReminders)
 
 // Run match invitation expiration check every hour
 cron.schedule("0 * * * *", async () => {
@@ -133,31 +111,28 @@ cron.schedule("0 * * * *", async () => {
   } catch (error) {
     logger.error("Cron: Failed match invitation check", {}, error instanceof Error ? error : new Error(String(error)));
   }
-});
+}, CRON_TZ);
 
-// // Run auto-approval check for match results every hour
-// cron.schedule("0 * * * *", async () => {
-//   try {
-//     const notificationService = new NotificationService();
-//     const matchResultService = getMatchResultService(notificationService);
-//     const results = await matchResultService.autoApproveResults();
-//     if (results.autoApprovedCount > 0) {
-//       log.info(
-//         {
-//           matchesChecked: results.matchesChecked,
-//           autoApproved: results.autoApprovedCount,
-//         },
-//         "Cron: Auto-approved match results"
-//       );
-//     }
-//   } catch (error) {
-//     log.error({ err: error }, "Cron: Failed auto-approval check");
-//   }
-// });
+// Run auto-approval check for match results every hour
+cron.schedule("0 * * * *", async () => {
+  try {
+    const notificationService = new NotificationService();
+    const matchResultService = getMatchResultService(notificationService);
+    const results = await matchResultService.autoApproveResults();
+    if (results.autoApprovedCount > 0) {
+      logger.info("Cron: Auto-approved match results", {
+        matchesChecked: results.matchesChecked,
+        autoApproved: results.autoApprovedCount,
+      });
+    }
+  } catch (error) {
+    logger.error("Cron: Failed auto-approval check", {}, error instanceof Error ? error : new Error(String(error)));
+  }
+}, CRON_TZ);
 
-// // Initialize all notification jobs
+// Phase 1 — Safe crons (DB operations only, no user notifications)
+schedulePushTokenCleanup();
+scheduleMatchStreakReEvaluation();
+
+// Phase 2+ — All notification jobs (enable when push tokens verified & dedup tested)
 // initializeNotificationJobs();
-
-// log.info(
-//   "Cron jobs scheduled: expiration(daily), inactivity(daily), reminders/invitations/auto-approve(hourly)"
-// );
