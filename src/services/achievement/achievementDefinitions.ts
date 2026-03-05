@@ -241,26 +241,45 @@ async function fullDivision(
     },
   });
 
-  let count = 0;
-  for (const assignment of assignments) {
-    const divisionSize = assignment.division.assignments.length;
-    const expectedOpponents = divisionSize - 1;
-    if (expectedOpponents <= 0) continue;
+  // Filter to divisions with >1 member
+  const validAssignments = assignments.filter(
+    a => a.division.assignments.length > 1
+  );
 
-    // Count distinct opponents in this division's non-friendly matches
-    const matchResults = await prisma.matchResult.findMany({
-      where: {
-        playerId: ctx.userId,
-        match: {
-          divisionId: assignment.divisionId,
-          isFriendly: false,
-        },
+  if (validAssignments.length === 0) {
+    return { currentValue: 0, isComplete: false };
+  }
+
+  // Batch: single query for all division match results (eliminates N+1)
+  const divisionIds = validAssignments.map(a => a.divisionId);
+  const allMatchResults = await prisma.matchResult.findMany({
+    where: {
+      playerId: ctx.userId,
+      match: {
+        divisionId: { in: divisionIds },
+        isFriendly: false,
       },
-      select: { opponentId: true },
-      distinct: ['opponentId'],
-    });
+    },
+    select: { opponentId: true, match: { select: { divisionId: true } } },
+  });
 
-    if (matchResults.length >= expectedOpponents) {
+  // Group distinct opponents by divisionId
+  const opponentsByDivision = new Map<string, Set<string>>();
+  for (const mr of allMatchResults) {
+    const divId = mr.match.divisionId;
+    if (!divId) continue;
+    if (!opponentsByDivision.has(divId)) {
+      opponentsByDivision.set(divId, new Set());
+    }
+    opponentsByDivision.get(divId)!.add(mr.opponentId);
+  }
+
+  // Count divisions where user played all opponents
+  let count = 0;
+  for (const assignment of validAssignments) {
+    const expectedOpponents = assignment.division.assignments.length - 1;
+    const distinctOpponents = opponentsByDivision.get(assignment.divisionId)?.size ?? 0;
+    if (distinctOpponents >= expectedOpponents) {
       count++;
     }
   }
