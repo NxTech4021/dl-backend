@@ -213,6 +213,11 @@ export async function grantAchievement(achievementId: string, userId: string) {
     throw new Error(`Achievement ${achievementId} not found`);
   }
 
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { id: true } });
+  if (!user) {
+    throw new Error(`User ${userId} not found`);
+  }
+
   return prisma.userAchievement.upsert({
     where: {
       userId_achievementId: { userId, achievementId },
