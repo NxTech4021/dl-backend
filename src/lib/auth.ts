@@ -105,13 +105,13 @@ export const auth = betterAuth({
             subject = "Verify Your Email - DeuceLeague";
             title = "Welcome to DeuceLeague!";
             message = "Please verify your email address to complete your registration.";
-            buttonColor = "#10B981"; // Green
+            buttonColor = "#FEA04D"; // Brand Color
           } else if (type === "forget-password") {
             console.log("Sending forget password email to", email);
             subject = "Password Reset Code - DeuceLeague";
             title = "Reset Your Password";
             message = "You requested to reset your password. Use the code below to continue.";
-            buttonColor = "#EF4444"; // Red
+            buttonColor = "#165E99"; // Blue
           }
 
           if (subject) {
