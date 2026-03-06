@@ -28,7 +28,7 @@
       },
       {
         "key": "competitive_level",
-        "question": "What is the highest level of tennis you usually compete in??",
+        "question": "What is the highest level of tennis you usually compete in?",
         "type": "single_choice",
         "options": [
           { "label": "Recreational/social play with friends", "weight": -0.5 },
