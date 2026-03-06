@@ -226,7 +226,7 @@ export interface NotificationPayload {
 }
 
 
-// FIX THIS LATER, CANNOT BE UNDEFINED 
+// FIX THIS LATER, CANNOT BE UNDEFINED
 export interface CreateNotificationData extends NotificationPayload {
   userIds: string | string[];
   seasonId?: string | undefined;
@@ -235,8 +235,12 @@ export interface CreateNotificationData extends NotificationPayload {
   partnershipId?: string | undefined;
   threadId?: string | undefined;
   pairRequestId?: string | undefined;
-  achievementId?: string | undefined; 
+  achievementId?: string | undefined;
   withdrawalRequestId?: string | undefined;
+  /** When set, skips sending if a notification with the same type + entity IDs
+   *  was already sent to the user within the given time window (in ms).
+   *  Used by cron jobs to prevent duplicate notifications on server restart. */
+  skipDuplicateWithinMs?: number;
 }
 
 export interface NotificationResult {

@@ -52,8 +52,8 @@ function ipSpoofMiddleware(req: Request, _res: Response, next: NextFunction) {
 
 /**
  * Stub auth middleware that reads x-user-id header and sets req.user.
- * Mimics the real verifyAuth middleware's x-user-id fallback path
- * without touching the database or better-auth.
+ * Sets req.user from x-user-id header for test convenience.
+ * Production verifyAuth uses session cookies only (x-user-id fallback removed in Issue #2).
  */
 function stubVerifyAuth(req: Request, res: Response, next: NextFunction) {
   const userId = req.headers['x-user-id'] as string | undefined;

@@ -1,3 +1,6 @@
+// TODO: This file uses x-user-id headers for test auth. API tests (matchApi.test.ts)
+// are currently excluded from jest.config.cjs due to ESM issues. When re-enabled,
+// migrate to jest.mock() pattern (see adminSessionService.test.ts) instead of x-user-id.
 import request from 'supertest';
 import { Express } from 'express';
 import { createTestApp } from '../setup/testApp';

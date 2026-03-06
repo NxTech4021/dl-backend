@@ -92,6 +92,18 @@ export async function createAchievementHandler(req: Request, res: Response) {
       return sendError(res, `Invalid evaluatorKey. Valid keys: ${validKeys.join(', ')}`, 400);
     }
 
+    // Validate enum values
+    const validCategories = Object.values(AchievementCategory);
+    if (!validCategories.includes(category)) {
+      return sendError(res, `Invalid category. Valid: ${validCategories.join(', ')}`, 400);
+    }
+    if (tier !== undefined && !Object.values(TierType).includes(tier)) {
+      return sendError(res, `Invalid tier. Valid: ${Object.values(TierType).join(', ')}`, 400);
+    }
+    if (scope !== undefined && !Object.values(AchievementScope).includes(scope)) {
+      return sendError(res, `Invalid scope. Valid: ${Object.values(AchievementScope).join(', ')}`, 400);
+    }
+
     const achievement = await createAchievement({
       title,
       description,
@@ -130,6 +142,17 @@ export async function updateAchievementHandler(req: Request, res: Response) {
       if (!validKeys.includes(req.body.evaluatorKey)) {
         return sendError(res, `Invalid evaluatorKey. Valid keys: ${validKeys.join(', ')}`, 400);
       }
+    }
+
+    // Validate enum values if provided
+    if (req.body.category !== undefined && !Object.values(AchievementCategory).includes(req.body.category)) {
+      return sendError(res, `Invalid category. Valid: ${Object.values(AchievementCategory).join(', ')}`, 400);
+    }
+    if (req.body.tier !== undefined && !Object.values(TierType).includes(req.body.tier)) {
+      return sendError(res, `Invalid tier. Valid: ${Object.values(TierType).join(', ')}`, 400);
+    }
+    if (req.body.scope !== undefined && !Object.values(AchievementScope).includes(req.body.scope)) {
+      return sendError(res, `Invalid scope. Valid: ${Object.values(AchievementScope).join(', ')}`, 400);
     }
 
     const achievement = await updateAchievement(id, req.body);

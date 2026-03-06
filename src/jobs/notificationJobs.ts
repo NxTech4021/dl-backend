@@ -4,8 +4,22 @@
  */
 
 import cron from "node-cron";
+import dayjs from "dayjs";
+import utc from "dayjs/plugin/utc.js";
+import tz from "dayjs/plugin/timezone.js";
 import { prisma } from "../lib/prisma";
 import { logger } from "../utils/logger";
+
+dayjs.extend(utc);
+dayjs.extend(tz);
+
+const MYT = "Asia/Kuala_Lumpur";
+const CRON_TZ = { timezone: MYT };
+
+/** Wrapper that applies Malaysia timezone to every cron schedule */
+function scheduleCron(expression: string, fn: () => void): void {
+  cron.schedule(expression, fn, CRON_TZ);
+}
 import {
   sendMatchReminder24h,
   sendMatchReminder2h,
@@ -33,7 +47,7 @@ import { notificationService } from "../services/notificationService";
  * Runs every hour
  */
 export function scheduleMatch24hReminders(): void {
-  cron.schedule("0 * * * *", async () => {
+  scheduleCron("0 * * * *", async () => {
     try {
       logger.info("Running 24h match reminder job");
 
@@ -66,8 +80,8 @@ export function scheduleMatch24hReminders(): void {
       for (const match of matches) {
         if (!match.participants || match.participants.length < 2) continue;
         
-        const date = match.matchDate?.toLocaleDateString() || 'TBD';
-        const time = match.matchDate?.toLocaleTimeString() || 'TBD';
+        const date = match.matchDate ? dayjs(match.matchDate).tz(MYT).format('D MMM YYYY') : 'TBD';
+        const time = match.matchDate ? dayjs(match.matchDate).tz(MYT).format('h:mm A') : 'TBD';
         const venue = match.venue || match.location || 'TBD';
         
         for (const player of match.participants) {
@@ -91,6 +105,7 @@ export function scheduleMatch24hReminders(): void {
             ...notif,
             userIds: player.userId,
             matchId: match.id,
+            skipDuplicateWithinMs: 25 * 60 * 60 * 1000,
           });
         }
       }
@@ -109,7 +124,7 @@ export function scheduleMatch24hReminders(): void {
  * Runs every 15 minutes
  */
 export function scheduleMatch2hReminders(): void {
-  cron.schedule("*/15 * * * *", async () => {
+  scheduleCron("*/15 * * * *", async () => {
     try {
       const now = new Date();
       const in2Hours = new Date(now.getTime() + 2 * 60 * 60 * 1000);
@@ -151,15 +166,13 @@ export function scheduleMatch2hReminders(): void {
         },
       });
 
-      console.log(
-        `✅ Match reminder check complete: ${matches.length} matches checked, ${matches.length} reminders sent`
-      );
+      logger.info("2h match reminder check complete", { matchesChecked: matches.length });
 
       // Send notifications for each match
       for (const match of matches) {
         if (!match.participants || match.participants.length < 2) continue;
         
-        const time = match.matchDate?.toLocaleTimeString() || 'TBD';
+        const time = match.matchDate ? dayjs(match.matchDate).tz(MYT).format('h:mm A') : 'TBD';
         const venue = match.venue || match.location || 'TBD';
         
         for (const player of match.participants) {
@@ -182,6 +195,7 @@ export function scheduleMatch2hReminders(): void {
             ...notif,
             userIds: player.userId,
             matchId: match.id,
+            skipDuplicateWithinMs: 3 * 60 * 60 * 1000,
           });
         }
       }
@@ -201,7 +215,7 @@ export function scheduleMatch2hReminders(): void {
  * Runs daily at 8:00 AM
  */
 export function scheduleMatchMorningReminders(): void {
-  cron.schedule("0 8 * * *", async () => {
+  scheduleCron("0 8 * * *", async () => {
     try {
       logger.info("Running match day morning reminder job");
 
@@ -235,8 +249,8 @@ export function scheduleMatchMorningReminders(): void {
       for (const match of matches) {
         if (!match.participants || match.participants.length < 2) continue;
         
-        const date = match.matchDate?.toLocaleDateString() || 'TBD';
-        const time = match.matchDate?.toLocaleTimeString() || 'TBD';
+        const date = match.matchDate ? dayjs(match.matchDate).tz(MYT).format('D MMM YYYY') : 'TBD';
+        const time = match.matchDate ? dayjs(match.matchDate).tz(MYT).format('h:mm A') : 'TBD';
         const venue = match.venue || match.location || 'TBD';
         
         for (const player of match.participants) {
@@ -260,6 +274,7 @@ export function scheduleMatchMorningReminders(): void {
             ...notif,
             userIds: player.userId,
             matchId: match.id,
+            skipDuplicateWithinMs: 24 * 60 * 60 * 1000,
           });
         }
       }
@@ -278,7 +293,7 @@ export function scheduleMatchMorningReminders(): void {
  * Runs every 5 minutes
  */
 export function scheduleScoreSubmissionReminders(): void {
-  cron.schedule("*/5 * * * *", async () => {
+  scheduleCron("*/5 * * * *", async () => {
     try {
       const now = new Date();
       const fifteenMinutesAgo = new Date(now.getTime() - 15 * 60 * 1000);
@@ -317,11 +332,7 @@ export function scheduleScoreSubmissionReminders(): void {
  * Runs daily at 10:00 AM
  */
 export function scheduleSeasonStartingSoonNotifications(): void {
-  // Production: 
-  cron.schedule("0 10 * * *", async () => {
-  
-  // TESTING: every min
-  // cron.schedule("* * * * *", async () => {
+  scheduleCron("0 10 * * *", async () => {
     try {
       logger.info("Running Season starting soon job");
 
@@ -364,10 +375,7 @@ export function scheduleSeasonStartingSoonNotifications(): void {
  * Runs daily at 8:00 PM
  */
 export function scheduleSeasonStartsTomorrowNotifications(): void {
-  // Production: 
-  cron.schedule("0 20 * * *", async () => {
-  // TESTING: every 5 mins
-  // cron.schedule("* * * * *", async () => {
+  scheduleCron("0 20 * * *", async () => {
     try {
       logger.info("Running Season starts tomorrow job");
 
@@ -413,10 +421,7 @@ export function scheduleSeasonStartsTomorrowNotifications(): void {
  * Runs daily at 8:00 AM
  */
 export function scheduleSeasonStartedNotifications(): void {
-  // Production: 
-  cron.schedule("0 8 * * *", async () => {
-  // TESTING: every 5 mins
-  // cron.schedule("* * * * *", async () => {
+  scheduleCron("0 8 * * *", async () => {
     try {
       logger.info("Running season started job");
 
@@ -461,7 +466,7 @@ export function scheduleSeasonStartedNotifications(): void {
  * Runs daily at 10:00 AM on Mondays
  */
 export function scheduleFinalWeekAlerts(): void {
-  cron.schedule("0 10 * * 1", async () => {
+  scheduleCron("0 10 * * 1", async () => {
     try {
       logger.info("Running final week alert job");
 
@@ -498,7 +503,7 @@ export function scheduleFinalWeekAlerts(): void {
  * Runs daily at 10:00 AM
  */
 export function scheduleLastMatchDeadline48h(): void {
-  cron.schedule('0 10 * * *', async () => {
+  scheduleCron('0 10 * * *', async () => {
     try {
       logger.info('Running last-match-deadline 48h job');
 
@@ -531,6 +536,7 @@ export function scheduleLastMatchDeadline48h(): void {
             userIds,
             ...notif,
             seasonId: season.id,
+            skipDuplicateWithinMs: 25 * 60 * 60 * 1000,
           });
 
           logger.info('Last-match 48h notifications sent', { seasonId: season.id, count: userIds.length });
@@ -551,7 +557,7 @@ export function scheduleLastMatchDeadline48h(): void {
  * Runs daily at 10:00 AM
  */
 export function scheduleRegistrationClosing3Days(): void {
-  cron.schedule('0 10 * * *', async () => {
+  scheduleCron('0 10 * * *', async () => {
     try {
       logger.info('Running registration closing 3d job');
 
@@ -588,7 +594,7 @@ export function scheduleRegistrationClosing3Days(): void {
  * Runs daily at 10:00 AM
  */
 export function scheduleRegistrationClosing24h(): void {
-  cron.schedule('0 10 * * *', async () => {
+  scheduleCron('0 10 * * *', async () => {
     try {
       logger.info('Running registration closing 24h job');
 
@@ -625,7 +631,7 @@ export function scheduleRegistrationClosing24h(): void {
  * Runs weekly on Mondays at 10:00 AM
  */
 export function scheduleMidSeasonUpdates(): void {
-  cron.schedule("0 10 * * 1", async () => {
+  scheduleCron("0 10 * * 1", async () => {
     try {
       logger.info("Running mid-season update job");
 
@@ -672,7 +678,7 @@ export function scheduleMidSeasonUpdates(): void {
  * Runs every Monday at 8:00 AM
  */
 export function scheduleWeeklyRankingUpdates(): void {
-  cron.schedule("0 8 * * 1", async () => {
+  scheduleCron("0 8 * * 1", async () => {
     try {
       logger.info("Running weekly ranking update job");
 
@@ -716,13 +722,14 @@ export function scheduleWeeklyRankingUpdates(): void {
  * Runs on the last day of each month at 8:00 PM
  */
 export function scheduleMonthlyDMRRecaps(): void {
-  cron.schedule("0 20 28-31 * *", async () => {
+  scheduleCron("0 20 28-31 * *", async () => {
     try {
       const today = new Date();
       const tomorrow = new Date(today);
       tomorrow.setDate(tomorrow.getDate() + 1);
 
-      // Only run on the last day of the month
+      // Guard: cron fires on days 28-31, but only execute on the ACTUAL last day.
+      // If tomorrow is a different month, today must be the last day of this month.
       if (tomorrow.getMonth() !== today.getMonth()) {
         logger.info("Running monthly DMR recap job");
 
@@ -754,7 +761,7 @@ export function scheduleMonthlyDMRRecaps(): void {
  * Runs every 30 minutes
  */
 export function scheduleTeamRegistrationReminder2h(): void {
-  cron.schedule('*/30 * * * *', async () => {
+  scheduleCron('*/30 * * * *', async () => {
     try {
       logger.info('Running team registration 2h reminder job');
 
@@ -829,6 +836,7 @@ export function scheduleTeamRegistrationReminder2h(): void {
                 ...notif,
                 seasonId: season.id,
                 partnershipId: partnership.id,
+                skipDuplicateWithinMs: 3 * 60 * 60 * 1000,
               });
             }
           }
@@ -851,7 +859,7 @@ export function scheduleTeamRegistrationReminder2h(): void {
  * Runs daily at 10:00 AM
  */
 export function scheduleTeamRegistrationReminder24h(): void {
-  cron.schedule('0 10 * * *', async () => {
+  scheduleCron('0 10 * * *', async () => {
     try {
       logger.info('Running team registration 24h reminder job');
 
@@ -915,6 +923,7 @@ export function scheduleTeamRegistrationReminder24h(): void {
                 ...notif,
                 seasonId: season.id,
                 partnershipId: partnership.id,
+                skipDuplicateWithinMs: 25 * 60 * 60 * 1000,
               });
             }
           }
@@ -937,7 +946,7 @@ export function scheduleTeamRegistrationReminder24h(): void {
  * Runs daily at 8:00 PM (evening before deadline day)
  */
 export function scheduleRegistrationDeadlineCaptain(): void {
-  cron.schedule('0 20 * * *', async () => {
+  scheduleCron('0 20 * * *', async () => {
     try {
       logger.info('Running registration deadline captain reminder job');
 
@@ -1013,6 +1022,7 @@ export function scheduleRegistrationDeadlineCaptain(): void {
                 ...notif,
                 seasonId: season.id,
                 partnershipId: partnership.id,
+                skipDuplicateWithinMs: 25 * 60 * 60 * 1000,
               });
             }
           }
@@ -1035,7 +1045,7 @@ export function scheduleRegistrationDeadlineCaptain(): void {
  * Runs daily at 6:00 PM for users created today
  */
 export function scheduleProfileReminders(): void {
-  cron.schedule("0 18 * * *", async () => {
+  scheduleCron("0 18 * * *", async () => {
     try {
       logger.info("Running profile reminder job");
 
@@ -1075,7 +1085,7 @@ export function scheduleProfileReminders(): void {
  * - Removes tokens not used for 90+ days
  */
 export function schedulePushTokenCleanup(): void {
-  cron.schedule('0 3 * * *', async () => {
+  scheduleCron('0 3 * * *', async () => {
     try {
       logger.info('Running push token cleanup job');
 
@@ -1142,7 +1152,7 @@ export function schedulePushTokenCleanup(): void {
  * (no match played in the previous week).
  */
 export function scheduleMatchStreakReEvaluation(): void {
-  cron.schedule('5 0 * * 1', async () => {
+  scheduleCron('5 0 * * 1', async () => {
     try {
       logger.info('Running weekly match streak re-evaluation');
 

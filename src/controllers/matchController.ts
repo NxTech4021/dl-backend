@@ -401,7 +401,8 @@ export const getMatchDetails = async (req: Request, res: Response) => {
       },
     });
 
-    if (!match) return sendError(res, "Match not found.", 404);
+    // Reject friendly matches — they must use the friendly endpoint
+    if (!match || match.isFriendly) return sendError(res, "Match not found.", 404);
 
     // Format match date and time
     const matchDate = match.matchDate ? new Date(match.matchDate) : null;
@@ -500,10 +501,10 @@ export const getMatchDetails = async (req: Request, res: Response) => {
       isDisputed,
       dispute: isDisputed ? match.disputes[0] : null,
 
-      // Friendly match info
-      isFriendly: false, // League matches are not friendly
-      genderRestriction: null,
-      skillLevels: [],
+      // League endpoint — friendly matches are rejected on line 404 above
+      isFriendly: false,
+      genderRestriction: match.genderRestriction ?? null,
+      skillLevels: match.skillLevels ?? [],
 
       // Comments
       comments: match.comments || [],

@@ -125,6 +125,80 @@ export async function createTestMatch(options: CreateMatchOptions = {}) {
   return match;
 }
 
+export interface CreateFriendlyMatchOptions {
+  id?: string;
+  creatorId?: string;
+  sport?: string;
+  matchType?: MatchType;
+  matchDate?: Date;
+  location?: string;
+  venue?: string;
+  status?: MatchStatus;
+  genderRestriction?: string;
+  skillLevels?: string[];
+}
+
+/**
+ * Create a test friendly match (no division/league/season)
+ * Friendly matches have isFriendly: true and divisionId: null
+ */
+export async function createTestFriendlyMatch(options: CreateFriendlyMatchOptions = {}) {
+  const uniqueSuffix = randomString(8);
+
+  // Create creator if not provided
+  let creatorId = options.creatorId;
+  if (!creatorId) {
+    const creator = await createTestUser({ name: 'Friendly Creator' });
+    creatorId = creator.id;
+  }
+
+  const match = await prismaTest.match.create({
+    data: {
+      id: options.id ?? `test-friendly-${uniqueSuffix}`,
+      sport: options.sport ?? 'PICKLEBALL',
+      matchType: options.matchType ?? MatchType.SINGLES,
+      matchDate: options.matchDate ?? randomFutureDate(),
+      location: options.location ?? randomCity(),
+      venue: options.venue ?? `Court ${randomCourtNumber()}`,
+      status: options.status ?? MatchStatus.SCHEDULED,
+      format: MatchFormat.STANDARD,
+      fee: MatchFeeType.FREE,
+      feeAmount: 0,
+      isWalkover: false,
+      isDisputed: false,
+      isFriendly: true,
+      // NO division, league, or season — this is a friendly match
+      divisionId: null,
+      leagueId: null,
+      seasonId: null,
+      createdById: creatorId,
+      genderRestriction: options.genderRestriction ?? null,
+      skillLevels: options.skillLevels ?? [],
+      // Create the creator as a participant
+      participants: {
+        create: {
+          userId: creatorId,
+          role: ParticipantRole.CREATOR,
+          team: 'team1',
+          isStarter: true,
+          invitationStatus: InvitationStatus.ACCEPTED,
+          acceptedAt: new Date(),
+        },
+      },
+    },
+    include: {
+      participants: {
+        include: {
+          user: true,
+        },
+      },
+      createdBy: true,
+    },
+  });
+
+  return match;
+}
+
 /**
  * Create a match with two participants (ready for play)
  */
