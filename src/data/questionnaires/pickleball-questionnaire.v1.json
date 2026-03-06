@@ -7,9 +7,9 @@
         "question": "Do you have a DUPR (Dynamic Universal Pickleball Rating)?",
         "type": "single_choice",
         "options": [
-          { "label": "Yes", "value": true },
-          { "label": "No", "value": false },
-          { "label": "Not sure what DUPR is", "value": false }
+          { "label": "Yes", "value": "Yes" },
+          { "label": "No", "value": "No" },
+          { "label": "Not sure what DUPR is", "value": "Not sure what DUPR is" }
         ]
       },
       {
@@ -22,7 +22,7 @@
         "optional": true,
         "helptext": "Leave blank if you don't have a singles DUPR rating",
         "visible_if": [
-          { "key": "has_dupr", "op": "==", "value": true }
+          { "key": "has_dupr", "op": "==", "value": "Yes" }
         ]
       },
       {
@@ -35,7 +35,7 @@
         "optional": true,
         "helptext": "Leave blank if you don't have a doubles DUPR rating",
         "visible_if": [
-          { "key": "has_dupr", "op": "==", "value": true }
+          { "key": "has_dupr", "op": "==", "value": "Yes" }
         ]
       },
       {
@@ -48,7 +48,7 @@
         "optional": true,
         "helptext": "Your reliability percentage (0-100%). Leave blank if unsure - we'll use a default.",
         "visible_if": [
-          { "key": "has_dupr", "op": "==", "value": true }
+          { "key": "has_dupr", "op": "==", "value": "Yes" }
         ]
       },
       {
@@ -61,7 +61,7 @@
         "optional": true,
         "helptext": "Your reliability percentage (0-100%). Leave blank if unsure - we'll use a default.",
         "visible_if": [
-          { "key": "has_dupr", "op": "==", "value": true }
+          { "key": "has_dupr", "op": "==", "value": "Yes" }
         ]
       },
       {
@@ -102,7 +102,7 @@
       },
       {
         "key": "competitive_level",
-        "question": "What is the highest level you usually play at??",
+        "question": "What is the highest level you usually play at?",
         "type": "single_choice",
         "options": [
           { "label": "Recreational/social games", "weight": -0.4 },
