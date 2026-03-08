@@ -37,7 +37,7 @@ describe('Scoring Services', () => {
 
         expect(result.source).toBe('questionnaire');
         expect(result.singles).toBeLessThan(1500);
-        expect(result.singles).toBeGreaterThanOrEqual(1000);
+        expect(result.singles).toBeGreaterThanOrEqual(800);
       });
 
       it('should calculate advanced rating correctly', () => {
@@ -99,7 +99,7 @@ describe('Scoring Services', () => {
 
         const result = scorePickleball(beginnerAnswers);
 
-        expect(result.singles).toBeGreaterThanOrEqual(1000);
+        expect(result.singles).toBeGreaterThanOrEqual(800);
         expect(result.singles).toBeLessThanOrEqual(8000);
       });
     });
@@ -455,6 +455,36 @@ describe('Scoring Services', () => {
       expect(pickleballResult.singles).toBeDefined();
       expect(tennisResult.singles).toBeDefined();
       expect(padelResult.singles).toBeDefined();
+    });
+  });
+
+  // BUG 8: Pickleball min clamp should be 800, not 1000
+  describe('BUG 8: Pickleball minimum rating clamp', () => {
+    it('pickleball: minimum rating should be 800, not 1000', () => {
+      const answers = {
+        experience: 'Less than 3 month',
+        sports_background: 'No prior experience with racquet sports',
+        frequency: 'Less than once a month',
+        competitive_level: 'Recreational/social games',
+        self_rating: '1.0-1.5 (Beginner)',
+        tournament: 'Never',
+      };
+
+      const result = scorePickleball(answers);
+
+      expect(result.singles).toBeGreaterThanOrEqual(800);
+    });
+  });
+
+  // BUG 10: Tennis duplicate field names
+  describe('BUG 10: Tennis return object field names', () => {
+    it('tennis: should not have duplicate rating field names', () => {
+      const result = scoreTennis({ experience: '1-2 years' });
+
+      expect(result).toHaveProperty('singles');
+      expect(result).toHaveProperty('doubles');
+      expect(result).not.toHaveProperty('singles_rating');
+      expect(result).not.toHaveProperty('doubles_rating');
     });
   });
 });
