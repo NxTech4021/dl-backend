@@ -210,6 +210,28 @@ router.put("/step/:userId", verifyAuth, onboardingLimiter, validateOwnUserOrAdmi
       return handleQuestionnaireError(error, res);
     }
 
+    // Validate step ordering — prevent skipping steps
+    const STEP_ORDER = validSteps;
+    const targetIdx = STEP_ORDER.indexOf(step);
+    if (targetIdx > 0) {
+      const currentStep = existingUser.onboardingStep;
+      if (!currentStep) {
+        return res.status(400).json({
+          error: `Cannot set step to ${step}. Must complete earlier steps first.`,
+          code: "STEP_OUT_OF_ORDER",
+          success: false,
+        });
+      }
+      const currentIdx = STEP_ORDER.indexOf(currentStep);
+      if (currentIdx < targetIdx - 1) {
+        return res.status(400).json({
+          error: `Cannot set step to ${step}. Current step is ${currentStep}.`,
+          code: "STEP_OUT_OF_ORDER",
+          success: false,
+        });
+      }
+    }
+
     // Update user's onboarding step
     const updatedUser = await prisma.user.update({
       where: { id: userId },
@@ -255,8 +277,10 @@ router.put("/step/:userId", verifyAuth, onboardingLimiter, validateOwnUserOrAdmi
   }
 });
 
-// Serve questions directly from files with proper error handling
-router.get("/:sport/questions", validateSportParam, async (req, res) => {
+// Serve questions directly from files with proper error handling.
+// NOTE: This endpoint is currently unused — the frontend loads questions from
+// bundled JSON files. Retained for potential future use (e.g., dynamic questions).
+router.get("/:sport/questions", verifyAuth, validateSportParam, async (req, res) => {
   const startTime = Date.now();
   const requestId = req.requestId!;
   const sport = req.sport!;
@@ -487,69 +511,72 @@ router.post("/:sport/submit", questionnaireLimiter, verifyAuth, validateSportPar
       detail: detailPayload,
     };
 
-    // Database operations with proper error handling
-    const dbStart = Date.now();
-    let response;
-    try {
-      // Check for existing response
-      const existingResponse = await prisma.questionnaireResponse.findFirst({
-        where: {
+    // Check for resubmission — reject if questionnaire already completed
+    const existingCompleted = await prisma.questionnaireResponse.findUnique({
+      where: {
+        userId_sport: {
           userId: submissionRequest.userId,
           sport,
+        },
+      },
+    });
+
+    if (existingCompleted?.completedAt) {
+      logger.warn("Questionnaire resubmission rejected - already completed", {
+        userId: submissionRequest.userId,
+        sport,
+        requestId,
+        completedAt: existingCompleted.completedAt,
+      });
+      return res.status(409).json({
+        error: "Questionnaire already completed for this sport",
+        code: "ALREADY_COMPLETED",
+        success: false,
+      });
+    }
+
+    // Database operations with proper error handling
+    const dbStart = Date.now();
+    let response: any;
+    try {
+      // Upsert questionnaire response (@@unique([userId, sport]) prevents duplicates)
+      response = await prisma.questionnaireResponse.upsert({
+        where: {
+          userId_sport: {
+            userId: submissionRequest.userId,
+            sport,
+          },
+        },
+        create: {
+          userId: submissionRequest.userId,
+          sport,
+          qVersion: version,
+          qHash: hash,
+          answersJson: sanitizedAnswers as Prisma.InputJsonValue,
+          completedAt: new Date(),
+          result: { create: dbResultPayload },
+        },
+        update: {
+          qVersion: version,
+          qHash: hash,
+          answersJson: sanitizedAnswers as Prisma.InputJsonValue,
+          completedAt: new Date(),
+          result: {
+            upsert: {
+              create: dbResultPayload,
+              update: dbResultPayload,
+            },
+          },
         },
         include: { result: true },
       });
 
-      if (existingResponse) {
-        // Update existing response
-        response = await prisma.questionnaireResponse.update({
-          where: { id: existingResponse.id },
-          data: {
-            qVersion: version,
-            qHash: hash,
-            answersJson: sanitizedAnswers as Prisma.InputJsonValue,
-            completedAt: new Date(),
-            result: {
-              upsert: {
-                create: dbResultPayload,
-                update: dbResultPayload,
-              },
-            },
-          },
-          include: { result: true },
-        });
-
-        logger.info("Updated existing questionnaire response - questionnaire now completed, sport fully tracked", {
-          responseId: response.id,
-          userId: submissionRequest.userId,
-          sport,
-          requestId,
-          wasPlaceholder: !existingResponse.completedAt,
-        });
-      } else {
-        // Create new response with completedAt set
-        // This automatically adds the sport to the user's profile via questionnaireResponses
-        // The profile service extracts sports from all questionnaireResponses (extractSports function)
-        response = await prisma.questionnaireResponse.create({
-          data: {
-            userId: submissionRequest.userId,
-            sport,
-            qVersion: version,
-            qHash: hash,
-            answersJson: sanitizedAnswers as Prisma.InputJsonValue,
-            completedAt: new Date(),
-            result: { create: dbResultPayload },
-          },
-          include: { result: true },
-        });
-
-        logger.info("Created new questionnaire response - sport automatically added to profile", {
-          responseId: response.id,
-          userId: submissionRequest.userId,
-          sport,
-          requestId,
-        });
-      }
+      logger.info("Questionnaire response upserted", {
+        responseId: response.id,
+        userId: submissionRequest.userId,
+        sport,
+        requestId,
+      });
     } catch (error) {
       const dbDuration = Date.now() - dbStart;
       logger.error(
@@ -953,6 +980,35 @@ router.post("/complete/:userId", verifyAuth, onboardingLimiter, validateOwnUserO
       return handleQuestionnaireError(error, res);
     }
 
+    // Validate all required steps are completed before allowing completion
+    const userWithData = await prisma.user.findUnique({
+      where: { id: userId },
+      include: { questionnaireResponses: true },
+    });
+
+    const hasPersonalInfo = !!(userWithData?.name && userWithData.name.trim() !== '' && userWithData?.gender);
+    const hasSports = (userWithData?.questionnaireResponses?.length ?? 0) > 0;
+    const hasLocation = !!userWithData?.area;
+
+    const missingSteps: string[] = [];
+    if (!hasPersonalInfo) missingSteps.push('personal_info');
+    if (!hasSports) missingSteps.push('sports_selection');
+    if (!hasLocation) missingSteps.push('location');
+
+    if (missingSteps.length > 0) {
+      logger.warn("Onboarding completion rejected - missing steps", {
+        userId,
+        requestId,
+        missingSteps,
+      });
+      return res.status(400).json({
+        error: `Cannot complete onboarding. Missing steps: ${missingSteps.join(', ')}`,
+        code: "INCOMPLETE_ONBOARDING",
+        missingSteps,
+        success: false,
+      });
+    }
+
     // Update user's onboarding completion status and set step to PROFILE_PICTURE
     const updatedUser = await prisma.user.update({
       where: { id: userId },
@@ -1256,29 +1312,23 @@ router.post("/sports/:userId", verifyAuth, onboardingLimiter, validateOwnUserOrA
     const sportsToSave = [];
 
     for (const sport of sports) {
-      // Check if response already exists for this sport
-      const existingResponse = await prisma.questionnaireResponse.findFirst({
+      // Upsert placeholder response (@@unique([userId, sport]) prevents duplicates)
+      const response = await prisma.questionnaireResponse.upsert({
         where: {
+          userId_sport: { userId, sport },
+        },
+        create: {
           userId,
           sport,
+          qVersion: 1,
+          qHash: "placeholder",
+          answersJson: {},
+          startedAt: new Date(),
+          completedAt: null,
         },
+        update: {}, // No-op if already exists
       });
-
-      if (!existingResponse) {
-        // Create a placeholder response with empty answers
-        const response = await prisma.questionnaireResponse.create({
-          data: {
-            userId,
-            sport,
-            qVersion: 1, // Default version
-            qHash: "placeholder", // Placeholder hash
-            answersJson: {}, // Empty answers
-            startedAt: new Date(),
-            completedAt: null, // Not completed since they skipped
-          },
-        });
-        sportsToSave.push(response);
-      }
+      sportsToSave.push(response);
     }
 
     const dbDuration = Date.now() - dbStart;
@@ -1379,11 +1429,13 @@ router.post("/location/:userId", verifyAuth, onboardingLimiter, validateOwnUserO
       ? `${cleanCity}, ${cleanState}`
       : cleanCity;
 
-    // Update user's area field
+    // Update user's area field and coordinates
     const updatedUser = await prisma.user.update({
       where: { id: userId },
       data: {
         area: locationString,
+        latitude: latitude ? parseFloat(latitude) : null,
+        longitude: longitude ? parseFloat(longitude) : null,
       },
     });
 
@@ -1428,7 +1480,7 @@ router.post("/location/:userId", verifyAuth, onboardingLimiter, validateOwnUserO
 });
 
 // Search locations using Nominatim (OpenStreetMap)
-router.get("/locations/search", async (req, res) => {
+router.get("/locations/search", verifyAuth, async (req, res) => {
   const startTime = Date.now();
   const requestId = req.requestId!;
   const { q: query, limit = 5 } = req.query;
@@ -1469,7 +1521,7 @@ router.get("/locations/search", async (req, res) => {
       `countrycodes=my&` +            // Restrict to Malaysia
       // NO layer filter - include all location types (cities, suburbs, railways, etc.)
       `dedupe=1&` +                   // Remove duplicate results
-      `email=nexeatech@gmail.com`; // Contact email (required for production use)
+      `email=${process.env.NOMINATIM_EMAIL || 'nexeatech@gmail.com'}`; // Contact email (required for production use)
 
     const response = await fetch(nominatimUrl, {
       headers: {
