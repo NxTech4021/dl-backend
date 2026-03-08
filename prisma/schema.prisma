@@ -348,6 +348,7 @@ model League {
   name        String  @db.VarChar(255)
   location    String?
   description String?
+  rules       String?
 
   status    Statuses  @default(UPCOMING)
   sportType SportType

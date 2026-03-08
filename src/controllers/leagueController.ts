@@ -20,6 +20,7 @@ interface CreateLeagueBody {
   name?: string;
   location?: string;
   description?: string;
+  rules?: string;
   status?: string;
   sportType?: string;
   gameType?: string;
@@ -31,6 +32,7 @@ interface UpdateLeagueBody {
   name?: string;
   location?: string;
   description?: string;
+  rules?: string;
   status?: string;
 }
 
@@ -76,6 +78,7 @@ export const createLeague = async (req: Request, res: Response) => {
       name,
       location,
       description,
+      rules,
       status,
       sportType,
       gameType,
@@ -137,6 +140,7 @@ export const createLeague = async (req: Request, res: Response) => {
       name,
       location,
       ...(description !== undefined && { description }),
+      ...(rules !== undefined && { rules }),
       ...(status !== undefined && { status: status as Statuses }),
       ...(sportType !== undefined && { sportType: sportType as SportType }),
       ...(gameType !== undefined && { gameType: gameType as GameType }),
@@ -267,7 +271,7 @@ export const updateLeague = async (req: Request, res: Response) => {
 
   try {
     const id = req.params.id;
-    const { name, location, description, status } =
+    const { name, location, description, rules, status } =
       req.body as UpdateLeagueBody;
 
     if (!id) {
@@ -300,6 +304,7 @@ export const updateLeague = async (req: Request, res: Response) => {
     if (name !== undefined) updateData.name = name;
     if (location !== undefined) updateData.location = location;
     if (description !== undefined) updateData.description = description;
+    if (rules !== undefined) updateData.rules = rules;
     if (status !== undefined) updateData.status = status as Statuses;
 
     const updatedLeague = await leagueService.updateLeague(id, updateData);

@@ -14,6 +14,7 @@ interface LeagueData {
   name?: string;
   location?: string;
   description?: string;
+  rules?: string;
   status?: Statuses;
   sportType?: SportType;
   gameType?: GameType;
@@ -297,7 +298,7 @@ export class LeagueService {
   }
 
   async createLeague(data: LeagueData) {
-    const { name, location, description, status, sportType, gameType, sponsorships, existingSponsorshipIds } = data;
+    const { name, location, description, rules, status, sportType, gameType, sponsorships, existingSponsorshipIds } = data;
 
     // Validate required fields
     if (!name) {
@@ -359,6 +360,7 @@ export class LeagueService {
         name,
         location: location || null,
         description: description || null,
+        rules: rules || null,
         status: status || Statuses.UPCOMING,
         sportType,
         gameType,
@@ -391,6 +393,7 @@ export class LeagueService {
     if (data.name !== undefined) updateData.name = data.name.trim();
     if (data.location !== undefined) updateData.location = data.location.trim();
     if (data.description !== undefined) updateData.description = data.description.trim();
+    if (data.rules !== undefined) updateData.rules = data.rules ? data.rules.trim() : null;
     if (data.status !== undefined) updateData.status = data.status;
 
     return this.prisma.league.update({
