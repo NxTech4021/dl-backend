@@ -21,6 +21,8 @@ model User {
   dateOfBirth         DateTime?
   gender              String?
   area                String?
+  latitude            Float?
+  longitude           Float?
   completedOnboarding Boolean         @default(false)
   onboardingStep      OnboardingStep?
   lastActivityCheck   DateTime?
@@ -325,6 +327,7 @@ model QuestionnaireResponse {
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@unique([userId, sport])
   @@index([userId])
   @@index([sport, qVersion])
   @@index([qHash])
