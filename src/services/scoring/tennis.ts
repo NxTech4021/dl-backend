@@ -99,8 +99,6 @@ export function scoreTennis(answers: Record<string, any>) {
     source: 'questionnaire',
     singles: finalRating,
     doubles: finalRating, // Same for tennis initially
-    singles_rating: finalRating,
-    doubles_rating: finalRating,
     rd,
     confidence,
     detail: {
