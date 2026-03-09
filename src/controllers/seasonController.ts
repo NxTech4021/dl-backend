@@ -17,6 +17,8 @@ import {
   updatePaymentStatusService,
 } from "../services/seasonService";
 
+import { getMembershipsByUserId } from "../services/season/seasonMembershipService";
+
 import {
   validateUpdateSeasonData,
   validateStatusUpdate,
@@ -873,6 +875,27 @@ export const assignPlayerToDivision = async (req: Request, res: Response) => {
     console.error("Error assigning player to division:", error);
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     return sendError(res, errorMessage, 400);
+  }
+};
+
+/**
+ * Get current user's season memberships
+ * Returns all seasons the authenticated user is registered for
+ */
+export const getMyMemberships = async (req: Request, res: Response) => {
+  const authReq = req as AuthenticatedRequest;
+  const userId = authReq.user?.id;
+
+  if (!userId) {
+    return sendError(res, "Authentication required.", 401);
+  }
+
+  try {
+    const memberships = await getMembershipsByUserId(userId);
+    return sendSuccess(res, memberships, `Found ${memberships.length} membership(s)`);
+  } catch (error: unknown) {
+    console.error("Error fetching user memberships:", error);
+    return sendError(res, "Failed to fetch memberships.", 500);
   }
 };
 

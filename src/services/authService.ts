@@ -1,6 +1,7 @@
 import { prisma } from "../lib/prisma";
 import { PrismaClient } from "@prisma/client";
 import { sendEmail } from "../config/nodemailer";
+import { randomUUID } from "crypto";
 
 export interface VerifyOtpResult {
   success: boolean;
@@ -419,4 +420,431 @@ export const verifyResetOTP = async (
       code: "INTERNAL_ERROR",
     };
   }
+};
+
+// Google OAuth configuration
+const GOOGLE_IOS_CLIENT_ID = "1049126820486-s6dpimmdmcgkcar6ju3c1turdlr05hpt.apps.googleusercontent.com";
+const GOOGLE_WEB_CLIENT_ID = "1049126820486-5amoljjhl97lodkul5jhp669k40jl6av.apps.googleusercontent.com"; // Used by Android
+
+// Valid audiences for Google token verification
+const VALID_GOOGLE_AUDIENCES = [GOOGLE_IOS_CLIENT_ID, GOOGLE_WEB_CLIENT_ID];
+
+interface GoogleTokenPayload {
+  iss: string;
+  azp: string;
+  aud: string;
+  sub: string;
+  email: string;
+  email_verified: boolean;
+  name?: string;
+  picture?: string;
+  given_name?: string;
+  family_name?: string;
+  iat: number;
+  exp: number;
+}
+
+export interface GoogleSignInResult {
+  success: boolean;
+  user?: any;
+  session?: any;
+  sessionToken?: string;
+  isNewUser?: boolean;
+  error?: string;
+}
+
+/**
+ * Verify Google ID token and sign in or create user
+ *
+ * @param idToken - The ID token from Google Sign-In SDK
+ * @returns GoogleSignInResult with user and session data
+ */
+export const signInWithGoogleToken = async (
+  idToken: string,
+  prismaClient: PrismaClient = prisma
+): Promise<GoogleSignInResult> => {
+  try {
+    console.log("🔐 [signInWithGoogleToken] Verifying Google ID token...");
+
+    // Verify the token with Google's tokeninfo endpoint
+    const response = await fetch(
+      `https://oauth2.googleapis.com/tokeninfo?id_token=${idToken}`
+    );
+
+    if (!response.ok) {
+      console.error("❌ Google token verification failed:", response.status);
+      return {
+        success: false,
+        error: "Invalid Google token",
+      };
+    }
+
+    const payload: GoogleTokenPayload = await response.json();
+
+    // Verify the token is for our app (iOS or Android)
+    if (!VALID_GOOGLE_AUDIENCES.includes(payload.aud)) {
+      console.error("❌ Token audience mismatch");
+      console.error("   Expected one of:", VALID_GOOGLE_AUDIENCES);
+      console.error("   Got:", payload.aud);
+      return {
+        success: false,
+        error: "Token not issued for this application",
+      };
+    }
+
+    // Verify email is verified
+    if (!payload.email_verified) {
+      return {
+        success: false,
+        error: "Email not verified with Google",
+      };
+    }
+
+    console.log("✅ Google token verified for:", payload.email);
+
+    // Check if user exists
+    let user = await prismaClient.user.findUnique({
+      where: { email: payload.email.toLowerCase() },
+    });
+
+    let isNewUser = false;
+
+    if (!user) {
+      // Create new user
+      console.log("📝 Creating new user for:", payload.email);
+      isNewUser = true;
+
+      user = await prismaClient.user.create({
+        data: {
+          id: randomUUID(),
+          email: payload.email.toLowerCase(),
+          name: payload.name || payload.given_name || "User",
+          image: payload.picture || null,
+          emailVerified: true,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      });
+
+      // Create account link for Google provider
+      await prismaClient.account.create({
+        data: {
+          id: randomUUID(),
+          userId: user.id,
+          accountId: payload.sub,
+          providerId: "google",
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      });
+
+      console.log("✅ New user created:", user.id);
+    } else {
+      console.log("👤 Existing user found:", user.id);
+
+      // Check if Google account is linked
+      const existingAccount = await prismaClient.account.findFirst({
+        where: {
+          userId: user.id,
+          providerId: "google",
+        },
+      });
+
+      if (!existingAccount) {
+        // Link Google account to existing user
+        await prismaClient.account.create({
+          data: {
+            id: randomUUID(),
+            userId: user.id,
+            accountId: payload.sub,
+            providerId: "google",
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          },
+        });
+        console.log("🔗 Google account linked to existing user");
+      }
+    }
+
+    // Create session
+    const sessionToken = randomUUID();
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+
+    const session = await prismaClient.session.create({
+      data: {
+        id: randomUUID(),
+        token: sessionToken,
+        userId: user.id,
+        expiresAt,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    });
+
+    console.log("✅ Session created for user:", user.id);
+
+    return {
+      success: true,
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        image: user.image,
+        emailVerified: user.emailVerified,
+        role: user.role,
+      },
+      session: {
+        id: session.id,
+        expiresAt: session.expiresAt,
+      },
+      sessionToken,
+      isNewUser,
+    };
+  } catch (error) {
+    console.error("❌ [signInWithGoogleToken] Error:", error);
+    return {
+      success: false,
+      error: "Failed to authenticate with Google",
+    };
+  }
+};
+
+// Apple Sign-In configuration
+// Bundle ID is used as the audience for Apple tokens
+const APPLE_BUNDLE_ID = "com.deucelague.app";
+
+interface AppleTokenPayload {
+  iss: string; // https://appleid.apple.com
+  aud: string; // Your bundle ID
+  exp: number;
+  iat: number;
+  sub: string; // User's unique Apple ID
+  email?: string;
+  email_verified?: boolean | string;
+  is_private_email?: boolean | string;
+  nonce_supported?: boolean;
+}
+
+export interface AppleSignInResult {
+  success: boolean;
+  user?: any;
+  session?: any;
+  sessionToken?: string;
+  isNewUser?: boolean;
+  error?: string;
+}
+
+interface AppleUserInfo {
+  fullName?: {
+    givenName?: string | null;
+    familyName?: string | null;
+  } | null;
+  email?: string | null;
+}
+
+/**
+ * Decode Apple identity token (JWT) without verification
+ * Apple tokens are JWTs signed with RS256
+ */
+const decodeAppleToken = (token: string): AppleTokenPayload | null => {
+  try {
+    const parts = token.split('.');
+    if (parts.length !== 3) return null;
+
+    const payload = Buffer.from(parts[1], 'base64').toString('utf-8');
+    return JSON.parse(payload);
+  } catch {
+    return null;
+  }
+};
+
+/**
+ * Verify Apple ID token and sign in or create user
+ *
+ * @param identityToken - The identity token from Apple Sign-In SDK
+ * @param userInfo - Optional user info (name, email) provided on first sign-in
+ * @returns AppleSignInResult with user and session data
+ */
+export const signInWithAppleToken = async (
+  identityToken: string,
+  userInfo?: AppleUserInfo,
+  prismaClient: PrismaClient = prisma
+): Promise<AppleSignInResult> => {
+  try {
+    console.log("🍎 [signInWithAppleToken] Verifying Apple identity token...");
+
+    // Decode the token to get claims
+    const payload = decodeAppleToken(identityToken);
+
+    if (!payload) {
+      console.error("❌ Failed to decode Apple token");
+      return {
+        success: false,
+        error: "Invalid Apple token",
+      };
+    }
+
+    // Verify issuer
+    if (payload.iss !== "https://appleid.apple.com") {
+      console.error("❌ Invalid token issuer:", payload.iss);
+      return {
+        success: false,
+        error: "Invalid token issuer",
+      };
+    }
+
+    // Verify audience (bundle ID)
+    if (payload.aud !== APPLE_BUNDLE_ID) {
+      console.error("❌ Token audience mismatch");
+      console.error("   Expected:", APPLE_BUNDLE_ID);
+      console.error("   Got:", payload.aud);
+      return {
+        success: false,
+        error: "Token not issued for this application",
+      };
+    }
+
+    // Verify expiration
+    if (payload.exp * 1000 < Date.now()) {
+      console.error("❌ Token has expired");
+      return {
+        success: false,
+        error: "Token has expired",
+      };
+    }
+
+    const appleUserId = payload.sub;
+    // Apple may or may not provide email - it's only given on first sign-in
+    // and user can choose to hide it
+    const email = payload.email || userInfo?.email;
+
+    console.log("✅ Apple token verified for user:", appleUserId);
+    console.log("   Email:", email || "(not provided)");
+
+    // First, check if we have an account linked with this Apple ID
+    let account = await prismaClient.account.findFirst({
+      where: {
+        providerId: "apple",
+        accountId: appleUserId,
+      },
+      include: { user: true },
+    });
+
+    let user = account?.user;
+    let isNewUser = false;
+
+    if (!user && email) {
+      // No Apple account linked, check if user exists by email
+      user = await prismaClient.user.findUnique({
+        where: { email: email.toLowerCase() },
+      });
+    }
+
+    if (!user) {
+      // Create new user
+      console.log("📝 Creating new user for Apple ID:", appleUserId);
+      isNewUser = true;
+
+      // Build user name from provided info
+      const givenName = userInfo?.fullName?.givenName || "";
+      const familyName = userInfo?.fullName?.familyName || "";
+      const name = [givenName, familyName].filter(Boolean).join(" ") || "User";
+
+      user = await prismaClient.user.create({
+        data: {
+          id: randomUUID(),
+          email: email?.toLowerCase() || `apple_${appleUserId}@private.apple.com`,
+          name,
+          emailVerified: true, // Apple verifies emails
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      });
+
+      // Create account link for Apple provider
+      await prismaClient.account.create({
+        data: {
+          id: randomUUID(),
+          userId: user.id,
+          accountId: appleUserId,
+          providerId: "apple",
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      });
+
+      console.log("✅ New user created:", user.id);
+    } else if (!account) {
+      // User exists but Apple account not linked - link it
+      console.log("🔗 Linking Apple account to existing user:", user.id);
+      await prismaClient.account.create({
+        data: {
+          id: randomUUID(),
+          userId: user.id,
+          accountId: appleUserId,
+          providerId: "apple",
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      });
+    } else {
+      console.log("👤 Existing user found:", user.id);
+    }
+
+    // Create session
+    const sessionToken = randomUUID();
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+
+    const session = await prismaClient.session.create({
+      data: {
+        id: randomUUID(),
+        token: sessionToken,
+        userId: user.id,
+        expiresAt,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    });
+
+    console.log("✅ Session created for user:", user.id);
+
+    return {
+      success: true,
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        image: user.image,
+        emailVerified: user.emailVerified,
+        role: user.role,
+      },
+      session: {
+        id: session.id,
+        expiresAt: session.expiresAt,
+      },
+      sessionToken,
+      isNewUser,
+    };
+  } catch (error) {
+    console.error("❌ [signInWithAppleToken] Error:", error);
+    return {
+      success: false,
+      error: "Failed to authenticate with Apple",
+    };
+  }
+};
+
+/**
+ * Check if an admin/superadmin user should be blocked from mobile login
+ *
+ * @param role - User's role (USER, ADMIN, SUPERADMIN)
+ * @param clientType - Client type header value (e.g., 'mobile', 'web', undefined)
+ * @returns true if user should be blocked, false otherwise
+ */
+export const isAdminBlockedOnMobile = (
+  role: string | undefined,
+  clientType: string | undefined
+): boolean => {
+  if (clientType !== 'mobile') return false;
+  return role === 'ADMIN' || role === 'SUPERADMIN';
 };

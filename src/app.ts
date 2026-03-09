@@ -10,7 +10,7 @@ import { auth } from "./lib/auth";
 import { socketMiddleware } from "./middlewares/socketmiddleware";
 
 import router from "./routes/index";
-import { getApiPrefix } from "./config/network";
+import { getApiPrefix, getTrustedOrigins } from "./config/network";
 // import pinoHttp from "pino-http";
 // import pino from "pino";
 import {
@@ -90,7 +90,7 @@ app.use(preventSQLInjection);
 // Set up CORS
 app.use(
   cors({
-    origin: "*",
+    origin: getTrustedOrigins(),
     // origin: [
     //   "http://localhost:3030",
     //   "http://localhost:82",

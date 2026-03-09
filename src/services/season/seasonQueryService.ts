@@ -64,7 +64,7 @@ export async function getAllSeasons(): Promise<any[]> {
             }
           }
         },
-        take: 6,
+        // Removed take: 6 - frontend needs all memberships to check current user registration
         orderBy: {
           joinedAt: 'asc'
         }
