@@ -3,6 +3,28 @@ import { PrismaClient } from "@prisma/client";
 import { sendEmail } from "../config/nodemailer";
 import { randomUUID } from "crypto";
 
+
+const CUTE_ADJECTIVES = [
+  "Happy", "Swift", "Lucky", "Sunny", "Brave", "Clever", "Mighty", "Gentle",
+  "Fluffy", "Bouncy", "Zippy", "Snappy", "Jolly", "Peppy", "Perky", "Sparkly",
+  "Cosmic", "Turbo", "Mega", "Super", "Ultra", "Ninja", "Pixel", "Neon",
+  "Speedy", "Dizzy", "Fuzzy", "Groovy", "Funky", "Sassy", "Zesty", "Spicy"
+];
+
+const CUTE_NOUNS = [
+  "Panda", "Otter", "Koala", "Penguin", "Bunny", "Fox", "Wolf", "Tiger",
+  "Dragon", "Phoenix", "Falcon", "Dolphin", "Owl", "Sloth", "Raccoon", "Hedgehog",
+  "Unicorn", "Puma", "Lynx", "Badger", "Moose", "Beaver", "Hamster", "Squirrel",
+  "Rocket", "Comet", "Star", "Blaze", "Thunder", "Storm", "Wave", "Ace"
+];
+
+const generateCuteUsername = (): string => {
+  const adjective = CUTE_ADJECTIVES[Math.floor(Math.random() * CUTE_ADJECTIVES.length)];
+  const noun = CUTE_NOUNS[Math.floor(Math.random() * CUTE_NOUNS.length)];
+  const number = Math.floor(100 + Math.random() * 900); // 3-digit number
+  return `${adjective}${noun}${number}`;
+};
+
 export interface VerifyOtpResult {
   success: boolean;
   message: string;
@@ -422,12 +444,12 @@ export const verifyResetOTP = async (
   }
 };
 
-// Google OAuth configuration
-const GOOGLE_IOS_CLIENT_ID = "1049126820486-s6dpimmdmcgkcar6ju3c1turdlr05hpt.apps.googleusercontent.com";
-const GOOGLE_WEB_CLIENT_ID = "1049126820486-5amoljjhl97lodkul5jhp669k40jl6av.apps.googleusercontent.com"; // Used by Android
+// Google OAuth configuration (from environment variables)
+const GOOGLE_IOS_CLIENT_ID = process.env.GOOGLE_IOS_CLIENT_ID || "";
+const GOOGLE_ANDROID_CLIENT_ID = process.env.GOOGLE_ANDROID_CLIENT_ID || ""; // Web client ID used by Android
 
 // Valid audiences for Google token verification
-const VALID_GOOGLE_AUDIENCES = [GOOGLE_IOS_CLIENT_ID, GOOGLE_WEB_CLIENT_ID];
+const VALID_GOOGLE_AUDIENCES = [GOOGLE_IOS_CLIENT_ID, GOOGLE_ANDROID_CLIENT_ID].filter(Boolean);
 
 interface GoogleTokenPayload {
   iss: string;
@@ -514,11 +536,15 @@ export const signInWithGoogleToken = async (
       console.log("📝 Creating new user for:", payload.email);
       isNewUser = true;
 
+      // Generate a cute random username
+      const generatedUsername = generateCuteUsername();
+
       user = await prismaClient.user.create({
         data: {
           id: randomUUID(),
           email: payload.email.toLowerCase(),
           name: payload.name || payload.given_name || "User",
+          username: generatedUsername,
           image: payload.picture || null,
           emailVerified: true,
           createdAt: new Date(),
@@ -609,9 +635,9 @@ export const signInWithGoogleToken = async (
   }
 };
 
-// Apple Sign-In configuration
+// Apple Sign-In configuration (from environment variables)
 // Bundle ID is used as the audience for Apple tokens
-const APPLE_BUNDLE_ID = "com.deucelague.app";
+const APPLE_BUNDLE_ID = process.env.APPLE_BUNDLE_ID || "com.deucelague.app";
 
 interface AppleTokenPayload {
   iss: string; // https://appleid.apple.com
@@ -750,11 +776,15 @@ export const signInWithAppleToken = async (
       const familyName = userInfo?.fullName?.familyName || "";
       const name = [givenName, familyName].filter(Boolean).join(" ") || "User";
 
+      // Generate a cute random username
+      const generatedUsername = generateCuteUsername();
+
       user = await prismaClient.user.create({
         data: {
           id: randomUUID(),
           email: email?.toLowerCase() || `apple_${appleUserId}@private.apple.com`,
           name,
+          username: generatedUsername,
           emailVerified: true, // Apple verifies emails
           createdAt: new Date(),
           updatedAt: new Date(),
