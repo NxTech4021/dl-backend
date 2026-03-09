@@ -5,13 +5,16 @@ CREATE TYPE "public"."UserActionType" AS ENUM ('MATCH_CREATE', 'MATCH_JOIN', 'MA
 CREATE TYPE "public"."UserTargetType" AS ENUM ('MATCH', 'SEASON', 'PARTNERSHIP', 'INVITATION', 'PAYMENT');
 
 -- CreateEnum
-CREATE TYPE "public"."SkillLevel" AS ENUM ('BEGINNER', 'IMPROVER', 'INTERMEDIATE', 'UPPER_INTERMEDIATE', 'ADVANCED', 'EXPERT');
-
--- CreateEnum
 CREATE TYPE "public"."AchievementCategory" AS ENUM ('MATCH_COUNTER', 'LEAGUE_SEASON', 'WINNING', 'MULTI_SPORT', 'MATCH_STREAK');
 
 -- CreateEnum
 CREATE TYPE "public"."AchievementScope" AS ENUM ('MATCH', 'SEASON', 'LIFETIME');
+
+-- CreateEnum
+CREATE TYPE "public"."SkillLevel" AS ENUM ('BEGINNER', 'IMPROVER', 'INTERMEDIATE', 'UPPER_INTERMEDIATE', 'ADVANCED', 'EXPERT');
+
+-- AlterEnum
+ALTER TYPE "public"."GenderType" ADD VALUE 'OPEN';
 
 -- AlterEnum
 ALTER TYPE "public"."AdminActionType" ADD VALUE 'ADMIN_SUSPEND';
@@ -21,9 +24,6 @@ ALTER TYPE "public"."AdminActionType" ADD VALUE 'PAYMENT_BULK_UPDATE';
 
 -- AlterEnum
 ALTER TYPE "public"."AdminTargetType" ADD VALUE 'PAYMENT';
-
--- AlterEnum
-ALTER TYPE "public"."GenderType" ADD VALUE 'OPEN';
 
 -- AlterEnum
 ALTER TYPE "public"."StatusChangeReason" ADD VALUE 'ADMIN_SUSPEND';

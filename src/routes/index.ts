@@ -20,6 +20,7 @@ import ratingRoutes from "./ratingRoutes";
 import standingsRoutes from "./standingsRoutes";
 import feedRoutes from "./feedRoutes";
 import authRouter from "./authRoute";
+import waitlistRoutes from "./waitlistRoutes";
 
 const router = express.Router();
 
@@ -50,6 +51,9 @@ router.use("/friendly", friendlyRoutes);
 // Ratings & Standings
 router.use("/ratings", ratingRoutes);
 router.use("/standings", standingsRoutes);
+
+// Waitlist
+router.use("/waitlist", waitlistRoutes);
 
 // Chat
 router.use("/chat", chatRoutes);

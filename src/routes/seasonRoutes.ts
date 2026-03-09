@@ -10,6 +10,7 @@ import {
   processWithdrawalRequest,
   registerPlayerToSeason,
   assignPlayerToDivision,
+  getMyMemberships,
 } from '../controllers/seasonController';
 import { verifyAuth, requireAdmin } from '../middlewares/auth.middleware';
 
@@ -17,6 +18,10 @@ const seasonRoutes = Router();
 
 // Public read operations - seasons can be viewed by anyone
 seasonRoutes.get('/', getSeasons);
+
+// Get current user's season memberships (must be before /:id to avoid conflict)
+seasonRoutes.get('/membership/me', verifyAuth, getMyMemberships);
+
 seasonRoutes.get('/:id', getSeasonById);
 
 // Admin-only season management operations
