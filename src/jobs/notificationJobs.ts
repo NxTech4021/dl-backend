@@ -1197,6 +1197,43 @@ export function scheduleMatchStreakReEvaluation(): void {
 }
 
 /**
+ * Auto-finish seasons whose endDate has passed but status is still ACTIVE or UPCOMING.
+ * Runs every hour.
+ */
+export function scheduleSeasonAutoFinish(): void {
+  scheduleCron('0 0 * * *', async () => {
+    try {
+      const now = new Date();
+
+      const expiredSeasons = await prisma.season.findMany({
+        where: {
+          endDate: { lt: now },
+          status: { in: ['ACTIVE', 'UPCOMING'] },
+        },
+        select: { id: true, name: true, status: true },
+      });
+
+      if (expiredSeasons.length === 0) return;
+
+      const ids = expiredSeasons.map(s => s.id);
+
+      await prisma.season.updateMany({
+        where: { id: { in: ids } },
+        data: { status: 'FINISHED', isActive: false },
+      });
+
+      logger.info(`Season auto-finish: marked ${expiredSeasons.length} season(s) as FINISHED`, {
+        seasons: expiredSeasons.map(s => ({ id: s.id, name: s.name, previousStatus: s.status })),
+      });
+    } catch (error) {
+      logger.error('Season auto-finish job failed', {}, error instanceof Error ? error : new Error(String(error)));
+    }
+  });
+
+  logger.info('Season auto-finish job scheduled (every hour)');
+}
+
+/**
  * Initialize all notification jobs
  */
 export function initializeNotificationJobs(): void {

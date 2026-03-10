@@ -69,6 +69,64 @@ export const auth = betterAuth({
     provider: "postgresql",
   }),
 
+  // Add hooks to block admin login from mobile
+  // Use 'before' hook to check user role BEFORE sign-in completes
+  hooks: {
+    before: createAuthMiddleware(async (ctx) => {
+      const userAgent = ctx.headers?.get('user-agent') || '';
+      const clientType = ctx.headers?.get('x-client-type');
+      const path = ctx.path;
+
+      // Only check on sign-in endpoints
+      if (!path.includes('sign-in') && !path.includes('email-otp/verify-email')) {
+        return;
+      }
+
+      console.log("🔒 [Auth Hook BEFORE] Path:", path);
+      console.log("🔒 [Auth Hook BEFORE] User-Agent:", userAgent);
+
+      // Detect mobile client via User-Agent (Expo/React Native) OR X-Client-Type header
+      const isMobileUserAgent = /expo|reactnative|okhttp/i.test(userAgent);
+      const isMobileClient = clientType === 'mobile' || isMobileUserAgent;
+
+      if (!isMobileClient) {
+        console.log("🔒 [Auth Hook BEFORE] Skipping - not mobile client");
+        return;
+      }
+
+      console.log("🔒 [Auth Hook BEFORE] Mobile client detected, checking user...");
+
+      // Get email from request body
+      const body = ctx.body as any;
+      const email = body?.email;
+      console.log("🔒 [Auth Hook BEFORE] Email:", email);
+
+      if (!email) {
+        console.log("🔒 [Auth Hook BEFORE] No email in body, skipping");
+        return;
+      }
+
+      // Look up user by email to check role BEFORE sign-in
+      try {
+        const user = await prisma.user.findUnique({
+          where: { email: email.toLowerCase().trim() },
+          select: { role: true },
+        });
+        console.log("🔒 [Auth Hook BEFORE] User role:", user?.role);
+
+        if (user && (user.role === 'ADMIN' || user.role === 'SUPERADMIN')) {
+          console.log("🔒 [Auth Hook BEFORE] BLOCKING ADMIN LOGIN!");
+          throw new APIError("FORBIDDEN", {
+            message: "Admin accounts cannot sign in via the mobile app. Please use the web dashboard.",
+          });
+        }
+      } catch (error) {
+        if (error instanceof APIError) throw error;
+        console.error("Error checking admin mobile login:", error);
+      }
+    }),
+  },
+
   // Configure user schema to include phoneNumber as an additional field
   user: {
     additionalFields: {
@@ -105,13 +163,13 @@ export const auth = betterAuth({
             subject = "Verify Your Email - DeuceLeague";
             title = "Welcome to DeuceLeague!";
             message = "Please verify your email address to complete your registration.";
-            buttonColor = "#10B981"; // Green
+            buttonColor = "#FEA04D"; // Brand Color
           } else if (type === "forget-password") {
             console.log("Sending forget password email to", email);
             subject = "Password Reset Code - DeuceLeague";
             title = "Reset Your Password";
             message = "You requested to reset your password. Use the code below to continue.";
-            buttonColor = "#EF4444"; // Red
+            buttonColor = "#165E99"; // Blue
           }
 
           if (subject) {

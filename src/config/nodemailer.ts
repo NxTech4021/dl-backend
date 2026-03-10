@@ -4,7 +4,7 @@ import { Resend } from "resend";
 
 dotenv.config();
 
-const resend = new Resend("re_4WKNJbCW_Q3ERonrPhkQ9HMQyeoeyWZFM");
+const resend = new Resend(process.env.RESEND_API_KEY);
 
 export const transporter = nodemailer.createTransport({
   service: "Gmail",

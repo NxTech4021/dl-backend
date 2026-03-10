@@ -2,6 +2,7 @@ import { prisma, PrismaClient } from "../lib/prisma";
 import { Prisma, PaymentStatus } from '@prisma/client';
 import { CreateSeasonData, UpdateSeasonData } from "../types/seasonTypes";
 import { getEndOfDayMalaysia } from "../utils/timezone";
+import { waitlistService } from "./waitlistService";
 
 interface StatusUpdate {
   status?: "UPCOMING" | "ACTIVE" | "FINISHED" | "CANCELLED";
@@ -152,7 +153,7 @@ export class SeasonService {
                 }
               }
             },
-            take: 6,
+            // Removed take: 6 - frontend needs all memberships to check if current user is registered
             orderBy: {
               joinedAt: 'asc'
             }
@@ -312,7 +313,7 @@ export class SeasonService {
               }
             }
           },
-          take: 6,
+          // Removed take: 6 limit - frontend needs ALL memberships to check if current user is registered
           orderBy: {
             joinedAt: 'asc'
           }
@@ -363,6 +364,13 @@ export class SeasonService {
   async updateSeasonStatus(id: string, data: StatusUpdate) {
     const { status, isActive } = data;
 
+    // Get current season to check previous status
+    const currentSeason = await this.prisma.season.findUnique({
+      where: { id },
+      select: { status: true },
+    });
+
+    const previousStatus = currentSeason?.status;
     const finalStatus = status ?? (isActive ? "ACTIVE" : undefined);
 
     const updateData: any = {};
@@ -377,6 +385,17 @@ export class SeasonService {
       where: { id },
       data: updateData,
     });
+
+    // Auto-promote waitlisted users when season changes from UPCOMING to ACTIVE
+    if (previousStatus === "UPCOMING" && finalStatus === "ACTIVE") {
+      try {
+        const promotionResult = await waitlistService.promoteAllUsers(id);
+        console.log(`Auto-promoted ${promotionResult.promoted} waitlisted users for season ${id}`);
+      } catch (error) {
+        console.error(`Failed to auto-promote waitlisted users for season ${id}:`, error);
+        // Don't throw - promotion failure shouldn't block status update
+      }
+    }
 
     return updatedSeason;
   }
