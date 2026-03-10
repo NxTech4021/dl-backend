@@ -1,7 +1,21 @@
 import { Request, Response } from "express";
+import { serializeSignedCookie } from "better-call";
 import { verifyResetOTP, signInWithGoogleToken, signInWithAppleToken, isAdminBlockedOnMobile } from "../services/authService";
 import { sendSuccess, sendError } from "../utils/response";
 import { prisma } from "../lib/prisma";
+import { auth } from "../lib/auth";
+
+const buildSignedSessionCookieHeader = async (sessionToken: string) => {
+  const authContext = await auth.$context;
+  const { name, options } = authContext.authCookies.sessionToken;
+
+  return serializeSignedCookie(
+    name,
+    sessionToken,
+    authContext.secret,
+    options,
+  );
+};
 
 /**
  * POST /api/auth/verify-reset-otp
@@ -228,14 +242,12 @@ export const googleNativeSignIn = async (req: Request, res: Response) => {
       );
     }
 
-    // Set the session cookie (secure settings handled by auth service)
-    if (result.sessionToken) {
-      res.cookie("better-auth.session_token", result.sessionToken, {
-        httpOnly: true,
-        secure: false, // Set to true in production via reverse proxy
-        sameSite: "lax",
-        maxAge: 60 * 60 * 24 * 7 * 1000, // 7 days
-      });
+    const sessionCookieHeader = result.sessionToken
+      ? await buildSignedSessionCookieHeader(result.sessionToken)
+      : null;
+
+    if (sessionCookieHeader) {
+      res.append("Set-Cookie", sessionCookieHeader);
     }
 
     return sendSuccess(
@@ -244,6 +256,7 @@ export const googleNativeSignIn = async (req: Request, res: Response) => {
         user: result.user,
         session: result.session,
         sessionToken: result.sessionToken, // Include for mobile SecureStore
+        sessionCookieHeader,
         isNewUser: result.isNewUser,
       },
       result.isNewUser ? "Account created successfully" : "Signed in successfully"
@@ -292,14 +305,12 @@ export const appleNativeSignIn = async (req: Request, res: Response) => {
       );
     }
 
-    // Set the session cookie
-    if (result.sessionToken) {
-      res.cookie("better-auth.session_token", result.sessionToken, {
-        httpOnly: true,
-        secure: false, // Set to true in production via reverse proxy
-        sameSite: "lax",
-        maxAge: 60 * 60 * 24 * 7 * 1000, // 7 days
-      });
+    const sessionCookieHeader = result.sessionToken
+      ? await buildSignedSessionCookieHeader(result.sessionToken)
+      : null;
+
+    if (sessionCookieHeader) {
+      res.append("Set-Cookie", sessionCookieHeader);
     }
 
     return sendSuccess(
@@ -308,6 +319,7 @@ export const appleNativeSignIn = async (req: Request, res: Response) => {
         user: result.user,
         session: result.session,
         sessionToken: result.sessionToken,
+        sessionCookieHeader,
         isNewUser: result.isNewUser,
       },
       result.isNewUser ? "Account created successfully" : "Signed in successfully"

@@ -1,5 +1,5 @@
 import { prisma } from "../lib/prisma";
-import { PrismaClient } from "@prisma/client";
+import { Prisma, PrismaClient } from "@prisma/client";
 import { sendEmail } from "../config/nodemailer";
 import { randomUUID } from "crypto";
 
@@ -25,6 +25,87 @@ const generateCuteUsername = (): string => {
   return `${adjective}${noun}${number}`;
 };
 
+const MAX_USERNAME_GENERATION_ATTEMPTS = 10;
+
+const isUsernameConflictError = (error: unknown): boolean => {
+  if (!error || typeof error !== "object") {
+    return false;
+  }
+
+  const prismaError = error as Prisma.PrismaClientKnownRequestError & {
+    code?: string;
+    meta?: { target?: string | string[] };
+  };
+
+  if (prismaError.code !== "P2002") {
+    return false;
+  }
+
+  const target = prismaError.meta?.target;
+  if (Array.isArray(target)) {
+    return target.includes("username");
+  }
+
+  return typeof target === "string" && target.includes("username");
+};
+
+const createOAuthUser = async (
+  prismaClient: PrismaClient,
+  userData: {
+    email: string;
+    name: string;
+    image?: string | null;
+  },
+) => {
+  for (let attempt = 1; attempt <= MAX_USERNAME_GENERATION_ATTEMPTS; attempt++) {
+    try {
+      return await prismaClient.user.create({
+        data: {
+          id: randomUUID(),
+          email: userData.email,
+          name: userData.name,
+          username: generateCuteUsername(),
+          image: userData.image || null,
+          emailVerified: true,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      });
+    } catch (error) {
+      if (isUsernameConflictError(error) && attempt < MAX_USERNAME_GENERATION_ATTEMPTS) {
+        console.warn(`⚠️ Username collision during OAuth signup, retrying (${attempt}/${MAX_USERNAME_GENERATION_ATTEMPTS})`);
+        continue;
+      }
+
+      throw error;
+    }
+  }
+
+  throw new Error("Failed to generate a unique username for OAuth user");
+};
+
+const mapAuthUser = (user: {
+  id: string;
+  email: string;
+  name: string;
+  image: string | null;
+  emailVerified: boolean;
+  role: string;
+  username: string;
+  completedOnboarding: boolean;
+  onboardingStep: string | null;
+}) => ({
+  id: user.id,
+  email: user.email,
+  name: user.name,
+  image: user.image,
+  emailVerified: user.emailVerified,
+  role: user.role,
+  username: user.username,
+  completedOnboarding: user.completedOnboarding,
+  onboardingStep: user.onboardingStep,
+});
+
 export interface VerifyOtpResult {
   success: boolean;
   message: string;
@@ -45,7 +126,7 @@ interface AttemptRecord {
 const otpAttempts = new Map<string, AttemptRecord>();
 
 // Clean up old attempt records periodically (every 5 minutes)
-setInterval(() => {
+const otpCleanupInterval = setInterval(() => {
   const now = Date.now();
   for (const [email, record] of otpAttempts.entries()) {
     if (now - record.firstAttemptAt > ATTEMPT_WINDOW_MS && (!record.lockedUntil || now > record.lockedUntil)) {
@@ -53,6 +134,7 @@ setInterval(() => {
     }
   }
 }, 5 * 60 * 1000);
+otpCleanupInterval.unref?.();
 
 /**
  * Check if email is locked out due to too many attempts
@@ -536,20 +618,10 @@ export const signInWithGoogleToken = async (
       console.log("📝 Creating new user for:", payload.email);
       isNewUser = true;
 
-      // Generate a cute random username
-      const generatedUsername = generateCuteUsername();
-
-      user = await prismaClient.user.create({
-        data: {
-          id: randomUUID(),
-          email: payload.email.toLowerCase(),
-          name: payload.name || payload.given_name || "User",
-          username: generatedUsername,
-          image: payload.picture || null,
-          emailVerified: true,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        },
+      user = await createOAuthUser(prismaClient, {
+        email: payload.email.toLowerCase(),
+        name: payload.name || payload.given_name || "User",
+        image: payload.picture || null,
       });
 
       // Create account link for Google provider
@@ -611,14 +683,17 @@ export const signInWithGoogleToken = async (
 
     return {
       success: true,
-      user: {
+      user: mapAuthUser({
         id: user.id,
         email: user.email,
         name: user.name,
         image: user.image,
         emailVerified: user.emailVerified,
         role: user.role,
-      },
+        username: user.username,
+        completedOnboarding: user.completedOnboarding,
+        onboardingStep: user.onboardingStep,
+      }),
       session: {
         id: session.id,
         expiresAt: session.expiresAt,
@@ -676,8 +751,10 @@ const decodeAppleToken = (token: string): AppleTokenPayload | null => {
   try {
     const parts = token.split('.');
     if (parts.length !== 3) return null;
+    const encodedPayload = parts[1];
+    if (!encodedPayload) return null;
 
-    const payload = Buffer.from(parts[1], 'base64').toString('utf-8');
+    const payload = Buffer.from(encodedPayload, 'base64').toString('utf-8');
     return JSON.parse(payload);
   } catch {
     return null;
@@ -756,7 +833,7 @@ export const signInWithAppleToken = async (
       include: { user: true },
     });
 
-    let user = account?.user;
+    let user = account?.user ?? null;
     let isNewUser = false;
 
     if (!user && email) {
@@ -776,19 +853,9 @@ export const signInWithAppleToken = async (
       const familyName = userInfo?.fullName?.familyName || "";
       const name = [givenName, familyName].filter(Boolean).join(" ") || "User";
 
-      // Generate a cute random username
-      const generatedUsername = generateCuteUsername();
-
-      user = await prismaClient.user.create({
-        data: {
-          id: randomUUID(),
-          email: email?.toLowerCase() || `apple_${appleUserId}@private.apple.com`,
-          name,
-          username: generatedUsername,
-          emailVerified: true, // Apple verifies emails
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        },
+      user = await createOAuthUser(prismaClient, {
+        email: email?.toLowerCase() || `apple_${appleUserId}@private.apple.com`,
+        name,
       });
 
       // Create account link for Apple provider
@@ -840,14 +907,17 @@ export const signInWithAppleToken = async (
 
     return {
       success: true,
-      user: {
+      user: mapAuthUser({
         id: user.id,
         email: user.email,
         name: user.name,
         image: user.image,
         emailVerified: user.emailVerified,
         role: user.role,
-      },
+        username: user.username,
+        completedOnboarding: user.completedOnboarding,
+        onboardingStep: user.onboardingStep,
+      }),
       session: {
         id: session.id,
         expiresAt: session.expiresAt,
