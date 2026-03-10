@@ -22,7 +22,7 @@ export const sendEmail = async (to: string, subject: string, html: string) => {
     console.log("📧 Sending email via Resend to:", to);
     try {
       const result = await resend.emails.send({
-        from: "Deuce League <noreply@deuceleague.com>",
+        from: "Deuce League <no-reply@staging.appdevelopers.my>",
         to,
         subject,
         html,
