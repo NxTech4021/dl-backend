@@ -184,7 +184,7 @@ function scoreQuestionnaire(answers: QuestionnaireAnswers) {
     rd = HIGH_CONFIDENCE_RD;
   }
 
-  const clampRating = (rating: number) => Math.max(1000, Math.min(8000, rating));
+  const clampRating = (rating: number) => Math.max(800, Math.min(8000, rating));
 
   let singlesRating = Math.round(BASE_RATING + ratingAdjustment);
   let doublesRating = Math.round(
