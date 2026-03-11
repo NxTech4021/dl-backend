@@ -1,3 +1,5 @@
+import { SignJWT, exportJWK, generateKeyPair } from "jose";
+
 const createMockPrisma = () => ({
   user: {
     findUnique: jest.fn(),
@@ -12,10 +14,29 @@ const createMockPrisma = () => ({
   },
 });
 
-const buildAppleIdentityToken = (payload: Record<string, unknown>) => {
-  const header = Buffer.from(JSON.stringify({ alg: "none", typ: "JWT" })).toString("base64");
-  const body = Buffer.from(JSON.stringify(payload)).toString("base64");
-  return `${header}.${body}.signature`;
+// Helper: sign a real Apple-like JWT with a test RSA key
+const signAppleToken = async (
+  payload: Record<string, unknown>,
+  privateKey: CryptoKey,
+  kid: string = "test-key-1",
+) => {
+  return new SignJWT(payload as any)
+    .setProtectedHeader({ alg: "RS256", kid })
+    .sign(privateKey);
+};
+
+// Helper: mock fetch to return JWKS with our test public key
+const mockAppleJWKS = async (publicKey: CryptoKey, kid: string = "test-key-1") => {
+  const jwk = await exportJWK(publicKey);
+  jwk.kid = kid;
+  jwk.alg = "RS256";
+  jwk.use = "sig";
+  (global.fetch as jest.Mock).mockResolvedValue({
+    ok: true,
+    status: 200,
+    json: async () => ({ keys: [jwk] }),
+    headers: new Headers({ "content-type": "application/json" }),
+  });
 };
 
 describe("authService native OAuth", () => {
@@ -30,7 +51,14 @@ describe("authService native OAuth", () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    global.fetch = jest.fn();
+    // Default: empty JWKS. Apple tests override with mockAppleJWKS.
+    // Google tests override with their own fetch mock.
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ keys: [] }),
+      headers: new Headers({ "content-type": "application/json" }),
+    });
   });
 
   test("signInWithGoogleToken retries username collisions and returns onboarding fields", async () => {
@@ -143,14 +171,20 @@ describe("authService native OAuth", () => {
 
   test("signInWithAppleToken creates a new user from first sign-in details", async () => {
     const mockPrisma = createMockPrisma();
-    const identityToken = buildAppleIdentityToken({
-      iss: "https://appleid.apple.com",
-      aud: "com.deucelague.app",
-      exp: Math.floor(Date.now() / 1000) + 3600,
-      iat: Math.floor(Date.now() / 1000),
-      sub: "apple-user-1",
-      email: "apple-user@example.com",
-    });
+    const { privateKey, publicKey } = await generateKeyPair("RS256");
+    await mockAppleJWKS(publicKey);
+
+    const identityToken = await signAppleToken(
+      {
+        iss: "https://appleid.apple.com",
+        aud: "com.deucelague.app",
+        exp: Math.floor(Date.now() / 1000) + 3600,
+        iat: Math.floor(Date.now() / 1000),
+        sub: "apple-user-1",
+        email: "apple-user@example.com",
+      },
+      privateKey,
+    );
 
     mockPrisma.account.findFirst.mockResolvedValue(null);
     mockPrisma.user.findUnique.mockResolvedValue(null);
@@ -195,13 +229,19 @@ describe("authService native OAuth", () => {
 
   test("signInWithAppleToken signs in returning Apple users even when Apple omits email", async () => {
     const mockPrisma = createMockPrisma();
-    const identityToken = buildAppleIdentityToken({
-      iss: "https://appleid.apple.com",
-      aud: "com.deucelague.app",
-      exp: Math.floor(Date.now() / 1000) + 3600,
-      iat: Math.floor(Date.now() / 1000),
-      sub: "apple-user-2",
-    });
+    const { privateKey, publicKey } = await generateKeyPair("RS256");
+    await mockAppleJWKS(publicKey);
+
+    const identityToken = await signAppleToken(
+      {
+        iss: "https://appleid.apple.com",
+        aud: "com.deucelague.app",
+        exp: Math.floor(Date.now() / 1000) + 3600,
+        iat: Math.floor(Date.now() / 1000),
+        sub: "apple-user-2",
+      },
+      privateKey,
+    );
     const existingUser = {
       id: "apple-existing-user",
       email: "private@appleid.example",
