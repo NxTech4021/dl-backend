@@ -981,9 +981,15 @@ router.post("/complete/:userId", verifyAuth, onboardingLimiter, validateOwnUserO
     }
 
     // Validate all required steps are completed before allowing completion
+    // Use select instead of include to avoid conflict with Prisma middleware that adds select clause
     const userWithData = await prisma.user.findUnique({
       where: { id: userId },
-      include: { questionnaireResponses: true },
+      select: {
+        name: true,
+        gender: true,
+        area: true,
+        questionnaireResponses: true,
+      },
     });
 
     const hasPersonalInfo = !!(userWithData?.name && userWithData.name.trim() !== '' && userWithData?.gender);
