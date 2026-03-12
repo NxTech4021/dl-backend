@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { verifyAuth } from "../middlewares/auth.middleware";
-import { matchJoinLimiter } from '../middlewares/rateLimiter';
+import { matchJoinLimiter, scoreSubmissionLimiter } from '../middlewares/rateLimiter';
 import {
   updateMatch,
   deleteMatch,
@@ -88,9 +88,9 @@ matchRoutes.post('/invitations/:id/respond', respondToInvitation);
 
 // Results
 matchRoutes.get('/:id/result', getMatchResult);
-matchRoutes.post('/:id/result', submitResult);
-matchRoutes.post('/:id/confirm', confirmResult);
-matchRoutes.post('/:id/walkover', submitWalkover);
+matchRoutes.post('/:id/result', scoreSubmissionLimiter, submitResult);
+matchRoutes.post('/:id/confirm', scoreSubmissionLimiter, confirmResult);
+matchRoutes.post('/:id/walkover', scoreSubmissionLimiter, submitWalkover);
 
 // Disputes
 matchRoutes.get('/disputes/:id', getDisputeById);
