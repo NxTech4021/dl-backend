@@ -235,6 +235,10 @@ export const googleNativeSignIn = async (req: Request, res: Response) => {
     // Check if admin/superadmin trying to login from mobile
     const clientType = req.headers['x-client-type'] as string | undefined;
     if (isAdminBlockedOnMobile(result.user?.role, clientType)) {
+      // Clean up the session created during OAuth flow to avoid orphans
+      if (result.session?.id) {
+        await prisma.session.delete({ where: { id: result.session.id } }).catch(() => {});
+      }
       return sendError(
         res,
         "Admin accounts cannot sign in via the mobile app. Please use the web dashboard.",
@@ -298,6 +302,10 @@ export const appleNativeSignIn = async (req: Request, res: Response) => {
     // Check if admin/superadmin trying to login from mobile
     const clientType = req.headers['x-client-type'] as string | undefined;
     if (isAdminBlockedOnMobile(result.user?.role, clientType)) {
+      // Clean up the session created during OAuth flow to avoid orphans
+      if (result.session?.id) {
+        await prisma.session.delete({ where: { id: result.session.id } }).catch(() => {});
+      }
       return sendError(
         res,
         "Admin accounts cannot sign in via the mobile app. Please use the web dashboard.",

@@ -2,6 +2,7 @@ import { prisma } from "../lib/prisma";
 import { Prisma, PrismaClient } from "@prisma/client";
 import { sendEmail } from "../config/nodemailer";
 import { randomUUID } from "crypto";
+import { createRemoteJWKSet, jwtVerify } from "jose";
 
 
 const CUTE_ADJECTIVES = [
@@ -533,6 +534,13 @@ const GOOGLE_ANDROID_CLIENT_ID = process.env.GOOGLE_ANDROID_CLIENT_ID || ""; // 
 // Valid audiences for Google token verification
 const VALID_GOOGLE_AUDIENCES = [GOOGLE_IOS_CLIENT_ID, GOOGLE_ANDROID_CLIENT_ID].filter(Boolean);
 
+if (VALID_GOOGLE_AUDIENCES.length === 0) {
+  console.warn(
+    "⚠️ GOOGLE_IOS_CLIENT_ID and GOOGLE_ANDROID_CLIENT_ID are both missing. " +
+    "Google Sign-In will reject all tokens until at least one is configured."
+  );
+}
+
 interface GoogleTokenPayload {
   iss: string;
   azp: string;
@@ -743,20 +751,27 @@ interface AppleUserInfo {
   email?: string | null;
 }
 
-/**
- * Decode Apple identity token (JWT) without verification
- * Apple tokens are JWTs signed with RS256
- */
-const decodeAppleToken = (token: string): AppleTokenPayload | null => {
-  try {
-    const parts = token.split('.');
-    if (parts.length !== 3) return null;
-    const encodedPayload = parts[1];
-    if (!encodedPayload) return null;
+/** Apple JWKS endpoint for cryptographic signature verification. */
+const APPLE_JWKS_URL = new URL("https://appleid.apple.com/auth/keys");
 
-    const payload = Buffer.from(encodedPayload, 'base64').toString('utf-8');
-    return JSON.parse(payload);
-  } catch {
+/**
+ * Verify Apple identity token cryptographically against Apple's JWKS.
+ * Validates signature, issuer, audience, and expiration.
+ * Returns the verified payload or null if verification fails.
+ */
+const verifyAppleToken = async (
+  token: string,
+): Promise<AppleTokenPayload | null> => {
+  try {
+    // createRemoteJWKSet handles HTTP caching internally via cache headers
+    const jwks = createRemoteJWKSet(APPLE_JWKS_URL);
+    const { payload } = await jwtVerify(token, jwks, {
+      issuer: "https://appleid.apple.com",
+      audience: APPLE_BUNDLE_ID,
+    });
+    return payload as unknown as AppleTokenPayload;
+  } catch (error) {
+    console.error("❌ Apple token verification failed:", error);
     return null;
   }
 };
@@ -776,50 +791,21 @@ export const signInWithAppleToken = async (
   try {
     console.log("🍎 [signInWithAppleToken] Verifying Apple identity token...");
 
-    // Decode the token to get claims
-    const payload = decodeAppleToken(identityToken);
+    // Cryptographically verify the token against Apple's JWKS
+    // This validates signature, issuer, audience, and expiration
+    const payload = await verifyAppleToken(identityToken);
 
     if (!payload) {
-      console.error("❌ Failed to decode Apple token");
       return {
         success: false,
-        error: "Invalid Apple token",
-      };
-    }
-
-    // Verify issuer
-    if (payload.iss !== "https://appleid.apple.com") {
-      console.error("❌ Invalid token issuer:", payload.iss);
-      return {
-        success: false,
-        error: "Invalid token issuer",
-      };
-    }
-
-    // Verify audience (bundle ID)
-    if (payload.aud !== APPLE_BUNDLE_ID) {
-      console.error("❌ Token audience mismatch");
-      console.error("   Expected:", APPLE_BUNDLE_ID);
-      console.error("   Got:", payload.aud);
-      return {
-        success: false,
-        error: "Token not issued for this application",
-      };
-    }
-
-    // Verify expiration
-    if (payload.exp * 1000 < Date.now()) {
-      console.error("❌ Token has expired");
-      return {
-        success: false,
-        error: "Token has expired",
+        error: "Invalid or tampered Apple token",
       };
     }
 
     const appleUserId = payload.sub;
-    // Apple may or may not provide email - it's only given on first sign-in
-    // and user can choose to hide it
-    const email = payload.email || userInfo?.email;
+    // Only trust email from the cryptographically verified token payload.
+    // NEVER use userInfo.email (from request body) — it's attacker-controlled.
+    const email = payload.email;
 
     console.log("✅ Apple token verified for user:", appleUserId);
     console.log("   Email:", email || "(not provided)");

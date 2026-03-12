@@ -29,29 +29,44 @@ export const sendFriendRequestHandler = async (req: AuthenticatedRequest, res: R
       recipientId,
     });
 
-
-    // Get sender's name for the notification
-    const sender = await prisma.user.findUnique({
-      where: { id: userId },
-      select: { name: true, username: true },
-    });
-
-    if (sender) {
-      const notification = socialCommunityNotifications.friendRequest(sender.name || sender.username || 'Someone');
-      await notificationService.createNotification({
-        userIds: [recipientId],
-        ...notification,
-        metadata: {
-          ...notification.metadata,
-          senderId: userId,
-        },
+    // Send notification (best-effort — don't fail the request if notification fails)
+    try {
+      const sender = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { name: true, username: true },
       });
+
+      if (sender) {
+        const notification = socialCommunityNotifications.friendRequest(sender.name || sender.username || 'Someone');
+        await notificationService.createNotification({
+          userIds: [recipientId],
+          ...notification,
+          metadata: {
+            ...notification.metadata,
+            senderId: userId,
+          },
+        });
+      }
+    } catch (notifError) {
+      console.error('Failed to send friend request notification (non-fatal):', notifError);
     }
 
     return sendSuccess(res, friendship, undefined, 201);
   } catch (error: unknown) {
     console.error('Error sending friend request:', error);
-    return sendError(res, 'Failed to send friend request', 500);
+    const message = error instanceof Error ? error.message : 'Failed to send friend request';
+
+    // Map known service errors to appropriate HTTP status codes
+    const clientErrors = [
+      'Cannot send friend request to yourself',
+      'User not found',
+      'Friend request already pending',
+      'Already friends',
+      'Cannot send friend request',
+    ];
+    const status = clientErrors.some(e => message.includes(e)) ? 400 : 500;
+
+    return sendError(res, message, status);
   }
 };
 

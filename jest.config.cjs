@@ -34,7 +34,7 @@ module.exports = {
 
   // Transform ESM packages
   transformIgnorePatterns: [
-    'node_modules/(?!(@faker-js/faker)/)',
+    'node_modules/(?!(@faker-js/faker|jose)/)',
   ],
 
   // Module file extensions
