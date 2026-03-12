@@ -109,6 +109,23 @@ export const matchJoinLimiter = rateLimit({
   ),
 });
 
+// ── Score submission limiter — prevent rapid-fire result/confirm/walkover ────
+// Applied to: POST /:id/result, POST /:id/confirm, POST /:id/walkover (both league and friendly)
+// 10 submissions per 5 minutes per user. Score submission is infrequent —
+// a legitimate user submits once, confirms once. This stops automated abuse
+// and reduces the window for race condition exploitation.
+export const scoreSubmissionLimiter = rateLimit({
+  windowMs: 5 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: userKeyGenerator,
+  handler: makeHandler(
+    'SCORE_SUBMISSION_RATE_LIMIT_EXCEEDED',
+    'Too many score submission attempts. Please try again in a few minutes.'
+  ),
+});
+
 // ── Push token limiter ──────────────────────────────────────────────────────
 // Applied to: POST /api/notifications/push-token
 // 10 registrations per hour is plenty — tokens only change on reinstall.
