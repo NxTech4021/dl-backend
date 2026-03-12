@@ -65,6 +65,16 @@ export const auth = betterAuth({
   appName: "DeuceLeague",
   secret: process.env.BETTER_AUTH_SECRET,
 
+  // VE-1 (P0): better-auth rate limiting defaults to disabled unless NODE_ENV=production.
+  // TODO(production): Before deploying to production, EITHER:
+  //   1. Set NODE_ENV=production in docker-compose (recommended), OR
+  //   2. Uncomment the rateLimit block below to force-enable in all environments.
+  // Without this, OTP endpoints have no IP-based throttling — only per-OTP attempt limits (3 guesses).
+  // rateLimit: {
+  //   enabled: true,
+  //   storage: "memory", // Acceptable for single-instance; use "secondary-storage" for multi-instance.
+  // },
+
   database: prismaAdapter(prisma, {
     provider: "postgresql",
   }),
@@ -142,7 +152,9 @@ export const auth = betterAuth({
     expo(),
     username() as any,
     emailOTP({
-      // We add Rate limit later for emails
+      // VE-2: Align OTP expiry with email template (15 minutes)
+      // better-auth default is 300s (5min) — too short, causes user confusion
+      expiresIn: 900, // 15 minutes
       overrideDefaultEmailVerification: true,
       async sendVerificationOTP({ email, otp, type }) {
         try {
