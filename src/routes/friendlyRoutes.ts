@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { verifyAuth } from "../middlewares/auth.middleware";
-import { matchJoinLimiter } from '../middlewares/rateLimiter';
+import { matchJoinLimiter, scoreSubmissionLimiter } from '../middlewares/rateLimiter';
 import {
   createFriendlyMatch,
   getFriendlyMatches,
@@ -31,8 +31,8 @@ friendlyRoutes.get("/", getFriendlyMatches);
 friendlyRoutes.get("/:id/details", getFriendlyMatchDetails); // Full match details for UI display
 friendlyRoutes.get("/:id", getFriendlyMatchById);
 friendlyRoutes.post("/:id/join", matchJoinLimiter, joinFriendlyMatch);
-friendlyRoutes.post("/:id/result", submitFriendlyResult);
-friendlyRoutes.post("/:id/confirm", confirmFriendlyResult);
+friendlyRoutes.post("/:id/result", scoreSubmissionLimiter, submitFriendlyResult);
+friendlyRoutes.post("/:id/confirm", scoreSubmissionLimiter, confirmFriendlyResult);
 friendlyRoutes.post("/:id/accept", acceptFriendlyMatchRequest);
 friendlyRoutes.post("/:id/decline", declineFriendlyMatchRequest);
 friendlyRoutes.post("/:id/cancel", cancelFriendlyMatch);

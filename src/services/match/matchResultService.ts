@@ -168,6 +168,11 @@ export class MatchResultService {
         throw new Error('Cannot submit result for a cancelled or void match');
       }
 
+      // SS-5: Prevent duplicate submission — defense-in-depth for READ COMMITTED race window
+      if (currentMatch.resultSubmittedById) {
+        throw new Error('A result has already been submitted for this match');
+      }
+
       if (currentMatch.sport === 'PICKLEBALL') {
         // Delete existing Pickleball scores if any
         await tx.pickleballGameScore.deleteMany({
@@ -343,23 +348,31 @@ export class MatchResultService {
     let feedPostId: string | null = null;
 
     if (confirmed) {
-      // Opponent APPROVED - Complete the match and update standings
-      await prisma.match.update({
-        where: { id: matchId },
-        data: {
-          status: MatchStatus.COMPLETED,
-          resultConfirmedById: userId,
-          resultConfirmedAt: new Date(),
-          isAutoApproved: false
+      // SS-3: Wrap confirm path in transaction with inner status re-check
+      // Prevents double processMatchCompletion when two opponents confirm simultaneously
+      await prisma.$transaction(async (tx) => {
+        const freshMatch = await tx.match.findUnique({ where: { id: matchId } });
+        if (!freshMatch || freshMatch.status !== MatchStatus.ONGOING) {
+          throw new Error('Match is not pending confirmation');
         }
+
+        await tx.match.update({
+          where: { id: matchId },
+          data: {
+            status: MatchStatus.COMPLETED,
+            resultConfirmedById: userId,
+            resultConfirmedAt: new Date(),
+            isAutoApproved: false
+          }
+        });
       });
 
-      // Process match completion: update standings for ALL participants (including partnerships)
+      // Process match completion AFTER transaction commits (side effects)
       await this.processMatchCompletion(matchId);
 
       // NOTE: Feed post creation is now handled by user via share prompt
       // Don't auto-create feed posts to avoid "already exists" issue
-      
+
       // Notify all participants of completion
       await this.sendResultConfirmedNotification(matchId, userId);
 
@@ -818,6 +831,16 @@ export class MatchResultService {
 
     if (!defaultingParticipant) {
       throw new Error('Defaulting user is not a participant in this match');
+    }
+
+    // SS-4: Status check — prevent walkover on completed/cancelled/void matches
+    if (match.status !== MatchStatus.SCHEDULED && match.status !== MatchStatus.ONGOING) {
+      throw new Error('Can only record walkover for scheduled or ongoing matches');
+    }
+
+    // SS-4: Prevent walkover when result already submitted (conflicting state)
+    if (match.resultSubmittedAt) {
+      throw new Error('Cannot record walkover — a result has already been submitted for this match');
     }
 
     // Determine winner (opposite team)

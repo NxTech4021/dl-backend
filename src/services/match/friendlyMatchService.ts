@@ -797,42 +797,22 @@ export class FriendlyMatchService {
       return updatedMatch;
     }
 
-    // For doubles friendly matches, apply team assignments if provided
+    // Validate team assignments and scores OUTSIDE transaction (pure validation)
     if (match.matchType === MatchType.DOUBLES && teamAssignments) {
-      // Validate exactly 2 players per team
       if (teamAssignments.team1.length !== 2 || teamAssignments.team2.length !== 2) {
         throw new Error('Doubles matches require exactly 2 players per team');
       }
-
-      // Validate all assigned players are participants
       const participantIds = (match.participants || [])
         .filter((p: any) => p.invitationStatus === InvitationStatus.ACCEPTED)
         .map((p: any) => p.userId);
-
       const allAssigned = [...teamAssignments.team1, ...teamAssignments.team2];
       const invalidPlayers = allAssigned.filter((id: string) => !participantIds.includes(id));
       if (invalidPlayers.length > 0) {
         throw new Error('All assigned players must be accepted participants');
       }
-
-      // Update team assignments
-      await prisma.$transaction([
-        ...teamAssignments.team1.map((userId: string) =>
-          prisma.matchParticipant.updateMany({
-            where: { matchId, userId },
-            data: { team: 'team1' }
-          })
-        ),
-        ...teamAssignments.team2.map((userId: string) =>
-          prisma.matchParticipant.updateMany({
-            where: { matchId, userId },
-            data: { team: 'team2' }
-          })
-        )
-      ]);
     }
 
-    // Calculate scores
+    // Calculate scores OUTSIDE transaction (pure computation)
     let team1Score: number, team2Score: number, winner: string;
 
     if (match.sport === 'PICKLEBALL') {
@@ -843,30 +823,6 @@ export class FriendlyMatchService {
       team1Score = result.team1Score;
       team2Score = result.team2Score;
       winner = result.winner;
-
-      // Save pickleball scores
-      await Promise.all(
-        gameScores.map(score =>
-          prisma.pickleballGameScore.upsert({
-            where: {
-              matchId_gameNumber: {
-                matchId: match.id,
-                gameNumber: score.gameNumber
-              }
-            },
-            create: {
-              matchId: match.id,
-              gameNumber: score.gameNumber,
-              player1Points: score.team1Points,
-              player2Points: score.team2Points
-            },
-            update: {
-              player1Points: score.team1Points,
-              player2Points: score.team2Points
-            }
-          })
-        )
-      );
     } else {
       // Tennis/Padel
       if (!setScores || !Array.isArray(setScores) || setScores.length === 0) {
@@ -876,86 +832,115 @@ export class FriendlyMatchService {
       team1Score = result.team1Score;
       team2Score = result.team2Score;
       winner = result.winner;
+    }
 
-      // Save set scores - use transaction to ensure atomicity
-      await prisma.$transaction(async (tx) => {
-        // Delete existing scores first to avoid conflicts
-        await tx.matchScore.deleteMany({
-          where: { matchId: match.id }
-        });
+    // SS-1/SS-2: Wrap ALL writes in a single transaction with inner status re-check
+    // Prevents concurrent submissions from silently overwriting each other's scores
+    const updatedMatch = await prisma.$transaction(async (tx) => {
+      // Re-fetch and re-check status INSIDE transaction
+      const freshMatch = await tx.match.findUnique({
+        where: { id: matchId },
+        include: { participants: true }
+      });
 
-        // Create new set scores
-        for (const score of setScores) {
+      if (!freshMatch) {
+        throw new Error('Friendly match not found');
+      }
+
+      if (freshMatch.status === MatchStatus.COMPLETED) {
+        throw new Error('Match has already been completed');
+      }
+
+      if (freshMatch.status === MatchStatus.ONGOING) {
+        throw new Error('Match result is pending opponent confirmation');
+      }
+
+      if ((freshMatch as any).resultSubmittedById) {
+        throw new Error('A result has already been submitted for this match');
+      }
+
+      // Team assignments (if doubles)
+      if (match.matchType === MatchType.DOUBLES && teamAssignments) {
+        for (const userId of teamAssignments.team1) {
+          await tx.matchParticipant.updateMany({
+            where: { matchId, userId },
+            data: { team: 'team1' }
+          });
+        }
+        for (const userId of teamAssignments.team2) {
+          await tx.matchParticipant.updateMany({
+            where: { matchId, userId },
+            data: { team: 'team2' }
+          });
+        }
+      }
+
+      // Score writes (delete + create pattern, matching league)
+      if (match.sport === 'PICKLEBALL') {
+        await tx.pickleballGameScore.deleteMany({ where: { matchId } });
+        for (const score of gameScores!) {
+          await tx.pickleballGameScore.create({
+            data: {
+              matchId,
+              gameNumber: score.gameNumber,
+              player1Points: score.team1Points,
+              player2Points: score.team2Points
+            }
+          });
+        }
+      } else {
+        await tx.matchScore.deleteMany({ where: { matchId } });
+        for (const score of setScores!) {
           const scoreData: any = {
-            matchId: match.id,
+            matchId,
             setNumber: score.setNumber,
             player1Games: score.team1Games,
             player2Games: score.team2Games,
             hasTiebreak: !!(score.team1Tiebreak || score.team2Tiebreak)
           };
-          
-          if (score.team1Tiebreak !== undefined) {
-            scoreData.player1Tiebreak = score.team1Tiebreak;
-          }
-          if (score.team2Tiebreak !== undefined) {
-            scoreData.player2Tiebreak = score.team2Tiebreak;
-          }
-          // Add tiebreakType if provided (for Set 3 match tiebreaks)
-          if (score.tiebreakType) {
-            scoreData.tiebreakType = score.tiebreakType;
-          }
-
+          if (score.team1Tiebreak !== undefined) scoreData.player1Tiebreak = score.team1Tiebreak;
+          if (score.team2Tiebreak !== undefined) scoreData.player2Tiebreak = score.team2Tiebreak;
+          if (score.tiebreakType) scoreData.tiebreakType = score.tiebreakType;
           await tx.matchScore.create({ data: scoreData });
         }
-      });
-    }
+      }
 
-    // Create a match comment if provided
-    if (comment) {
-      await prisma.matchComment.create({
-        data: {
-          matchId,
-          userId: submittedById,
-          comment: comment,
+      // Comment (inside tx)
+      if (comment) {
+        await tx.matchComment.create({
+          data: { matchId, userId: submittedById, comment }
+        });
+      }
+
+      // Match update (inside tx)
+      const matchUpdateData: any = {
+        team1Score,
+        team2Score,
+        outcome: winner,
+        status: MatchStatus.ONGOING,
+        resultSubmittedById: submittedById,
+        resultSubmittedAt: new Date(),
+        resultEvidence: evidence || null
+      };
+
+      if (match.sport === 'PICKLEBALL' && gameScores) {
+        matchUpdateData.setScores = JSON.stringify(gameScores);
+      } else if (setScores) {
+        matchUpdateData.setScores = JSON.stringify(setScores);
+      }
+
+      return tx.match.update({
+        where: { id: matchId },
+        data: matchUpdateData,
+        include: {
+          createdBy: { select: { id: true, name: true, username: true, image: true } },
+          participants: {
+            include: { user: { select: { id: true, name: true, username: true, image: true } } }
+          },
+          scores: true,
+          pickleballScores: true
         }
       });
-    }
-
-    // Update match with result
-    const matchUpdateData: any = {
-      team1Score,
-      team2Score,
-      outcome: winner,
-      status: MatchStatus.ONGOING, // Pending confirmation
-      resultSubmittedById: submittedById,
-      resultSubmittedAt: new Date(),
-      resultEvidence: evidence || null
-    };
-
-    // Save setScores to Match model (JSON field) for easy access
-    if (match.sport === 'PICKLEBALL' && gameScores) {
-      matchUpdateData.setScores = JSON.stringify(gameScores);
-    } else if (setScores) {
-      matchUpdateData.setScores = JSON.stringify(setScores);
-    }
-
-    const updatedMatch = await prisma.match.update({
-      where: { id: matchId },
-      data: matchUpdateData,
-      include: {
-        createdBy: {
-          select: { id: true, name: true, username: true, image: true }
-        },
-        participants: {
-          include: {
-            user: {
-              select: { id: true, name: true, username: true, image: true }
-            }
-          }
-        },
-        scores: true,
-        pickleballScores: true
-      }
     });
 
     // NOTE: NO rating calculation for friendly matches
@@ -999,36 +984,49 @@ export class FriendlyMatchService {
     }
 
     if (confirmed) {
-      // Mark match as completed
-      await prisma.match.update({
-        where: { id: matchId },
-        data: {
-          status: MatchStatus.COMPLETED,
-          resultConfirmedById: userId,
-          resultConfirmedAt: new Date()
+      // SS-6: Wrap confirm path in transaction with inner status re-check
+      await prisma.$transaction(async (tx) => {
+        const freshMatch = await tx.match.findUnique({ where: { id: matchId } });
+        if (!freshMatch || freshMatch.status !== MatchStatus.ONGOING) {
+          throw new Error('Match is not pending confirmation — already completed or reset');
         }
+
+        await tx.match.update({
+          where: { id: matchId },
+          data: {
+            status: MatchStatus.COMPLETED,
+            resultConfirmedById: userId,
+            resultConfirmedAt: new Date()
+          }
+        });
       });
     } else {
-      // Create dispute (but don't affect ratings)
-      await prisma.matchDispute.create({
-        data: {
-          matchId: match.id,
-          raisedByUserId: userId,
-          disputeCategory: 'OTHER',
-          disputeComment: disputeReason || 'Result disputed',
-          status: 'OPEN'
+      // SS-7: Wrap dispute path in transaction with inner status re-check
+      await prisma.$transaction(async (tx) => {
+        const freshMatch = await tx.match.findUnique({ where: { id: matchId } });
+        if (!freshMatch || freshMatch.status !== MatchStatus.ONGOING) {
+          throw new Error('Match is not pending confirmation — already completed or reset');
         }
-      });
 
-      // Reset match status
-      await prisma.match.update({
-        where: { id: matchId },
-        data: {
-          status: MatchStatus.SCHEDULED,
-          resultSubmittedById: null,
-          resultSubmittedAt: null,
-          resultEvidence: null
-        }
+        await tx.matchDispute.create({
+          data: {
+            matchId: match.id,
+            raisedByUserId: userId,
+            disputeCategory: 'OTHER',
+            disputeComment: disputeReason || 'Result disputed',
+            status: 'OPEN'
+          }
+        });
+
+        await tx.match.update({
+          where: { id: matchId },
+          data: {
+            status: MatchStatus.SCHEDULED,
+            resultSubmittedById: null,
+            resultSubmittedAt: null,
+            resultEvidence: null
+          }
+        });
       });
     }
 
