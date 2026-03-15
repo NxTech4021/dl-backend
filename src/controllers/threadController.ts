@@ -917,6 +917,8 @@ export const getMessages = async (req: Request, res: Response) => {
               msg.matchData = {
                 ...matchData,
                 participants: enrichedParticipants,
+                // Always sync live match status so frontend reflects cancellations / completions after reload
+                status: match.status,
                 // Always sync friendly request status from the actual Match record
                 requestStatus: matchAny.requestStatus || matchData.requestStatus,
                 isFriendlyRequest: matchAny.isFriendlyRequest ?? matchData.isFriendlyRequest,

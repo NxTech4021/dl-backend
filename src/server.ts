@@ -13,7 +13,7 @@ import { expireOldRequests } from "./services/pairingService";
 import { getInactivityService } from "./services/inactivityService";
 import { NotificationService } from "./services/notificationService";
 import { INACTIVITY_CONFIG } from "./config/inactivity.config";
-import { initializeNotificationJobs, schedulePushTokenCleanup, scheduleMatchStreakReEvaluation } from "./jobs/notificationJobs";
+import { initializeNotificationJobs, schedulePushTokenCleanup, scheduleMatchStreakReEvaluation, scheduleSeasonAutoFinish } from "./jobs/notificationJobs";
 import { getMatchInvitationService } from "./services/match/matchInvitationService";
 import { getMatchResultService } from "./services/match/matchResultService";
 import { logger } from "./utils/logger";
@@ -133,6 +133,7 @@ cron.schedule("0 * * * *", async () => {
 // Phase 1 — Safe crons (DB operations only, no user notifications)
 schedulePushTokenCleanup();
 scheduleMatchStreakReEvaluation();
+scheduleSeasonAutoFinish();
 
 // Phase 2+ — All notification jobs (enable when push tokens verified & dedup tested)
 // initializeNotificationJobs();

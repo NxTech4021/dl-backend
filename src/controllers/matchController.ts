@@ -153,6 +153,12 @@ export const updateMatch = async (req: Request, res: Response) => {
     const existingMatch = await prisma.match.findUnique({ where: { id } });
     if (!existingMatch) return sendError(res, "Match not found.", 404);
 
+    const userId = (req as any).user?.id;
+    if (!userId) return sendError(res, "Authentication required.", 401);
+    if (existingMatch.createdById !== userId) {
+      return sendError(res, "Only the match creator can edit this match.", 403);
+    }
+
     const updateData: Prisma.MatchUpdateInput = {};
     
     if (divisionId !== undefined) {
