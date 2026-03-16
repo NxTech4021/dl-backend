@@ -262,6 +262,7 @@ export class WaitlistService {
       select: {
         id: true,
         name: true,
+        paymentRequired: true,
         waitlist: { include: { waitlistedUsers: true } },
       },
     });
@@ -269,6 +270,10 @@ export class WaitlistService {
     if (!season?.waitlist) {
       return { promoted: 0, promotedUserIds: [], failedUserIds: [], seasonName: season?.name ?? "" };
     }
+
+    // Determine payment status based on whether season requires payment
+    // Free seasons: COMPLETED (nothing to pay). Paid seasons: PENDING (awaiting payment).
+    const paymentStatus = season.paymentRequired ? "PENDING" : "COMPLETED";
 
     const waitlistedUsers = await this.prisma.waitlistUser.findMany({
       where: { waitlistId: season.waitlist.id, promotedToRegistered: false },
@@ -281,13 +286,13 @@ export class WaitlistService {
 
     for (const waitlistUser of waitlistedUsers) {
       try {
-        // Create membership with PENDING payment
+        // Create membership — payment status depends on season.paymentRequired
         await this.prisma.seasonMembership.create({
           data: {
             seasonId,
             userId: waitlistUser.userId,
             status: "ACTIVE",
-            paymentStatus: "PENDING",
+            paymentStatus,
           },
         });
 
