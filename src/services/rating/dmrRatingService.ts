@@ -381,11 +381,21 @@ export class DMRRatingService {
   }
 
   /**
-   * Cap rating change to prevent extreme swings
+   * Cap rating change to prevent extreme swings.
+   * Uses tiered multiplier: more generous for uncertain (high RD) players,
+   * tighter for established (low RD) players.
    */
   private capRatingChange(ratingChange: number, rd: number): number {
     const { capK, absMaxDelta } = this.config;
-    const maxDelta = Math.min(capK * rd, absMaxDelta);
+    let effectiveCapK: number;
+    if (rd > 200) {
+      effectiveCapK = 0.15; // New/very uncertain players — allow faster calibration
+    } else if (rd > 100) {
+      effectiveCapK = 0.12; // Calibrating players — moderate flexibility
+    } else {
+      effectiveCapK = capK; // Established players — original tight cap
+    }
+    const maxDelta = Math.min(effectiveCapK * rd, absMaxDelta);
     return Math.max(-maxDelta, Math.min(maxDelta, ratingChange));
   }
 
