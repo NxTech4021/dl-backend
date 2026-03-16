@@ -28,6 +28,10 @@ import {
   getPlayerSeasonHistory,
   getPlayerDivisionHistory,
   getPlayerMatchHistoryAdmin,
+  // Account Deletion
+  deletePlayerAccount,
+  // Sports Management
+  updatePlayerSports,
 } from '../controllers/playerController';
 import { getSettings, updateSettings, updateSkillLevels } from '../controllers/settingsController';
 
@@ -47,6 +51,8 @@ playerRouter.get('/:id/matches', verifyAuth, requireAdmin, getPlayerMatchHistory
 // Player profile routes (authenticated user)
 playerRouter.get('/profile/me', verifyAuth, getPlayerProfile as any);
 playerRouter.put('/profile/me', verifyAuth, updatePlayerProfile as any);
+playerRouter.put('/sports', verifyAuth, updatePlayerSports as any);
+playerRouter.delete('/profile/me', verifyAuth, deletePlayerAccount as any);
 playerRouter.put('/profile/password', verifyAuth, changePlayerPassword as any);
 playerRouter.get('/profile/matches', verifyAuth, getPlayerMatchHistory as any);
 playerRouter.get('/profile/achievements', verifyAuth, getPlayerAchievements as any);

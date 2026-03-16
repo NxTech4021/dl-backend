@@ -852,3 +852,130 @@ export async function getCompletedPlayerAchievements(userId: string) {
   const { getCompletedAchievements } = await import('../achievement/achievementCrudService');
   return getCompletedAchievements(userId);
 }
+
+/**
+ * Permanently delete a player's account.
+ * - Deletes the GCS profile image if present.
+ * - Deletes the User row; Prisma cascades handle all personal data.
+ * - Message.senderId, MatchParticipant.userId, DivisionStanding.userId
+ *   are SET NULL via FK constraints to preserve competitive history.
+ */
+export async function updatePlayerSports(userId: string, sports: string[]): Promise<string[]> {
+  const validSports = ['pickleball', 'tennis', 'padel'];
+  const invalid = sports.filter((s) => !validSports.includes(s));
+  if (invalid.length > 0) {
+    throw new Error(`Invalid sports: ${invalid.join(', ')}. Valid sports are: ${validSports.join(', ')}`);
+  }
+
+  // Delete questionnaire responses for sports no longer selected
+  await prisma.questionnaireResponse.deleteMany({
+    where: { userId, sport: { notIn: sports } },
+  });
+
+  // Upsert questionnaire responses for newly selected sports
+  for (const sport of sports) {
+    await prisma.questionnaireResponse.upsert({
+      where: { userId_sport: { userId, sport } },
+      create: {
+        userId,
+        sport,
+        qVersion: 1,
+        qHash: 'placeholder',
+        answersJson: {},
+        startedAt: new Date(),
+        completedAt: null,
+      },
+      update: {},
+    });
+  }
+
+  return sports;
+}
+
+export async function deletePlayerAccount(
+  userId: string,
+  reason: string,
+  reasonText?: string
+): Promise<void> {
+  // Fetch image URL before deletion so we can clean up GCS
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { image: true },
+  });
+
+  // Delete GCS profile image if it exists and is a storage URL
+  if (user?.image && user.image.startsWith('https://storage.googleapis.com')) {
+    try {
+      await deleteProfileImage(user.image);
+    } catch (err) {
+      // Non-fatal: proceed with account deletion even if image cleanup fails
+      console.warn('[deletePlayerAccount] Failed to delete profile image from GCS:', err);
+    }
+  }
+
+  // Anonymize the account in a single transaction:
+  //   1. Delete all records that have required (non-nullable) userId FKs with no CASCADE,
+  //      which would otherwise block deletion or leave orphaned rows.
+  //   2. Update the user row itself with anonymised placeholder values so that:
+  //      - Historical records (messages, match results, standings) survive and render
+  //        as "Deleted User" via the name field.
+  //      - The original email and username are freed immediately for re-registration.
+  //      - All personal data is wiped from the user row.
+  await prisma.$transaction(async (tx) => {
+    // --- Delete records that block deletion or should be fully removed ---
+
+    // Notification inbox entries (required FK, no CASCADE)
+    await tx.userNotification.deleteMany({ where: { userId } });
+
+    // Push tokens (device tokens should be revoked on deletion)
+    await tx.userPushToken.deleteMany({ where: { userId } });
+
+    // Active sessions (force-logout all devices)
+    await tx.session.deleteMany({ where: { userId } });
+
+    // Auth provider links (OAuth accounts)
+    await tx.account.deleteMany({ where: { userId } });
+
+    // Onboarding / questionnaire data
+    await tx.questionnaireResponse.deleteMany({ where: { userId } });
+
+    // User settings
+    await tx.userSettings.deleteMany({ where: { userId } });
+
+    // Notification preferences
+    await tx.notificationPreference.deleteMany({ where: { userId } });
+
+    // --- Anonymise the user row (wipe PII, free email + username) ---
+    await tx.user.update({
+      where: { id: userId },
+      data: {
+        // Neutral display name preserved in historical records
+        name: 'Deleted User',
+        // Scrambled placeholders free up the originals for re-registration
+        email: `deleted+${userId}@accounts.deuceleague.com`,
+        username: `deleted_${userId}`,
+        displayUsername: null,
+        // Wipe all personal information
+        image: null,
+        bio: null,
+        phoneNumber: null,
+        dateOfBirth: null,
+        gender: null,
+        area: null,
+        latitude: null,
+        longitude: null,
+        // Reset onboarding state
+        completedOnboarding: false,
+        onboardingStep: null,
+        // Revoke verification and flag account as deleted
+        emailVerified: false,
+        status: 'DELETED',
+        // Clear activity timestamps
+        lastLogin: null,
+        lastActivityCheck: null,
+        inactivityWarningAt: null,
+        markedInactiveAt: null,
+      },
+    });
+  });
+}
