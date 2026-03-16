@@ -674,7 +674,8 @@ export const signInWithGoogleToken = async (
 
     // Create session
     const sessionToken = randomUUID();
-    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+    const sessionExpirySeconds = parseInt(process.env.SESSION_EXPIRY_SECONDS || '2592000', 10); // 30 days default
+    const expiresAt = new Date(Date.now() + sessionExpirySeconds * 1000);
 
     const session = await prismaClient.session.create({
       data: {
@@ -876,7 +877,8 @@ export const signInWithAppleToken = async (
 
     // Create session
     const sessionToken = randomUUID();
-    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+    const sessionExpirySeconds = parseInt(process.env.SESSION_EXPIRY_SECONDS || '2592000', 10); // 30 days default
+    const expiresAt = new Date(Date.now() + sessionExpirySeconds * 1000);
 
     const session = await prismaClient.session.create({
       data: {
