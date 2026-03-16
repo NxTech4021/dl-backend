@@ -96,6 +96,8 @@ model User {
   bugReports       BugReport[]       @relation("BugReporter")
   bugComments      BugComment[]      @relation("BugCommentAuthor")
   bugStatusChanges BugStatusChange[] @relation("BugStatusChanger")
+  // Crash reporting
+  crashReports     CrashReport[]     @relation("CrashReporter")
 
   // Match invitation system relations
   matchesCreated           Match[]           @relation("MatchCreator")
@@ -3110,6 +3112,50 @@ enum Set3Format {
 // =============================================
 // END BEST 6 SCORING SYSTEM ENUMS
 // =============================================
+
+// =============================================
+// CRASH REPORTING
+// =============================================
+
+model CrashReport {
+  id              String   @id @default(cuid())
+  userId          String?
+
+  type            String   // JS_ERROR, RENDER_ERROR, UNHANDLED_REJECTION, SESSION_LOST
+  errorMessage    String
+  stackTrace      String?  @db.Text
+  componentStack  String?  @db.Text
+
+  screenName      String?
+
+  platform        String   // ios, android
+  osVersion       String?
+  appVersion      String?
+  deviceModel     String?
+  buildType       String?  // standalone, expo-go
+
+  severity        String   @default("MEDIUM")
+  resolved        Boolean  @default(false)
+  resolvedAt      DateTime?
+  resolvedById    String?
+  notes           String?  @db.Text
+
+  occurrenceCount Int      @default(1)
+  firstSeenAt     DateTime @default(now())
+  lastSeenAt      DateTime @default(now())
+
+  createdAt       DateTime @default(now())
+
+  user            User?    @relation("CrashReporter", fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([createdAt])
+  @@index([type])
+  @@index([screenName])
+  @@index([resolved])
+  @@index([severity])
+  @@index([errorMessage, screenName, appVersion])
+}
 
 // =============================================
 // ONBOARDING STEP TRACKING ENUM
