@@ -194,6 +194,14 @@ export class LeagueService {
                     id: true,
                     name: true,
                     image: true,
+                    playerRatings: {
+                      select: {
+                        currentRating: true,
+                        gameType: true,
+                        sport: true,
+                      },
+                      take: 2,
+                    },
                   }
                 }
               },
