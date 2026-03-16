@@ -647,3 +647,52 @@ export const getPlayerMatchHistoryAdmin = async (req: Request, res: Response) =>
     return sendError(res, errorMessage, statusCode);
   }
 };
+
+/**
+ * Delete authenticated player's account (permanent)
+ * DELETE /api/player/profile/me
+ * Body: { reason: string, reasonText?: string }
+ */
+export const updatePlayerSports = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      return sendError(res, 'Unauthorized', 401);
+    }
+
+    const { sports } = req.body as { sports?: unknown };
+    if (!Array.isArray(sports)) {
+      return sendError(res, 'Sports must be an array of sport names', 400);
+    }
+
+    const result = await profileService.updatePlayerSports(userId, sports as string[]);
+    return sendSuccess(res, { sports: result }, 'Sports updated successfully');
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Failed to update sports';
+    return sendError(res, errorMessage, 400);
+  }
+};
+
+export const deletePlayerAccount = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const userId = req.user?.id;
+
+    if (!userId) {
+      return sendError(res, 'Unauthorized', 401);
+    }
+
+    const { reason, reasonText } = req.body as { reason?: string; reasonText?: string };
+
+    if (!reason || typeof reason !== 'string' || reason.trim().length === 0) {
+      return sendError(res, 'A deletion reason is required', 400);
+    }
+
+    await profileService.deletePlayerAccount(userId, reason.trim(), reasonText?.trim());
+
+    return sendSuccess(res, null, 'Account deleted successfully');
+  } catch (error: unknown) {
+    console.error('❌ deletePlayerAccount: Error deleting account:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Failed to delete account';
+    return sendError(res, errorMessage);
+  }
+};
