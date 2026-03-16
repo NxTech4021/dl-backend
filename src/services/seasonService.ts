@@ -413,9 +413,14 @@ export class SeasonService {
     if (data.categoryId !== undefined) {
       (updateData).categoryId = data.categoryId;
     }
+    // BUG 6+8: Sync isActive and status — infer one from the other
+    // Matches the inference logic in updateSeasonStatus (line 374)
+    const finalStatus = data.status ?? (data.isActive ? "ACTIVE" : undefined);
     if (data.isActive !== undefined) updateData.isActive = data.isActive;
-    if (data.isActive !== undefined) updateData.isActive = data.isActive;
-    if (data.status !== undefined) updateData.status = data.status;
+    if (finalStatus) {
+      updateData.status = finalStatus;
+      updateData.isActive = (finalStatus === "ACTIVE");
+    }
     if (data.paymentRequired !== undefined) updateData.paymentRequired = data.paymentRequired;
     if (data.promoCodeSupported !== undefined) updateData.promoCodeSupported = data.promoCodeSupported;
     if (data.withdrawalEnabled !== undefined) updateData.withdrawalEnabled = data.withdrawalEnabled;
