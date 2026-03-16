@@ -83,6 +83,9 @@ export const NOTIFICATION_TYPES = {
   OPPONENT_CHANGED: 'OPPONENT_CHANGED',
   PARTNER_CHANGED: 'PARTNER_CHANGED',
 
+  // Waitlist notifications
+  WAITLIST_PROMOTED: 'WAITLIST_PROMOTED',
+
   // Season registration notifications
   SEASON_REGISTRATION_OPEN: 'SEASON_REGISTRATION_OPEN',
 
@@ -368,6 +371,9 @@ export function getCategoryForNotificationType(type: NotificationType): Notifica
     // Partner/Opponent change types
     [NOTIFICATION_TYPES.OPPONENT_CHANGED]: 'MATCH',
     [NOTIFICATION_TYPES.PARTNER_CHANGED]: 'MATCH',
+
+    // Waitlist
+    [NOTIFICATION_TYPES.WAITLIST_PROMOTED]: 'SEASON',
 
     // Season registration
     [NOTIFICATION_TYPES.SEASON_REGISTRATION_OPEN]: 'SEASON',
