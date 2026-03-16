@@ -5,7 +5,7 @@
  */
 
 import { prisma } from '../../lib/prisma';
-import { Prisma, PaymentStatus } from '@prisma/client';
+import { Prisma, PaymentStatus, SportType } from '@prisma/client';
 import {
   RegisterMembershipInput,
   UpdatePaymentStatusInput,
@@ -18,6 +18,7 @@ import {
   validateDivisionExists
 } from './seasonValidationService';
 import { formatMembershipResponse } from './utils/formatters';
+import { createInitialRating } from '../rating/playerRatingService';
 
 /**
  * Register a new membership for a season
@@ -84,6 +85,39 @@ export async function registerMembership(
   });
 
   console.log(`✅ Membership ${result.id} created for user ${userId} in season ${seasonId}`);
+
+  // Create initial PlayerRating from questionnaire results (if available)
+  // This bridges the gap between InitialRatingResult (onboarding) and PlayerRating (matchmaking)
+  try {
+    const seasonWithLeagues = await prisma.season.findUnique({
+      where: { id: seasonId },
+      include: { leagues: { select: { sportType: true }, take: 1 } },
+    });
+    const sport = seasonWithLeagues?.leagues?.[0]?.sportType;
+
+    if (sport) {
+      const questionnaireResponse = await prisma.questionnaireResponse.findFirst({
+        where: { userId, sport: sport.toLowerCase(), completedAt: { not: null } },
+        include: { result: true },
+      });
+
+      if (questionnaireResponse?.result) {
+        const { singles, doubles, rd } = questionnaireResponse.result;
+        await createInitialRating({
+          userId,
+          seasonId,
+          sport: sport as SportType,
+          singles: singles ?? null,
+          doubles: doubles ?? null,
+          rd: rd ?? 350,
+        });
+        console.log(`✅ Initial PlayerRating created for user ${userId} from questionnaire`);
+      }
+    }
+  } catch (ratingError) {
+    // Don't block registration if rating creation fails
+    console.error(`⚠️ Failed to create initial rating for user ${userId}:`, ratingError);
+  }
 
   return formatMembershipResponse(result);
 }
