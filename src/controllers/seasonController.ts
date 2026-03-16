@@ -40,6 +40,7 @@ import {
 } from "../services/season/utils/formatters";
 
 import { notificationService } from '../services/notificationService';
+import { waitlistService } from '../services/waitlistService';
 
 import { leagueLifecycleNotifications } from '../helpers/notifications';
 import { NOTIFICATION_TYPES } from '../types/notificationTypes';
@@ -368,33 +369,91 @@ export const updateSeason = async (req: Request, res: Response) => {
 
     const season = await updateSeasonService(id, seasonData);
 
-    // 🆕 Send notifications for status changes
-    if (status && currentSeason && status !== currentSeason.status) {
-      const registeredUsers = await prisma.seasonMembership.findMany({
-        where: { seasonId: id },
-        select: { userId: true }
-      });
+    // Determine effective new status (matching service-level inference)
+    const effectiveNewStatus = status ?? (isActive ? "ACTIVE" : undefined);
 
-      if (registeredUsers.length > 0) {
-        let notificationData;
+    // BUG 1: Trigger waitlist promotion on UPCOMING -> ACTIVE transition
+    if (currentSeason && currentSeason.status === 'UPCOMING' && effectiveNewStatus === 'ACTIVE') {
+      try {
+        const promotionResult = await waitlistService.promoteAllUsers(id);
+        if (promotionResult.promoted > 0) {
+          console.log(`Auto-promoted ${promotionResult.promoted} waitlisted users for season ${id}`);
 
-        if (status === 'FINISHED') {
-          notificationData = leagueLifecycleNotifications.leagueEndedFinalResults(
-            season.name
-          );
-        } else if (status === 'CANCELLED') {
-          notificationData = leagueLifecycleNotifications.leagueCancelled(
-            season.name
-          );
-        }
-
-        if (notificationData) {
+          // BUG 3: Notify promoted users
+          const promotionNotification = leagueLifecycleNotifications.waitlistPromoted(season.name);
           await notificationService.createNotification({
-            userIds: registeredUsers.map(u => u.userId),
-            ...notificationData,
-            seasonId: id
+            userIds: promotionResult.promotedUserIds,
+            ...promotionNotification,
+            seasonId: id,
           });
         }
+        if (promotionResult.failedUserIds.length > 0) {
+          console.warn(`Failed to promote ${promotionResult.failedUserIds.length} users for season ${id}:`, promotionResult.failedUserIds);
+        }
+      } catch (error) {
+        console.error(`Failed to auto-promote waitlisted users for season ${id}:`, error);
+        // Don't throw — promotion failure shouldn't block status update
+      }
+    }
+
+    // Send notifications for status changes
+    if (effectiveNewStatus && currentSeason && effectiveNewStatus !== currentSeason.status) {
+      try {
+        let notificationData;
+
+        if (effectiveNewStatus === 'FINISHED') {
+          const registeredUsers = await prisma.seasonMembership.findMany({
+            where: { seasonId: id },
+            select: { userId: true }
+          });
+          if (registeredUsers.length > 0) {
+            notificationData = leagueLifecycleNotifications.leagueEndedFinalResults(
+              season.name
+            );
+            await notificationService.createNotification({
+              userIds: registeredUsers.map(u => u.userId),
+              ...notificationData,
+              seasonId: id
+            });
+          }
+        } else if (effectiveNewStatus === 'CANCELLED') {
+          const registeredUsers = await prisma.seasonMembership.findMany({
+            where: { seasonId: id },
+            select: { userId: true }
+          });
+          if (registeredUsers.length > 0) {
+            notificationData = leagueLifecycleNotifications.leagueCancelled(
+              season.name
+            );
+            await notificationService.createNotification({
+              userIds: registeredUsers.map(u => u.userId),
+              ...notificationData,
+              seasonId: id
+            });
+          }
+        } else if (effectiveNewStatus === 'ACTIVE') {
+          // BUG 2: Send "season is live" announcement to all users
+          const seasonWithLeagues = await prisma.season.findUnique({
+            where: { id },
+            include: { leagues: { select: { name: true, location: true, sportType: true } } }
+          });
+          if (seasonWithLeagues?.leagues?.[0]) {
+            const league = seasonWithLeagues.leagues[0];
+            if (league.location && league.sportType) {
+              const announcementData = leagueLifecycleNotifications.newSeasonAnnouncement(
+                season.name, league.location, league.sportType
+              );
+              const allUsers = await prisma.user.findMany({ select: { id: true } });
+              await notificationService.createNotification({
+                userIds: allUsers.map(u => u.id),
+                ...announcementData,
+                seasonId: id
+              });
+            }
+          }
+        }
+      } catch (notificationError) {
+        console.error("Error sending season status change notification:", notificationError);
       }
     }
 
@@ -402,6 +461,116 @@ export const updateSeason = async (req: Request, res: Response) => {
   } catch (error: unknown) {
     console.error("Error updating season:", error);
     return handlePrismaError(error, res, "Failed to update season");
+  }
+};
+
+/**
+ * BUG 9: Dedicated go-live endpoint.
+ * POST /:id/go-live
+ *
+ * Atomically: validates UPCOMING, sets ACTIVE + isActive, promotes waitlisted users,
+ * sends notifications, returns promotion results.
+ */
+export const goLiveSeason = async (req: Request, res: Response) => {
+  const { id } = req.params;
+
+  if (!id) {
+    return sendError(res, "Season ID is required.", 400);
+  }
+
+  try {
+    // Fetch season with leagues for notification context
+    const season = await prisma.season.findUnique({
+      where: { id },
+      include: {
+        leagues: { select: { name: true, location: true, sportType: true } },
+      },
+    });
+
+    if (!season) {
+      return sendError(res, "Season not found.", 404);
+    }
+
+    // Validate season is UPCOMING
+    if (season.status !== "UPCOMING") {
+      return sendError(
+        res,
+        `Season cannot go live. Current status is ${season.status}. Only UPCOMING seasons can be activated.`,
+        400
+      );
+    }
+
+    // Set status to ACTIVE and isActive to true
+    const updatedSeason = await prisma.season.update({
+      where: { id },
+      data: { status: "ACTIVE", isActive: true },
+    });
+
+    // Promote all waitlisted users
+    let promotionResult = { promoted: 0, promotedUserIds: [] as string[], failedUserIds: [] as string[], seasonName: season.name };
+    try {
+      promotionResult = await waitlistService.promoteAllUsers(id);
+    } catch (error) {
+      console.error(`Failed to promote waitlisted users during go-live for season ${id}:`, error);
+    }
+
+    // Send notification to promoted users
+    if (promotionResult.promoted > 0) {
+      try {
+        const promotionNotification = leagueLifecycleNotifications.waitlistPromoted(season.name);
+        await notificationService.createNotification({
+          userIds: promotionResult.promotedUserIds,
+          ...promotionNotification,
+          seasonId: id,
+        });
+      } catch (error) {
+        console.error("Failed to send waitlist promotion notifications:", error);
+      }
+    }
+
+    // Send general "season is live" announcement
+    try {
+      const league = season.leagues?.[0];
+      if (league?.location && league?.sportType) {
+        const announcementData = leagueLifecycleNotifications.newSeasonAnnouncement(
+          season.name, league.location, league.sportType
+        );
+        const allUsers = await prisma.user.findMany({ select: { id: true } });
+        await notificationService.createNotification({
+          userIds: allUsers.map(u => u.id),
+          ...announcementData,
+          seasonId: id,
+        });
+      }
+    } catch (error) {
+      console.error("Failed to send season announcement:", error);
+    }
+
+    // BUG 24: Emit socket events for promoted users
+    if (req.io && promotionResult.promotedUserIds.length > 0) {
+      try {
+        promotionResult.promotedUserIds.forEach(userId => {
+          req.io.to(userId).emit('waitlist_promotion', {
+            seasonId: id,
+            seasonName: season.name,
+          });
+        });
+      } catch (socketError) {
+        console.error("Failed to emit waitlist_promotion socket events:", socketError);
+      }
+    }
+
+    return sendSuccess(res, {
+      season: updatedSeason,
+      promotion: {
+        promoted: promotionResult.promoted,
+        promotedUserIds: promotionResult.promotedUserIds,
+        failed: promotionResult.failedUserIds,
+      },
+    }, "Season is now live!");
+  } catch (error: unknown) {
+    console.error("Error activating season:", error);
+    return handlePrismaError(error, res, "Failed to activate season");
   }
 };
 
