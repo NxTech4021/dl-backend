@@ -61,3 +61,18 @@ describe('BUG 11: promoteAllUsers must fetch season name for notifications', () 
     expect(promoteMethod).toMatch(/season\.name|name:\s*true|select.*name/);
   });
 });
+
+describe('Edge case: free vs paid season payment status', () => {
+  it('should check paymentRequired to determine payment status', () => {
+    expect(promoteMethod).toMatch(/paymentRequired/);
+  });
+
+  it('should set COMPLETED for free seasons and PENDING for paid', () => {
+    // Pattern: paymentRequired ? "PENDING" : "COMPLETED"
+    expect(promoteMethod).toMatch(/paymentRequired\s*\?\s*["']PENDING["']\s*:\s*["']COMPLETED["']/);
+  });
+
+  it('should select paymentRequired in the season query', () => {
+    expect(promoteMethod).toMatch(/paymentRequired:\s*true/);
+  });
+});
