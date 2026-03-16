@@ -247,16 +247,27 @@ export class WaitlistService {
   }
 
   /**
-   * Promote all waitlisted users to registered (with PENDING payment)
+   * Promote all waitlisted users to registered (with PENDING payment).
+   * BUG 4: Increments registeredUserCount after promotion.
+   * BUG 17: Tracks promoted and failed user IDs for admin visibility.
    */
-  async promoteAllUsers(seasonId: string): Promise<{ promoted: number }> {
+  async promoteAllUsers(seasonId: string): Promise<{
+    promoted: number;
+    promotedUserIds: string[];
+    failedUserIds: string[];
+    seasonName: string;
+  }> {
     const season = await this.prisma.season.findUnique({
       where: { id: seasonId },
-      include: { waitlist: { include: { waitlistedUsers: true } } },
+      select: {
+        id: true,
+        name: true,
+        waitlist: { include: { waitlistedUsers: true } },
+      },
     });
 
     if (!season?.waitlist) {
-      return { promoted: 0 };
+      return { promoted: 0, promotedUserIds: [], failedUserIds: [], seasonName: season?.name ?? "" };
     }
 
     const waitlistedUsers = await this.prisma.waitlistUser.findMany({
@@ -265,6 +276,8 @@ export class WaitlistService {
     });
 
     let promoted = 0;
+    const promotedUserIds: string[] = [];
+    const failedUserIds: string[] = [];
 
     for (const waitlistUser of waitlistedUsers) {
       try {
@@ -285,13 +298,23 @@ export class WaitlistService {
         });
 
         promoted++;
+        promotedUserIds.push(waitlistUser.userId);
       } catch (error) {
-        // Skip if already registered (unique constraint)
+        // Skip if already registered (unique constraint) or other error
         console.error(`Failed to promote user ${waitlistUser.userId}:`, error);
+        failedUserIds.push(waitlistUser.userId);
       }
     }
 
-    return { promoted };
+    // BUG 4: Increment registeredUserCount atomically
+    if (promoted > 0) {
+      await this.prisma.season.update({
+        where: { id: seasonId },
+        data: { registeredUserCount: { increment: promoted } },
+      });
+    }
+
+    return { promoted, promotedUserIds, failedUserIds, seasonName: season.name };
   }
 
   /**
