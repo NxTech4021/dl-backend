@@ -33,12 +33,8 @@ const authBasePath = getAuthBasePath();
 
 // Environment-aware security settings
 const isProduction = process.env.NODE_ENV === 'production';
-// Session expiry: configurable via env, defaults to 24 hours in production, 7 days in development
-const sessionExpirySeconds = process.env.SESSION_EXPIRY_SECONDS
-  ? parseInt(process.env.SESSION_EXPIRY_SECONDS, 10)
-  : isProduction
-    ? 60 * 60 * 24 // 24 hours for production
-    : 60 * 60 * 24 * 7; // 7 days for development
+// Session expiry: configurable via env, defaults to 30 days (community app — users expect persistent sessions)
+const sessionExpirySeconds = parseInt(process.env.SESSION_EXPIRY_SECONDS || '2592000', 10); // 30 days
 console.log(`   BETTER_AUTH_BASE_PATH: ${authBasePath}`);
 
 // Trusted origins: uses auto-detected LAN IP from network.ts + env overrides
