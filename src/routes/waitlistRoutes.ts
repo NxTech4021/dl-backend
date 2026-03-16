@@ -84,6 +84,17 @@ waitlistRoutes.post('/:seasonId/promote', verifyAuth, requireAdmin, (async (req,
   try {
     const seasonId = req.params.seasonId!;
     const result = await waitlistService.promoteAllUsers(seasonId);
+
+    // BUG 24: Emit socket events for promoted users
+    if (req.io && result.promotedUserIds.length > 0) {
+      result.promotedUserIds.forEach(userId => {
+        req.io.to(userId).emit('waitlist_promotion', {
+          seasonId,
+          seasonName: result.seasonName,
+        });
+      });
+    }
+
     res.json(result);
   } catch (error) {
     next(error);

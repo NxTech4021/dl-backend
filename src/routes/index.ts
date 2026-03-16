@@ -16,6 +16,7 @@ import matchRoutes from "./matchRoutes";
 import paymentRoutes from "./paymentRoutes";
 import friendlyRoutes from "./friendlyRoutes";
 import bugRouter from "./bugRoutes";
+import crashReportRoutes from "./crashReportRoutes";
 import ratingRoutes from "./ratingRoutes";
 import standingsRoutes from "./standingsRoutes";
 import feedRoutes from "./feedRoutes";
@@ -69,6 +70,9 @@ router.use("/notification-preferences", notificationPreferenceRouter);
 
 // Bug Tracking
 router.use("/bug", bugRouter);
+
+// Crash Reporting
+router.use("/crash-reports", crashReportRoutes);
 
 // router.post("/api/")
 

@@ -140,3 +140,19 @@ export const pushTokenLimiter = rateLimit({
     'Too many push token registrations. Please try again later.'
   ),
 });
+
+// ── Crash report limiter — public endpoint protection ──────────────────────
+// Applied to: POST /crash-reports
+// 20 per 15 minutes per user (or IP if anonymous).
+// Generous to allow crash loops but prevents abuse.
+export const crashReportLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: userKeyGenerator,
+  handler: makeHandler(
+    'CRASH_REPORT_RATE_LIMIT_EXCEEDED',
+    'Too many crash reports submitted. Please try again later.'
+  ),
+});

@@ -323,6 +323,18 @@ export const leagueLifecycleNotifications = {
     metadata: { seasonName, location, sport },
   }),
 
+  waitlistPromoted: (
+    seasonName: string
+  ): NotificationPayload => ({
+    type: NOTIFICATION_TYPES.WAITLIST_PROMOTED,
+    category: getCategoryForNotificationType(
+      NOTIFICATION_TYPES.WAITLIST_PROMOTED
+    ),
+    title: "You're In!",
+    message: `You've been added to ${seasonName} from the waitlist. Welcome aboard!`,
+    metadata: { seasonName },
+  }),
+
   registrationClosing3Days: (
     seasonName: string,
     leagueName: string

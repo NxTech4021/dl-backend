@@ -5,6 +5,7 @@ import {
   createSeason,
   updateSeason,
   updateSeasonStatus,
+  goLiveSeason,
   deleteSeason,
   submitWithdrawalRequest,
   processWithdrawalRequest,
@@ -31,6 +32,8 @@ seasonRoutes.post('/', verifyAuth, requireAdmin, createSeason);
 seasonRoutes.put('/:id', verifyAuth, requireAdmin, updateSeason);
 //updates the status only (admin only)
 seasonRoutes.put('/:id/status', verifyAuth, requireAdmin, updateSeasonStatus);
+// BUG 9: Dedicated go-live endpoint (admin only)
+seasonRoutes.post('/:id/go-live', verifyAuth, requireAdmin, goLiveSeason);
 
 seasonRoutes.delete('/:id', verifyAuth, requireAdmin, deleteSeason);
 
