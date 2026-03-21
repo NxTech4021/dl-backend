@@ -700,7 +700,7 @@ model Match {
   location      String?
   venue         String? // Specific venue name
   notes         String?
-  duration      Int?
+  duration      Float?
   courtBooked   Boolean?
 
   // Fee fields
