@@ -29,6 +29,7 @@ import {
   submitResult,
   confirmResult,
   submitWalkover,
+  disputeWalkover,
   getMatchResult,
   getDisputeById
 } from "../controllers/match/matchResultController";
@@ -91,6 +92,7 @@ matchRoutes.get('/:id/result', getMatchResult);
 matchRoutes.post('/:id/result', scoreSubmissionLimiter, submitResult);
 matchRoutes.post('/:id/confirm', scoreSubmissionLimiter, confirmResult);
 matchRoutes.post('/:id/walkover', scoreSubmissionLimiter, submitWalkover);
+matchRoutes.post('/:id/walkover/dispute', disputeWalkover);
 
 // Disputes
 matchRoutes.get('/disputes/:id', getDisputeById);
