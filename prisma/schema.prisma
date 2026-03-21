@@ -329,6 +329,7 @@ model QuestionnaireResponse {
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  //@@unique([userId, sport])
   @@unique([userId, sport], name: "userId_sport")
   @@index([userId])
   @@index([sport, qVersion])

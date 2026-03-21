@@ -210,28 +210,9 @@ router.put("/step/:userId", verifyAuth, onboardingLimiter, validateOwnUserOrAdmi
       return handleQuestionnaireError(error, res);
     }
 
-    // Validate step ordering — prevent skipping steps
-    const STEP_ORDER = validSteps;
-    const targetIdx = STEP_ORDER.indexOf(step);
-    if (targetIdx > 0) {
-      const currentStep = existingUser.onboardingStep;
-      if (!currentStep) {
-        return res.status(400).json({
-          error: `Cannot set step to ${step}. Must complete earlier steps first.`,
-          code: "STEP_OUT_OF_ORDER",
-          success: false,
-        });
-      }
-      const currentIdx = STEP_ORDER.indexOf(currentStep);
-      if (currentIdx < targetIdx - 1) {
-        return res.status(400).json({
-          error: `Cannot set step to ${step}. Current step is ${currentStep}.`,
-          code: "STEP_OUT_OF_ORDER",
-          success: false,
-        });
-      }
-    }
+    // No step ordering validation — users can navigate back and forth during onboarding
 
+    //Test 
     // Update user's onboarding step
     const updatedUser = await prisma.user.update({
       where: { id: userId },
