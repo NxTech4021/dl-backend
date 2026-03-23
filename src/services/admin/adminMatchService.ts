@@ -676,7 +676,7 @@ export class AdminMatchService {
           newValue: { resolution: action, finalScore },
           reason,
           affectedUserIds: dispute.match.participants.map(p => p.userId),
-          triggeredRecalculation: action !== DisputeResolutionAction.REQUEST_MORE_INFO
+          triggeredRecalculation: action !== DisputeResolutionAction.REQUEST_MORE_INFO && action !== DisputeResolutionAction.REJECT
         }
       });
     });
