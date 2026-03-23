@@ -982,10 +982,16 @@ export class MatchResultService {
         try {
           // Use transaction to re-check isDisputed before completing (race guard)
           const completed = await prisma.$transaction(async (tx) => {
+            // Re-check both match status and walkover dispute state
+            const freshMatch = await tx.match.findUnique({
+              where: { id: match.id },
+              select: { status: true },
+            });
+            if (freshMatch?.status !== ('WALKOVER_PENDING' as MatchStatus)) return false;
+
             const freshWalkover = await tx.matchWalkover.findUnique({
               where: { matchId: match.id },
             });
-            // Re-check: opponent may have disputed between query and now
             if (!freshWalkover || freshWalkover.isDisputed) return false;
 
             await tx.match.update({
