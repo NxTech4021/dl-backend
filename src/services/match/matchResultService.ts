@@ -907,45 +907,54 @@ export class MatchResultService {
   async disputeWalkover(input: { matchId: string; disputedById: string; reason: string }) {
     const { matchId, disputedById, reason } = input;
 
-    const match = await prisma.match.findUnique({
-      where: { id: matchId },
-      include: { walkover: true, participants: true },
+    // Use transaction to prevent race with autoCompleteWalkovers
+    return await prisma.$transaction(async (tx) => {
+      const match = await tx.match.findUnique({
+        where: { id: matchId },
+        include: { walkover: true, participants: true },
+      });
+
+      if (!match) throw new Error('Match not found');
+      if (match.status !== ('WALKOVER_PENDING' as MatchStatus)) {
+        throw new Error('This match is not in a walkover pending state');
+      }
+      if (!match.walkover) throw new Error('No walkover record found');
+
+      // Verify disputer is the defaulting player
+      if (match.walkover.defaultingPlayerId !== disputedById) {
+        throw new Error('Only the reported player can dispute a walkover');
+      }
+
+      // Check if already disputed
+      if (match.walkover.isDisputed) {
+        throw new Error('This walkover has already been disputed');
+      }
+
+      // Check 24h window
+      if (match.walkover.disputeExpiresAt && new Date() > match.walkover.disputeExpiresAt) {
+        throw new Error('Dispute window has expired (24 hours)');
+      }
+
+      // Mark as disputed
+      await tx.matchWalkover.update({
+        where: { id: match.walkover.id },
+        data: {
+          isDisputed: true,
+          disputedAt: new Date(),
+          disputeReason: reason,
+        },
+      });
+
+      // Set match to require admin review
+      await tx.match.update({
+        where: { id: matchId },
+        data: { requiresAdminReview: true },
+      });
+
+      logger.info(`Walkover disputed for match ${matchId} by user ${disputedById}`);
+
+      return { success: true, message: 'Walkover disputed successfully. An admin will review this match.' };
     });
-
-    if (!match) throw new Error('Match not found');
-    if (match.status !== ('WALKOVER_PENDING' as MatchStatus)) {
-      throw new Error('This match is not in a walkover pending state');
-    }
-    if (!match.walkover) throw new Error('No walkover record found');
-
-    // Verify disputer is the defaulting player
-    if (match.walkover.defaultingPlayerId !== disputedById) {
-      throw new Error('Only the reported player can dispute a walkover');
-    }
-
-    // Check if already disputed
-    if (match.walkover.isDisputed) {
-      throw new Error('This walkover has already been disputed');
-    }
-
-    // Check 24h window
-    if (match.walkover.disputeExpiresAt && new Date() > match.walkover.disputeExpiresAt) {
-      throw new Error('Dispute window has expired (24 hours)');
-    }
-
-    // Mark as disputed
-    await prisma.matchWalkover.update({
-      where: { id: match.walkover.id },
-      data: {
-        isDisputed: true,
-        disputedAt: new Date(),
-        disputeReason: reason,
-      },
-    });
-
-    logger.info(`Walkover disputed for match ${matchId} by user ${disputedById}`);
-
-    return { success: true, message: 'Walkover disputed successfully. An admin will review this match.' };
   }
 
   /**
@@ -971,15 +980,28 @@ export class MatchResultService {
 
       for (const match of pendingWalkovers) {
         try {
-          await prisma.match.update({
-            where: { id: match.id },
-            data: { status: MatchStatus.COMPLETED },
+          // Use transaction to re-check isDisputed before completing (race guard)
+          const completed = await prisma.$transaction(async (tx) => {
+            const freshWalkover = await tx.matchWalkover.findUnique({
+              where: { matchId: match.id },
+            });
+            // Re-check: opponent may have disputed between query and now
+            if (!freshWalkover || freshWalkover.isDisputed) return false;
+
+            await tx.match.update({
+              where: { id: match.id },
+              data: { status: MatchStatus.COMPLETED },
+            });
+            return true;
           });
 
-          await this.processMatchCompletion(match.id);
-          completedCount++;
-
-          logger.info(`Auto-completed walkover for match ${match.id} (24h dispute window expired)`);
+          if (completed) {
+            await this.processMatchCompletion(match.id);
+            completedCount++;
+            logger.info(`Auto-completed walkover for match ${match.id} (24h dispute window expired)`);
+          } else {
+            logger.info(`Skipped auto-complete for match ${match.id} (disputed during processing)`);
+          }
         } catch (error) {
           logger.error(`Failed to auto-complete walkover for match ${match.id}:`, error as Error);
         }
