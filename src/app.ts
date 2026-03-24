@@ -113,14 +113,14 @@ app.use(
     // ], // Allow nginx proxy, direct access, and local IP
     credentials: true,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: ["*"],
-    // allowedHeaders: [
-    //   "Content-Type",
-    //   "Authorization",
-    //   "X-Requested-With",
-    //   "expo-origin",
-    //   "Cache-Control",
-    // ],
+    allowedHeaders: [
+      "Content-Type",
+      "Authorization",
+      "X-Requested-With",
+      "expo-origin",
+      "Cache-Control",
+      "Cookie",
+    ],
   })
 );
 
