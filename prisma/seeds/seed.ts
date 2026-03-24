@@ -1,34 +1,49 @@
 /**
  * Main Database Seeding Orchestrator
  *
- * This is the entry point for database seeding. It orchestrates all seed modules
- * in the correct order to ensure data dependencies are satisfied.
+ * Supports 3 seed modes via SEED_MODE environment variable:
  *
- * Run with: npx prisma db seed
- * Or: npx tsx prisma/seeds/seed.ts
+ *   SEED_MODE=essential  →  Production bootstrap (superadmin, achievements, system config)
+ *   SEED_MODE=dev        →  Essential + team accounts + one test league
+ *   SEED_MODE=full       →  Everything (500 users, 2500 matches, full demo environment)
  *
- * Data Summary:
- * - 500 users + 10 admins
- * - 15 leagues, 60 seasons, 150+ divisions
- * - 2,500+ league matches + 200 friendly matches
- * - 300 friendships, 150+ chats, 1500+ notifications
- * - 180 disputes, 100 penalties, 150 walkovers
- * - 500+ user ratings, standings for all divisions
- * - 75 bug reports, 40 feature requests
- * - 30 achievement definitions + user achievement unlocks
- * - Division standings computed from Best 6 system
- * - 300 activity feed posts with likes and comments
- * - 80 pair requests, 60 season invitations, 250 payments
- * - 500 match comments, 100 dispute notes, 200 dispute comments
- * - Rating parameters, bug comments, bug status changes
- * - System maintenance, feature announcements
- * - Tournament brackets with rounds and matches
- * - 2000+ user activity logs, player/admin status changes
+ * Usage:
+ *   SEED_MODE=essential npx prisma db seed
+ *   SEED_MODE=dev npx prisma db seed
+ *   npx prisma db seed                       # defaults to full
  *
- * All data is spread over 12 months for realistic time-series charts.
+ * Or run directly:
+ *   SEED_MODE=essential npx tsx prisma/seeds/seed.ts
+ *
+ * ─────────────────────────────────────────────────────────────────
+ * Mode Comparison:
+ * ─────────────────────────────────────────────────────────────────
+ * Layer              │ essential │ dev  │ full
+ * ───────────────────┼───────────┼──────┼──────
+ * Superadmin account │    ✓      │  ✓   │  ✓
+ * Admin accounts     │    ✓      │  ✓   │  ✓
+ * Achievements (30)  │    ✓      │  ✓   │  ✓
+ * System config      │    ✓      │  ✓   │  ✓
+ * Team accounts      │           │  ✓   │  ✓
+ * Test league/season │           │  ✓   │  ✓
+ * 500 users          │           │      │  ✓
+ * 15 leagues         │           │      │  ✓
+ * 2500+ matches      │           │      │  ✓
+ * Disputes/penalties │           │      │  ✓
+ * Ratings/standings  │           │      │  ✓
+ * Social/chat/feed   │           │      │  ✓
+ * Bug reports        │           │      │  ✓
+ * Brackets/audit     │           │      │  ✓
+ * ─────────────────────────────────────────────────────────────────
  */
 
 import { prisma, logSection, logSuccess, logProgress, logWarning } from "./utils";
+
+// ─── Essential seeds (always run) ───
+import { seedAchievements, seedUserAchievements } from "./achievements.seed";
+import { seedSystemData } from "./system.seed";
+
+// ─── Full seeds (only in full mode) ───
 import { seedAdmins, seedUsers, seedAdminInviteTokens, seedNotificationPreferences, seedUserPushTokens, seedUserSettings } from "./users.seed";
 import { seedLeaguesAndSeasons, seedCategories, seedSponsorships, seedSeasonMemberships, seedPartnerships, seedPromoCodes, seedWaitlists, seedInactivitySettings, seedSeasonLocks, seedPairRequests, seedSeasonInvitations, seedPayments } from "./leagues.seed";
 import { seedMatches, seedFriendlyMatches, seedMatchResults, seedPickleballGameScores, seedMatchInvitations, seedMatchAdminActions, seedMatchComments } from "./matches.seed";
@@ -38,214 +53,252 @@ import { seedRatingsAndStandings, seedRatingParameters } from "./ratings.seed";
 import { seedDMRRatings } from "./dmr-ratings.seed";
 import { seedBugsAndFeedback, seedBugComments, seedBugStatusChanges, seedBugReportSettings } from "./bugs.seed";
 import { seedAdminActivityLogs, seedAdminMessageLogs } from "./admin-logs.seed";
-import { seedAchievements, seedUserAchievements } from "./achievements.seed";
 import { seedStandings } from "./standings.seed";
 import { seedFeed } from "./feed.seed";
-import { seedSystemData } from "./system.seed";
 import { seedBrackets } from "./brackets.seed";
 import { seedAuditTrails } from "./audit.seed";
 
-// =============================================
-// MAIN SEED FUNCTION
-// =============================================
+// ─── Seed mode detection ───
+type SeedMode = "essential" | "dev" | "full";
 
+function getSeedMode(): SeedMode {
+  const mode = process.env.SEED_MODE?.toLowerCase();
+  if (mode === "essential" || mode === "dev" || mode === "full") return mode;
+  if (mode) {
+    console.warn(`⚠️  Unknown SEED_MODE "${mode}". Valid: essential, dev, full. Defaulting to full.`);
+  }
+  return "full";
+}
+
+// =============================================
+// PHASE: ESSENTIAL — Production bootstrap
+// =============================================
+async function seedEssential() {
+  logSection("═══ ESSENTIAL: Superadmin Account ═══");
+
+  // Import and run superadmin seed inline (it's a standalone script)
+  const { PrismaClient, AdminStatus } = await import("@prisma/client");
+  const { hashPassword } = await import("better-auth/crypto");
+
+  const SUPERADMIN_CONFIG = {
+    name: "Super Admin",
+    email: "superadmin@dleague.com",
+    username: "superadmin",
+    password: "Admin@123",
+  };
+
+  const hashedPassword = await hashPassword(SUPERADMIN_CONFIG.password);
+
+  const existingUser = await prisma.user.findUnique({
+    where: { email: SUPERADMIN_CONFIG.email },
+    include: { admin: true, accounts: true },
+  });
+
+  if (!existingUser) {
+    const user = await prisma.user.create({
+      data: {
+        name: SUPERADMIN_CONFIG.name,
+        email: SUPERADMIN_CONFIG.email,
+        username: SUPERADMIN_CONFIG.username,
+        displayUsername: SUPERADMIN_CONFIG.name,
+        emailVerified: true,
+        role: "SUPERADMIN",
+        completedOnboarding: true,
+      },
+    });
+
+    await prisma.admin.create({
+      data: { userId: user.id, status: AdminStatus.ACTIVE },
+    });
+
+    await prisma.account.create({
+      data: {
+        userId: user.id,
+        accountId: user.id,
+        providerId: "credential",
+        password: hashedPassword,
+      },
+    });
+
+    logSuccess("Superadmin created: superadmin@dleague.com / Admin@123");
+  } else {
+    logWarning("Superadmin already exists, skipping");
+  }
+
+  logSection("═══ ESSENTIAL: Admin Accounts ═══");
+  const admins = await seedAdmins();
+
+  logSection("═══ ESSENTIAL: Achievement Definitions ═══");
+  await seedAchievements();
+
+  logSection("═══ ESSENTIAL: System Configuration ═══");
+  await seedSystemData();
+
+  return { admins };
+}
+
+// =============================================
+// PHASE: DEV — Team accounts + test league
+// =============================================
+async function seedDev(_admins: any[]) {
+  logSection("═══ DEV: Team Test Accounts ═══");
+
+  try {
+    const { execSync } = await import("child_process");
+    execSync("npx tsx prisma/seeds/seed-test-team.ts", { stdio: "inherit", cwd: "/app" });
+    logSuccess("Team accounts seeded");
+  } catch (error) {
+    logWarning("Team seed had errors (non-blocking). Some team accounts may be missing.");
+  }
+
+  logSection("═══ DEV: Quick Test League ═══");
+
+  try {
+    const { execSync } = await import("child_process");
+    execSync("npx tsx prisma/seeds/createSingleSeason.ts", { stdio: "inherit", cwd: "/app" });
+    logSuccess("Test league/season created");
+  } catch (error) {
+    logWarning("Test league seed had errors (non-blocking).");
+  }
+}
+
+// =============================================
+// PHASE: FULL — Complete demo environment
+// =============================================
+async function seedFull(admins: any[]) {
+  // Phase 1: Users
+  logSection("═══ FULL: Users ═══");
+  const users = await seedUsers();
+  await seedAdminInviteTokens(admins);
+  await seedNotificationPreferences(users);
+  await seedUserPushTokens(users);
+  await seedUserSettings(users);
+
+  // Phase 2: Leagues, Seasons, Divisions
+  logSection("═══ FULL: Leagues & Seasons ═══");
+  const categories = await seedCategories();
+  const adminId = admins.length > 0 ? admins[0].adminId : undefined;
+  const sponsorships = await seedSponsorships(adminId);
+  const { leagues, seasons, divisions } = await seedLeaguesAndSeasons(adminId!, categories, sponsorships);
+  await seedSeasonMemberships(users, seasons, divisions);
+  await seedPartnerships(seasons, divisions);
+  await seedPromoCodes(seasons);
+  await seedWaitlists(seasons, users);
+  await seedInactivitySettings(leagues, seasons, adminId!);
+  await seedSeasonLocks(seasons, adminId!);
+  await seedPairRequests(seasons, users);
+  await seedSeasonInvitations(seasons, users);
+  await seedPayments(seasons, users);
+
+  // Phase 3: Matches
+  logSection("═══ FULL: Matches ═══");
+  const leagueMatches = await seedMatches(users, divisions, seasons, admins);
+  const friendlyMatches = await seedFriendlyMatches(users, leagues);
+  const allMatches = [...leagueMatches, ...friendlyMatches];
+  await seedMatchResults(allMatches, users);
+  await seedPickleballGameScores(allMatches);
+  await seedMatchInvitations(allMatches, users);
+  await seedMatchAdminActions(allMatches, admins);
+  await seedMatchComments(allMatches, users);
+
+  // Phase 4: Social
+  logSection("═══ FULL: Social Features ═══");
+  const adminUserRecords = await prisma.user.findMany({
+    where: { id: { in: admins.map((a: any) => a.userId) } },
+  });
+  await seedSocialFeatures([...users, ...adminUserRecords]);
+
+  // Phase 5: Disputes
+  logSection("═══ FULL: Disputes & Penalties ═══");
+  await seedDisputesAndPenalties(users, admins);
+  await seedDisputeAdminNotes(admins);
+  await seedDisputeComments(users);
+
+  // Phase 6: DMR Ratings
+  logSection("═══ FULL: DMR Rating Processing ═══");
+  await seedDMRRatings();
+
+  // Phase 7: Rating Admin Data
+  logSection("═══ FULL: Rating Admin Data ═══");
+  await seedRatingsAndStandings(users, admins);
+  await seedRatingParameters(leagues, seasons, admins);
+
+  // Phase 8: Bug Reports
+  logSection("═══ FULL: Bug Reports ═══");
+  await seedBugsAndFeedback(users, admins);
+  await seedBugComments(users, admins);
+  await seedBugStatusChanges(admins);
+  await seedBugReportSettings(admins);
+
+  // Phase 9: Admin Logs
+  logSection("═══ FULL: Admin Activity Logs ═══");
+  await seedAdminActivityLogs(admins);
+  await seedAdminMessageLogs(admins);
+
+  // Phase 10: User Achievements
+  logSection("═══ FULL: User Achievements ═══");
+  await seedUserAchievements();
+
+  // Phase 11: Standings
+  logSection("═══ FULL: Division Standings ═══");
+  await seedStandings();
+
+  // Phase 12: Feed
+  logSection("═══ FULL: Activity Feed ═══");
+  await seedFeed();
+
+  // Phase 13: Brackets
+  logSection("═══ FULL: Tournament Brackets ═══");
+  await seedBrackets();
+
+  // Phase 14: Audit
+  logSection("═══ FULL: Audit Trails ═══");
+  await seedAuditTrails(users, admins);
+}
+
+// =============================================
+// MAIN
+// =============================================
 async function main() {
+  const mode = getSeedMode();
+
   console.log("\n");
   console.log("╔══════════════════════════════════════════════════════════════╗");
-  console.log("║           DEUCE LEAGUE DATABASE SEEDING                      ║");
-  console.log("║           Comprehensive Data for Development & Testing       ║");
+  console.log(`║           DEUCE LEAGUE DATABASE SEEDING                      ║`);
+  console.log(`║           Mode: ${mode.toUpperCase().padEnd(43)}║`);
   console.log("╚══════════════════════════════════════════════════════════════╝");
   console.log("\n");
 
   const startTime = Date.now();
 
   try {
-    // =========================================
-    // PHASE 1: USERS AND ADMINS
-    // =========================================
-    logSection("═══ PHASE 1: USERS AND AUTHENTICATION ═══");
+    // Always run essential
+    const { admins } = await seedEssential();
 
-    const admins = await seedAdmins();
-    const users = await seedUsers();
-    await seedAdminInviteTokens(admins);
-    await seedNotificationPreferences(users);
-    await seedUserPushTokens(users);
-    await seedUserSettings(users);
+    // Dev mode: essential + team + test league
+    if (mode === "dev" || mode === "full") {
+      await seedDev(admins);
+    }
 
-    // =========================================
-    // PHASE 2: LEAGUES, SEASONS, AND DIVISIONS
-    // =========================================
-    logSection("═══ PHASE 2: LEAGUES AND SEASONS ═══");
+    // Full mode: everything
+    if (mode === "full") {
+      await seedFull(admins);
+    }
 
-    const categories = await seedCategories();
-    const adminId = admins.length > 0 ? admins[0].adminId : undefined;
-    const sponsorships = await seedSponsorships(adminId);
-    const { leagues, seasons, divisions } = await seedLeaguesAndSeasons(adminId!, categories, sponsorships);
-    await seedSeasonMemberships(users, seasons, divisions);
-    await seedPartnerships(seasons, divisions);
-    await seedPromoCodes(seasons);
-    await seedWaitlists(seasons, users);
-    await seedInactivitySettings(leagues, seasons, adminId!);
-    await seedSeasonLocks(seasons, adminId!);
-    const pairRequestCount = await seedPairRequests(seasons, users);
-    const seasonInvitationCount = await seedSeasonInvitations(seasons, users);
-    const paymentCount = await seedPayments(seasons, users);
-
-    // =========================================
-    // PHASE 3: MATCHES AND RESULTS
-    // =========================================
-    logSection("═══ PHASE 3: MATCHES AND RESULTS ═══");
-
-    const leagueMatches = await seedMatches(users, divisions, seasons, admins);
-    const friendlyMatches = await seedFriendlyMatches(users, leagues);
-    const allMatches = [...leagueMatches, ...friendlyMatches];
-    await seedMatchResults(allMatches, users);
-    await seedPickleballGameScores(allMatches);
-    await seedMatchInvitations(allMatches, users);
-    await seedMatchAdminActions(allMatches, admins);
-    const matchCommentCount = await seedMatchComments(allMatches, users);
-
-    // =========================================
-    // PHASE 4: SOCIAL FEATURES
-    // =========================================
-    logSection("═══ PHASE 4: SOCIAL FEATURES ═══");
-
-    // Include admin User records so admins have chat threads in dl-admin
-    const adminUserRecords = await prisma.user.findMany({
-      where: { id: { in: admins.map(a => a.userId) } },
-    });
-    const socialData = await seedSocialFeatures([...users, ...adminUserRecords]);
-
-    // =========================================
-    // PHASE 5: DISPUTES AND PENALTIES
-    // =========================================
-    logSection("═══ PHASE 5: DISPUTES AND PENALTIES ═══");
-
-    const disputeData = await seedDisputesAndPenalties(users, admins);
-    const disputeNoteCount = await seedDisputeAdminNotes(admins);
-    const disputeCommentCount = await seedDisputeComments(users);
-
-    // =========================================
-    // PHASE 6: DMR RATING PROCESSING
-    // =========================================
-    logSection("═══ PHASE 6: DMR RATING PROCESSING ═══");
-
-    // Process all completed matches through the DMR (Glicko-2) rating system
-    // This generates realistic player ratings and rating history based on actual match results
-    const dmrData = await seedDMRRatings();
-
-    // =========================================
-    // PHASE 7: RATING ADMIN DATA
-    // =========================================
-    logSection("═══ PHASE 7: RATING ADMIN DATA ═══");
-
-    // Now seed admin-related rating data (adjustments, recalculations)
-    // These require DMR ratings to exist first
-    const ratingData = await seedRatingsAndStandings(users, admins);
-    const ratingParamCount = await seedRatingParameters(leagues, seasons, admins);
-
-    // =========================================
-    // PHASE 8: BUG REPORTS AND FEEDBACK
-    // =========================================
-    logSection("═══ PHASE 8: BUG REPORTS AND FEEDBACK ═══");
-
-    const bugData = await seedBugsAndFeedback(users, admins);
-    const bugCommentCount = await seedBugComments(users, admins);
-    const bugStatusChangeCount = await seedBugStatusChanges(admins);
-    const bugSettingsCount = await seedBugReportSettings(admins);
-
-    // =========================================
-    // PHASE 9: ADMIN ACTIVITY LOGS
-    // =========================================
-    logSection("═══ PHASE 9: ADMIN ACTIVITY LOGS ═══");
-
-    const adminLogData = await seedAdminActivityLogs(admins);
-    const adminMessageCount = await seedAdminMessageLogs(admins);
-
-    // =========================================
-    // PHASE 10: ACHIEVEMENTS
-    // =========================================
-    logSection("═══ PHASE 10: ACHIEVEMENTS ═══");
-
-    const achievementData = await seedAchievements();
-    const userAchievementCount = await seedUserAchievements();
-
-    // =========================================
-    // PHASE 11: DIVISION STANDINGS
-    // =========================================
-    logSection("═══ PHASE 11: DIVISION STANDINGS ═══");
-
-    const standingsData = await seedStandings();
-
-    // =========================================
-    // PHASE 12: ACTIVITY FEED
-    // =========================================
-    logSection("═══ PHASE 12: ACTIVITY FEED ═══");
-
-    const feedData = await seedFeed();
-
-    // =========================================
-    // PHASE 13: SYSTEM DATA
-    // =========================================
-    logSection("═══ PHASE 13: SYSTEM DATA ═══");
-
-    const systemData = await seedSystemData();
-
-    // =========================================
-    // PHASE 14: TOURNAMENT BRACKETS
-    // =========================================
-    logSection("═══ PHASE 14: TOURNAMENT BRACKETS ═══");
-
-    const bracketData = await seedBrackets();
-
-    // =========================================
-    // PHASE 15: AUDIT TRAILS
-    // =========================================
-    logSection("═══ PHASE 15: AUDIT TRAILS ═══");
-
-    const auditData = await seedAuditTrails(users, admins);
-
-    // =========================================
-    // SUMMARY
-    // =========================================
-    const endTime = Date.now();
-    const duration = ((endTime - startTime) / 1000).toFixed(2);
+    const duration = ((Date.now() - startTime) / 1000).toFixed(2);
 
     console.log("\n");
     console.log("╔══════════════════════════════════════════════════════════════╗");
     console.log("║                    SEEDING COMPLETE!                         ║");
+    console.log(`║  Mode: ${mode.toUpperCase().padEnd(53)}║`);
+    console.log(`║  Duration: ${duration}s${" ".repeat(Math.max(0, 49 - duration.length))}║`);
     console.log("╠══════════════════════════════════════════════════════════════╣");
-    console.log(`║  Duration: ${duration}s                                         ║`);
-    console.log("╠══════════════════════════════════════════════════════════════╣");
-    console.log("║  SUMMARY:                                                    ║");
-    console.log(`║  Users: ${users.length} + ${admins.length} admins`);
-    console.log(`║  Leagues: ${leagues.length}, Seasons: ${seasons.length}, Divisions: ${divisions.length}`);
-    console.log(`║  Friendships: ${socialData.friendshipCount}, Threads: ${socialData.threadCount}`);
-    console.log(`║  Notifications: ${socialData.notificationCount}`);
-    console.log(`║  League Matches: ${leagueMatches.length}, Friendly Matches: ${friendlyMatches.length}`);
-    console.log(`║  Match Comments: ${matchCommentCount}`);
-    console.log(`║  Pair Requests: ${pairRequestCount}, Season Invitations: ${seasonInvitationCount}`);
-    console.log(`║  Payments: ${paymentCount}`);
-    console.log(`║  Disputes: ${disputeData.disputeCount}, Penalties: ${disputeData.penaltyCount}`);
-    console.log(`║  Dispute Notes: ${disputeNoteCount}, Dispute Comments: ${disputeCommentCount}`);
-    console.log(`║  DMR Ratings: ${dmrData.ratingsCreated} (${dmrData.matchesProcessed} matches)`);
-    console.log(`║  Rating History: ${dmrData.historyEntriesCreated}`);
-    console.log(`║  Rating Adjustments: ${ratingData.adjustmentCount}, Rating Params: ${ratingParamCount}`);
-    console.log(`║  Bug Reports: ${bugData.bugCount}, Bug Comments: ${bugCommentCount}`);
-    console.log(`║  Bug Status Changes: ${bugStatusChangeCount}, Bug Settings: ${bugSettingsCount}`);
-    console.log(`║  Admin Logs: ${adminLogData.logCount}, Admin Messages: ${adminMessageCount}`);
-    console.log(`║  Achievements: ${achievementData.count} defs, ${userAchievementCount} unlocks`);
-    console.log(`║  Division Standings: ${standingsData.standingCount}`);
-    console.log(`║  Feed Posts: ${feedData.postCount} (${feedData.likeCount} likes, ${feedData.commentCount} comments)`);
-    console.log(`║  System Maintenance: ${systemData.maintenanceCount}, Announcements: ${systemData.announcementCount}`);
-    console.log(`║  Brackets: ${bracketData.bracketCount}, Rounds: ${bracketData.roundCount}, Bracket Matches: ${bracketData.matchCount}`);
-    console.log(`║  Activity Logs: ${auditData.activityLogCount}`);
-    console.log(`║  Player Status Changes: ${auditData.playerStatusCount}, Admin Status Changes: ${auditData.adminStatusCount}`);
-    console.log("╠══════════════════════════════════════════════════════════════╣");
-    console.log("║  TEST CREDENTIALS:                                           ║");
-    console.log("║  • superadmin@dleague.com / Admin@123 (SUPERADMIN)           ║");
-    console.log("║  • admin@dleague.com / Admin@123 (ADMIN)                     ║");
-    console.log("║  • Any user: [username]@test.com / Test@123                  ║");
+    console.log("║  CREDENTIALS:                                               ║");
+    console.log("║  • superadmin@dleague.com / Admin@123 (SUPERADMIN)          ║");
+    if (mode === "full") {
+      console.log("║  • admin@dleague.com / Admin@123 (ADMIN)                    ║");
+      console.log("║  • Any user: [username]@test.com / Test@123                 ║");
+    }
     console.log("╚══════════════════════════════════════════════════════════════╝");
     console.log("\n");
 
@@ -256,9 +309,8 @@ async function main() {
 }
 
 // =============================================
-// RUN SEED
+// RUN
 // =============================================
-
 main()
   .then(async () => {
     await prisma.$disconnect();
