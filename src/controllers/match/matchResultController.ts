@@ -321,6 +321,38 @@ export const submitWalkover = async (req: Request, res: Response) => {
 };
 
 /**
+ * Dispute a pending walkover
+ * POST /api/matches/:id/walkover/dispute
+ */
+export const disputeWalkover = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user?.id;
+    const { reason } = req.body;
+
+    if (!userId) {
+      return sendError(res, 'Authentication required', 401);
+    }
+
+    if (!reason?.trim()) {
+      return sendError(res, 'Dispute reason is required', 400);
+    }
+
+    const result = await matchResultService.disputeWalkover({
+      matchId: id,
+      disputedById: userId,
+      reason: reason.trim(),
+    });
+
+    sendSuccess(res, result);
+  } catch (error) {
+    console.error('Dispute Walkover Error:', error);
+    const message = error instanceof Error ? error.message : 'Failed to dispute walkover';
+    sendError(res, message, 400);
+  }
+};
+
+/**
  * Get match with results
  * GET /api/matches/:id/result
  */

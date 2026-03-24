@@ -676,7 +676,7 @@ export class AdminMatchService {
           newValue: { resolution: action, finalScore },
           reason,
           affectedUserIds: dispute.match.participants.map(p => p.userId),
-          triggeredRecalculation: action !== DisputeResolutionAction.REQUEST_MORE_INFO
+          triggeredRecalculation: action !== DisputeResolutionAction.REQUEST_MORE_INFO && action !== DisputeResolutionAction.REJECT
         }
       });
     });
@@ -687,6 +687,61 @@ export class AdminMatchService {
     }
 
     logger.info(`Dispute ${disputeId} resolved by admin ${adminId} with action ${action}`);
+
+    // Recalculate standings, ratings, and Best 6 after dispute resolution
+    // (matches editMatchResult pattern — BUG 3 fix)
+    const actionsRequiringRecalc = [
+      DisputeResolutionAction.UPHOLD_ORIGINAL,
+      DisputeResolutionAction.UPHOLD_DISPUTER,
+      DisputeResolutionAction.CUSTOM_SCORE,
+      DisputeResolutionAction.VOID_MATCH,
+      DisputeResolutionAction.AWARD_WALKOVER,
+    ];
+
+    if (actionsRequiringRecalc.includes(action)) {
+      const resolvedMatch = await prisma.match.findUnique({
+        where: { id: dispute.matchId },
+        select: {
+          id: true,
+          status: true,
+          divisionId: true,
+          seasonId: true,
+          participants: { select: { userId: true } },
+        },
+      });
+
+      if (resolvedMatch?.divisionId && resolvedMatch?.seasonId) {
+        try {
+          const { recalculateMatchRatings } = await import('../rating/adminRatingService');
+          await recalculateMatchRatings(resolvedMatch.id, adminId);
+
+          const { recalculateDivisionStandings } = await import('../rating/standingsCalculationService');
+          await recalculateDivisionStandings(resolvedMatch.divisionId);
+
+          const { Best6AlgorithmService } = await import('../match/best6/best6AlgorithmService');
+          const best6Service = new Best6AlgorithmService();
+          for (const participant of resolvedMatch.participants) {
+            await best6Service.applyBest6ToDatabase(
+              participant.userId,
+              resolvedMatch.divisionId,
+              resolvedMatch.seasonId,
+            );
+          }
+
+          logger.info('Standings, ratings, and Best 6 recalculated after dispute resolution', {
+            disputeId,
+            matchId: resolvedMatch.id,
+            divisionId: resolvedMatch.divisionId,
+          });
+        } catch (error) {
+          logger.error('Error recalculating after dispute resolution', {
+            disputeId,
+            matchId: resolvedMatch.id,
+          }, error as Error);
+          // Don't throw — dispute resolution succeeded, recalculation is secondary
+        }
+      }
+    }
 
     return this.getDisputeById(disputeId);
   }

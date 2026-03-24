@@ -118,6 +118,8 @@ cron.schedule("0 * * * *", async () => {
   try {
     const notificationService = new NotificationService();
     const matchResultService = getMatchResultService(notificationService);
+
+    // Auto-approve regular score submissions after 24h
     const results = await matchResultService.autoApproveResults();
     if (results.autoApprovedCount > 0) {
       logger.info("Cron: Auto-approved match results", {
@@ -125,8 +127,17 @@ cron.schedule("0 * * * *", async () => {
         autoApproved: results.autoApprovedCount,
       });
     }
+
+    // Auto-complete undisputed walkovers after 24h
+    const walkoverResults = await matchResultService.autoCompleteWalkovers();
+    if (walkoverResults.walkoversCompleted > 0) {
+      logger.info("Cron: Auto-completed walkovers", {
+        walkoversChecked: walkoverResults.walkoversChecked,
+        walkoversCompleted: walkoverResults.walkoversCompleted,
+      });
+    }
   } catch (error) {
-    logger.error("Cron: Failed auto-approval check", {}, error instanceof Error ? error : new Error(String(error)));
+    logger.error("Cron: Failed auto-approval/walkover check", {}, error instanceof Error ? error : new Error(String(error)));
   }
 }, CRON_TZ);
 

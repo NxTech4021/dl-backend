@@ -222,6 +222,86 @@ export const createMatch = async (req: Request, res: Response) => {
       // Don't fail the request if notification fails
     }
 
+    // Auto-post match to division's group chat thread
+    // This ensures matches created from ANY path (chat, matches page, etc.) appear in chat
+    try {
+      if (divisionId) {
+        const thread = await prisma.thread.findFirst({
+          where: { divisionId, isGroup: true },
+        });
+
+        if (thread) {
+          const creator = await prisma.user.findUnique({
+            where: { id: userId },
+            select: { name: true },
+          });
+
+          const fullMatch = await prisma.match.findUnique({
+            where: { id: match.id },
+            include: {
+              participants: {
+                where: { invitationStatus: 'ACCEPTED' },
+                include: { user: { select: { id: true, name: true, image: true, username: true } } },
+              },
+              division: {
+                select: {
+                  name: true,
+                  season: { select: { name: true, leagues: { select: { sportType: true }, take: 1 } } },
+                },
+              },
+            },
+          });
+
+          const sportType = fullMatch?.division?.season?.leagues?.[0]?.sportType || 'PICKLEBALL';
+          const leagueName = fullMatch?.division?.name || 'Division';
+
+          await prisma.message.create({
+            data: {
+              threadId: thread.id,
+              senderId: userId,
+              content: `📅 Match scheduled`,
+              messageType: 'MATCH',
+              matchId: match.id,
+              matchData: {
+                matchId: match.id,
+                matchType: match.matchType,
+                isFriendly: false,
+                date: fullMatch?.matchDate?.toISOString(),
+                location: match.location || match.venue || 'TBD',
+                duration: match.duration,
+                courtBooked: match.courtBooked,
+                fee: match.fee,
+                feeAmount: match.feeAmount,
+                sportType,
+                leagueName,
+                status: 'SCHEDULED',
+                participants: fullMatch?.participants?.map(p => ({
+                  id: p.user?.id,
+                  name: p.user?.name,
+                  image: p.user?.image,
+                  username: p.user?.username,
+                  role: p.role,
+                })) || [],
+              },
+            },
+          });
+
+          // Emit socket event so chat updates in real-time
+          if (req.io) {
+            req.io.to(thread.id).emit('new_message', {
+              threadId: thread.id,
+              matchId: match.id,
+              messageType: 'MATCH',
+            });
+          }
+
+          console.log('✅ [Match Creation] Match posted to division chat thread:', thread.id);
+        }
+      }
+    } catch (chatError) {
+      console.error('❌ [Match Creation] Failed to post match to chat:', chatError);
+      // Don't fail match creation if chat posting fails
+    }
 
     void logMatchActivity(userId, UserActionType.MATCH_CREATE, match.id, { matchType }, req.ip);
 

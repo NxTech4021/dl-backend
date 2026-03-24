@@ -156,8 +156,8 @@ export class MatchResultService {
       }
 
       // Check match status INSIDE transaction to prevent race conditions
-      if (currentMatch.status === MatchStatus.COMPLETED) {
-        throw new Error('Match has already been completed');
+      if (currentMatch.status === MatchStatus.COMPLETED || currentMatch.status === 'WALKOVER_PENDING') {
+        throw new Error('Match has already been completed or has a pending walkover');
       }
 
       if (currentMatch.status === MatchStatus.ONGOING) {
@@ -862,15 +862,19 @@ export class MatchResultService {
       };
       if (reasonDetail) walkoverData.walkoverReasonDetail = reasonDetail;
 
+      // Set dispute expiry to 24h from now
+      walkoverData.disputeExpiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+
       await tx.matchWalkover.create({
         data: walkoverData
       });
 
-      // Update match with sport-specific walkover scores
+      // Update match to WALKOVER_PENDING — NOT COMPLETED
+      // Match stays pending for 24h to allow opponent to dispute
       await tx.match.update({
         where: { id: matchId },
         data: {
-          status: MatchStatus.COMPLETED,
+          status: 'WALKOVER_PENDING' as MatchStatus,
           isWalkover: true,
           walkoverReason: reason,
           walkoverRecordedById: reportedById,
@@ -885,8 +889,7 @@ export class MatchResultService {
     // Notify participants
     await this.sendWalkoverNotification(matchId, reportedById, defaultingUserId);
 
-    // Process match completion (ratings, standings, Best6) - same as regular match
-    await this.processMatchCompletion(matchId);
+    // DO NOT process match completion here — deferred until 24h expiry or admin resolution
 
     // NOTE: Feed post creation is now handled by user via share prompt
     // Don't auto-create feed posts to avoid "already exists" issue
@@ -895,6 +898,126 @@ export class MatchResultService {
 
     const matchResult = await this.getMatchWithResults(matchId);
     return matchResult;
+  }
+
+  /**
+   * Dispute a pending walkover.
+   * Only the defaulting player can dispute within 24 hours.
+   */
+  async disputeWalkover(input: { matchId: string; disputedById: string; reason: string }) {
+    const { matchId, disputedById, reason } = input;
+
+    // Use transaction to prevent race with autoCompleteWalkovers
+    return await prisma.$transaction(async (tx) => {
+      const match = await tx.match.findUnique({
+        where: { id: matchId },
+        include: { walkover: true, participants: true },
+      });
+
+      if (!match) throw new Error('Match not found');
+      if (match.status !== ('WALKOVER_PENDING' as MatchStatus)) {
+        throw new Error('This match is not in a walkover pending state');
+      }
+      if (!match.walkover) throw new Error('No walkover record found');
+
+      // Verify disputer is the defaulting player
+      if (match.walkover.defaultingPlayerId !== disputedById) {
+        throw new Error('Only the reported player can dispute a walkover');
+      }
+
+      // Check if already disputed
+      if (match.walkover.isDisputed) {
+        throw new Error('This walkover has already been disputed');
+      }
+
+      // Check 24h window
+      if (match.walkover.disputeExpiresAt && new Date() > match.walkover.disputeExpiresAt) {
+        throw new Error('Dispute window has expired (24 hours)');
+      }
+
+      // Mark as disputed
+      await tx.matchWalkover.update({
+        where: { id: match.walkover.id },
+        data: {
+          isDisputed: true,
+          disputedAt: new Date(),
+          disputeReason: reason,
+        },
+      });
+
+      // Set match to require admin review
+      await tx.match.update({
+        where: { id: matchId },
+        data: { requiresAdminReview: true },
+      });
+
+      logger.info(`Walkover disputed for match ${matchId} by user ${disputedById}`);
+
+      return { success: true, message: 'Walkover disputed successfully. An admin will review this match.' };
+    });
+  }
+
+  /**
+   * Auto-complete undisputed walkovers after 24h.
+   * Called by the existing autoApproveResults cron job.
+   */
+  async autoCompleteWalkovers() {
+    try {
+      const now = new Date();
+
+      const pendingWalkovers = await prisma.match.findMany({
+        where: {
+          status: 'WALKOVER_PENDING' as MatchStatus,
+          walkover: {
+            isDisputed: false,
+            disputeExpiresAt: { lte: now },
+          },
+        },
+        include: { walkover: true },
+      });
+
+      let completedCount = 0;
+
+      for (const match of pendingWalkovers) {
+        try {
+          // Use transaction to re-check isDisputed before completing (race guard)
+          const completed = await prisma.$transaction(async (tx) => {
+            // Re-check both match status and walkover dispute state
+            const freshMatch = await tx.match.findUnique({
+              where: { id: match.id },
+              select: { status: true },
+            });
+            if (freshMatch?.status !== ('WALKOVER_PENDING' as MatchStatus)) return false;
+
+            const freshWalkover = await tx.matchWalkover.findUnique({
+              where: { matchId: match.id },
+            });
+            if (!freshWalkover || freshWalkover.isDisputed) return false;
+
+            await tx.match.update({
+              where: { id: match.id },
+              data: { status: MatchStatus.COMPLETED },
+            });
+            return true;
+          });
+
+          if (completed) {
+            await this.processMatchCompletion(match.id);
+            completedCount++;
+            logger.info(`Auto-completed walkover for match ${match.id} (24h dispute window expired)`);
+          } else {
+            logger.info(`Skipped auto-complete for match ${match.id} (disputed during processing)`);
+          }
+        } catch (error) {
+          logger.error(`Failed to auto-complete walkover for match ${match.id}:`, error as Error);
+        }
+      }
+
+      return { walkoversChecked: pendingWalkovers.length, walkoversCompleted: completedCount };
+    } catch (error) {
+      logger.error('Error in autoCompleteWalkovers:', error as Error);
+      return { walkoversChecked: 0, walkoversCompleted: 0 };
+    }
   }
 
   /**
