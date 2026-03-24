@@ -133,6 +133,24 @@ export const auth = betterAuth({
     }),
   },
 
+  // Initialize onboardingStep for new users created via better-auth (email signup)
+  databaseHooks: {
+    user: {
+      create: {
+        after: async (user) => {
+          try {
+            await prisma.user.update({
+              where: { id: user.id },
+              data: { onboardingStep: "PERSONAL_INFO" },
+            });
+          } catch (error) {
+            console.error("Failed to initialize onboardingStep for user", user.id, error);
+          }
+        },
+      },
+    },
+  },
+
   // Configure user schema to include phoneNumber as an additional field
   user: {
     additionalFields: {
