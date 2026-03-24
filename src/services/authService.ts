@@ -68,6 +68,7 @@ const createOAuthUser = async (
           username: generateCuteUsername(),
           image: userData.image || null,
           emailVerified: true,
+          onboardingStep: "PERSONAL_INFO",
           createdAt: new Date(),
           updatedAt: new Date(),
         },
