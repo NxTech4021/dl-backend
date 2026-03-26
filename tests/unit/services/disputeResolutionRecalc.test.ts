@@ -1,11 +1,8 @@
 /**
- * Tests for BUG 3 (P0): resolveDispute must trigger standings/ratings/Best6 recalculation.
+ * Tests for resolveDispute recalculation pipeline.
  *
- * The resolveDispute() function updates match scores but never called
- * recalculateDivisionStandings(), recalculateMatchRatings(), or Best6.
- * Meanwhile editMatchResult() in the SAME file does all three.
- *
- * This structural test verifies the recalculation block exists in resolveDispute().
+ * Updated for Issue #036: Now verifies V2 standings, MatchResult refresh,
+ * and that REJECT is included in recalculation (since REJECT now sets COMPLETED).
  */
 
 import * as fs from 'fs';
@@ -16,14 +13,14 @@ const serviceFile = fs.readFileSync(
   'utf-8'
 );
 
-describe('BUG 3: resolveDispute must recalculate standings after resolution', () => {
-  // Find the resolveDispute method body
+describe('resolveDispute must recalculate standings after resolution', () => {
   const resolveDisputeStart = serviceFile.indexOf('async resolveDispute(');
   const resolveDisputeEnd = serviceFile.indexOf('async editMatchResult(');
   const resolveDisputeBody = serviceFile.slice(resolveDisputeStart, resolveDisputeEnd);
 
-  it('should call recalculateDivisionStandings', () => {
+  it('should call recalculateDivisionStandings (V2)', () => {
     expect(resolveDisputeBody).toContain('recalculateDivisionStandings');
+    expect(resolveDisputeBody).toContain('StandingsV2Service');
   });
 
   it('should call recalculateMatchRatings for DMR', () => {
@@ -34,17 +31,22 @@ describe('BUG 3: resolveDispute must recalculate standings after resolution', ()
     expect(resolveDisputeBody).toContain('Best6AlgorithmService');
   });
 
-  it('should only recalculate for actions that change match state', () => {
-    // Should NOT recalculate for REJECT or REQUEST_MORE_INFO
-    expect(resolveDisputeBody).toMatch(/REJECT|REQUEST_MORE_INFO/);
-    // Should have a guard to skip recalculation for non-modifying actions
-    expect(resolveDisputeBody).toMatch(/actionsRequiringRecalc|shouldRecalculate/);
+  it('should only skip recalculation for REQUEST_MORE_INFO', () => {
+    // REJECT is now included (sets COMPLETED), only REQUEST_MORE_INFO is excluded
+    expect(resolveDisputeBody).toContain('actionsRequiringRecalc');
+    // REQUEST_MORE_INFO should NOT be in the recalc list
+    const recalcList = resolveDisputeBody.slice(
+      resolveDisputeBody.indexOf('actionsRequiringRecalc'),
+      resolveDisputeBody.indexOf('if (actionsRequiringRecalc.includes')
+    );
+    expect(recalcList).not.toContain('REQUEST_MORE_INFO');
+    // REJECT SHOULD be in the recalc list
+    expect(recalcList).toContain('REJECT');
   });
 
   it('should wrap recalculation in try-catch (non-blocking)', () => {
-    // Recalculation failure should not break the dispute resolution
     const recalcSection = resolveDisputeBody.slice(
-      resolveDisputeBody.indexOf('recalculateDivisionStandings') - 200
+      resolveDisputeBody.indexOf('Recalculate standings')
     );
     expect(recalcSection).toContain('try');
     expect(recalcSection).toContain('catch');
