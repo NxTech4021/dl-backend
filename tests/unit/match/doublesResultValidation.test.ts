@@ -58,4 +58,9 @@ describe('#037 BUG 7: Doubles confirmation — only one confirmation per team', 
     // Must reference resultConfirmedById to check previous responder
     expect(serviceFile).toMatch(/resultConfirmedById[\s\S]*?team.*already/i);
   });
+
+  it('should block confirmation when teammate has active dispute', () => {
+    // If teammate disputed, partner should not be able to confirm
+    expect(serviceFile).toMatch(/teammate.*disputed.*result|disputed this result/i);
+  });
 });
