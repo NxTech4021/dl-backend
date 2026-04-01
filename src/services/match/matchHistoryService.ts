@@ -373,12 +373,16 @@ export class MatchHistoryService {
         }
       }
 
-      // Count walkovers
-      if (match.walkover) {
-        if (match.walkover.defaultingPlayerId === userId) {
-          walkoversGiven++;
-        } else if (match.walkover.winningPlayerId === userId) {
+      // Count walkovers — #038 BUG 2/3: use team scores for doubles (individual IDs only track one player per team)
+      if (match.walkover && match.isWalkover) {
+        const userIsOnWinningTeam =
+          (userTeam === 'team1' && (match.team1Score ?? 0) > (match.team2Score ?? 0)) ||
+          (userTeam === 'team2' && (match.team2Score ?? 0) > (match.team1Score ?? 0));
+
+        if (userIsOnWinningTeam) {
           walkoversReceived++;
+        } else {
+          walkoversGiven++;
         }
       }
     }
