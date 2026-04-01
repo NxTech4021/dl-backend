@@ -108,7 +108,13 @@ export const getMatchById = async (req: Request, res: Response) => {
       include: {
         division: true,
         participants: { include: { user: true } },
-        //Easier to differentiate in the backend via game/set scores 
+        invitations: {
+          include: {
+            inviter: { select: { id: true, name: true, username: true } },
+            invitee: { select: { id: true, name: true, username: true } }
+          }
+        },
+        //Easier to differentiate in the backend via game/set scores
         scores: {
           orderBy: { setNumber: 'asc' }
         },
