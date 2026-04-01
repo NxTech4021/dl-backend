@@ -354,14 +354,32 @@ export class MatchResultService {
     }
 
     // #037 BUG 7: For doubles, check if a teammate already confirmed/disputed
-    if (match.matchType === MatchType.DOUBLES && match.resultConfirmedById) {
-      const previousConfirmer = match.participants.find(
-        p => p.userId === match.resultConfirmedById
-      );
-      if (previousConfirmer && previousConfirmer.team === userParticipant.team) {
-        throw new Error(
-          'Your team has already responded to this result. Only one response per team is allowed.'
+    if (match.matchType === MatchType.DOUBLES) {
+      // Check if teammate already confirmed
+      if (match.resultConfirmedById) {
+        const previousConfirmer = match.participants.find(
+          p => p.userId === match.resultConfirmedById
         );
+        if (previousConfirmer && previousConfirmer.team === userParticipant.team) {
+          throw new Error(
+            'Your team has already responded to this result. Only one response per team is allowed.'
+          );
+        }
+      }
+
+      // Check if teammate already disputed — block confirmation if active dispute exists
+      const activeDispute = match.disputes?.find(
+        d => d.status !== DisputeStatus.RESOLVED
+      );
+      if (activeDispute) {
+        const disputer = match.participants.find(
+          p => p.userId === activeDispute.raisedByUserId
+        );
+        if (disputer && disputer.team === userParticipant.team) {
+          throw new Error(
+            'Your teammate has already disputed this result. The dispute must be resolved first.'
+          );
+        }
       }
     }
 
