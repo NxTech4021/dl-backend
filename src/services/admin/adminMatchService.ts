@@ -856,6 +856,13 @@ export class AdminMatchService {
         }
       }
 
+      // #043 BUG 3: Auto-complete match when admin provides scores with outcome
+      // Admin editing scores is an explicit decision — no reason to leave match ONGOING
+      if (outcome && match.status !== MatchStatus.COMPLETED) {
+        updateData.status = MatchStatus.COMPLETED;
+        updateData.resultConfirmedAt = new Date();
+      }
+
       await tx.match.update({
         where: { id: matchId },
         data: updateData
@@ -878,7 +885,9 @@ export class AdminMatchService {
 
     // Trigger rating and standings recalculation for completed matches
     // Uses V2 standings (Best 6 based) + MatchResult refresh for consistency
-    if (match.status === MatchStatus.COMPLETED && match.divisionId && match.seasonId) {
+    // #043 BUG 3: Also triggers if admin just completed the match (status was changed in transaction)
+    const isNowCompleted = match.status === MatchStatus.COMPLETED || (outcome && match.status !== MatchStatus.COMPLETED);
+    if (isNowCompleted && match.divisionId && match.seasonId) {
       try {
         // Step 1: Refresh MatchResult records (V2 standings depends on these)
         const { MatchResultCreationService } = await import(
