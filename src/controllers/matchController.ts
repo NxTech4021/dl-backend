@@ -3,6 +3,12 @@ import { Request, Response } from "express";
 import { Prisma, MatchType } from "@prisma/client";
 import { getMatchCommentService } from "../services/match/matchCommentService";
 import { sendSuccess, sendError } from '../utils/response';
+import dayjs from 'dayjs';
+import utc from 'dayjs/plugin/utc';
+import timezone from 'dayjs/plugin/timezone';
+
+dayjs.extend(utc);
+dayjs.extend(timezone);
 
 type MatchFeeType = 'FREE' | 'SPLIT' | 'FIXED';
 
@@ -30,6 +36,7 @@ interface UpdateMatchBody {
   opponentScore?: number;
   outcome?: string;
   matchDate?: string;
+  deviceTimezone?: string;
   location?: string;
   notes?: string;
   duration?: number;
@@ -145,7 +152,7 @@ export const getMatchById = async (req: Request, res: Response) => {
 
 export const updateMatch = async (req: Request, res: Response) => {
   const { id } = req.params;
-  const { divisionId, sport, matchType, playerScore, opponentScore, outcome, matchDate, location, notes, duration, courtBooked, fee, feeAmount } = req.body as UpdateMatchBody;
+  const { divisionId, sport, matchType, playerScore, opponentScore, outcome, matchDate, deviceTimezone, location, notes, duration, courtBooked, fee, feeAmount } = req.body as UpdateMatchBody;
 
   if (!id) return sendError(res, "Match ID is required.", 400);
 
@@ -169,7 +176,15 @@ export const updateMatch = async (req: Request, res: Response) => {
     if (playerScore !== undefined) updateData.playerScore = playerScore ?? null;
     if (opponentScore !== undefined) updateData.opponentScore = opponentScore ?? null;
     if (outcome !== undefined) updateData.outcome = outcome ?? null;
-    if (matchDate !== undefined) updateData.matchDate = new Date(matchDate);
+    if (matchDate !== undefined) {
+      // #031: Use dayjs.tz for timezone conversion (same as create endpoint)
+      if (deviceTimezone && deviceTimezone !== 'Asia/Kuala_Lumpur') {
+        const deviceTime = dayjs.tz(matchDate, deviceTimezone);
+        updateData.matchDate = deviceTime.tz('Asia/Kuala_Lumpur').toDate();
+      } else {
+        updateData.matchDate = dayjs.tz(matchDate, 'Asia/Kuala_Lumpur').toDate();
+      }
+    }
     if (location !== undefined) updateData.location = location ?? null;
     if (notes !== undefined) updateData.notes = notes ?? null;
     if (duration !== undefined) updateData.duration = duration ?? null;
