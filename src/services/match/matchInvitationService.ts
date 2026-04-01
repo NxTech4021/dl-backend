@@ -1295,7 +1295,13 @@ export class MatchInvitationService {
                  inv.status === InvitationStatus.DECLINED
         );
 
-        if (hasExpiredOrDeclined && allInvitationsResolved) {
+        // #037 BUG 9: For doubles, also cancel if not all 4 players accepted
+        // and at least one invitation expired (stuck match scenario)
+        const isDoublesIncomplete = match.matchType === MatchType.DOUBLES &&
+          hasExpiredOrDeclined &&
+          match.participants.filter(p => p.invitationStatus === InvitationStatus.ACCEPTED).length < 4;
+
+        if ((hasExpiredOrDeclined && allInvitationsResolved) || isDoublesIncomplete) {
           // Move match to DRAFT status
           await prisma.match.update({
             where: { id: matchId },
@@ -1307,7 +1313,9 @@ export class MatchInvitationService {
             await this.notificationService.createNotification({
               type: 'MATCH_INVITATION_EXPIRED',
               title: 'Match Invitation Expired',
-              message: 'Your match invitation has expired. You can edit and resend it from your drafts.',
+              message: isDoublesIncomplete
+                ? 'Your doubles match was cancelled because not all players accepted in time.'
+                : 'Your match invitation has expired. You can edit and resend it from your drafts.',
               category: 'MATCH',
               matchId,
               userIds: [match.createdById]
