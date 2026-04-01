@@ -1442,6 +1442,7 @@ export class MatchInvitationService {
       const updateData: any = {};
       if (matchType) updateData.matchType = matchType;
       if (format) updateData.format = format;
+      if (matchDate !== undefined) updateData.matchDate = matchDate;
       if (location !== undefined) updateData.location = location;
       if (venue !== undefined) updateData.venue = venue;
       if (notes !== undefined) updateData.notes = notes;
