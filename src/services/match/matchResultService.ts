@@ -929,7 +929,7 @@ export class MatchResultService {
           isWalkover: true,
           walkoverReason: reason,
           walkoverRecordedById: reportedById,
-          outcome: `Walkover - ${reason}`,
+          outcome: winningTeam, // #038: Use team format so match history counts win correctly. Reason stored in walkoverReason.
           walkoverScore: walkoverScores.walkoverScore,
           team1Score: winningTeam === 'team1' ? walkoverScores.setsWon : 0,
           team2Score: winningTeam === 'team2' ? walkoverScores.setsWon : 0
