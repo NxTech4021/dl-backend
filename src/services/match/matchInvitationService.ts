@@ -107,6 +107,14 @@ export class MatchInvitationService {
       throw new Error('Division not found');
     }
 
+    // #036 GAP 1: Validate matchType matches division.gameType
+    if (matchType !== division.gameType) {
+      throw new Error(
+        `Cannot create ${matchType} match in a ${division.gameType} division. ` +
+        `This division only allows ${division.gameType} matches.`
+      );
+    }
+
     // Validate creator is in this division
     const creatorMembership = await prisma.seasonMembership.findFirst({
       where: {
@@ -123,6 +131,32 @@ export class MatchInvitationService {
     // For doubles, validate partner
     if (matchType === MatchType.DOUBLES && !partnerId) {
       throw new Error('Partner is required for doubles matches');
+    }
+
+    // #037 BUG 2: Validate active partnership exists between creator and partner
+    if (matchType === MatchType.DOUBLES && partnerId) {
+      const creatorPartnership = await prisma.partnership.findFirst({
+        where: {
+          OR: [
+            { captainId: createdById, partnerId: partnerId },
+            { captainId: partnerId, partnerId: createdById },
+          ],
+          status: 'ACTIVE',
+          divisionId,
+        },
+      });
+      if (!creatorPartnership) {
+        throw new Error(
+          'You must have an active partnership with this player in this division'
+        );
+      }
+    }
+
+    // #037 BUG 3: Require opponentPartnerId for doubles direct challenge
+    if (matchType === MatchType.DOUBLES && opponentId && !opponentPartnerId) {
+      throw new Error(
+        'Opponent partner is required for doubles matches with direct challenge'
+      );
     }
 
     // COMMENTED OUT - Scheduling conflict check
@@ -259,6 +293,25 @@ export class MatchInvitationService {
 
         if (!opponentMembership) {
           throw new Error('Opponent must be an active member of this division');
+        }
+
+        // #037 BUG 4: Validate partnership between opponent and opponentPartner
+        if (matchType === MatchType.DOUBLES && opponentPartnerId) {
+          const opponentPartnership = await tx.partnership.findFirst({
+            where: {
+              OR: [
+                { captainId: opponentId, partnerId: opponentPartnerId },
+                { captainId: opponentPartnerId, partnerId: opponentId },
+              ],
+              status: 'ACTIVE',
+              divisionId,
+            },
+          });
+          if (!opponentPartnership) {
+            throw new Error(
+              'Opponent and their partner must have an active partnership in this division'
+            );
+          }
         }
 
         // Add opponent as participant
