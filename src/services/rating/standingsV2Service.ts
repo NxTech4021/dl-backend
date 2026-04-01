@@ -104,7 +104,7 @@ export class StandingsV2Service {
           standingId: s.id,
           userId: s.userId!,
           name: s.user?.name || 'Unknown',
-          metrics: this.calculatePlayerMetricsFromResults(playerResults, best6Results)
+          metrics: this.calculatePlayerMetricsFromResults(playerResults, best6Results, allResults)
         };
       });
 
@@ -154,14 +154,16 @@ export class StandingsV2Service {
    */
   private calculatePlayerMetricsFromResults(
     allResults: any[],
-    best6Results: any[]
+    best6Results: any[],
+    allDivisionResults?: any[]
   ): TiebreakMetrics {
 
     // 1. Total Points (from Best 6)
     const totalPoints = best6Results.reduce((sum, r) => sum + r.matchPoints, 0);
 
     // 2. Head-to-Head (ALL matches)
-    const headToHead = this.calculateHeadToHead(allResults);
+    // #037 BUG 8: Pass allDivisionResults for doubles H2H — opponentId only stores one opponent
+    const headToHead = this.calculateHeadToHead(allResults, allDivisionResults);
 
     // 3. Set Win % (from Best 6)
     const setWinPct = this.calculateSetWinPercentage(best6Results);
@@ -199,21 +201,50 @@ export class StandingsV2Service {
 
   /**
    * Calculate Head-to-Head record (ALL matches)
+   * #037 BUG 8: For doubles, also discovers opponents via shared matchId
+   * since opponentId only stores one of the two opponents.
    */
-  private calculateHeadToHead(allResults: any[]): Record<string, H2HRecord> {
+  private calculateHeadToHead(
+    playerResults: any[],
+    allDivisionResults?: any[]
+  ): Record<string, H2HRecord> {
     const h2h: Record<string, H2HRecord> = {};
 
-    for (const result of allResults) {
-      if (!result.opponentId) continue;
+    if (!playerResults.length) return h2h;
 
-      if (!h2h[result.opponentId]) {
-        h2h[result.opponentId] = { wins: 0, losses: 0 };
+    const playerId = playerResults[0]?.playerId;
+
+    for (const result of playerResults) {
+      // Track the stored opponentId (always works for singles)
+      if (result.opponentId) {
+        if (!h2h[result.opponentId]) {
+          h2h[result.opponentId] = { wins: 0, losses: 0 };
+        }
+        if (result.isWin) {
+          h2h[result.opponentId]!.wins++;
+        } else {
+          h2h[result.opponentId]!.losses++;
+        }
       }
 
-      if (result.isWin) {
-        h2h[result.opponentId]!.wins++;
-      } else {
-        h2h[result.opponentId]!.losses++;
+      // For doubles: find ALL opponents from the same match via allDivisionResults
+      if (allDivisionResults && result.match?.matchType === 'DOUBLES') {
+        const sameMatchResults = allDivisionResults.filter(
+          r => r.matchId === result.matchId && r.playerId !== playerId && r.isWin !== result.isWin
+        );
+        for (const opponentResult of sameMatchResults) {
+          // Skip if we already counted this opponent via opponentId
+          if (opponentResult.playerId === result.opponentId) continue;
+
+          if (!h2h[opponentResult.playerId]) {
+            h2h[opponentResult.playerId] = { wins: 0, losses: 0 };
+          }
+          if (result.isWin) {
+            h2h[opponentResult.playerId]!.wins++;
+          } else {
+            h2h[opponentResult.playerId]!.losses++;
+          }
+        }
       }
     }
 
