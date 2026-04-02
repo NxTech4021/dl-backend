@@ -998,16 +998,19 @@ export class MatchResultService {
 
       // Create a MatchDispute record so admin can resolve through the existing dispute workflow
       // This connects walkover disputes to the same admin resolution modal as score disputes
-      await tx.matchDispute.create({
-        data: {
-          matchId,
-          raisedByUserId: disputedById,
-          disputeCategory: 'OTHER',
-          disputeComment: `Walkover dispute: ${reason}`,
-          status: 'OPEN',
-          priority: 'HIGH',
-        },
-      });
+      const existingDispute = await tx.matchDispute.findUnique({ where: { matchId } });
+      if (!existingDispute) {
+        await tx.matchDispute.create({
+          data: {
+            matchId,
+            raisedByUserId: disputedById,
+            disputeCategory: 'OTHER',
+            disputeComment: `Walkover dispute: ${reason}`,
+            status: 'OPEN',
+            priority: 'HIGH',
+          },
+        });
+      }
 
       // Set match to require admin review and mark as disputed
       await tx.match.update({
