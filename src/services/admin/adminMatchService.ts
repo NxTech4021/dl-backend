@@ -612,22 +612,32 @@ export class AdminMatchService {
       } else if (action === DisputeResolutionAction.UPHOLD_DISPUTER || action === DisputeResolutionAction.CUSTOM_SCORE) {
         // Update match with new score and mark as completed
         if (finalScore) {
-          // Delete old scores
-          await tx.matchScore.deleteMany({
-            where: { matchId: dispute.matchId }
-          });
-
-          // Create new scores
+          // Delete old scores and create new ones — sport-aware table selection
           if (finalScore.setScores) {
-            for (const score of finalScore.setScores) {
-              await tx.matchScore.create({
-                data: {
-                  matchId: dispute.matchId,
-                  setNumber: score.setNumber,
-                  player1Games: score.team1Games,
-                  player2Games: score.team2Games
-                }
-              });
+            if (dispute.match.sport === 'PICKLEBALL') {
+              await tx.pickleballGameScore.deleteMany({ where: { matchId: dispute.matchId } });
+              for (const score of finalScore.setScores) {
+                await tx.pickleballGameScore.create({
+                  data: {
+                    matchId: dispute.matchId,
+                    gameNumber: score.setNumber,
+                    player1Points: score.team1Games,
+                    player2Points: score.team2Games,
+                  }
+                });
+              }
+            } else {
+              await tx.matchScore.deleteMany({ where: { matchId: dispute.matchId } });
+              for (const score of finalScore.setScores) {
+                await tx.matchScore.create({
+                  data: {
+                    matchId: dispute.matchId,
+                    setNumber: score.setNumber,
+                    player1Games: score.team1Games,
+                    player2Games: score.team2Games
+                  }
+                });
+              }
             }
           }
 
