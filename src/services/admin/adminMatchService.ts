@@ -295,7 +295,8 @@ export class AdminMatchService {
       COMPLETED: 0,
       UNFINISHED: 0,
       CANCELLED: 0,
-      VOID: 0
+      VOID: 0,
+      WALKOVER_PENDING: 0,
     };
     byStatus.forEach(s => {
       statusCounts[s.status] = s._count;
