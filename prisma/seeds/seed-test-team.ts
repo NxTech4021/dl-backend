@@ -179,34 +179,15 @@ async function seedTestTeam() {
     await prisma.userSettings.create({
       data: {
         userId: user.id,
-        matchRemindersEnabled: true,
-        notificationsEnabled: true,
+        matchReminders: true,
+        notifications: true,
       },
     });
 
     // Create ratings for each sport
-    for (const sport of member.sports) {
-      const gameTypes: GameType[] = sport === "TENNIS" ? ["TENNIS_SINGLES", "TENNIS_DOUBLES"] :
-                                     sport === "PICKLEBALL" ? ["PICKLEBALL_SINGLES", "PICKLEBALL_DOUBLES"] :
-                                     ["PADEL_DOUBLES"];
-
-      for (const gameType of gameTypes) {
-        await prisma.rating.create({
-          data: {
-            userId: user.id,
-            sportType: sport,
-            gameType: gameType,
-            rating: SKILL_TO_RATING[member.skillLevel],
-            ratingDeviation: 200,
-            volatility: 0.06,
-            peakRating: SKILL_TO_RATING[member.skillLevel],
-            gamesPlayed: 0,
-            wins: 0,
-            losses: 0,
-          },
-        });
-      }
-    }
+    // Note: PlayerRating requires seasonId — ratings are created when
+    // users register for seasons, not during account seeding.
+    // The old `prisma.rating` model no longer exists.
 
     console.log(`   ✅ Created: ${member.name} (${member.email}) - ${member.role}`);
     createdUsers.push(user);
@@ -228,7 +209,9 @@ async function createTestSeason() {
       data: {
         name: "Internal Testing League",
         description: "League for internal testing purposes",
-        isActive: true,
+        sportType: "PICKLEBALL",
+        gameType: "SINGLES",
+        status: "ACTIVE",
       },
     });
     console.log("   ✅ Created: Internal Testing League");
@@ -249,10 +232,10 @@ async function createTestSeason() {
     season = await prisma.season.create({
       data: {
         name: "Test Season January 2026",
-        leagueId: league.id,
+        leagues: { connect: { id: league.id } },
         startDate: startDate,
         endDate: endDate,
-        registrationDeadline: new Date(startDate.getTime() + 7 * 24 * 60 * 60 * 1000),
+        regiDeadline: new Date(startDate.getTime() + 7 * 24 * 60 * 60 * 1000),
         entryFee: 0, // Free for testing
         status: "ACTIVE",
         isActive: true,
@@ -282,8 +265,8 @@ async function createFriendships(users: any[]) {
     const existing = await prisma.friendship.findFirst({
       where: {
         OR: [
-          { senderId: users[i].id, receiverId: users[j].id },
-          { senderId: users[j].id, receiverId: users[i].id },
+          { requesterId: users[i].id, recipientId: users[j].id },
+          { requesterId: users[j].id, recipientId: users[i].id },
         ],
       },
     });
@@ -291,8 +274,8 @@ async function createFriendships(users: any[]) {
     if (!existing) {
       await prisma.friendship.create({
         data: {
-          senderId: users[i].id,
-          receiverId: users[j].id,
+          requesterId: users[i].id,
+          recipientId: users[j].id,
           status: "ACCEPTED",
         },
       });

@@ -574,10 +574,12 @@ export class AdminMatchService {
       throw new Error('Dispute has already been resolved or rejected');
     }
 
-    // Determine final status based on action
+    // Determine final dispute status based on action
     const finalStatus = action === DisputeResolutionAction.REJECT
       ? DisputeStatus.REJECTED
-      : DisputeStatus.RESOLVED;
+      : action === DisputeResolutionAction.REQUEST_MORE_INFO
+        ? DisputeStatus.UNDER_REVIEW
+        : DisputeStatus.RESOLVED;
 
     await prisma.$transaction(async (tx) => {
       // Update dispute
@@ -586,7 +588,8 @@ export class AdminMatchService {
         resolvedByAdminId: adminId,
         adminResolution: reason,
         resolutionAction: action,
-        resolvedAt: new Date()
+        // Only set resolvedAt for actual resolution actions, not REQUEST_MORE_INFO
+        ...(action !== DisputeResolutionAction.REQUEST_MORE_INFO && { resolvedAt: new Date() }),
       };
       if (finalScore) disputeUpdateData.finalScore = JSON.stringify(finalScore);
 
@@ -597,13 +600,17 @@ export class AdminMatchService {
 
       // Handle different resolution actions
       if (action === DisputeResolutionAction.UPHOLD_ORIGINAL) {
-        // Keep original score, mark match as no longer disputed
+        // Keep original score, mark match as completed
         await tx.match.update({
           where: { id: dispute.matchId },
-          data: { isDisputed: false }
+          data: {
+            isDisputed: false,
+            status: MatchStatus.COMPLETED,
+            resultConfirmedAt: new Date(),
+          }
         });
       } else if (action === DisputeResolutionAction.UPHOLD_DISPUTER || action === DisputeResolutionAction.CUSTOM_SCORE) {
-        // Update match with new score
+        // Update match with new score and mark as completed
         if (finalScore) {
           // Delete old scores
           await tx.matchScore.deleteMany({
@@ -634,7 +641,9 @@ export class AdminMatchService {
               team2Score: finalScore.team2Score,
               outcome: winner,
               isDisputed: false,
-              requiresAdminReview: false
+              requiresAdminReview: false,
+              status: MatchStatus.COMPLETED,
+              resultConfirmedAt: new Date(),
             }
           });
         }
@@ -655,14 +664,20 @@ export class AdminMatchService {
             isDisputed: false,
             team1Score: finalScore?.team1Score || 2,
             team2Score: finalScore?.team2Score || 0,
-            outcome: (finalScore?.team1Score || 2) > (finalScore?.team2Score || 0) ? 'team1' : 'team2'
+            outcome: (finalScore?.team1Score || 2) > (finalScore?.team2Score || 0) ? 'team1' : 'team2',
+            status: MatchStatus.COMPLETED,
+            resultConfirmedAt: new Date(),
           }
         });
       } else if (action === DisputeResolutionAction.REJECT) {
-        // Reject dispute - mark match as no longer disputed, keep original score
+        // Reject dispute — original score accepted, match completed
         await tx.match.update({
           where: { id: dispute.matchId },
-          data: { isDisputed: false }
+          data: {
+            isDisputed: false,
+            status: MatchStatus.COMPLETED,
+            resultConfirmedAt: new Date(),
+          }
         });
       }
 
@@ -676,7 +691,7 @@ export class AdminMatchService {
           newValue: { resolution: action, finalScore },
           reason,
           affectedUserIds: dispute.match.participants.map(p => p.userId),
-          triggeredRecalculation: action !== DisputeResolutionAction.REQUEST_MORE_INFO && action !== DisputeResolutionAction.REJECT
+          triggeredRecalculation: action !== DisputeResolutionAction.REQUEST_MORE_INFO
         }
       });
     });
@@ -689,13 +704,15 @@ export class AdminMatchService {
     logger.info(`Dispute ${disputeId} resolved by admin ${adminId} with action ${action}`);
 
     // Recalculate standings, ratings, and Best 6 after dispute resolution
-    // (matches editMatchResult pattern — BUG 3 fix)
-    const actionsRequiringRecalc = [
+    // Uses V2 standings (Best 6 based) + MatchResult refresh for consistency
+    // with normal match completion flow (processMatchCompletion)
+    const actionsRequiringRecalc: DisputeResolutionAction[] = [
       DisputeResolutionAction.UPHOLD_ORIGINAL,
       DisputeResolutionAction.UPHOLD_DISPUTER,
       DisputeResolutionAction.CUSTOM_SCORE,
       DisputeResolutionAction.VOID_MATCH,
       DisputeResolutionAction.AWARD_WALKOVER,
+      DisputeResolutionAction.REJECT,
     ];
 
     if (actionsRequiringRecalc.includes(action)) {
@@ -712,12 +729,35 @@ export class AdminMatchService {
 
       if (resolvedMatch?.divisionId && resolvedMatch?.seasonId) {
         try {
-          const { recalculateMatchRatings } = await import('../rating/adminRatingService');
-          await recalculateMatchRatings(resolvedMatch.id, adminId);
+          // Step 1: Refresh MatchResult records (V2 standings depends on these)
+          const { MatchResultCreationService } = await import(
+            '../match/calculation/matchResultCreationService'
+          );
+          const matchResultCreator = new MatchResultCreationService();
+          await matchResultCreator.deleteMatchResults(resolvedMatch.id);
+          if (resolvedMatch.status === MatchStatus.COMPLETED) {
+            try {
+              await matchResultCreator.createMatchResults(resolvedMatch.id);
+            } catch (mrError) {
+              logger.error('Failed to create MatchResult records after dispute resolution', {
+                disputeId, matchId: resolvedMatch.id,
+              }, mrError as Error);
+              // Flag for admin review but don't block
+              await prisma.match.update({
+                where: { id: resolvedMatch.id },
+                data: { requiresAdminReview: true },
+              });
+            }
+          }
+          // VOID matches: delete only, no MatchResult recreation
 
-          const { recalculateDivisionStandings } = await import('../rating/standingsCalculationService');
-          await recalculateDivisionStandings(resolvedMatch.divisionId);
+          // Step 2: Recalculate ratings (reverses old + applies new — safe for re-runs)
+          if (resolvedMatch.status === MatchStatus.COMPLETED) {
+            const { recalculateMatchRatings } = await import('../rating/adminRatingService');
+            await recalculateMatchRatings(resolvedMatch.id, adminId);
+          }
 
+          // Step 3: Recalculate Best 6 (must run before V2 standings)
           const { Best6AlgorithmService } = await import('../match/best6/best6AlgorithmService');
           const best6Service = new Best6AlgorithmService();
           for (const participant of resolvedMatch.participants) {
@@ -728,13 +768,21 @@ export class AdminMatchService {
             );
           }
 
-          logger.info('Standings, ratings, and Best 6 recalculated after dispute resolution', {
+          // Step 4: Recalculate V2 standings (reads MatchResult + Best 6)
+          const { StandingsV2Service } = await import('../rating/standingsV2Service');
+          const standingsV2 = new StandingsV2Service();
+          await standingsV2.recalculateDivisionStandings(
+            resolvedMatch.divisionId,
+            resolvedMatch.seasonId,
+          );
+
+          logger.info('Post-dispute recalculation complete (V2 standings + ratings + Best 6)', {
             disputeId,
             matchId: resolvedMatch.id,
             divisionId: resolvedMatch.divisionId,
           });
         } catch (error) {
-          logger.error('Error recalculating after dispute resolution', {
+          logger.error('Error in post-dispute recalculation', {
             disputeId,
             matchId: resolvedMatch.id,
           }, error as Error);
@@ -808,6 +856,13 @@ export class AdminMatchService {
         }
       }
 
+      // #043 BUG 3: Auto-complete match when admin provides scores with outcome
+      // Admin editing scores is an explicit decision — no reason to leave match ONGOING
+      if (outcome && match.status !== MatchStatus.COMPLETED) {
+        updateData.status = MatchStatus.COMPLETED;
+        updateData.resultConfirmedAt = new Date();
+      }
+
       await tx.match.update({
         where: { id: matchId },
         data: updateData
@@ -828,18 +883,25 @@ export class AdminMatchService {
       });
     });
 
-    // Trigger rating and standings recalculation for completed matches using DMR
-    if (match.status === MatchStatus.COMPLETED && match.divisionId && match.seasonId) {
+    // Trigger rating and standings recalculation for completed matches
+    // Uses V2 standings (Best 6 based) + MatchResult refresh for consistency
+    // #043 BUG 3: Also triggers if admin just completed the match (status was changed in transaction)
+    const isNowCompleted = match.status === MatchStatus.COMPLETED || (outcome && match.status !== MatchStatus.COMPLETED);
+    if (isNowCompleted && match.divisionId && match.seasonId) {
       try {
-        // Use DMR service for rating recalculation
+        // Step 1: Refresh MatchResult records (V2 standings depends on these)
+        const { MatchResultCreationService } = await import(
+          '../match/calculation/matchResultCreationService'
+        );
+        const matchResultCreator = new MatchResultCreationService();
+        await matchResultCreator.deleteMatchResults(matchId);
+        await matchResultCreator.createMatchResults(matchId);
+
+        // Step 2: Recalculate ratings (reverses old + applies new)
         const { recalculateMatchRatings } = await import('../rating/adminRatingService');
         await recalculateMatchRatings(matchId, adminId);
 
-        // Recalculate standings for division
-        const { recalculateDivisionStandings } = await import('../rating/standingsCalculationService');
-        await recalculateDivisionStandings(match.divisionId);
-
-        // Recalculate Best 6 for affected players
+        // Step 3: Recalculate Best 6 (must run before V2 standings)
         const { Best6AlgorithmService } = await import('../match/best6/best6AlgorithmService');
         const best6Service = new Best6AlgorithmService();
         for (const participant of match.participants) {
@@ -850,9 +912,14 @@ export class AdminMatchService {
           );
         }
 
-        logger.info(`DMR ratings and standings recalculated after match ${matchId} result edit`);
+        // Step 4: Recalculate V2 standings (reads MatchResult + Best 6)
+        const { StandingsV2Service } = await import('../rating/standingsV2Service');
+        const standingsV2 = new StandingsV2Service();
+        await standingsV2.recalculateDivisionStandings(match.divisionId, match.seasonId);
+
+        logger.info(`Post-edit recalculation complete (V2 standings + ratings + Best 6) for match ${matchId}`);
       } catch (error) {
-        logger.error('Error during DMR recalculation after result edit', { matchId }, error as Error);
+        logger.error('Error during post-edit recalculation', { matchId }, error as Error);
         // Don't throw - the edit was successful, recalculation is secondary
       }
     }

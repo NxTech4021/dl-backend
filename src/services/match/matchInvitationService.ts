@@ -107,6 +107,14 @@ export class MatchInvitationService {
       throw new Error('Division not found');
     }
 
+    // #036 GAP 1: Validate matchType matches division.gameType
+    if (matchType !== division.gameType) {
+      throw new Error(
+        `Cannot create ${matchType} match in a ${division.gameType} division. ` +
+        `This division only allows ${division.gameType} matches.`
+      );
+    }
+
     // Validate creator is in this division
     const creatorMembership = await prisma.seasonMembership.findFirst({
       where: {
@@ -123,6 +131,32 @@ export class MatchInvitationService {
     // For doubles, validate partner
     if (matchType === MatchType.DOUBLES && !partnerId) {
       throw new Error('Partner is required for doubles matches');
+    }
+
+    // #037 BUG 2: Validate active partnership exists between creator and partner
+    if (matchType === MatchType.DOUBLES && partnerId) {
+      const creatorPartnership = await prisma.partnership.findFirst({
+        where: {
+          OR: [
+            { captainId: createdById, partnerId: partnerId },
+            { captainId: partnerId, partnerId: createdById },
+          ],
+          status: 'ACTIVE',
+          divisionId,
+        },
+      });
+      if (!creatorPartnership) {
+        throw new Error(
+          'You must have an active partnership with this player in this division'
+        );
+      }
+    }
+
+    // #037 BUG 3: Require opponentPartnerId for doubles direct challenge
+    if (matchType === MatchType.DOUBLES && opponentId && !opponentPartnerId) {
+      throw new Error(
+        'Opponent partner is required for doubles matches with direct challenge'
+      );
     }
 
     // COMMENTED OUT - Scheduling conflict check
@@ -259,6 +293,25 @@ export class MatchInvitationService {
 
         if (!opponentMembership) {
           throw new Error('Opponent must be an active member of this division');
+        }
+
+        // #037 BUG 4: Validate partnership between opponent and opponentPartner
+        if (matchType === MatchType.DOUBLES && opponentPartnerId) {
+          const opponentPartnership = await tx.partnership.findFirst({
+            where: {
+              OR: [
+                { captainId: opponentId, partnerId: opponentPartnerId },
+                { captainId: opponentPartnerId, partnerId: opponentId },
+              ],
+              status: 'ACTIVE',
+              divisionId,
+            },
+          });
+          if (!opponentPartnership) {
+            throw new Error(
+              'Opponent and their partner must have an active partnership in this division'
+            );
+          }
         }
 
         // Add opponent as participant
@@ -1242,7 +1295,13 @@ export class MatchInvitationService {
                  inv.status === InvitationStatus.DECLINED
         );
 
-        if (hasExpiredOrDeclined && allInvitationsResolved) {
+        // #037 BUG 9: For doubles, also cancel if not all 4 players accepted
+        // and at least one invitation expired (stuck match scenario)
+        const isDoublesIncomplete = match.matchType === MatchType.DOUBLES &&
+          hasExpiredOrDeclined &&
+          match.participants.filter(p => p.invitationStatus === InvitationStatus.ACCEPTED).length < 4;
+
+        if ((hasExpiredOrDeclined && allInvitationsResolved) || isDoublesIncomplete) {
           // Move match to DRAFT status
           await prisma.match.update({
             where: { id: matchId },
@@ -1254,7 +1313,9 @@ export class MatchInvitationService {
             await this.notificationService.createNotification({
               type: 'MATCH_INVITATION_EXPIRED',
               title: 'Match Invitation Expired',
-              message: 'Your match invitation has expired. You can edit and resend it from your drafts.',
+              message: isDoublesIncomplete
+                ? 'Your doubles match was cancelled because not all players accepted in time.'
+                : 'Your match invitation has expired. You can edit and resend it from your drafts.',
               category: 'MATCH',
               matchId,
               userIds: [match.createdById]
@@ -1389,6 +1450,7 @@ export class MatchInvitationService {
       const updateData: any = {};
       if (matchType) updateData.matchType = matchType;
       if (format) updateData.format = format;
+      if (matchDate !== undefined) updateData.matchDate = matchDate;
       if (location !== undefined) updateData.location = location;
       if (venue !== undefined) updateData.venue = venue;
       if (notes !== undefined) updateData.notes = notes;

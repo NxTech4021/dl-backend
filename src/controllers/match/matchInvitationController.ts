@@ -706,6 +706,7 @@ export const editMatch = async (req: Request, res: Response) => {
       partnerId,
       opponentPartnerId,
       matchDate,           // Using matchDate
+      deviceTimezone,      // User's device timezone
       // proposedTimes,    // COMMENTED OUT
       location,
       venue,
@@ -718,13 +719,24 @@ export const editMatch = async (req: Request, res: Response) => {
       expiresInHours
     } = req.body;
 
+    // #031: Use dayjs.tz for timezone conversion (same as create endpoint)
+    let parsedMatchDate: Date | undefined;
+    if (matchDate) {
+      if (deviceTimezone && deviceTimezone !== 'Asia/Kuala_Lumpur') {
+        const deviceTime = dayjs.tz(matchDate, deviceTimezone);
+        parsedMatchDate = deviceTime.tz('Asia/Kuala_Lumpur').toDate();
+      } else {
+        parsedMatchDate = dayjs.tz(matchDate, 'Asia/Kuala_Lumpur').toDate();
+      }
+    }
+
     const match = await matchInvitationService.editMatch(id, userId, {
       matchType: matchType as MatchType,
       format: format as MatchFormat,
       opponentId,
       partnerId,
       opponentPartnerId,
-      ...(matchDate && { matchDate: new Date(matchDate) }),
+      ...(parsedMatchDate && { matchDate: parsedMatchDate }),
       // proposedTimes: proposedTimes?.map((t: string) => new Date(t)),  // COMMENTED OUT
       location,
       venue,

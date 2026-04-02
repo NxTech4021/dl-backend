@@ -211,24 +211,24 @@ router.put("/step/:userId", verifyAuth, onboardingLimiter, validateOwnUserOrAdmi
     }
 
     // Validate step ordering — prevent skipping steps
+    // Backtracking is allowed (user can go back to edit earlier screens).
+    // Only skipping forward by more than 1 step is prevented.
     const STEP_ORDER = validSteps;
     const targetIdx = STEP_ORDER.indexOf(step);
     if (targetIdx > 0) {
       const currentStep = existingUser.onboardingStep;
-      if (!currentStep) {
-        return res.status(400).json({
-          error: `Cannot set step to ${step}. Must complete earlier steps first.`,
-          code: "STEP_OUT_OF_ORDER",
-          success: false,
-        });
-      }
-      const currentIdx = STEP_ORDER.indexOf(currentStep);
-      if (currentIdx < targetIdx - 1) {
-        return res.status(400).json({
-          error: `Cannot set step to ${step}. Current step is ${currentStep}.`,
-          code: "STEP_OUT_OF_ORDER",
-          success: false,
-        });
+      // If currentStep is null (pre-existing users or race condition during
+      // concurrent step updates), allow the step — the completion endpoint
+      // validates all required data independently.
+      if (currentStep) {
+        const currentIdx = STEP_ORDER.indexOf(currentStep);
+        if (currentIdx < targetIdx - 1) {
+          return res.status(400).json({
+            error: `Cannot set step to ${step}. Current step is ${currentStep}.`,
+            code: "STEP_OUT_OF_ORDER",
+            success: false,
+          });
+        }
       }
     }
 

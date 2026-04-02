@@ -108,6 +108,19 @@ export class MatchResultService {
       throw new Error('Submitter must be a participant in the match');
     }
 
+    // #037 BUG 5: For doubles, all 4 players must have ACCEPTED before submitting
+    if (matchPreCheck.matchType === MatchType.DOUBLES) {
+      const acceptedCount = matchPreCheck.participants.filter(
+        p => p.invitationStatus === InvitationStatus.ACCEPTED
+      ).length;
+      if (acceptedCount < 4) {
+        throw new Error(
+          'All 4 players must accept the match before submitting results. ' +
+          `Currently ${acceptedCount} of 4 have accepted.`
+        );
+      }
+    }
+
     // Validate and calculate scores based on sport (can do outside transaction)
     let team1Score: number, team2Score: number, winner: string;
 
@@ -338,6 +351,36 @@ export class MatchResultService {
     // Also check: the person who submitted cannot confirm their own submission
     if (match.resultSubmittedById === userId) {
       throw new Error('You cannot confirm your own submission. The opposing team must approve or deny.');
+    }
+
+    // #037 BUG 7: For doubles, check if a teammate already confirmed/disputed
+    if (match.matchType === MatchType.DOUBLES) {
+      // Check if teammate already confirmed
+      if (match.resultConfirmedById) {
+        const previousConfirmer = match.participants.find(
+          p => p.userId === match.resultConfirmedById
+        );
+        if (previousConfirmer && previousConfirmer.team === userParticipant.team) {
+          throw new Error(
+            'Your team has already responded to this result. Only one response per team is allowed.'
+          );
+        }
+      }
+
+      // Check if teammate already disputed — block confirmation if active dispute exists
+      const activeDispute = match.disputes?.find(
+        d => d.status !== DisputeStatus.RESOLVED
+      );
+      if (activeDispute) {
+        const disputer = match.participants.find(
+          p => p.userId === activeDispute.raisedByUserId
+        );
+        if (disputer && disputer.team === userParticipant.team) {
+          throw new Error(
+            'Your teammate has already disputed this result. The dispute must be resolved first.'
+          );
+        }
+      }
     }
 
     // Check match is in correct status
@@ -833,6 +876,12 @@ export class MatchResultService {
       throw new Error('Defaulting user is not a participant in this match');
     }
 
+    // #037 BUG 6: Validate defaulting player is on the OPPOSING team
+    const reporterParticipantCheck = match.participants.find(p => p.userId === reportedById);
+    if (reporterParticipantCheck && defaultingParticipant.team === reporterParticipantCheck.team) {
+      throw new Error('Cannot report a walkover for your own team member');
+    }
+
     // SS-4: Status check — prevent walkover on completed/cancelled/void matches
     if (match.status !== MatchStatus.SCHEDULED && match.status !== MatchStatus.ONGOING) {
       throw new Error('Can only record walkover for scheduled or ongoing matches');
@@ -843,8 +892,10 @@ export class MatchResultService {
       throw new Error('Cannot record walkover — a result has already been submitted for this match');
     }
 
-    // Determine winner (opposite team)
+    // #037 BUG 6: Determine winner from defaulting player's team (opposing team wins)
     const reporterParticipant = match.participants.find(p => p.userId === reportedById);
+    const defaultingTeam = defaultingParticipant.team;
+    const winningTeam = defaultingTeam === 'team1' ? 'team2' : 'team1';
     const winningUserId = reportedById; // Reporter wins the walkover
 
     // Get sport-specific walkover scores
@@ -878,10 +929,10 @@ export class MatchResultService {
           isWalkover: true,
           walkoverReason: reason,
           walkoverRecordedById: reportedById,
-          outcome: `Walkover - ${reason}`,
+          outcome: winningTeam, // #038: Use team format so match history counts win correctly. Reason stored in walkoverReason.
           walkoverScore: walkoverScores.walkoverScore,
-          team1Score: reporterParticipant?.team === 'team1' ? walkoverScores.setsWon : 0,
-          team2Score: reporterParticipant?.team === 'team1' ? 0 : walkoverScores.setsWon
+          team1Score: winningTeam === 'team1' ? walkoverScores.setsWon : 0,
+          team2Score: winningTeam === 'team2' ? walkoverScores.setsWon : 0
         }
       });
     });
