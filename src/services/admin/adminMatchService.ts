@@ -692,15 +692,36 @@ export class AdminMatchService {
         });
       }
 
-      // Clean up walkover dispute record if this was a walkover dispute
+      // Clean up walkover record if this was a walkover dispute
       if (dispute.match.isWalkover) {
+        const walkoverUpdate: any = {
+          adminVerified: true,
+          adminVerifiedBy: adminId,
+          adminVerifiedAt: new Date(),
+        };
+
+        // If admin reversed the walkover (disputer wins), swap winner/defaulter
+        if (action === DisputeResolutionAction.UPHOLD_DISPUTER) {
+          const walkover = await tx.matchWalkover.findUnique({
+            where: { matchId: dispute.matchId },
+          });
+          if (walkover) {
+            walkoverUpdate.winningPlayerId = walkover.defaultingPlayerId;
+            walkoverUpdate.defaultingPlayerId = walkover.winningPlayerId;
+          }
+        }
+
+        // If admin provided actual scores (CUSTOM_SCORE), match is no longer a walkover
+        if (action === DisputeResolutionAction.CUSTOM_SCORE) {
+          await tx.match.update({
+            where: { id: dispute.matchId },
+            data: { isWalkover: false },
+          });
+        }
+
         await tx.matchWalkover.updateMany({
           where: { matchId: dispute.matchId },
-          data: {
-            adminVerified: true,
-            adminVerifiedBy: adminId,
-            adminVerifiedAt: new Date(),
-          },
+          data: walkoverUpdate,
         });
       }
 
