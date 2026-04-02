@@ -986,7 +986,7 @@ export class MatchResultService {
         throw new Error('Dispute window has expired (24 hours)');
       }
 
-      // Mark as disputed
+      // Mark walkover as disputed
       await tx.matchWalkover.update({
         where: { id: match.walkover.id },
         data: {
@@ -996,10 +996,26 @@ export class MatchResultService {
         },
       });
 
-      // Set match to require admin review
+      // Create a MatchDispute record so admin can resolve through the existing dispute workflow
+      // This connects walkover disputes to the same admin resolution modal as score disputes
+      await tx.matchDispute.create({
+        data: {
+          matchId,
+          raisedByUserId: disputedById,
+          disputeCategory: 'OTHER',
+          disputeComment: `Walkover dispute: ${reason}`,
+          status: 'OPEN',
+          priority: 'HIGH',
+        },
+      });
+
+      // Set match to require admin review and mark as disputed
       await tx.match.update({
         where: { id: matchId },
-        data: { requiresAdminReview: true },
+        data: {
+          requiresAdminReview: true,
+          isDisputed: true,
+        },
       });
 
       logger.info(`Walkover disputed for match ${matchId} by user ${disputedById}`);
