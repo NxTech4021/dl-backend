@@ -828,19 +828,34 @@ export class AdminMatchService {
     };
 
     await prisma.$transaction(async (tx) => {
-      // Update scores if provided
+      // Update scores if provided — sport-aware table selection
       if (setScores) {
-        await tx.matchScore.deleteMany({ where: { matchId } });
-
-        for (const score of setScores) {
-          await tx.matchScore.create({
-            data: {
-              matchId,
-              setNumber: score.setNumber,
-              player1Games: score.team1Games,
-              player2Games: score.team2Games
-            }
-          });
+        if (match.sport === 'PICKLEBALL') {
+          // Pickleball uses PickleballGameScore table
+          await tx.pickleballGameScore.deleteMany({ where: { matchId } });
+          for (const score of setScores) {
+            await tx.pickleballGameScore.create({
+              data: {
+                matchId,
+                gameNumber: score.setNumber,
+                player1Points: score.team1Games,
+                player2Points: score.team2Games,
+              }
+            });
+          }
+        } else {
+          // Tennis/Padel uses MatchScore table
+          await tx.matchScore.deleteMany({ where: { matchId } });
+          for (const score of setScores) {
+            await tx.matchScore.create({
+              data: {
+                matchId,
+                setNumber: score.setNumber,
+                player1Games: score.team1Games,
+                player2Games: score.team2Games
+              }
+            });
+          }
         }
       }
 
