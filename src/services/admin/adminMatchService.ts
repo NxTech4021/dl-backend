@@ -692,6 +692,18 @@ export class AdminMatchService {
         });
       }
 
+      // Clean up walkover dispute record if this was a walkover dispute
+      if (dispute.match.isWalkover) {
+        await tx.matchWalkover.updateMany({
+          where: { matchId: dispute.matchId },
+          data: {
+            adminVerified: true,
+            adminVerifiedBy: adminId,
+            adminVerifiedAt: new Date(),
+          },
+        });
+      }
+
       // Log admin action
       await tx.matchAdminAction.create({
         data: {
