@@ -295,7 +295,8 @@ export class AdminMatchService {
       COMPLETED: 0,
       UNFINISHED: 0,
       CANCELLED: 0,
-      VOID: 0
+      VOID: 0,
+      WALKOVER_PENDING: 0,
     };
     byStatus.forEach(s => {
       statusCounts[s.status] = s._count;
@@ -612,22 +613,32 @@ export class AdminMatchService {
       } else if (action === DisputeResolutionAction.UPHOLD_DISPUTER || action === DisputeResolutionAction.CUSTOM_SCORE) {
         // Update match with new score and mark as completed
         if (finalScore) {
-          // Delete old scores
-          await tx.matchScore.deleteMany({
-            where: { matchId: dispute.matchId }
-          });
-
-          // Create new scores
+          // Delete old scores and create new ones — sport-aware table selection
           if (finalScore.setScores) {
-            for (const score of finalScore.setScores) {
-              await tx.matchScore.create({
-                data: {
-                  matchId: dispute.matchId,
-                  setNumber: score.setNumber,
-                  player1Games: score.team1Games,
-                  player2Games: score.team2Games
-                }
-              });
+            if (dispute.match.sport === 'PICKLEBALL') {
+              await tx.pickleballGameScore.deleteMany({ where: { matchId: dispute.matchId } });
+              for (const score of finalScore.setScores) {
+                await tx.pickleballGameScore.create({
+                  data: {
+                    matchId: dispute.matchId,
+                    gameNumber: score.setNumber,
+                    player1Points: score.team1Games,
+                    player2Points: score.team2Games,
+                  }
+                });
+              }
+            } else {
+              await tx.matchScore.deleteMany({ where: { matchId: dispute.matchId } });
+              for (const score of finalScore.setScores) {
+                await tx.matchScore.create({
+                  data: {
+                    matchId: dispute.matchId,
+                    setNumber: score.setNumber,
+                    player1Games: score.team1Games,
+                    player2Games: score.team2Games
+                  }
+                });
+              }
             }
           }
 
@@ -828,19 +839,34 @@ export class AdminMatchService {
     };
 
     await prisma.$transaction(async (tx) => {
-      // Update scores if provided
+      // Update scores if provided — sport-aware table selection
       if (setScores) {
-        await tx.matchScore.deleteMany({ where: { matchId } });
-
-        for (const score of setScores) {
-          await tx.matchScore.create({
-            data: {
-              matchId,
-              setNumber: score.setNumber,
-              player1Games: score.team1Games,
-              player2Games: score.team2Games
-            }
-          });
+        if (match.sport === 'PICKLEBALL') {
+          // Pickleball uses PickleballGameScore table
+          await tx.pickleballGameScore.deleteMany({ where: { matchId } });
+          for (const score of setScores) {
+            await tx.pickleballGameScore.create({
+              data: {
+                matchId,
+                gameNumber: score.setNumber,
+                player1Points: score.team1Games,
+                player2Points: score.team2Games,
+              }
+            });
+          }
+        } else {
+          // Tennis/Padel uses MatchScore table
+          await tx.matchScore.deleteMany({ where: { matchId } });
+          for (const score of setScores) {
+            await tx.matchScore.create({
+              data: {
+                matchId,
+                setNumber: score.setNumber,
+                player1Games: score.team1Games,
+                player2Games: score.team2Games
+              }
+            });
+          }
         }
       }
 

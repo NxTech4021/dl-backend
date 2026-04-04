@@ -87,6 +87,13 @@ export async function validateMatchStatus(matchId: string): Promise<MatchStatusV
         blockedReason: 'Cannot edit participants for unfinished matches'
       };
 
+    case 'WALKOVER_PENDING' as MatchStatus:
+      return {
+        canEdit: false,
+        requiresRecalc: false,
+        blockedReason: 'Cannot edit participants while walkover is pending dispute'
+      };
+
     default:
       return {
         canEdit: false,
