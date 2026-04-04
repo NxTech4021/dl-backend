@@ -7,6 +7,7 @@
 export enum NotificationDeliveryType {
   PUSH = 'PUSH',
   IN_APP = 'IN_APP',
+  BOTH = 'BOTH',
 }
 
 /**
@@ -38,9 +39,12 @@ export const NOTIFICATION_DELIVERY_MAP: Record<string, NotificationDeliveryType>
   NEW_WEEKLY_STREAK: NotificationDeliveryType.PUSH,
   STREAK_AT_RISK: NotificationDeliveryType.PUSH,
   APP_UPDATE_AVAILABLE: NotificationDeliveryType.PUSH,
-  SCHEDULED_MAINTENANCE: NotificationDeliveryType.PUSH,
-  SYSTEM_MAINTENANCE: NotificationDeliveryType.PUSH,
-  MAINTENANCE_COMPLETE: NotificationDeliveryType.PUSH,
+  MAINTENANCE_SCHEDULED: NotificationDeliveryType.BOTH,
+  MAINTENANCE_IN_PROGRESS: NotificationDeliveryType.BOTH,
+  MAINTENANCE_COMPLETE: NotificationDeliveryType.BOTH,
+  MAINTENANCE_CANCELLED: NotificationDeliveryType.BOTH,
+  // Backward compatibility aliases
+  SYSTEM_MAINTENANCE: NotificationDeliveryType.BOTH,
   NEW_FEATURE: NotificationDeliveryType.IN_APP,
   
   // Doubles League - IN_APP
@@ -191,7 +195,16 @@ export function getNotificationDeliveryType(notificationType: string): Notificat
  * Check if a notification should be sent as push
  */
 export function shouldSendPushNotification(notificationType: string): boolean {
-  return getNotificationDeliveryType(notificationType) === NotificationDeliveryType.PUSH;
+  const type = getNotificationDeliveryType(notificationType);
+  return type === NotificationDeliveryType.PUSH || type === NotificationDeliveryType.BOTH;
+}
+
+/**
+ * Check if a notification should create an in-app record
+ */
+export function shouldCreateInAppRecord(notificationType: string): boolean {
+  const type = getNotificationDeliveryType(notificationType);
+  return type === NotificationDeliveryType.IN_APP || type === NotificationDeliveryType.BOTH;
 }
 
 /**
