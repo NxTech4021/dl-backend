@@ -2,14 +2,15 @@ import { PaymentStatus } from "@prisma/client";
 
 export interface CreateSeasonData {
   name: string;
-  startDate: string | Date;
-  endDate: string | Date;
+  startDate?: string | Date;
+  endDate?: string | Date;
   regiDeadline?: string | Date;
   description?: string;
   entryFee: string | number;
   leagueIds: string[];
   categoryId: string;
   sponsorId?: string;
+  status?: 'ACTIVE' | 'UPCOMING' | 'REGISTER_INTEREST';
   isActive?: boolean;
   paymentRequired?: boolean;
   promoCodeSupported?: boolean;
@@ -27,14 +28,14 @@ export interface UpdateSeasonData {
   categoryId?: string;
   sponsorId?: string;
   isActive?: boolean;
-  status?: "UPCOMING" | "ACTIVE" | "FINISHED" | "CANCELLED";
+  status?: "UPCOMING" | "ACTIVE" | "REGISTER_INTEREST" | "FINISHED" | "CANCELLED";
   paymentRequired?: boolean;
   promoCodeSupported?: boolean;
   withdrawalEnabled?: boolean;
 }
 
 export interface StatusUpdateData {
-  status?: "UPCOMING" | "ACTIVE" | "FINISHED" | "CANCELLED";
+  status?: "UPCOMING" | "ACTIVE" | "REGISTER_INTEREST" | "FINISHED" | "CANCELLED";
   isActive?: boolean;
 }
 
