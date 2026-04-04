@@ -4,7 +4,7 @@
  */
 
 import { Router } from 'express';
-import { verifyAuth, requireAdmin } from '../../middlewares/auth.middleware';
+// Auth middleware is already applied by parent adminRoutes.ts (verifyAuth + requireAdmin)
 import {
   createMaintenance,
   updateMaintenance,
@@ -24,10 +24,6 @@ import {
 } from '../../controllers/admin/featureAnnouncementController';
 
 const adminSystemRoutes = Router();
-
-// Apply authentication middleware to all routes
-adminSystemRoutes.use(verifyAuth);
-adminSystemRoutes.use(requireAdmin);
 
 // System Maintenance Routes
 adminSystemRoutes.post('/maintenance', createMaintenance);
