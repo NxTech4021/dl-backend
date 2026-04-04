@@ -167,9 +167,9 @@ export const accountNotifications = {
     maintenanceTime: string,
     duration: string
   ): NotificationPayload => ({
-    type: NOTIFICATION_TYPES.SYSTEM_MAINTENANCE,
+    type: NOTIFICATION_TYPES.MAINTENANCE_SCHEDULED,
     category: getCategoryForNotificationType(
-      NOTIFICATION_TYPES.SYSTEM_MAINTENANCE
+      NOTIFICATION_TYPES.MAINTENANCE_SCHEDULED
     ),
     title: "Upcoming Maintenance",
     message: `DEUCE will be scheduled for maintenance on ${maintenanceTime} for ${duration}`,
@@ -184,6 +184,26 @@ export const accountNotifications = {
     title: "We're Back",
     message: "DEUCE is back online! Thanks for your patience",
     metadata: {},
+  }),
+
+  maintenanceInProgress: (duration: string): NotificationPayload => ({
+    type: NOTIFICATION_TYPES.MAINTENANCE_IN_PROGRESS,
+    category: getCategoryForNotificationType(
+      NOTIFICATION_TYPES.MAINTENANCE_IN_PROGRESS
+    ),
+    title: "Maintenance in Progress",
+    message: `DEUCE is currently down for maintenance. Expected duration: ${duration}. We'll be back soon!`,
+    metadata: { duration },
+  }),
+
+  maintenanceCancelled: (reason?: string): NotificationPayload => ({
+    type: NOTIFICATION_TYPES.MAINTENANCE_CANCELLED,
+    category: getCategoryForNotificationType(
+      NOTIFICATION_TYPES.MAINTENANCE_CANCELLED
+    ),
+    title: "Maintenance Cancelled",
+    message: `The scheduled maintenance has been cancelled.${reason ? ` Reason: ${reason}` : " No disruption expected."}`,
+    metadata: { reason },
   }),
 
   withdrawalRequestSubmitted: (
