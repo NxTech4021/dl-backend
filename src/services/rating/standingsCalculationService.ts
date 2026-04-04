@@ -58,6 +58,9 @@ export interface StandingEntry {
   setDifferential: number;
   previousRank: number;
   rankChange: number;
+  partnerId?: string;
+  partnerName?: string;
+  partnerImage?: string;
 }
 
 /**
@@ -357,25 +360,100 @@ function resolveTieBreakers(standings: any[]): any[] {
  * Get division standings (leaderboard)
  */
 export async function getDivisionStandings(divisionId: string): Promise<StandingEntry[]> {
-  const standings = await prisma.divisionStanding.findMany({
-    where: { divisionId },
-    include: {
-      user: {
-        select: {
-          id: true,
-          name: true,
-          image: true
-        }
-      }
+  // Check whether this division uses partnership-based standings (doubles).
+  // When a player is assigned to a doubles division the system creates BOTH a user row
+  // (userId != null) AND a partnership row (partnershipId != null, userId = null).
+  // The partnership row is the canonical team entry for display; the user rows hold the
+  // actual stats (wins/losses/etc) because that's where the standings engine writes them.
+  const partnershipRows = await prisma.divisionStanding.findMany({
+    where: {
+      divisionId,
+      partnershipId: { not: null },
+      userId: null,
     },
-    orderBy: { rank: 'asc' }
+    include: {
+      partnership: {
+        select: {
+          captainId: true,
+          partnerId: true,
+          captain: { select: { id: true, name: true, image: true } },
+          partner: { select: { id: true, name: true, image: true } },
+        },
+      },
+    },
+    orderBy: { rank: 'asc' },
   });
 
-  return standings.map(s => ({
+  if (partnershipRows.length > 0) {
+    // Doubles division — fetch user-level stats for accurate wins/losses/points
+    const userRows = await prisma.divisionStanding.findMany({
+      where: { divisionId, userId: { not: null } },
+    });
+    const userStats = new Map(userRows.map(r => [r.userId!, r]));
+
+    const entries = partnershipRows.map(s => {
+      const captainId = s.partnership?.captainId || '';
+      const cs = userStats.get(captainId);
+      return {
+        odlayerId: captainId,
+        odlayerName: s.partnership?.captain?.name || 'Unknown',
+        odlayerImage: s.partnership?.captain?.image || null,
+        partnerId: s.partnership?.partnerId ?? undefined,
+        partnerName: s.partnership?.partner?.name ?? undefined,
+        partnerImage: s.partnership?.partner?.image ?? undefined,
+        rank: s.rank,
+        wins: cs?.wins ?? s.wins,
+        losses: cs?.losses ?? s.losses,
+        matchesPlayed: cs?.matchesPlayed ?? s.matchesPlayed,
+        matchesRemaining: (cs?.matchesScheduled ?? s.matchesScheduled) - (cs?.matchesPlayed ?? s.matchesPlayed),
+        winPoints: cs?.winPoints ?? s.winPoints,
+        setPoints: cs?.setPoints ?? s.setPoints,
+        completionBonus: cs?.completionBonus ?? s.completionBonus,
+        totalPoints: cs?.totalPoints ?? s.totalPoints,
+        setsWon: cs?.setsWon ?? s.setsWon,
+        setsLost: cs?.setsLost ?? s.setsLost,
+        setDifferential: cs?.setDifferential ?? s.setDifferential,
+        previousRank: s.rank,
+        rankChange: 0,
+      };
+    });
+
+    // Partnership rows have rank=0 by default (recalculateDivisionRanks only writes
+    // user rows). Sort by totalPoints DESC so 1st place = highest points.
+    entries.sort((a, b) => {
+      if (b.totalPoints !== a.totalPoints) return b.totalPoints - a.totalPoints;
+      if (b.setsWon !== a.setsWon) return b.setsWon - a.setsWon;
+      return b.setDifferential - a.setDifferential;
+    });
+
+    // Assign display ranks after sorting
+    entries.forEach((e, i) => { e.rank = i + 1; });
+
+    return entries;
+  }
+
+  // Singles division — one entry per user.
+  // Order by stored rank (set by recalculateDivisionRanks). Fall back to totalPoints DESC
+  // in case some rows still have rank=0 (e.g. season just started, no matches played yet).
+  const userStandings = await prisma.divisionStanding.findMany({
+    where: { divisionId, userId: { not: null } },
+    include: {
+      user: {
+        select: { id: true, name: true, image: true },
+      },
+    },
+    orderBy: [
+      { totalPoints: 'desc' },
+      { setsWon: 'desc' },
+      { setDifferential: 'desc' },
+    ],
+  });
+
+  return userStandings.map((s, i) => ({
     odlayerId: s.userId || '',
     odlayerName: s.user?.name || 'Unknown',
     odlayerImage: s.user?.image || null,
-    rank: s.rank,
+    rank: s.rank > 0 ? s.rank : i + 1,
     wins: s.wins,
     losses: s.losses,
     matchesPlayed: s.matchesPlayed,
@@ -387,8 +465,8 @@ export async function getDivisionStandings(divisionId: string): Promise<Standing
     setsWon: s.setsWon,
     setsLost: s.setsLost,
     setDifferential: s.setDifferential,
-    previousRank: s.rank, // TODO: Track previous rank
-    rankChange: 0
+    previousRank: s.rank > 0 ? s.rank : i + 1,
+    rankChange: 0,
   }));
 }
 
