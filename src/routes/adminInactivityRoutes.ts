@@ -4,21 +4,18 @@
  */
 
 import { Router } from 'express';
-import { verifyAuth, requireAdmin } from '../middlewares/auth.middleware';
+// Auth middleware already applied by parent adminRoutes.ts (verifyAuth + requireAdmin)
 import {
   getSettings,
   getAllSettings,
   updateSettings,
   removeSettings,
   triggerInactivityCheck,
-  getInactivityStats
+  getInactivityStats,
+  toggleInactivityExempt
 } from '../controllers/adminInactivityController';
 
 const router = Router();
-
-// All routes require admin authentication
-router.use(verifyAuth);
-router.use(requireAdmin);
 
 // Settings
 router.get('/settings', getSettings);
@@ -28,6 +25,7 @@ router.delete('/settings/:settingsId', removeSettings);
 
 // Actions
 router.post('/check', triggerInactivityCheck);
+router.put('/exempt/:userId', toggleInactivityExempt);
 
 // Stats
 router.get('/stats', getInactivityStats);
