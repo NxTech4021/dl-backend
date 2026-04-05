@@ -5,7 +5,7 @@
 
 import { prisma } from '../lib/prisma';
 import { TeamChangeRequestStatus } from '@prisma/client';
-import { NotificationService } from './notificationService';
+import { notificationService } from './notificationService';
 import { notifyAdminsTeamChange } from './notification/adminNotificationService';
 
 // Types
@@ -175,7 +175,6 @@ export async function createTeamChangeRequest(
 
   // Notify admins
   try {
-    const notificationService = new NotificationService();
     await notifyAdminsTeamChange(notificationService, {
       playerName: user?.name || 'Unknown Player',
       currentTeam: currentDivision.name,
