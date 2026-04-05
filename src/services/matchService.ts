@@ -6,7 +6,7 @@
 import { prisma } from '../lib/prisma';
 import { MatchStatus } from '@prisma/client';
 import { getInactivityService } from './inactivityService';
-import { NotificationService } from './notificationService';
+import { notificationService } from './notificationService';
 import { logger } from '../utils/logger';
 
 /**
@@ -31,7 +31,6 @@ export async function handlePostMatchCreation(matchId: string): Promise<void> {
     }
 
     // Reactivate each participant if they were inactive
-    const notificationService = new NotificationService();
     const inactivityService = getInactivityService(notificationService);
 
     for (const participant of match.participants) {
