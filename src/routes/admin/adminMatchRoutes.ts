@@ -27,7 +27,8 @@ import {
   unhideMatch,
   reportMatchAbuse,
   clearMatchReport,
-  convertToWalkover
+  convertToWalkover,
+  getMessageLogs
 } from '../../controllers/admin/adminMatchController';
 
 const router = Router();
@@ -35,6 +36,7 @@ const router = Router();
 // AS6: Matches Dashboard
 router.get('/matches', getAdminMatches);
 router.get('/matches/stats', getMatchStats);
+router.get('/message-logs', getMessageLogs);
 router.get('/matches/:id', getMatchById);
 router.post('/matches/:id/message', messageParticipants);
 
