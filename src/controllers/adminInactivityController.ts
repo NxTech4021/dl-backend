@@ -11,7 +11,7 @@ import {
   getAllInactivitySettings
 } from '../services/admin/adminInactivityService';
 import { getInactivityService } from '../services/inactivityService';
-import { NotificationService } from '../services/notificationService';
+import { notificationService } from '../services/notificationService';
 import { sendSuccess, sendError } from '../utils/response';
 import { logger } from '../utils/logger';
 
@@ -157,7 +157,6 @@ export async function triggerInactivityCheck(req: Request, res: Response) {
       return sendError(res, 'Admin not authenticated', 401);
     }
 
-    const notificationService = new NotificationService();
     const inactivityService = getInactivityService(notificationService);
 
     const results = await inactivityService.checkAndUpdateInactivity();

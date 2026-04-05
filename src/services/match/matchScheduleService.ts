@@ -10,7 +10,7 @@ import {
   InvitationStatus
 } from '@prisma/client';
 import { logger } from '../../utils/logger';
-import { NotificationService } from '../notificationService';
+import { NotificationService, notificationService as notificationServiceSingleton } from '../notificationService';
 import { matchManagementNotifications } from '../../helpers/notifications/matchManagementNotifications';
 
 // Types
@@ -45,7 +45,7 @@ export class MatchScheduleService {
   private walkoverLateThresholdMinutes = 20;
 
   constructor(notificationService?: NotificationService) {
-    this.notificationService = notificationService || new NotificationService();
+    this.notificationService = notificationService || notificationServiceSingleton;
   }
 
   /**

@@ -12,7 +12,7 @@
 import { prisma } from '../../lib/prisma';
 import { AchievementScope, SportType, GameType } from '@prisma/client';
 import { getEvaluator, EvaluatorContext } from './achievementDefinitions';
-import { NotificationService } from '../notificationService';
+import { notificationService } from '../notificationService';
 import { accountNotifications } from '../../helpers/notifications/accountNotifications';
 import { logger } from '../../utils/logger';
 import { io } from '../../app';
@@ -167,7 +167,6 @@ async function evaluateAchievements(
 
         // Send in-app notification (fire-and-forget)
         try {
-          const notificationService = new NotificationService();
           const payload = accountNotifications.achievementUnlocked(achievement.title);
           await notificationService.createNotification({
             ...payload,

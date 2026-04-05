@@ -21,7 +21,8 @@ import {
   AdminActionType,
   AdminTargetType
 } from '@prisma/client';
-import { sendSuccess, sendError } from '../../utils/response';
+import { sendSuccess, sendPaginated, sendError } from '../../utils/response';
+import { prisma } from '../../lib/prisma';
 
 const adminMatchService = getAdminMatchService();
 const participantService = new AdminMatchParticipantService();
@@ -839,5 +840,52 @@ export const convertToWalkover = async (req: Request, res: Response) => {
     console.error('Convert To Walkover Error:', error);
     const message = error instanceof Error ? error.message : 'Failed to convert to walkover';
     sendError(res, message, 400);
+  }
+};
+
+/**
+ * Get admin message logs with delivery results
+ * GET /api/admin/message-logs
+ */
+export const getMessageLogs = async (req: Request, res: Response) => {
+  try {
+    const authReq = req as AuthenticatedRequest;
+    if (!authReq.user?.adminId) {
+      return sendError(res, 'Admin authentication required', 401);
+    }
+
+    const { page = 1, limit = 20, matchId, adminId } = req.query;
+
+    const where: any = {};
+    if (matchId) where.matchId = matchId as string;
+    if (adminId) where.adminId = adminId as string;
+
+    const [logs, total] = await Promise.all([
+      prisma.adminMessageLog.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip: (Number(page) - 1) * Number(limit),
+        take: Number(limit),
+        include: {
+          admin: {
+            include: {
+              user: { select: { name: true, email: true } }
+            }
+          },
+          match: { select: { id: true, sport: true, matchType: true, matchDate: true } }
+        }
+      }),
+      prisma.adminMessageLog.count({ where })
+    ]);
+
+    sendPaginated(res, logs, {
+      page: Number(page),
+      limit: Number(limit),
+      total,
+      totalPages: Math.ceil(total / Number(limit))
+    });
+  } catch (error) {
+    console.error('Get Message Logs Error:', error);
+    sendError(res, 'Failed to retrieve message logs');
   }
 };

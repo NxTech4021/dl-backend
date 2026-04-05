@@ -98,9 +98,8 @@ playerRouter.get('/activity-status/:playerId', verifyAuth, async (req, res) => {
     }
 
     const { getInactivityService } = await import('../services/inactivityService');
-    const { NotificationService } = await import('../services/notificationService');
+    const { notificationService } = await import('../services/notificationService');
 
-    const notificationService = new NotificationService();
     const inactivityService = getInactivityService(notificationService);
 
     const status = await inactivityService.getPlayerActivityStatus(playerId);

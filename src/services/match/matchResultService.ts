@@ -13,7 +13,7 @@ import {
   InvitationStatus
 } from '@prisma/client';
 import { logger } from '../../utils/logger';
-import { NotificationService } from '../notificationService';
+import { NotificationService, notificationService as notificationServiceSingleton } from '../notificationService';
 import { handlePostMatchCreation, createMatchFeedPost } from '../matchService';
 import { DMRRatingService, SetScore as DMRSetScore } from '../rating/dmrRatingService';
 import { SportType, GameType } from '@prisma/client';
@@ -74,7 +74,7 @@ export class MatchResultService {
   private notificationService: NotificationService;
 
   constructor(notificationService?: NotificationService) {
-    this.notificationService = notificationService || new NotificationService();
+    this.notificationService = notificationService || notificationServiceSingleton;
   }
 
   /**
@@ -986,7 +986,7 @@ export class MatchResultService {
         throw new Error('Dispute window has expired (24 hours)');
       }
 
-      // Mark as disputed
+      // Mark walkover as disputed
       await tx.matchWalkover.update({
         where: { id: match.walkover.id },
         data: {
@@ -996,10 +996,47 @@ export class MatchResultService {
         },
       });
 
-      // Set match to require admin review
+      // Create a MatchDispute record so admin can resolve through the existing dispute workflow
+      // This connects walkover disputes to the same admin resolution modal as score disputes
+      const existingDispute = await tx.matchDispute.findUnique({ where: { matchId } });
+      if (!existingDispute) {
+        // Get reporter name for context
+        const reporter = await tx.user.findUnique({
+          where: { id: match.walkover.reportedBy },
+          select: { name: true },
+        });
+        const disputer = await tx.user.findUnique({
+          where: { id: disputedById },
+          select: { name: true },
+        });
+
+        const walkoverReason = match.walkover.walkoverReason || 'Unknown';
+        const disputeComment = [
+          `[WALKOVER DISPUTE]`,
+          `Reported by: ${reporter?.name || 'Unknown'} — Reason: ${walkoverReason}`,
+          `Disputed by: ${disputer?.name || 'Unknown'}`,
+          `Dispute reason: ${reason}`,
+        ].join('\n');
+
+        await tx.matchDispute.create({
+          data: {
+            matchId,
+            raisedByUserId: disputedById,
+            disputeCategory: 'OTHER',
+            disputeComment,
+            status: 'OPEN',
+            priority: 'HIGH',
+          },
+        });
+      }
+
+      // Set match to require admin review and mark as disputed
       await tx.match.update({
         where: { id: matchId },
-        data: { requiresAdminReview: true },
+        data: {
+          requiresAdminReview: true,
+          isDisputed: true,
+        },
       });
 
       logger.info(`Walkover disputed for match ${matchId} by user ${disputedById}`);

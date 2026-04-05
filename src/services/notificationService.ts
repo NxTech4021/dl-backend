@@ -12,6 +12,7 @@ import {
 import {
   getNotificationDeliveryType,
   shouldSendPushNotification,
+  shouldCreateInAppRecord,
   NotificationDeliveryType,
 } from "../types/notificationDeliveryTypes";
 import { AppError } from "../utils/errors";
@@ -207,8 +208,9 @@ export class NotificationService {
         });
       }
 
-      // Only create in-app notification if delivery type is IN_APP
-      if (deliveryType === NotificationDeliveryType.IN_APP) {
+      // Create in-app notification if delivery type is IN_APP or BOTH
+      const willCreateInApp = type ? shouldCreateInAppRecord(type) : deliveryType === NotificationDeliveryType.IN_APP;
+      if (willCreateInApp) {
         const createData: any = {
           message,
           category,
@@ -299,7 +301,7 @@ export class NotificationService {
         }));
       }
 
-      // If PUSH only, return empty array (no in-app notification created)
+      // PUSH-only: no in-app record, return empty
       return [];
     } catch (error) {
       console.error(
@@ -834,16 +836,13 @@ export class NotificationService {
     if (userIds.length === 0) return;
 
     try {
-      // Get users who have push notifications enabled
-      const usersWithPushEnabled = await Promise.all(
-        userIds.map(async (userId) => {
-          const enabled = await isPushEnabled(userId);
-          return enabled ? userId : null;
-        })
-      );
-      const eligibleUserIds = usersWithPushEnabled.filter(
-        (id): id is string => id !== null
-      );
+      // Get users who have push disabled (batch query instead of N+1)
+      const disabledPrefs = await this.prisma.notificationPreference.findMany({
+        where: { userId: { in: userIds }, pushEnabled: false },
+        select: { userId: true }
+      });
+      const disabledSet = new Set(disabledPrefs.map(p => p.userId));
+      const eligibleUserIds = userIds.filter(id => !disabledSet.has(id));
 
       if (eligibleUserIds.length === 0) {
         logger.debug("No users with push notifications enabled", { userIds });
@@ -872,7 +871,7 @@ export class NotificationService {
       });
 
       // Send push notifications in parallel (with error handling per token)
-      await Promise.allSettled(
+      const results = await Promise.allSettled(
         tokens.map(({ token }) =>
           this.sendPushNotification({
             token,
@@ -882,6 +881,17 @@ export class NotificationService {
           })
         )
       );
+
+      // Batch update lastUsedAt for successfully sent tokens
+      const successTokens = tokens
+        .filter((_, i) => results[i].status === 'fulfilled')
+        .map(t => t.token);
+      if (successTokens.length > 0) {
+        await this.prisma.userPushToken.updateMany({
+          where: { token: { in: successTokens } },
+          data: { lastUsedAt: new Date() }
+        }).catch(err => logger.warn('Failed to update lastUsedAt for push tokens', { error: err }));
+      }
     } catch (error) {
       logger.error(
         "Error sending push notifications to users",

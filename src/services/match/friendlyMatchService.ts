@@ -15,7 +15,7 @@ import {
   SportType
 } from '@prisma/client';
 import { logger } from '../../utils/logger';
-import { NotificationService } from '../notificationService';
+import { NotificationService, notificationService as notificationServiceSingleton } from '../notificationService';
 import { NOTIFICATION_TYPES } from '../../types/notificationTypes';
 import { matchManagementNotifications } from '../../helpers/notifications/matchManagementNotifications';
 
@@ -102,7 +102,7 @@ export class FriendlyMatchService {
   private notificationService: NotificationService;
 
   constructor(notificationService?: NotificationService) {
-    this.notificationService = notificationService || new NotificationService();
+    this.notificationService = notificationService || notificationServiceSingleton;
   }
 
   /**

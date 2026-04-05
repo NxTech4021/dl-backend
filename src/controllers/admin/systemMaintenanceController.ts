@@ -28,16 +28,25 @@ export const createMaintenance = async (req: Request, res: Response) => {
       return sendError(res, 'Invalid date/time format', 400);
     }
 
+    if (start <= new Date()) {
+      return sendError(res, 'Start date/time must be in the future', 400);
+    }
+
     if (end <= start) {
       return sendError(res, 'End date/time must be after start date/time', 400);
     }
+
+    // Validate and sanitize affectedServices
+    const validServices = Array.isArray(affectedServices)
+      ? [...new Set(affectedServices.filter((s: unknown) => typeof s === 'string' && s.trim().length > 0 && s.length <= 100).map((s: string) => s.trim()))]
+      : [];
 
     const maintenance = await maintenanceService.createMaintenance({
       title,
       description,
       startDateTime: start,
       endDateTime: end,
-      affectedServices: affectedServices || []
+      affectedServices: validServices
     });
 
     sendSuccess(res, maintenance, undefined, 201);
@@ -59,10 +68,10 @@ export const updateMaintenance = async (req: Request, res: Response) => {
 
     const updateData: any = { id };
 
-    if (title) updateData.title = title;
-    if (description) updateData.description = description;
-    if (status) updateData.status = status;
-    if (affectedServices) updateData.affectedServices = affectedServices;
+    if (title !== undefined) updateData.title = title;
+    if (description !== undefined) updateData.description = description;
+    if (status !== undefined) updateData.status = status;
+    if (affectedServices !== undefined) updateData.affectedServices = affectedServices;
 
     if (startDateTime) {
       const start = new Date(startDateTime);
@@ -78,6 +87,11 @@ export const updateMaintenance = async (req: Request, res: Response) => {
         return sendError(res, 'Invalid end date/time format', 400);
       }
       updateData.endDateTime = end;
+    }
+
+    // Cross-validate: if both provided, ensure end > start
+    if (updateData.startDateTime && updateData.endDateTime && updateData.endDateTime <= updateData.startDateTime) {
+      return sendError(res, 'End date/time must be after start date/time', 400);
     }
 
     const maintenance = await maintenanceService.updateMaintenance(updateData);

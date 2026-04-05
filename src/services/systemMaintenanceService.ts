@@ -5,7 +5,7 @@
 
 import { prisma } from '../lib/prisma';
 import { $Enums } from '@prisma/client';
-import { NotificationService } from './notificationService';
+import { NotificationService, notificationService as notificationServiceSingleton } from './notificationService';
 import { logger } from '../utils/logger';
 import { accountNotifications } from '../helpers/notifications/accountNotifications';
 
@@ -31,7 +31,7 @@ export class SystemMaintenanceService {
   private notificationService: NotificationService;
 
   constructor(notificationService?: NotificationService) {
-    this.notificationService = notificationService || new NotificationService();
+    this.notificationService = notificationService || notificationServiceSingleton;
   }
 
   /**
@@ -62,11 +62,15 @@ export class SystemMaintenanceService {
       const userIds = users.map(u => u.id);
 
       if (userIds.length > 0) {
-        // Calculate maintenance duration and time
         const duration = this.calculateDuration(maintenance.startDateTime, maintenance.endDateTime);
         const maintenanceTime = this.formatDateTime(maintenance.startDateTime);
-
         const notificationPayload = accountNotifications.scheduledMaintenance(maintenanceTime, duration);
+
+        // Flag-first: mark as sent before sending, so retries don't duplicate
+        await prisma.systemMaintenance.update({
+          where: { id: maintenance.id },
+          data: { notificationSent: true }
+        });
 
         await this.notificationService.createNotification({
           ...notificationPayload,
@@ -80,15 +84,9 @@ export class SystemMaintenanceService {
           }
         });
 
-        // Mark notification as sent
-        await prisma.systemMaintenance.update({
-          where: { id: maintenance.id },
-          data: { notificationSent: true }
-        });
-
-        logger.info('Maintenance notification sent automatically to all users', { 
-          maintenanceId: maintenance.id, 
-          userCount: userIds.length 
+        logger.info('Maintenance notification sent automatically to all users', {
+          maintenanceId: maintenance.id,
+          userCount: userIds.length
         });
       }
     } catch (error) {
@@ -110,6 +108,12 @@ export class SystemMaintenanceService {
     } else {
       delete updateData.description;
     }
+
+    // Reset notificationSent flag when time changes so admin can re-notify
+    if (data.startDateTime || data.endDateTime) {
+      updateData.notificationSent = false;
+    }
+
     const maintenance = await prisma.systemMaintenance.update({
       where: { id },
       data: updateData,
@@ -149,8 +153,13 @@ export class SystemMaintenanceService {
     const maintenanceTime = this.formatDateTime(maintenance.startDateTime);
 
     try {
-      // Create notification payload using the template for advance notice
       const notificationPayload = accountNotifications.scheduledMaintenance(maintenanceTime, duration);
+
+      // Flag-first: mark as sent before sending, so retries don't duplicate
+      await prisma.systemMaintenance.update({
+        where: { id: maintenanceId },
+        data: { notificationSent: true }
+      });
 
       await this.notificationService.createNotification({
         ...notificationPayload,
@@ -164,15 +173,9 @@ export class SystemMaintenanceService {
         }
       });
 
-      // Mark notification as sent
-      await prisma.systemMaintenance.update({
-        where: { id: maintenanceId },
-        data: { notificationSent: true }
-      });
-
-      logger.info('Maintenance notification sent to all users', { 
-        maintenanceId, 
-        userCount: userIds.length 
+      logger.info('Maintenance notification sent to all users', {
+        maintenanceId,
+        userCount: userIds.length
       });
     } catch (error) {
       logger.error('Failed to send maintenance notification', { maintenanceId }, error as Error);
@@ -197,6 +200,10 @@ export class SystemMaintenanceService {
       return;
     }
 
+    if (maintenance.status === $Enums.MaintenanceStatus.CANCELLED) {
+      throw new Error('Cannot complete a cancelled maintenance.');
+    }
+
     // Get all active users
     const users = await prisma.user.findMany({
       where: { status: 'ACTIVE' },
@@ -209,6 +216,15 @@ export class SystemMaintenanceService {
       // Create notification payload using the template
       const notificationPayload = accountNotifications.maintenanceComplete();
 
+      // Use transaction to ensure notification flag and status are updated atomically
+      await prisma.systemMaintenance.update({
+        where: { id: maintenanceId },
+        data: {
+          completionSent: true,
+          status: $Enums.MaintenanceStatus.COMPLETED
+        }
+      });
+
       await this.notificationService.createNotification({
         ...notificationPayload,
         userIds,
@@ -216,15 +232,6 @@ export class SystemMaintenanceService {
           ...notificationPayload.metadata,
           maintenanceId: maintenance.id,
           completedAt: new Date().toISOString()
-        }
-      });
-
-      // Update maintenance status and mark completion notification as sent
-      await prisma.systemMaintenance.update({
-        where: { id: maintenanceId },
-        data: { 
-          completionSent: true,
-          status: $Enums.MaintenanceStatus.COMPLETED
         }
       });
 
@@ -239,15 +246,12 @@ export class SystemMaintenanceService {
   }
 
   /**
-   * Get upcoming maintenance schedules
+   * Get upcoming and active maintenance schedules
    */
   async getUpcomingMaintenance() {
     return await prisma.systemMaintenance.findMany({
       where: {
-        status: $Enums.MaintenanceStatus.SCHEDULED,
-        startDateTime: {
-          gte: new Date()
-        }
+        status: { in: [$Enums.MaintenanceStatus.SCHEDULED, $Enums.MaintenanceStatus.IN_PROGRESS] }
       },
       orderBy: { startDateTime: 'asc' }
     });
@@ -263,6 +267,10 @@ export class SystemMaintenanceService {
 
     if (!maintenance) {
       throw new Error('Maintenance schedule not found');
+    }
+
+    if (maintenance.status !== $Enums.MaintenanceStatus.SCHEDULED) {
+      throw new Error(`Cannot start maintenance in ${maintenance.status} status. Must be SCHEDULED.`);
     }
 
     // Update status to IN_PROGRESS
@@ -281,22 +289,18 @@ export class SystemMaintenanceService {
 
     if (userIds.length > 0) {
       try {
-        // Calculate maintenance duration
         const duration = this.calculateDuration(maintenance.startDateTime, maintenance.endDateTime);
+        const notificationPayload = accountNotifications.maintenanceInProgress(duration);
 
-        // Send push notification to all users with "happening now" message
         await this.notificationService.createNotification({
-          type: 'SYSTEM_MAINTENANCE',
-          category: 'GENERAL',
-          title: 'Maintenance in Progress',
-          message: `DEUCE is currently down for maintenance. Expected duration: ${duration}. We'll be back soon!`,
+          ...notificationPayload,
           userIds,
           metadata: {
+            ...notificationPayload.metadata,
             maintenanceId: maintenance.id,
             startDateTime: maintenance.startDateTime.toISOString(),
             endDateTime: maintenance.endDateTime.toISOString(),
             affectedServices: maintenance.affectedServices,
-            duration
           }
         });
 
@@ -306,7 +310,6 @@ export class SystemMaintenanceService {
         });
       } catch (error) {
         logger.error('Failed to send maintenance start notification', { maintenanceId }, error as Error);
-        // Don't throw error - maintenance should still start even if notification fails
       }
     }
 
@@ -323,6 +326,9 @@ export class SystemMaintenanceService {
     if (!current) {
       throw new Error('Maintenance schedule not found');
     }
+    if (current.status === $Enums.MaintenanceStatus.COMPLETED || current.status === $Enums.MaintenanceStatus.CANCELLED) {
+      throw new Error(`Cannot cancel maintenance in ${current.status} status.`);
+    }
     const updated = await prisma.systemMaintenance.update({
       where: { id: maintenanceId },
       data: {
@@ -333,6 +339,38 @@ export class SystemMaintenanceService {
       }
     });
     logger.info('Maintenance cancelled', { maintenanceId });
+
+    // Notify users if they were already told about this maintenance
+    if (current.notificationSent) {
+      try {
+        const users = await prisma.user.findMany({
+          where: { status: 'ACTIVE' },
+          select: { id: true }
+        });
+        const userIds = users.map(u => u.id);
+
+        if (userIds.length > 0) {
+          const notificationPayload = accountNotifications.maintenanceCancelled(reason);
+
+          await this.notificationService.createNotification({
+            ...notificationPayload,
+            userIds,
+            metadata: {
+              ...notificationPayload.metadata,
+              maintenanceId,
+            }
+          });
+
+          logger.info('Maintenance cancellation notification sent', {
+            maintenanceId,
+            userCount: userIds.length
+          });
+        }
+      } catch (error) {
+        logger.error('Failed to send cancellation notification', { maintenanceId }, error as Error);
+      }
+    }
+
     return updated;
   }
 

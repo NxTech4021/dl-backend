@@ -17,7 +17,7 @@ import {
   MatchReportCategory
 } from '@prisma/client';
 import { logger } from '../../utils/logger';
-import { NotificationService } from '../notificationService';
+import { NotificationService, notificationService as notificationServiceSingleton } from '../notificationService';
 import { DMRRatingService } from '../rating/dmrRatingService';
 import { StandingsV2Service } from '../rating/standingsV2Service';
 
@@ -92,7 +92,7 @@ export class AdminMatchService {
   private notificationService: NotificationService;
 
   constructor(notificationService?: NotificationService) {
-    this.notificationService = notificationService || new NotificationService();
+    this.notificationService = notificationService || notificationServiceSingleton;
   }
 
   /**
@@ -689,6 +689,39 @@ export class AdminMatchService {
             status: MatchStatus.COMPLETED,
             resultConfirmedAt: new Date(),
           }
+        });
+      }
+
+      // Clean up walkover record if this was a walkover dispute
+      if (dispute.match.isWalkover) {
+        const walkoverUpdate: any = {
+          adminVerified: true,
+          adminVerifiedBy: adminId,
+          adminVerifiedAt: new Date(),
+        };
+
+        // If admin reversed the walkover (disputer wins), swap winner/defaulter
+        if (action === DisputeResolutionAction.UPHOLD_DISPUTER) {
+          const walkover = await tx.matchWalkover.findUnique({
+            where: { matchId: dispute.matchId },
+          });
+          if (walkover) {
+            walkoverUpdate.winningPlayerId = walkover.defaultingPlayerId;
+            walkoverUpdate.defaultingPlayerId = walkover.winningPlayerId;
+          }
+        }
+
+        // If admin provided actual scores (CUSTOM_SCORE), match is no longer a walkover
+        if (action === DisputeResolutionAction.CUSTOM_SCORE) {
+          await tx.match.update({
+            where: { id: dispute.matchId },
+            data: { isWalkover: false },
+          });
+        }
+
+        await tx.matchWalkover.updateMany({
+          where: { matchId: dispute.matchId },
+          data: walkoverUpdate,
         });
       }
 

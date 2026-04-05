@@ -12,7 +12,7 @@ import {
   GameType
 } from '@prisma/client';
 import { logger } from '../../utils/logger';
-import { NotificationService } from '../notificationService';
+import { NotificationService, notificationService as notificationServiceSingleton } from '../notificationService';
 
 // Types
 export interface CreateBracketInput {
@@ -52,7 +52,7 @@ export class BracketService {
   private notificationService: NotificationService;
 
   constructor(notificationService?: NotificationService) {
-    this.notificationService = notificationService || new NotificationService();
+    this.notificationService = notificationService || notificationServiceSingleton;
   }
 
   /**

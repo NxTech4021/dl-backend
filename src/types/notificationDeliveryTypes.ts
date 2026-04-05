@@ -7,6 +7,7 @@
 export enum NotificationDeliveryType {
   PUSH = 'PUSH',
   IN_APP = 'IN_APP',
+  BOTH = 'BOTH',
 }
 
 /**
@@ -38,10 +39,20 @@ export const NOTIFICATION_DELIVERY_MAP: Record<string, NotificationDeliveryType>
   NEW_WEEKLY_STREAK: NotificationDeliveryType.PUSH,
   STREAK_AT_RISK: NotificationDeliveryType.PUSH,
   APP_UPDATE_AVAILABLE: NotificationDeliveryType.PUSH,
-  SCHEDULED_MAINTENANCE: NotificationDeliveryType.PUSH,
-  SYSTEM_MAINTENANCE: NotificationDeliveryType.PUSH,
-  MAINTENANCE_COMPLETE: NotificationDeliveryType.PUSH,
+  MAINTENANCE_SCHEDULED: NotificationDeliveryType.BOTH,
+  MAINTENANCE_IN_PROGRESS: NotificationDeliveryType.BOTH,
+  MAINTENANCE_COMPLETE: NotificationDeliveryType.BOTH,
+  MAINTENANCE_CANCELLED: NotificationDeliveryType.BOTH,
+  // Backward compatibility aliases
+  SYSTEM_MAINTENANCE: NotificationDeliveryType.BOTH,
   NEW_FEATURE: NotificationDeliveryType.IN_APP,
+
+  // Admin-targeted notifications - BOTH (push to admin phones + in-app record)
+  ADMIN_WITHDRAWAL_REQUEST: NotificationDeliveryType.BOTH,
+  ADMIN_DISPUTE_SUBMITTED: NotificationDeliveryType.BOTH,
+  ADMIN_TEAM_CHANGE_REQUEST: NotificationDeliveryType.BOTH,
+  ADMIN_SEASON_JOIN_REQUEST: NotificationDeliveryType.BOTH,
+  ADMIN_PLAYER_REPORT: NotificationDeliveryType.BOTH,
   
   // Doubles League - IN_APP
   PARTNER_REQUEST_SENT: NotificationDeliveryType.IN_APP,
@@ -191,7 +202,16 @@ export function getNotificationDeliveryType(notificationType: string): Notificat
  * Check if a notification should be sent as push
  */
 export function shouldSendPushNotification(notificationType: string): boolean {
-  return getNotificationDeliveryType(notificationType) === NotificationDeliveryType.PUSH;
+  const type = getNotificationDeliveryType(notificationType);
+  return type === NotificationDeliveryType.PUSH || type === NotificationDeliveryType.BOTH;
+}
+
+/**
+ * Check if a notification should create an in-app record
+ */
+export function shouldCreateInAppRecord(notificationType: string): boolean {
+  const type = getNotificationDeliveryType(notificationType);
+  return type === NotificationDeliveryType.IN_APP || type === NotificationDeliveryType.BOTH;
 }
 
 /**
