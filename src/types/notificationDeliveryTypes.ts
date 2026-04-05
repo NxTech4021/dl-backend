@@ -46,6 +46,13 @@ export const NOTIFICATION_DELIVERY_MAP: Record<string, NotificationDeliveryType>
   // Backward compatibility aliases
   SYSTEM_MAINTENANCE: NotificationDeliveryType.BOTH,
   NEW_FEATURE: NotificationDeliveryType.IN_APP,
+
+  // Admin-targeted notifications - BOTH (push to admin phones + in-app record)
+  ADMIN_WITHDRAWAL_REQUEST: NotificationDeliveryType.BOTH,
+  ADMIN_DISPUTE_SUBMITTED: NotificationDeliveryType.BOTH,
+  ADMIN_TEAM_CHANGE_REQUEST: NotificationDeliveryType.BOTH,
+  ADMIN_SEASON_JOIN_REQUEST: NotificationDeliveryType.BOTH,
+  ADMIN_PLAYER_REPORT: NotificationDeliveryType.BOTH,
   
   // Doubles League - IN_APP
   PARTNER_REQUEST_SENT: NotificationDeliveryType.IN_APP,
