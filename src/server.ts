@@ -11,7 +11,7 @@ import timezone from "dayjs/plugin/timezone.js";
 import { expireOldSeasonInvitations } from "./services/seasonInvitationService";
 import { expireOldRequests } from "./services/pairingService";
 import { getInactivityService } from "./services/inactivityService";
-import { NotificationService } from "./services/notificationService";
+import { notificationService } from "./services/notificationService";
 import { INACTIVITY_CONFIG } from "./config/inactivity.config";
 import { initializeNotificationJobs, schedulePushTokenCleanup, scheduleMatchStreakReEvaluation, scheduleSeasonAutoFinish } from "./jobs/notificationJobs";
 import { getMatchInvitationService } from "./services/match/matchInvitationService";
@@ -116,7 +116,6 @@ cron.schedule("0 * * * *", async () => {
 // Run auto-approval check for match results every hour
 cron.schedule("0 * * * *", async () => {
   try {
-    const notificationService = new NotificationService();
     const matchResultService = getMatchResultService(notificationService);
 
     // Auto-approve regular score submissions after 24h
