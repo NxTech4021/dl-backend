@@ -5,7 +5,7 @@
 
 import { prisma } from '../lib/prisma';
 import { $Enums } from '@prisma/client';
-import { NotificationService } from './notificationService';
+import { NotificationService, notificationService as notificationServiceSingleton } from './notificationService';
 import { logger } from '../utils/logger';
 import { accountNotifications } from '../helpers/notifications/accountNotifications';
 
@@ -31,7 +31,7 @@ export class SystemMaintenanceService {
   private notificationService: NotificationService;
 
   constructor(notificationService?: NotificationService) {
-    this.notificationService = notificationService || new NotificationService();
+    this.notificationService = notificationService || notificationServiceSingleton;
   }
 
   /**
