@@ -1194,24 +1194,24 @@ export const getActivePartnership = async (
     }
 
     // Debug logging
-    console.log('🔍 getActivePartnership - Captain skillRatings:', {
-      captainId: enrichedCaptain.id,
-      captainName: enrichedCaptain.name,
-      hasSkillRatings: !!enrichedCaptain.skillRatings,
-      skillRatingsKeys: enrichedCaptain.skillRatings ? Object.keys(enrichedCaptain.skillRatings) : [],
-      skillRatings: enrichedCaptain.skillRatings,
-      captainKeys: Object.keys(enrichedCaptain),
-    });
+    // console.log('🔍 getActivePartnership - Captain skillRatings:', {
+    //   captainId: enrichedCaptain.id,
+    //   captainName: enrichedCaptain.name,
+    //   hasSkillRatings: !!enrichedCaptain.skillRatings,
+    //   skillRatingsKeys: enrichedCaptain.skillRatings ? Object.keys(enrichedCaptain.skillRatings) : [],
+    //   skillRatings: enrichedCaptain.skillRatings,
+    //   captainKeys: Object.keys(enrichedCaptain),
+    // });
 
     if (enrichedPartner) {
-      console.log('🔍 getActivePartnership - Partner skillRatings:', {
-        partnerId: enrichedPartner.id,
-        partnerName: enrichedPartner.name,
-        hasSkillRatings: !!enrichedPartner.skillRatings,
-        skillRatingsKeys: enrichedPartner.skillRatings ? Object.keys(enrichedPartner.skillRatings) : [],
-        skillRatings: enrichedPartner.skillRatings,
-        partnerKeys: Object.keys(enrichedPartner),
-      });
+      // console.log('🔍 getActivePartnership - Partner skillRatings:', {
+      //   partnerId: enrichedPartner.id,
+      //   partnerName: enrichedPartner.name,
+      //   hasSkillRatings: !!enrichedPartner.skillRatings,
+      //   skillRatingsKeys: enrichedPartner.skillRatings ? Object.keys(enrichedPartner.skillRatings) : [],
+      //   skillRatings: enrichedPartner.skillRatings,
+      //   partnerKeys: Object.keys(enrichedPartner),
+      // });
     } else {
       console.log('🔍 getActivePartnership - No partner (INCOMPLETE partnership)');
     }

@@ -51,8 +51,8 @@ export class WaitlistService {
       throw new AppError("Season not found", 404);
     }
 
-    if (season.status !== "UPCOMING") {
-      throw new AppError("Can only join waitlist for upcoming seasons", 400);
+    if (season.status !== "UPCOMING" && season.status !== "REGISTER_INTEREST") {
+      throw new AppError("Can only register interest for upcoming seasons", 400);
     }
 
     // Create waitlist if doesn't exist
