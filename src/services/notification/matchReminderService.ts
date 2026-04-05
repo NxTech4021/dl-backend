@@ -4,7 +4,7 @@
  */
 
 import { prisma } from '../../lib/prisma';
-import { NotificationService } from '../notificationService';
+import { NotificationService, notificationService as notificationServiceSingleton } from '../notificationService';
 import { notificationTemplates } from '../../helpers/notifications';
 import { filterUsersByPreference } from './notificationPreferenceService';
 import { logger } from '../../utils/logger';
@@ -13,7 +13,7 @@ export class MatchReminderService {
   private notificationService: NotificationService;
 
   constructor(notificationService?: NotificationService) {
-    this.notificationService = notificationService || new NotificationService();
+    this.notificationService = notificationService || notificationServiceSingleton;
   }
 
   /**
