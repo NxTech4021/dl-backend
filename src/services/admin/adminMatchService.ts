@@ -17,7 +17,7 @@ import {
   MatchReportCategory
 } from '@prisma/client';
 import { logger } from '../../utils/logger';
-import { NotificationService } from '../notificationService';
+import { NotificationService, notificationService as notificationServiceSingleton } from '../notificationService';
 import { DMRRatingService } from '../rating/dmrRatingService';
 import { StandingsV2Service } from '../rating/standingsV2Service';
 
@@ -92,7 +92,7 @@ export class AdminMatchService {
   private notificationService: NotificationService;
 
   constructor(notificationService?: NotificationService) {
-    this.notificationService = notificationService || new NotificationService();
+    this.notificationService = notificationService || notificationServiceSingleton;
   }
 
   /**
