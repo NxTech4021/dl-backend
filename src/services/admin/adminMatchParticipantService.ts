@@ -12,7 +12,7 @@ import {
   MatchAdminActionType
 } from '@prisma/client';
 import { logger } from '../../utils/logger';
-import { NotificationService } from '../notificationService';
+import { NotificationService, notificationService as notificationServiceSingleton } from '../notificationService';
 import {
   ParticipantInput,
   validateParticipantEdit,
@@ -61,7 +61,7 @@ export class AdminMatchParticipantService {
   private notificationService: NotificationService;
 
   constructor(notificationService?: NotificationService) {
-    this.notificationService = notificationService || new NotificationService();
+    this.notificationService = notificationService || notificationServiceSingleton;
   }
 
   /**
