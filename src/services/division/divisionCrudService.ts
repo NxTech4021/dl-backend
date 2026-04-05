@@ -159,14 +159,29 @@ export async function getAllDivisions() {
 export async function getDivisionById(divisionId: string) {
   const division = await prisma.division.findUnique({
     where: { id: divisionId },
-    include: { season: true },
+    include: {
+      season: true,
+      _count: {
+        select: {
+          seasonMemberships: true,
+          matches: true,
+        },
+      },
+    },
   });
 
   if (!division) {
     return null;
   }
 
-  return formatDivision(division);
+  const formatted = formatDivision(division);
+  return {
+    ...formatted,
+    _count: {
+      memberships: division._count.seasonMemberships,
+      matches: division._count.matches,
+    },
+  };
 }
 
 export async function updateDivision(

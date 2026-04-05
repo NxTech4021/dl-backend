@@ -57,6 +57,7 @@ interface CreateSeasonBody {
   entryFee?: number;
   leagueIds?: string[];
   categoryId?: string;
+  status?: string;
   isActive?: boolean;
   paymentRequired?: boolean;
   promoCodeSupported?: boolean;
@@ -120,35 +121,51 @@ export const createSeason = async (req: Request, res: Response) => {
     entryFee,
     leagueIds,
     categoryId,
+    status,
     isActive,
     paymentRequired,
     promoCodeSupported,
     withdrawalEnabled,
   } = req.body as CreateSeasonBody;
 
+  const isRegisterInterest = status === 'REGISTER_INTEREST';
+
   // Validate required fields
   // Note: entryFee can be 0 (free seasons), so check for undefined/null instead of falsy
-  if (!name || !startDate || !endDate || entryFee === undefined || entryFee === null || !leagueIds || !categoryId) {
-    return sendError(res, "Missing required fields: name, startDate, endDate, entryFee, leagueIds, and categoryId are required", 400);
+  // Dates are not required for REGISTER_INTEREST seasons
+  if (!name || entryFee === undefined || entryFee === null || !leagueIds || !categoryId) {
+    return sendError(res, "Missing required fields: name, entryFee, leagueIds, and categoryId are required", 400);
+  }
+
+  if (!isRegisterInterest && (!startDate || !endDate)) {
+    return sendError(res, "Missing required fields: startDate and endDate are required for non-register-interest seasons", 400);
   }
 
   if (!Array.isArray(leagueIds) || leagueIds.length === 0) {
     return sendError(res, "At least one league ID is required", 400);
   }
 
+  // Derive effective status and isActive flag
+  const validStatuses = ['ACTIVE', 'UPCOMING', 'REGISTER_INTEREST'];
+  const effectiveStatus = (status && validStatuses.includes(status))
+    ? (status as 'ACTIVE' | 'UPCOMING' | 'REGISTER_INTEREST')
+    : (isActive ? 'ACTIVE' : 'UPCOMING');
+  const effectiveIsActive = effectiveStatus === 'ACTIVE';
+
   try {
     const seasonData: Parameters<typeof createSeasonService>[0] = {
       name,
-      startDate,
-      endDate,
       entryFee,
       leagueIds,
       categoryId,
+      status: effectiveStatus,
+      isActive: effectiveIsActive,
     };
 
+    if (startDate !== undefined) seasonData.startDate = startDate;
+    if (endDate !== undefined) seasonData.endDate = endDate;
     if (regiDeadline !== undefined) seasonData.regiDeadline = regiDeadline;
     if (description !== undefined) seasonData.description = description;
-    if (isActive !== undefined) seasonData.isActive = isActive;
     if (paymentRequired !== undefined) seasonData.paymentRequired = paymentRequired;
     if (promoCodeSupported !== undefined) seasonData.promoCodeSupported = promoCodeSupported;
     if (withdrawalEnabled !== undefined) seasonData.withdrawalEnabled = withdrawalEnabled;
@@ -161,7 +178,7 @@ export const createSeason = async (req: Request, res: Response) => {
     const season = await createSeasonService(seasonData);
 
     // 🆕 Send new season announcement to ALL users if season is active
-    if (isActive) {
+    if (effectiveIsActive) {
       try {
         // Get season with leagues to extract location and sport information
         const seasonWithLeagues = await prisma.season.findUnique({
@@ -207,7 +224,7 @@ export const createSeason = async (req: Request, res: Response) => {
     }
 
     // 🆕 Send notification if season is starting soon
-    if (isActive && startDate) {
+    if (effectiveIsActive && startDate) {
       const startDateObj = new Date(startDate);
       const now = new Date();
       const daysDifference = Math.ceil((startDateObj.getTime() - now.getTime()) / (1000 * 3600 * 24));
@@ -339,8 +356,21 @@ export const updateSeason = async (req: Request, res: Response) => {
   try {
     const currentSeason = await prisma.season.findUnique({
       where: { id },
-      select: { status: true, name: true }
+      select: { status: true, name: true, registeredUserCount: true }
     });
+
+    if (!currentSeason) {
+      return sendError(res, "Season not found.", 404);
+    }
+
+    const activeMembershipCount = await prisma.seasonMembership.count({
+      where: {
+        seasonId: id,
+        status: { in: ["ACTIVE", "PENDING"] as any },
+      },
+    });
+
+    const hasRegisteredPlayers = (currentSeason.registeredUserCount || 0) > 0 || activeMembershipCount > 0;
 
     const seasonData: Parameters<typeof updateSeasonService>[1] = {};
 
@@ -354,8 +384,8 @@ export const updateSeason = async (req: Request, res: Response) => {
     if (categoryId !== undefined) seasonData.categoryId = categoryId;
     if (isActive !== undefined) seasonData.isActive = isActive;
     if (status !== undefined) {
-      if (status && ["UPCOMING", "ACTIVE", "FINISHED", "CANCELLED"].includes(status)) {
-        seasonData.status = status as "UPCOMING" | "ACTIVE" | "FINISHED" | "CANCELLED";
+      if (status && ["UPCOMING", "ACTIVE", "REGISTER_INTEREST", "FINISHED", "CANCELLED"].includes(status)) {
+        seasonData.status = status as "UPCOMING" | "ACTIVE" | "REGISTER_INTEREST" | "FINISHED" | "CANCELLED";
       }
     }
     if (paymentRequired !== undefined) seasonData.paymentRequired = paymentRequired;
@@ -365,6 +395,39 @@ export const updateSeason = async (req: Request, res: Response) => {
     // Auto-disable payment for free seasons
     if (entryFee !== undefined && Number(entryFee) === 0) {
       seasonData.paymentRequired = false;
+    }
+
+    const requestedStatus = seasonData.status ?? (isActive === true ? "ACTIVE" : isActive === false ? "UPCOMING" : undefined);
+    if (currentSeason.status === "ACTIVE" && hasRegisteredPlayers) {
+      if (requestedStatus && (requestedStatus === "UPCOMING" || requestedStatus === "REGISTER_INTEREST")) {
+        return sendError(
+          res,
+          "Cannot change an active season with registered players to Upcoming or Register Interest. Only endDate can be updated.",
+          400
+        );
+      }
+
+      const hasNonEndDateChanges =
+        name !== undefined ||
+        startDate !== undefined ||
+        regiDeadline !== undefined ||
+        description !== undefined ||
+        entryFee !== undefined ||
+        leagueIds !== undefined ||
+        categoryId !== undefined ||
+        paymentRequired !== undefined ||
+        promoCodeSupported !== undefined ||
+        withdrawalEnabled !== undefined ||
+        isActive !== undefined ||
+        (status !== undefined && status !== "ACTIVE");
+
+      if (hasNonEndDateChanges) {
+        return sendError(
+          res,
+          "This active season already has registered players. Only endDate can be updated.",
+          400
+        );
+      }
     }
 
     const season = await updateSeasonService(id, seasonData);
@@ -584,10 +647,36 @@ export const updateSeasonStatus = async (req: Request, res: Response) => {
   try {
     const { status, isActive } = req.body as UpdateSeasonStatusBody;
 
+    const currentSeason = await prisma.season.findUnique({
+      where: { id },
+      select: { status: true, registeredUserCount: true },
+    });
+
+    if (!currentSeason) {
+      return sendError(res, "Season not found.", 404);
+    }
+
+    const activeMembershipCount = await prisma.seasonMembership.count({
+      where: {
+        seasonId: id,
+        status: { in: ["ACTIVE", "PENDING"] as any },
+      },
+    });
+    const hasRegisteredPlayers = (currentSeason.registeredUserCount || 0) > 0 || activeMembershipCount > 0;
+
+    const requestedStatus = status ?? (isActive === true ? "ACTIVE" : isActive === false ? "UPCOMING" : undefined);
+    if (currentSeason.status === "ACTIVE" && hasRegisteredPlayers && (requestedStatus === "UPCOMING" || requestedStatus === "REGISTER_INTEREST")) {
+      return sendError(
+        res,
+        "Cannot change an active season with registered players to Upcoming or Register Interest.",
+        400
+      );
+    }
+
     const statusUpdate: Parameters<typeof updateSeasonStatusService>[1] = {};
     if (status !== undefined) {
-      if (status && ["UPCOMING", "ACTIVE", "FINISHED", "CANCELLED"].includes(status)) {
-        statusUpdate.status = status as "UPCOMING" | "ACTIVE" | "FINISHED" | "CANCELLED";
+      if (status && ["UPCOMING", "ACTIVE", "REGISTER_INTEREST", "FINISHED", "CANCELLED"].includes(status)) {
+        statusUpdate.status = status as "UPCOMING" | "ACTIVE" | "REGISTER_INTEREST" | "FINISHED" | "CANCELLED";
       }
     }
     if (isActive !== undefined) statusUpdate.isActive = isActive;

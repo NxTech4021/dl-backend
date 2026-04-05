@@ -51,11 +51,16 @@ export class SeasonService {
       entryFee,
       leagueIds,
       categoryId,
+      status,
       isActive,
       paymentRequired,
       promoCodeSupported,
       withdrawalEnabled,
     } = data;
+
+    // Derive the canonical status to store in DB
+    const effectiveStatus = status ?? (isActive ? "ACTIVE" : "UPCOMING");
+    const effectiveIsActive = effectiveStatus === "ACTIVE";
 
     // Categories can be reused across multiple seasons (one-to-many relationship)
     // No validation check needed - a category can be linked to multiple seasons
@@ -63,16 +68,20 @@ export class SeasonService {
     return this.prisma.season.create({
       data: {
         name,
-        startDate: new Date(startDate),
-        endDate: new Date(endDate),
-        regiDeadline: regiDeadline ? getEndOfDayMalaysia(regiDeadline) : getEndOfDayMalaysia(endDate),
+        ...(startDate ? { startDate: new Date(startDate as string | Date) } : {}),
+        ...(endDate ? { endDate: new Date(endDate as string | Date) } : {}),
+        ...(regiDeadline
+          ? { regiDeadline: getEndOfDayMalaysia(regiDeadline) }
+          : endDate
+          ? { regiDeadline: getEndOfDayMalaysia(endDate) }
+          : {}),
         entryFee: new Prisma.Decimal(entryFee),
         description: description ?? null,
-        isActive: isActive ?? false,
+        isActive: effectiveIsActive,
         paymentRequired: paymentRequired ?? false,
         promoCodeSupported: promoCodeSupported ?? false,
         withdrawalEnabled: withdrawalEnabled ?? false,
-        status: isActive ? "ACTIVE" : "UPCOMING",
+        status: effectiveStatus as any,
         leagues: {
           connect: leagueIds.map(id => ({ id }))
         },
