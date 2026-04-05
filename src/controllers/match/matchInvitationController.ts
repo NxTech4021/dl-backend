@@ -7,7 +7,7 @@ import { Request, Response } from 'express';
 import { getMatchInvitationService } from '../../services/match/matchInvitationService';
 import { MatchType, MatchFormat, MatchStatus, MembershipStatus, ParticipantRole, InvitationStatus, JoinRequestStatus, MessageType, UserActionType } from '@prisma/client';
 import { prisma } from '../../lib/prisma';
-import { NotificationService } from '../../services/notificationService';
+import { notificationService } from '../../services/notificationService';
 import { NOTIFICATION_TYPES } from '../../types/notificationTypes';
 import { matchManagementNotifications } from '../../helpers/notifications/matchManagementNotifications';
 import { sendSuccess, sendError } from '../../utils/response';
@@ -34,7 +34,7 @@ const formatTime = (date: Date): string => {
 };
 
 const matchInvitationService = getMatchInvitationService();
-const notificationService = new NotificationService();
+// notificationService singleton imported from notificationService.ts
 
 /**
  * Create a new match with optional challenge
