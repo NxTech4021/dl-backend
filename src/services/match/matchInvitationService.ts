@@ -18,7 +18,7 @@ import {
 // Type alias until Prisma client is regenerated after migration
 type MatchFeeType = 'FREE' | 'SPLIT' | 'FIXED';
 import { logger } from '../../utils/logger';
-import { NotificationService } from '../notificationService';
+import { NotificationService, notificationService as notificationServiceSingleton } from '../notificationService';
 
 // Types
 export interface CreateMatchInput {
@@ -69,7 +69,7 @@ export class MatchInvitationService {
   private notificationService: NotificationService;
 
   constructor(notificationService?: NotificationService) {
-    this.notificationService = notificationService || new NotificationService();
+    this.notificationService = notificationService || notificationServiceSingleton;
   }
 
   /**
