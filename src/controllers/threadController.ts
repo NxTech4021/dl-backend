@@ -1215,8 +1215,9 @@ export const deleteMessage = async (req: Request, res: Response) => {
       return sendError(res, "Message already deleted", 400);
     }
 
-    // Only sender can delete their message
-    if (message.senderId !== userId) {
+    // Sender can always delete their own message. Admins can delete any message (moderation).
+    const isAdmin = req.user?.role === 'ADMIN' || req.user?.role === 'SUPERADMIN';
+    if (message.senderId !== userId && !isAdmin) {
       return sendError(res, "You can only delete your own messages", 403);
     }
 
