@@ -804,7 +804,7 @@ export const submitWithdrawalRequest = async (req: AuthenticatedRequest, res: Re
 export const processWithdrawalRequest = async (req: AuthenticatedRequest, res: Response) => {
   const { id } = req.params;
   const processedByAdminId = req.user?.id;
-  const { status } = req.body as ProcessWithdrawalRequestBody;
+  const { status, adminNotes } = req.body as ProcessWithdrawalRequestBody & { adminNotes?: string };
 
   if (!processedByAdminId) {
     return sendError(res, "Unauthorized", 401);
@@ -822,14 +822,19 @@ export const processWithdrawalRequest = async (req: AuthenticatedRequest, res: R
     const result = await processWithdrawalRequestService(
       id,
       status as "APPROVED" | "REJECTED",
-      processedByAdminId
+      processedByAdminId,
+      adminNotes?.trim()
     );
 
-    // 🆕 Send notification to user about withdrawal decision
+    // Send notification to user about withdrawal decision
     const withdrawalRequest = await prisma.withdrawalRequest.findUnique({
       where: { id },
       include: {
-        season: { select: { name: true } }
+        season: { select: { name: true } },
+        partnership: {
+          select: { captainId: true, partnerId: true }
+        },
+        user: { select: { name: true } }
       }
     });
 
@@ -852,12 +857,36 @@ export const processWithdrawalRequest = async (req: AuthenticatedRequest, res: R
         };
       }
 
+      // Notify the requesting player
       await notificationService.createNotification({
         userIds: withdrawalRequest.userId,
         ...notificationData,
         seasonId: withdrawalRequest.seasonId,
         withdrawalRequestId: id
       });
+
+      // Notify the remaining partner when a doubles withdrawal is approved
+      if (status === 'APPROVED' && withdrawalRequest.partnership) {
+        const remainingPartnerId = withdrawalRequest.partnership.captainId === withdrawalRequest.userId
+          ? withdrawalRequest.partnership.partnerId
+          : withdrawalRequest.partnership.captainId;
+
+        if (remainingPartnerId) {
+          try {
+            const withdrawingPlayerName = withdrawalRequest.user?.name || 'Your partner';
+            await notificationService.createNotification({
+              userIds: remainingPartnerId,
+              type: NOTIFICATION_TYPES.PARTNERSHIP_DISSOLVED,
+              category: 'GENERAL' as const,
+              title: 'Partnership Dissolved',
+              message: `${withdrawingPlayerName} has withdrawn from ${withdrawalRequest.season.name}. Your partnership has been dissolved. You can find a new partner in Team Pairing.`,
+              seasonId: withdrawalRequest.seasonId,
+            });
+          } catch (partnerNotifError) {
+            console.warn('Failed to notify remaining partner:', partnerNotifError);
+          }
+        }
+      }
     }
 
     return sendSuccess(res, result);
