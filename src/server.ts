@@ -12,6 +12,7 @@ import { expireOldSeasonInvitations } from "./services/seasonInvitationService";
 import { expireOldRequests } from "./services/pairingService";
 import { getInactivityService } from "./services/inactivityService";
 import { notificationService } from "./services/notificationService";
+import { getAdminUserIds } from "./services/notification/notificationPreferenceService";
 import { INACTIVITY_CONFIG } from "./config/inactivity.config";
 import { initializeNotificationJobs, schedulePushTokenCleanup, scheduleMatchStreakReEvaluation, scheduleSeasonAutoFinish } from "./jobs/notificationJobs";
 import { getMatchInvitationService } from "./services/match/matchInvitationService";
@@ -134,6 +135,22 @@ cron.schedule("0 * * * *", async () => {
         walkoversChecked: walkoverResults.walkoversChecked,
         walkoversCompleted: walkoverResults.walkoversCompleted,
       });
+
+      // Notify admins about auto-completed walkovers
+      try {
+        const adminIds = await getAdminUserIds();
+        if (adminIds.length > 0) {
+          await notificationService.createNotification({
+            type: 'ADMIN_MESSAGE',
+            category: 'ADMIN',
+            title: 'Walkovers Auto-Completed',
+            message: `${walkoverResults.walkoversCompleted} walkover(s) auto-completed after 24h dispute window expired.`,
+            userIds: adminIds,
+          });
+        }
+      } catch (notifError) {
+        logger.warn('Failed to notify admins about auto-completed walkovers', { error: notifError });
+      }
     }
   } catch (error) {
     logger.error("Cron: Failed auto-approval/walkover check", {}, error instanceof Error ? error : new Error(String(error)));
