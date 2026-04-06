@@ -92,6 +92,27 @@ export const createFriendlyMatch = async (req: Request, res: Response) => {
       return sendError(res, 'Valid matchType (SINGLES/DOUBLES) is required', 400);
     }
 
+    // Check for active suspension before allowing match creation
+    const activePenalty = await prisma.playerPenalty.findFirst({
+      where: {
+        userId,
+        penaltyType: 'SUSPENSION',
+        status: 'ACTIVE',
+        OR: [
+          { expiresAt: null },
+          { expiresAt: { gte: new Date() } },
+        ],
+      },
+      select: { id: true, reason: true, expiresAt: true },
+    });
+
+    if (activePenalty) {
+      const expiryMsg = activePenalty.expiresAt
+        ? ` Suspension ends ${activePenalty.expiresAt.toLocaleDateString()}.`
+        : '';
+      return sendError(res, `You are currently suspended and cannot create matches.${expiryMsg}`, 403);
+    }
+
     if (!matchDate) {
       return sendError(res, 'matchDate is required', 400);
     }
@@ -404,6 +425,27 @@ export const joinFriendlyMatch = async (req: Request, res: Response) => {
     }
 
     const { asPartner = false, partnerId } = req.body;
+
+    // Check for active suspension before allowing join
+    const activePenalty = await prisma.playerPenalty.findFirst({
+      where: {
+        userId,
+        penaltyType: 'SUSPENSION',
+        status: 'ACTIVE',
+        OR: [
+          { expiresAt: null },
+          { expiresAt: { gte: new Date() } },
+        ],
+      },
+      select: { id: true, reason: true, expiresAt: true },
+    });
+
+    if (activePenalty) {
+      const expiryMsg = activePenalty.expiresAt
+        ? ` Suspension ends ${activePenalty.expiresAt.toLocaleDateString()}.`
+        : '';
+      return sendError(res, `You are currently suspended and cannot join matches.${expiryMsg}`, 403);
+    }
 
     const match = await friendlyMatchService.joinFriendlyMatch(id, userId, asPartner, partnerId);
 
