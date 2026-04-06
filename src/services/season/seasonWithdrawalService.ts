@@ -113,7 +113,8 @@ export async function submitWithdrawalRequest(
 export async function processWithdrawalRequest(
   requestId: string,
   status: "APPROVED" | "REJECTED",
-  processedByAdminId: string
+  processedByAdminId: string,
+  adminNotes?: string
 ): Promise<FormattedWithdrawalRequest> {
   // Validate withdrawal request exists and is pending
   const validation = await validateWithdrawalRequestForProcessing(requestId);
@@ -131,7 +132,9 @@ export async function processWithdrawalRequest(
       where: { id: requestId },
       data: {
         status: status,
-        processedByAdminId: processedByAdminId
+        processedByAdminId: processedByAdminId,
+        adminNotes: adminNotes || null,
+        processedAt: new Date(),
       },
       include: {
         processedByAdmin: {
