@@ -382,14 +382,24 @@ export class AdminMatchService {
   async getDisputes(filters: {
     status?: DisputeStatus[];
     priority?: DisputePriority;
+    category?: string;
+    search?: string;
     page?: number;
     limit?: number;
   }) {
-    const { status, priority, page = 1, limit = 20 } = filters;
+    const { status, priority, category, search, page = 1, limit = 20 } = filters;
 
     const where: any = {};
     if (status && status.length > 0) where.status = { in: status };
     if (priority) where.priority = priority;
+    if (category) where.disputeCategory = category;
+    if (search) {
+      where.OR = [
+        { raisedByUser: { name: { contains: search, mode: 'insensitive' } } },
+        { raisedByUser: { username: { contains: search, mode: 'insensitive' } } },
+        { disputeComment: { contains: search, mode: 'insensitive' } },
+      ];
+    }
 
     const [disputes, total] = await Promise.all([
       prisma.matchDispute.findMany({
@@ -531,7 +541,7 @@ export class AdminMatchService {
       });
     }
 
-    return prisma.matchDispute.update({
+    const updatedDispute = await prisma.matchDispute.update({
       where: { id: disputeId },
       data: {
         status: DisputeStatus.UNDER_REVIEW,
@@ -550,6 +560,25 @@ export class AdminMatchService {
         resolvedByAdmin: { include: { user: true } }
       }
     });
+
+    // Notify match participants that their dispute is being reviewed
+    try {
+      const participantIds = updatedDispute.match?.participants?.map(p => p.userId).filter(Boolean) || [];
+      if (participantIds.length > 0) {
+        await this.notificationService.createNotification({
+          userIds: participantIds,
+          type: 'ADMIN_MESSAGE',
+          category: 'MATCH',
+          title: 'Dispute Under Review',
+          message: 'Your match dispute is now being reviewed by an admin. You will be notified when a decision is made.',
+          matchId: updatedDispute.matchId,
+        });
+      }
+    } catch (notifError) {
+      logger.warn('Failed to notify parties about dispute review start', { disputeId, error: notifError });
+    }
+
+    return updatedDispute;
   }
 
   /**
