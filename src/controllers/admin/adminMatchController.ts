@@ -131,7 +131,7 @@ export const getMatchById = async (req: Request, res: Response) => {
  */
 export const getDisputes = async (req: Request, res: Response) => {
   try {
-    const { status, priority, page = '1', limit = '20' } = req.query;
+    const { status, priority, category, search, page = '1', limit = '20' } = req.query;
 
     const disputeFilters: any = {
       page: parseInt(page as string),
@@ -140,6 +140,8 @@ export const getDisputes = async (req: Request, res: Response) => {
 
     if (status) disputeFilters.status = (status as string).split(',') as DisputeStatus[];
     if (priority) disputeFilters.priority = priority as DisputePriority;
+    if (category) disputeFilters.category = category as string;
+    if (search) disputeFilters.search = search as string;
 
     const result = await adminMatchService.getDisputes(disputeFilters);
 
