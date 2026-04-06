@@ -190,7 +190,9 @@ export async function getInactivityStats(req: Request, res: Response) {
     const warningMs = thresholds.warningDays * 24 * 60 * 60 * 1000;
 
     const warningDate = new Date(Date.now() - warningMs);
-    const gracePeriodDate = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000); // 14-day grace
+    // TODO(#048): Read from INACTIVITY_CONFIG.EXCLUSIONS.NEW_USER_GRACE_PERIOD instead of hardcoding 14.
+    // Currently matches the config value but would diverge if config changes.
+    const gracePeriodDate = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000);
 
     // Get counts by status
     const [activeCount, inactiveCount, atRiskCount] = await Promise.all([

@@ -90,6 +90,10 @@ export class InactivityService {
     const daysSinceLastMatch = await this.getDaysSinceLastMatch(userId);
     const daysSinceRegistration = this.calculateDaysSince(createdAt);
 
+    // Fixed milestone notifications (from DEUCE Notifications Masterlist).
+    // These fire at exact day counts regardless of admin-configured thresholds.
+    // The configurable threshold warnings (lines below) are separate and additive.
+
     // --- 1. 7 days since last match (Inactive Player Warning - 7 Days)
     if (daysSinceLastMatch === 7) {
       const notif = leagueLifecycleNotifications.inactivePlayerWarning7Days();
