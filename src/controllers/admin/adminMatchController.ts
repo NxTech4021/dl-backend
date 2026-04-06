@@ -23,6 +23,7 @@ import {
 } from '@prisma/client';
 import { sendSuccess, sendPaginated, sendError } from '../../utils/response';
 import { prisma } from '../../lib/prisma';
+import { notificationService } from '../../services/notificationService';
 
 const adminMatchService = getAdminMatchService();
 const participantService = new AdminMatchParticipantService();
@@ -361,13 +362,32 @@ export const voidMatch = async (req: Request, res: Response) => {
       return sendError(res, 'Match ID is required', 400);
     }
 
-    const { reason } = req.body;
+    const { reason, notifyParticipants = false } = req.body;
 
     if (!reason) {
       return sendError(res, 'reason is required', 400);
     }
 
     const match = await adminMatchService.voidMatch(id, adminId, reason);
+
+    // Notify participants if requested
+    if (notifyParticipants && match?.participants) {
+      try {
+        const participantIds = match.participants.map((p: any) => p.userId).filter(Boolean);
+        if (participantIds.length > 0) {
+          await notificationService.createNotification({
+            userIds: participantIds,
+            type: 'ADMIN_MESSAGE',
+            category: 'MATCH',
+            title: 'Match Voided',
+            message: `Your match has been voided by an admin. Reason: ${reason}`,
+            matchId: id,
+          });
+        }
+      } catch (notifError) {
+        console.warn('Failed to notify participants about voided match:', notifError);
+      }
+    }
 
     // Log admin action
     await logMatchAction(
