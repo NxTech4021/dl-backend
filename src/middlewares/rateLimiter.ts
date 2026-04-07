@@ -141,6 +141,23 @@ export const pushTokenLimiter = rateLimit({
   ),
 });
 
+// ── Match comment limiter — prevent comment spam ───────────────────────────
+// Applied to: POST /:id/comment (both league and friendly)
+// 20 comments per 5 minutes per user. Comments are between 2-4 match
+// participants so volume is naturally low, but this prevents automated spam
+// via direct API calls that bypass the frontend's isSubmitting guard.
+export const commentLimiter = rateLimit({
+  windowMs: 5 * 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: userKeyGenerator,
+  handler: makeHandler(
+    'COMMENT_RATE_LIMIT_EXCEEDED',
+    'Too many comments. Please slow down.'
+  ),
+});
+
 // ── Crash report limiter — public endpoint protection ──────────────────────
 // Applied to: POST /crash-reports
 // 20 per 15 minutes per user (or IP if anonymous).
