@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { verifyAuth } from "../middlewares/auth.middleware";
-import { matchJoinLimiter, scoreSubmissionLimiter } from '../middlewares/rateLimiter';
+import { matchJoinLimiter, scoreSubmissionLimiter, commentLimiter } from '../middlewares/rateLimiter';
 import {
   updateMatch,
   deleteMatch,
@@ -107,7 +107,7 @@ matchRoutes.post('/:id/continue', continueMatch);
 
 // Comments
 matchRoutes.get('/:id/comments', getMatchComments);
-matchRoutes.post('/:id/comment', postMatchComment);
+matchRoutes.post('/:id/comment', commentLimiter, postMatchComment);
 matchRoutes.put('/:id/comment/:commentId', updateMatchComment);
 matchRoutes.delete('/:id/comment/:commentId', deleteMatchComment);
 
