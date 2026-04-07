@@ -219,16 +219,52 @@ export async function updateSeason(id: string, data: UpdateSeasonInput) {
 export async function deleteSeason(seasonId: string) {
   const season = await prisma.season.findUnique({
     where: { id: seasonId },
-    select: { id: true, registeredUserCount: true, name: true },
+    select: { id: true, name: true, registeredUserCount: true },
   });
 
   if (!season) {
     throw new Error("Season not found.");
   }
 
-  if (season.registeredUserCount > 0) {
+  // Use real membership count — registeredUserCount is denormalized and can drift
+  const actualMembershipCount = await prisma.seasonMembership.count({
+    where: {
+      seasonId,
+      status: { in: ['ACTIVE', 'PENDING'] },
+    },
+  });
+
+  if (actualMembershipCount > 0) {
     throw new Error(
-      "Cannot delete season: there are registered users."
+      `Cannot delete season: ${actualMembershipCount} active/pending member(s) exist. Remove or withdraw them first.`
+    );
+  }
+
+  // Check for active partnerships
+  const activePartnershipCount = await prisma.partnership.count({
+    where: {
+      seasonId,
+      status: { in: ['ACTIVE', 'INCOMPLETE'] },
+    },
+  });
+
+  if (activePartnershipCount > 0) {
+    throw new Error(
+      `Cannot delete season: ${activePartnershipCount} active partnership(s) exist. Dissolve them first.`
+    );
+  }
+
+  // Check for non-terminal matches
+  const activeMatchCount = await prisma.match.count({
+    where: {
+      division: { seasonId },
+      status: { notIn: ['COMPLETED', 'CANCELLED', 'VOID'] },
+    },
+  });
+
+  if (activeMatchCount > 0) {
+    throw new Error(
+      `Cannot delete season: ${activeMatchCount} active match(es) exist. Complete, cancel, or void them first.`
     );
   }
 
