@@ -267,17 +267,7 @@ export class MatchInvitationService {
           }
         });
 
-        // Send notification to partner
-        // await NotificationService.sendNotification({
-        //   userId: partnerId,
-        //   type: 'MATCH_INVITATION',
-        //   title: 'Match Invitation',
-        //   message: `Your partner has invited you to join a ${matchType.toLowerCase()} match`,
-        //   data: {
-        //     matchId: newMatch.id,
-        //     inviterId: createdById
-        //   }
-        // });
+        // Partner notification handled post-transaction by sendMatchInvitationNotifications()
       }
 
       // Handle direct challenge to opponent
