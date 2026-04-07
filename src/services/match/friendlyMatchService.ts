@@ -147,164 +147,149 @@ export class FriendlyMatchService {
       ? new Date(Date.now() + 24 * 60 * 60 * 1000) // 24 hours
       : null;
 
-    // Create match with isFriendly = true
-    const match = await prisma.match.create({
-      data: {
-        isFriendly: true,
-        isFriendlyRequest: isRequest && requestRecipientId ? true : false,
-        requestRecipientId: isRequest && requestRecipientId ? requestRecipientId : null,
-        requestExpiresAt: requestExpiresAt,
-        requestStatus: isRequest && requestRecipientId ? InvitationStatus.PENDING : null,
-        sport,
-        matchType,
-        format,
-        matchDate,
-        location,
-        venue,
-        notes,
-        duration,
-        courtBooked,
-        fee: fee as any,
-        feeAmount: feeAmount ? feeAmount : null,
-        genderRestriction: genderRestriction || null,
-        skillLevels: skillLevels as any, // Prisma will handle string array
-        status: MatchStatus.SCHEDULED,
-        createdById,
-        // No divisionId, leagueId, seasonId for friendly matches
-      } as any,
-      include: {
-        createdBy: {
-          select: { id: true, name: true, username: true, image: true }
-        },
-        participants: {
-          include: {
-            user: {
-              select: { id: true, name: true, username: true, image: true }
-            }
-          }
+    // Atomic creation: match + participants + invitations in a single transaction
+    // Prevents orphaned matches on partial failure (consistent with league match pattern)
+    const match = await prisma.$transaction(async (tx) => {
+      // Create match with isFriendly = true
+      const newMatch = await tx.match.create({
+        data: {
+          isFriendly: true,
+          isFriendlyRequest: isRequest && requestRecipientId ? true : false,
+          requestRecipientId: isRequest && requestRecipientId ? requestRecipientId : null,
+          requestExpiresAt: requestExpiresAt,
+          requestStatus: isRequest && requestRecipientId ? InvitationStatus.PENDING : null,
+          sport,
+          matchType,
+          format,
+          matchDate,
+          location,
+          venue,
+          notes,
+          duration,
+          courtBooked,
+          fee: fee as any,
+          feeAmount: feeAmount ? feeAmount : null,
+          genderRestriction: genderRestriction || null,
+          skillLevels: skillLevels as any,
+          status: MatchStatus.SCHEDULED,
+          createdById,
+        } as any,
+      });
+
+      // Add creator as participant
+      await tx.matchParticipant.create({
+        data: {
+          matchId: newMatch.id,
+          userId: createdById,
+          role: ParticipantRole.CREATOR,
+          invitationStatus: InvitationStatus.ACCEPTED,
+          acceptedAt: new Date(),
+          team: 'team1'
         }
-      }
-    });
+      });
 
-    // Add creator as participant
-    await prisma.matchParticipant.create({
-      data: {
-        matchId: match.id,
-        userId: createdById,
-        role: ParticipantRole.CREATOR,
-        invitationStatus: InvitationStatus.ACCEPTED,
-        acceptedAt: new Date(),
-        team: 'team1'
-      }
-    });
-
-    // Handle direct challenge (opponent specified)
-    if (opponentId) {
-      if (matchType === MatchType.SINGLES) {
-        // Add opponent
-        await prisma.matchParticipant.create({
-          data: {
-            matchId: match.id,
-            userId: opponentId,
-            role: ParticipantRole.OPPONENT,
-            invitationStatus: InvitationStatus.PENDING,
-            team: 'team2'
-          }
-        });
-
-        // Create invitation
+      // Handle direct challenge (opponent specified)
+      if (opponentId) {
         const expiresAt = new Date();
         expiresAt.setHours(expiresAt.getHours() + expiresInHours);
 
-        await prisma.matchInvitation.create({
-          data: {
-            matchId: match.id,
-            inviterId: createdById,
-            inviteeId: opponentId,
-            status: InvitationStatus.PENDING,
-            message: message || null,
-            expiresAt
-          }
-        });
-      } else if (matchType === MatchType.DOUBLES) {
-        // Doubles: need partner and opponent partner
-        if (!partnerId || !opponentPartnerId) {
-          throw new Error('partnerId and opponentPartnerId are required for doubles matches');
-        }
-
-        // Add partner
-        await prisma.matchParticipant.create({
-          data: {
-            matchId: match.id,
-            userId: partnerId,
-            role: ParticipantRole.PARTNER,
-            invitationStatus: InvitationStatus.PENDING,
-            team: 'team1'
-          }
-        });
-
-        // Add opponent
-        await prisma.matchParticipant.create({
-          data: {
-            matchId: match.id,
-            userId: opponentId,
-            role: ParticipantRole.OPPONENT,
-            invitationStatus: InvitationStatus.PENDING,
-            team: 'team2'
-          }
-        });
-
-        // Add opponent partner
-        await prisma.matchParticipant.create({
-          data: {
-            matchId: match.id,
-            userId: opponentPartnerId,
-            role: ParticipantRole.OPPONENT,
-            invitationStatus: InvitationStatus.PENDING,
-            team: 'team2'
-          }
-        });
-
-        // Create invitations
-        const expiresAt = new Date();
-        expiresAt.setHours(expiresAt.getHours() + expiresInHours);
-
-        await Promise.all([
-          prisma.matchInvitation.create({
+        if (matchType === MatchType.SINGLES) {
+          await tx.matchParticipant.create({
             data: {
-              matchId: match.id,
-              inviterId: createdById,
-              inviteeId: partnerId,
-              status: InvitationStatus.PENDING,
-              message: message || null,
-              expiresAt
+              matchId: newMatch.id,
+              userId: opponentId,
+              role: ParticipantRole.OPPONENT,
+              invitationStatus: InvitationStatus.PENDING,
+              team: 'team2'
             }
-          }),
-          prisma.matchInvitation.create({
+          });
+
+          await tx.matchInvitation.create({
             data: {
-              matchId: match.id,
+              matchId: newMatch.id,
               inviterId: createdById,
               inviteeId: opponentId,
               status: InvitationStatus.PENDING,
               message: message || null,
               expiresAt
             }
-          }),
-          prisma.matchInvitation.create({
-            data: {
-              matchId: match.id,
-              inviterId: createdById,
-              inviteeId: opponentPartnerId,
-              status: InvitationStatus.PENDING,
-              message: message || null,
-              expiresAt
-            }
-          })
-        ]);
-      }
-    }
+          });
+        } else if (matchType === MatchType.DOUBLES) {
+          if (!partnerId || !opponentPartnerId) {
+            throw new Error('partnerId and opponentPartnerId are required for doubles matches');
+          }
 
-    // Fetch full match with all relations
+          // Add partner + opponent + opponent partner
+          await Promise.all([
+            tx.matchParticipant.create({
+              data: {
+                matchId: newMatch.id,
+                userId: partnerId,
+                role: ParticipantRole.PARTNER,
+                invitationStatus: InvitationStatus.PENDING,
+                team: 'team1'
+              }
+            }),
+            tx.matchParticipant.create({
+              data: {
+                matchId: newMatch.id,
+                userId: opponentId,
+                role: ParticipantRole.OPPONENT,
+                invitationStatus: InvitationStatus.PENDING,
+                team: 'team2'
+              }
+            }),
+            tx.matchParticipant.create({
+              data: {
+                matchId: newMatch.id,
+                userId: opponentPartnerId,
+                role: ParticipantRole.OPPONENT,
+                invitationStatus: InvitationStatus.PENDING,
+                team: 'team2'
+              }
+            }),
+          ]);
+
+          // Create invitations for all 3 invitees
+          await Promise.all([
+            tx.matchInvitation.create({
+              data: {
+                matchId: newMatch.id,
+                inviterId: createdById,
+                inviteeId: partnerId,
+                status: InvitationStatus.PENDING,
+                message: message || null,
+                expiresAt
+              }
+            }),
+            tx.matchInvitation.create({
+              data: {
+                matchId: newMatch.id,
+                inviterId: createdById,
+                inviteeId: opponentId,
+                status: InvitationStatus.PENDING,
+                message: message || null,
+                expiresAt
+              }
+            }),
+            tx.matchInvitation.create({
+              data: {
+                matchId: newMatch.id,
+                inviterId: createdById,
+                inviteeId: opponentPartnerId,
+                status: InvitationStatus.PENDING,
+                message: message || null,
+                expiresAt
+              }
+            })
+          ]);
+        }
+      }
+
+      return newMatch;
+    });
+
+    // Fetch full match with all relations (outside transaction — read-only)
     const fullMatch = await prisma.match.findUnique({
       where: { id: match.id },
       include: {
@@ -617,9 +602,9 @@ export class FriendlyMatchService {
       }
     }
 
-    // Validate skill level (if user has skill level info - this would need to be stored in User model or fetched from ratings)
-    // For now, we'll skip this validation as skill level isn't stored on User model
-    // This can be enhanced later by checking user's rating or adding skillLevel to User model
+    // TODO(skill-validation): Skill level validation skipped — skillLevel not stored on User model.
+    // Match lists skill levels for self-filtering; backend doesn't block mismatched joins.
+    // To enforce: add skillLevel field to User model, then compare against match.skillLevels.
 
     // Determine role and team
     let role: ParticipantRole;
@@ -855,7 +840,8 @@ export class FriendlyMatchService {
         throw new Error('Match result is pending opponent confirmation');
       }
 
-      if ((freshMatch as any).resultSubmittedById) {
+      // Allow re-submission for UNFINISHED matches (user completing the match)
+      if ((freshMatch as any).resultSubmittedById && freshMatch.status !== MatchStatus.UNFINISHED) {
         throw new Error('A result has already been submitted for this match');
       }
 
