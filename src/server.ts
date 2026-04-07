@@ -12,8 +12,9 @@ import { expireOldSeasonInvitations } from "./services/seasonInvitationService";
 import { expireOldRequests } from "./services/pairingService";
 import { getInactivityService } from "./services/inactivityService";
 import { notificationService } from "./services/notificationService";
+import { getAdminUserIds } from "./services/notification/notificationPreferenceService";
 import { INACTIVITY_CONFIG } from "./config/inactivity.config";
-import { initializeNotificationJobs, schedulePushTokenCleanup, scheduleMatchStreakReEvaluation, scheduleSeasonAutoFinish } from "./jobs/notificationJobs";
+import { initializeCoreNotificationJobs, schedulePushTokenCleanup, scheduleMatchStreakReEvaluation, scheduleSeasonAutoFinish } from "./jobs/notificationJobs";
 import { getMatchInvitationService } from "./services/match/matchInvitationService";
 import { getMatchResultService } from "./services/match/matchResultService";
 import { logger } from "./utils/logger";
@@ -134,16 +135,39 @@ cron.schedule("0 * * * *", async () => {
         walkoversChecked: walkoverResults.walkoversChecked,
         walkoversCompleted: walkoverResults.walkoversCompleted,
       });
+
+      // Notify admins about auto-completed walkovers
+      try {
+        const adminIds = await getAdminUserIds();
+        if (adminIds.length > 0) {
+          await notificationService.createNotification({
+            type: 'ADMIN_MESSAGE',
+            category: 'ADMIN',
+            title: 'Walkovers Auto-Completed',
+            message: `${walkoverResults.walkoversCompleted} walkover(s) auto-completed after 24h dispute window expired.`,
+            userIds: adminIds,
+          });
+        }
+      } catch (notifError) {
+        logger.warn('Failed to notify admins about auto-completed walkovers', { error: notifError });
+      }
     }
   } catch (error) {
     logger.error("Cron: Failed auto-approval/walkover check", {}, error instanceof Error ? error : new Error(String(error)));
   }
 }, CRON_TZ);
 
-// Phase 1 — Safe crons (DB operations only, no user notifications)
+// Infrastructure crons (DB maintenance, no user-facing notifications)
 schedulePushTokenCleanup();
 scheduleMatchStreakReEvaluation();
 scheduleSeasonAutoFinish();
 
-// Phase 2+ — All notification jobs (enable when push tokens verified & dedup tested)
-// initializeNotificationJobs();
+// Core notification crons (match reminders, season lifecycle, registration deadlines)
+// Tier 1+2: 14 crons — safe, dedup-protected, essential for user experience
+initializeCoreNotificationJobs();
+
+// TODO(production): When ready for full analytics notifications, replace with:
+//   import { initializeAllNotificationJobs } from "./jobs/notificationJobs";
+//   initializeAllNotificationJobs();
+// This adds Tier 3: mid-season updates, weekly rankings, monthly DMR recaps, profile reminders.
+// See notificationJobs.ts for prerequisites before enabling.

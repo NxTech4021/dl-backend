@@ -212,6 +212,7 @@ export async function sendScoreSubmissionReminder(matchId: string): Promise<void
       where: { id: matchId },
       select: {
         participants: {
+          where: { invitationStatus: 'ACCEPTED' },
           include: {
             user: {
               select: { id: true, name: true }
@@ -221,29 +222,35 @@ export async function sendScoreSubmissionReminder(matchId: string): Promise<void
       },
     });
 
+    // Only send if at least 2 accepted participants (singles) or 4 (doubles)
     if (!match || match.participants.length < 2) return;
 
-    const player1 = match.participants[0];
-    const player2 = match.participants[1];
+    const acceptedUserIds = match.participants
+      .map(p => p.userId)
+      .filter((id): id is string => id !== null);
 
-    if (!player1 || !player2) return;
+    if (acceptedUserIds.length < 2) return;
 
     const reminderNotif = notificationTemplates.match.scoreSubmissionReminder;
 
-    await Promise.all([
-      notificationService.createNotification({
-        ...reminderNotif(player2.user?.name || 'Opponent'),
-        userIds: player1.userId,
-        matchId,
-      }),
-      notificationService.createNotification({
-        ...reminderNotif(player1.user?.name || 'Opponent'),
-        userIds: player2.userId,
-        matchId,
-      }),
-    ]);
+    // Send to each accepted participant with opponent name context
+    for (const participant of match.participants) {
+      if (!participant.userId) continue;
 
-    logger.info('Score submission reminder sent', { matchId });
+      // Find an opponent name for context
+      const opponent = match.participants.find(p =>
+        p.userId !== participant.userId && p.team !== participant.team
+      );
+      const opponentName = opponent?.user?.name || 'Opponent';
+
+      await notificationService.createNotification({
+        ...reminderNotif(opponentName),
+        userIds: participant.userId,
+        matchId,
+      });
+    }
+
+    logger.info('Score submission reminder sent', { matchId, participantCount: acceptedUserIds.length });
   } catch (error) {
     logger.error('Failed to send score submission reminder', { matchId }, error as Error);
   }

@@ -463,20 +463,57 @@ export class SeasonService {
   async deleteSeason(seasonId: string) {
     const season = await this.prisma.season.findUnique({
       where: { id: seasonId },
-      select: { id: true, registeredUserCount: true },
+      select: { id: true, name: true, registeredUserCount: true },
     });
 
     if (!season) {
       throw new Error("Season not found.");
     }
 
-    if (season.registeredUserCount > 0) {
+    // Use real membership count — registeredUserCount is denormalized and can drift
+    // (multiple code paths create memberships without incrementing the counter)
+    const actualMembershipCount = await this.prisma.seasonMembership.count({
+      where: {
+        seasonId,
+        status: { in: ['ACTIVE', 'PENDING'] },
+      },
+    });
+
+    if (actualMembershipCount > 0) {
       throw new Error(
-        "Cannot delete season: there are registered users."
+        `Cannot delete season: ${actualMembershipCount} active/pending member(s) exist. Remove or withdraw them first.`
       );
     }
 
-    // Safe to delete
+    // Also check for active partnerships (could exist without memberships in edge cases)
+    const activePartnershipCount = await this.prisma.partnership.count({
+      where: {
+        seasonId,
+        status: { in: ['ACTIVE', 'INCOMPLETE'] },
+      },
+    });
+
+    if (activePartnershipCount > 0) {
+      throw new Error(
+        `Cannot delete season: ${activePartnershipCount} active partnership(s) exist. Dissolve them first.`
+      );
+    }
+
+    // Also check for non-terminal matches
+    const activeMatchCount = await this.prisma.match.count({
+      where: {
+        division: { seasonId },
+        status: { notIn: ['COMPLETED', 'CANCELLED', 'VOID'] },
+      },
+    });
+
+    if (activeMatchCount > 0) {
+      throw new Error(
+        `Cannot delete season: ${activeMatchCount} active match(es) exist. Complete, cancel, or void them first.`
+      );
+    }
+
+    // Safe to delete — Prisma cascades handle remaining relations
     return this.prisma.season.delete({
       where: { id: seasonId },
     });
@@ -501,8 +538,8 @@ export class SeasonService {
     });
     if (existingMembership) throw new Error("User already registered for this season");
 
-    // If payLater is true (development only), set payment status to COMPLETED
-    // Otherwise, use the season's paymentRequired flag
+    // payLater=true: "Register now, pay before deadline" flow — membership immediately ACTIVE.
+    // payLater=false: if season requires payment → PENDING until FIUU confirms; if free → COMPLETED.
     const paymentStatus = payLater
       ? PaymentStatus.COMPLETED
       : (season.paymentRequired ? PaymentStatus.PENDING : PaymentStatus.COMPLETED);

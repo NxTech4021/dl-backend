@@ -4,7 +4,7 @@
  */
 
 import { Router } from 'express';
-import { verifyAuth, requireAdmin } from '../middlewares/auth.middleware';
+// Auth middleware already applied by parent adminRoutes.ts (verifyAuth + requireAdmin)
 import {
   getAdminDivisionRatings,
   getAdminDivisionSummary,
@@ -23,10 +23,6 @@ import {
 } from '../controllers/adminRatingController';
 
 const router = Router();
-
-// All routes require admin authentication
-router.use(verifyAuth);
-router.use(requireAdmin);
 
 // Division ratings
 router.get('/division/:divisionId', getAdminDivisionRatings);

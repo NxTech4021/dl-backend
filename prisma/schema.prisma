@@ -529,6 +529,8 @@ model WithdrawalRequest {
   requestDate        DateTime         @default(now())
   status             WithdrawalStatus @default(PENDING)
   processedByAdminId String?
+  adminNotes         String?          @db.Text // Admin's reason for approval/rejection
+  processedAt        DateTime?        // When the request was processed
   partnershipId      String? // For partner change requests
 
   user             User           @relation("WithdrawalRequester", fields: [userId], references: [id])

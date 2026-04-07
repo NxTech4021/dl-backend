@@ -382,14 +382,24 @@ export class AdminMatchService {
   async getDisputes(filters: {
     status?: DisputeStatus[];
     priority?: DisputePriority;
+    category?: string;
+    search?: string;
     page?: number;
     limit?: number;
   }) {
-    const { status, priority, page = 1, limit = 20 } = filters;
+    const { status, priority, category, search, page = 1, limit = 20 } = filters;
 
     const where: any = {};
     if (status && status.length > 0) where.status = { in: status };
     if (priority) where.priority = priority;
+    if (category) where.disputeCategory = category;
+    if (search) {
+      where.OR = [
+        { raisedByUser: { name: { contains: search, mode: 'insensitive' } } },
+        { raisedByUser: { username: { contains: search, mode: 'insensitive' } } },
+        { disputeComment: { contains: search, mode: 'insensitive' } },
+      ];
+    }
 
     const [disputes, total] = await Promise.all([
       prisma.matchDispute.findMany({
@@ -531,7 +541,7 @@ export class AdminMatchService {
       });
     }
 
-    return prisma.matchDispute.update({
+    const updatedDispute = await prisma.matchDispute.update({
       where: { id: disputeId },
       data: {
         status: DisputeStatus.UNDER_REVIEW,
@@ -550,6 +560,25 @@ export class AdminMatchService {
         resolvedByAdmin: { include: { user: true } }
       }
     });
+
+    // Notify match participants that their dispute is being reviewed
+    try {
+      const participantIds = updatedDispute.match?.participants?.map(p => p.userId).filter(Boolean) || [];
+      if (participantIds.length > 0) {
+        await this.notificationService.createNotification({
+          userIds: participantIds,
+          type: 'ADMIN_MESSAGE',
+          category: 'MATCH',
+          title: 'Dispute Under Review',
+          message: 'Your match dispute is now being reviewed by an admin. You will be notified when a decision is made.',
+          matchId: updatedDispute.matchId,
+        });
+      }
+    } catch (notifError) {
+      logger.warn('Failed to notify parties about dispute review start', { disputeId, error: notifError });
+    }
+
+    return updatedDispute;
   }
 
   /**
@@ -1158,6 +1187,24 @@ export class AdminMatchService {
     });
 
     logger.info(`Late cancellation for match ${matchId} ${approved ? 'approved' : 'denied'} by admin ${adminId}`);
+
+    // Notify the player who cancelled about the decision
+    try {
+      const notifMessage = approved
+        ? 'Your late cancellation has been reviewed and approved.'
+        : `Your late cancellation has been reviewed and denied.${applyPenalty ? ' A penalty has been applied to your account.' : ''}`;
+
+      await this.notificationService.createNotification({
+        userIds: match.cancelledById!,
+        type: 'ADMIN_MESSAGE',
+        category: 'MATCH',
+        title: approved ? 'Cancellation Approved' : 'Cancellation Denied',
+        message: notifMessage,
+        matchId,
+      });
+    } catch (notifError) {
+      logger.warn('Failed to notify player about cancellation review', { matchId, error: notifError });
+    }
 
     return { success: true, approved, penaltyApplied: !approved && applyPenalty };
   }
@@ -1815,6 +1862,27 @@ export class AdminMatchService {
     });
 
     logger.info(`Match ${matchId} converted to walkover by admin ${adminId}, winner: ${winnerId}`);
+
+    // Recalculate standings and ratings after walkover conversion
+    // The match is now COMPLETED — standings should reflect the walkover outcome
+    if (match.divisionId && match.seasonId) {
+      try {
+        // Step 1: Refresh MatchResult records for V2 standings
+        const { MatchResultCreationService } = await import(
+          '../match/calculation/matchResultCreationService'
+        );
+        const matchResultService = new MatchResultCreationService();
+        await matchResultService.createOrUpdateMatchResult(matchId);
+
+        // Step 2: Recalculate V2 standings (Best 6 based)
+        const standingsV2 = new StandingsV2Service();
+        await standingsV2.recalculateDivisionStandings(match.divisionId, match.seasonId);
+
+        logger.info(`Recalculated standings after walkover conversion for match ${matchId}`);
+      } catch (error) {
+        logger.error(`Failed to recalculate after walkover conversion for match ${matchId}:`, {}, error as Error);
+      }
+    }
 
     return updatedMatch;
   }

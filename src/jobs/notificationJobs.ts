@@ -1234,36 +1234,67 @@ export function scheduleSeasonAutoFinish(): void {
 }
 
 /**
- * Initialize all notification jobs
+ * Initialize core notification jobs (Tier 1 + Tier 2).
+ * These are safe, well-tested, and essential for user experience.
+ *
+ * NOTE: schedulePushTokenCleanup() and scheduleMatchStreakReEvaluation()
+ * are registered separately in server.ts — NOT included here to avoid duplicates.
  */
-export function initializeNotificationJobs(): void {
-  logger.info("Initializing notification jobs...");
+export function initializeCoreNotificationJobs(): void {
+  logger.info("Initializing core notification jobs...");
 
-  scheduleMatch24hReminders();
-  scheduleMatch2hReminders();
-  scheduleMatchMorningReminders();
-  scheduleScoreSubmissionReminders();
-  scheduleSeasonStartingSoonNotifications();
-  scheduleSeasonStartsTomorrowNotifications();
-  scheduleSeasonStartedNotifications();
+  // ── Tier 1: Match reminders (directly satisfy testing requirements) ──
+  scheduleMatch24hReminders();           // Hourly — 24h before match
+  scheduleMatch2hReminders();            // Every 15min — 2h before match
+  scheduleMatchMorningReminders();       // Daily 8am — match day reminder
+  scheduleScoreSubmissionReminders();    // Every 5min — nudge 15min after match
 
-  scheduleFinalWeekAlerts();
+  // ── Tier 1: Season lifecycle (directly satisfy testing requirements) ──
+  scheduleSeasonStartingSoonNotifications();  // Daily 10am — 3 days before start
+  scheduleSeasonStartsTomorrowNotifications(); // Daily 8pm — 1 day before start
+  scheduleSeasonStartedNotifications();       // Daily 8am — season start day
+
+  // ── Tier 1: Registration deadline reminders ──
+  scheduleRegistrationClosing3Days();    // Daily 10am — 3 days before deadline
+  scheduleRegistrationClosing24h();      // Daily 10am — 24h before deadline
+
+  // ── Tier 2: Secondary but useful ──
+  scheduleFinalWeekAlerts();             // Mon 10am — last week of season
+  scheduleLastMatchDeadline48h();        // Daily 10am — 48h before season end
+  scheduleTeamRegistrationReminder2h();  // Every 30min — doubles team deadline
+  scheduleTeamRegistrationReminder24h(); // Daily 10am — doubles team deadline
+  scheduleRegistrationDeadlineCaptain(); // Daily 8pm — captain reminder
+
+  logger.info("✅ Core notification jobs initialized (14 crons active)");
+}
+
+/**
+ * Initialize ALL notification jobs including analytics and engagement crons.
+ * Call this instead of initializeCoreNotificationJobs() when ready for production scale.
+ *
+ * TODO(production): Enable these when ready:
+ *   - scheduleMidSeasonUpdates()     — Mon 10am, queries all active season divisions. Test DB load first.
+ *   - scheduleWeeklyRankingUpdates() — Mon 8am, sends per-division ranking updates. Same scale concern.
+ *   - scheduleMonthlyDMRRecaps()     — Last day of month 8pm, sends to ALL users with ratings. Batch carefully.
+ *   - scheduleProfileReminders()     — Daily 6pm, checks new users' profiles. Could spam if many incomplete.
+ *
+ * Before enabling Tier 3:
+ *   1. Verify DB query performance with production data volume
+ *   2. Test deduplication windows work correctly under load
+ *   3. Add rate limiting per user per notification type
+ *   4. Monitor push delivery success rates for 1-2 weeks with Tier 1+2
+ */
+export function initializeAllNotificationJobs(): void {
+  logger.info("Initializing ALL notification jobs...");
+
+  // Core jobs (Tier 1 + Tier 2)
+  initializeCoreNotificationJobs();
+
+  // Tier 3: Analytics & engagement (heavier queries, enable when production-ready)
   scheduleMidSeasonUpdates();
   scheduleWeeklyRankingUpdates();
   scheduleMonthlyDMRRecaps();
   scheduleProfileReminders();
-  scheduleRegistrationClosing3Days();
-  scheduleRegistrationClosing24h();
-  scheduleLastMatchDeadline48h();
-  schedulePushTokenCleanup();
 
-  // Doubles team registration reminders
-  scheduleTeamRegistrationReminder2h();
-  scheduleTeamRegistrationReminder24h();
-  scheduleRegistrationDeadlineCaptain();
-
-  // Achievement streak checks
-  scheduleMatchStreakReEvaluation();
-
-  logger.info("✅ All notification jobs initialized successfully");
+  logger.info("✅ All notification jobs initialized (18 crons active)");
 }

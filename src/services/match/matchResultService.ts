@@ -182,7 +182,8 @@ export class MatchResultService {
       }
 
       // SS-5: Prevent duplicate submission — defense-in-depth for READ COMMITTED race window
-      if (currentMatch.resultSubmittedById) {
+      // Exception: UNFINISHED matches allow re-submission (user is completing the match)
+      if (currentMatch.resultSubmittedById && currentMatch.status !== MatchStatus.UNFINISHED) {
         throw new Error('A result has already been submitted for this match');
       }
 

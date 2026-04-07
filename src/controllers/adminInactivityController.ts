@@ -6,6 +6,7 @@
 import { Request, Response } from 'express';
 import {
   getInactivitySettings,
+  getEffectiveThreshold,
   setInactivitySettings,
   deleteInactivitySettings,
   getAllInactivitySettings
@@ -184,6 +185,15 @@ export async function getInactivityStats(req: Request, res: Response) {
   try {
     const { prisma } = await import('../lib/prisma');
 
+    // Read configured warning threshold instead of hardcoding 21 days
+    const thresholds = await getEffectiveThreshold();
+    const warningMs = thresholds.warningDays * 24 * 60 * 60 * 1000;
+
+    const warningDate = new Date(Date.now() - warningMs);
+    // TODO(#048): Read from INACTIVITY_CONFIG.EXCLUSIONS.NEW_USER_GRACE_PERIOD instead of hardcoding 14.
+    // Currently matches the config value but would diverge if config changes.
+    const gracePeriodDate = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000);
+
     // Get counts by status
     const [activeCount, inactiveCount, atRiskCount] = await Promise.all([
       prisma.user.count({
@@ -192,14 +202,15 @@ export async function getInactivityStats(req: Request, res: Response) {
       prisma.user.count({
         where: { status: 'INACTIVE', role: 'USER' }
       }),
-      // At risk: active users who haven't played in warning threshold
+      // At risk: active users past warning threshold OR never-played past grace period
       prisma.user.count({
         where: {
           status: 'ACTIVE',
           role: 'USER',
-          lastActivityCheck: {
-            lte: new Date(Date.now() - 21 * 24 * 60 * 60 * 1000)
-          }
+          OR: [
+            { lastActivityCheck: { lte: warningDate } },
+            { lastActivityCheck: null, createdAt: { lte: gracePeriodDate } },
+          ]
         }
       })
     ]);
@@ -213,5 +224,51 @@ export async function getInactivityStats(req: Request, res: Response) {
   } catch (error: any) {
     logger.error('Get inactivity stats error:', error);
     return sendError(res, error.message || 'Failed to get inactivity stats');
+  }
+}
+
+/**
+ * Toggle inactivity exemption for a player
+ * PUT /api/admin/inactivity/exempt/:userId
+ */
+export async function toggleInactivityExempt(req: Request, res: Response) {
+  try {
+    const adminId = (req as any).user?.adminId || (req as any).user?.id;
+    if (!adminId) {
+      return sendError(res, 'Admin not authenticated', 401);
+    }
+
+    const { userId } = req.params;
+    if (!userId) {
+      return sendError(res, 'User ID is required', 400);
+    }
+
+    const { prisma } = await import('../lib/prisma');
+
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, name: true, inactivityExempt: true }
+    });
+
+    if (!user) {
+      return sendError(res, 'User not found', 404);
+    }
+
+    const newExempt = !user.inactivityExempt;
+
+    await prisma.user.update({
+      where: { id: userId },
+      data: { inactivityExempt: newExempt }
+    });
+
+    logger.info(`Admin ${adminId} toggled inactivity exemption for ${user.name} (${userId}) to ${newExempt}`);
+
+    return sendSuccess(res, {
+      userId,
+      inactivityExempt: newExempt
+    }, `Player ${newExempt ? 'exempted from' : 'included in'} inactivity checks`);
+  } catch (error: any) {
+    logger.error('Toggle inactivity exempt error:', error);
+    return sendError(res, error.message || 'Failed to toggle exemption');
   }
 }

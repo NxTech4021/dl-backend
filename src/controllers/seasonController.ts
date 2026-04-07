@@ -145,6 +145,17 @@ export const createSeason = async (req: Request, res: Response) => {
     return sendError(res, "At least one league ID is required", 400);
   }
 
+  // Date cross-validation (when dates are provided)
+  if (startDate && endDate && new Date(startDate) >= new Date(endDate)) {
+    return sendError(res, "Start date must be before end date", 400);
+  }
+  if (regiDeadline && startDate && new Date(regiDeadline) > new Date(startDate)) {
+    return sendError(res, "Registration deadline must be on or before the start date", 400);
+  }
+  if (entryFee !== undefined && Number(entryFee) < 0) {
+    return sendError(res, "Entry fee cannot be negative", 400);
+  }
+
   // Derive effective status and isActive flag
   const validStatuses = ['ACTIVE', 'UPCOMING', 'REGISTER_INTEREST'];
   const effectiveStatus = (status && validStatuses.includes(status))
@@ -353,6 +364,17 @@ export const updateSeason = async (req: Request, res: Response) => {
     return sendError(res, "Season ID is required.", 400);
   }
 
+  // Date cross-validation (when dates are provided)
+  if (startDate && endDate && new Date(startDate) >= new Date(endDate)) {
+    return sendError(res, "Start date must be before end date", 400);
+  }
+  if (regiDeadline && startDate && new Date(regiDeadline) > new Date(startDate)) {
+    return sendError(res, "Registration deadline must be on or before the start date", 400);
+  }
+  if (entryFee !== undefined && Number(entryFee) < 0) {
+    return sendError(res, "Entry fee cannot be negative", 400);
+  }
+
   try {
     const currentSeason = await prisma.season.findUnique({
       where: { id },
@@ -398,11 +420,14 @@ export const updateSeason = async (req: Request, res: Response) => {
     }
 
     const requestedStatus = seasonData.status ?? (isActive === true ? "ACTIVE" : isActive === false ? "UPCOMING" : undefined);
-    if (currentSeason.status === "ACTIVE" && hasRegisteredPlayers) {
+    // Terminal status transitions (FINISHED, CANCELLED) are always allowed from ACTIVE
+    const isTerminalTransition = requestedStatus === "FINISHED" || requestedStatus === "CANCELLED";
+
+    if (currentSeason.status === "ACTIVE" && hasRegisteredPlayers && !isTerminalTransition) {
       if (requestedStatus && (requestedStatus === "UPCOMING" || requestedStatus === "REGISTER_INTEREST")) {
         return sendError(
           res,
-          "Cannot change an active season with registered players to Upcoming or Register Interest. Only endDate can be updated.",
+          "Cannot change an active season with registered players to Upcoming or Register Interest. Only endDate or terminal status (Finished/Cancelled) can be updated.",
           400
         );
       }
@@ -419,12 +444,12 @@ export const updateSeason = async (req: Request, res: Response) => {
         promoCodeSupported !== undefined ||
         withdrawalEnabled !== undefined ||
         isActive !== undefined ||
-        (status !== undefined && status !== "ACTIVE");
+        (status !== undefined && status !== "ACTIVE" && status !== "FINISHED" && status !== "CANCELLED");
 
       if (hasNonEndDateChanges) {
         return sendError(
           res,
-          "This active season already has registered players. Only endDate can be updated.",
+          "This active season already has registered players. Only endDate or terminal status (Finished/Cancelled) can be updated.",
           400
         );
       }
@@ -705,7 +730,7 @@ export const deleteSeason = async (req: Request, res: Response) => {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
 
     if (errorMessage.includes("Cannot delete season")) {
-      return sendError(res, errorMessage, 400);
+      return sendError(res, errorMessage, 409);
     }
 
     if (errorMessage.includes("not found")) {
@@ -804,7 +829,7 @@ export const submitWithdrawalRequest = async (req: AuthenticatedRequest, res: Re
 export const processWithdrawalRequest = async (req: AuthenticatedRequest, res: Response) => {
   const { id } = req.params;
   const processedByAdminId = req.user?.id;
-  const { status } = req.body as ProcessWithdrawalRequestBody;
+  const { status, adminNotes } = req.body as ProcessWithdrawalRequestBody & { adminNotes?: string };
 
   if (!processedByAdminId) {
     return sendError(res, "Unauthorized", 401);
@@ -822,14 +847,19 @@ export const processWithdrawalRequest = async (req: AuthenticatedRequest, res: R
     const result = await processWithdrawalRequestService(
       id,
       status as "APPROVED" | "REJECTED",
-      processedByAdminId
+      processedByAdminId,
+      adminNotes?.trim()
     );
 
-    // 🆕 Send notification to user about withdrawal decision
+    // Send notification to user about withdrawal decision
     const withdrawalRequest = await prisma.withdrawalRequest.findUnique({
       where: { id },
       include: {
-        season: { select: { name: true } }
+        season: { select: { name: true } },
+        partnership: {
+          select: { captainId: true, partnerId: true }
+        },
+        user: { select: { name: true } }
       }
     });
 
@@ -852,12 +882,36 @@ export const processWithdrawalRequest = async (req: AuthenticatedRequest, res: R
         };
       }
 
+      // Notify the requesting player
       await notificationService.createNotification({
         userIds: withdrawalRequest.userId,
         ...notificationData,
         seasonId: withdrawalRequest.seasonId,
         withdrawalRequestId: id
       });
+
+      // Notify the remaining partner when a doubles withdrawal is approved
+      if (status === 'APPROVED' && withdrawalRequest.partnership) {
+        const remainingPartnerId = withdrawalRequest.partnership.captainId === withdrawalRequest.userId
+          ? withdrawalRequest.partnership.partnerId
+          : withdrawalRequest.partnership.captainId;
+
+        if (remainingPartnerId) {
+          try {
+            const withdrawingPlayerName = withdrawalRequest.user?.name || 'Your partner';
+            await notificationService.createNotification({
+              userIds: remainingPartnerId,
+              type: NOTIFICATION_TYPES.PARTNERSHIP_DISSOLVED,
+              category: 'GENERAL' as const,
+              title: 'Partnership Dissolved',
+              message: `${withdrawingPlayerName} has withdrawn from ${withdrawalRequest.season.name}. Your partnership has been dissolved. You can find a new partner in Team Pairing.`,
+              seasonId: withdrawalRequest.seasonId,
+            });
+          } catch (partnerNotifError) {
+            console.warn('Failed to notify remaining partner:', partnerNotifError);
+          }
+        }
+      }
     }
 
     return sendSuccess(res, result);
@@ -907,6 +961,11 @@ export const registerPlayerToSeason = async (req: Request, res: Response) => {
 
     if (partnership) {
       // ✅ DOUBLES REGISTRATION: Create or update memberships for both players
+      // TODO(captain-gate): Captain-only registration is currently UI-enforced only.
+      // The frontend disables the Register button for non-captains (DoublesTeamPairingScreen line 1040).
+      // Backend does NOT verify userId === partnership.captainId. Either partner can register both.
+      // This is idempotent and non-destructive, but add backend check if stricter control needed:
+      //   if (userId !== partnership.captainId) return sendError(res, "Only the team captain can register", 403);
       console.log(`🎾 Doubles registration detected for partnership ${partnership.id}`);
       const captainId = partnership.captainId;
       const partnerId = partnership.partnerId;
@@ -915,7 +974,9 @@ export const registerPlayerToSeason = async (req: Request, res: Response) => {
         return sendError(res, "Partnership has no partner assigned", 400);
       }
 
-      // If payLater is true (development only), set payment status to COMPLETED
+      // payLater=true: "Register now, pay before deadline" flow.
+      // Sets payment to COMPLETED immediately so membership is ACTIVE.
+      // Player must still pay before regiDeadline — admin tracks payment status separately.
       const paymentStatus = payLater === true ? PaymentStatus.COMPLETED : undefined;
 
       const result = await prisma.$transaction(async (tx) => {

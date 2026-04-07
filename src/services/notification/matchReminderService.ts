@@ -1,3 +1,6 @@
+// DEPRECATED: This service is superseded by notificationJobs.ts (scheduleMatch24hReminders, etc).
+// Not actively scheduled in server.ts. Safe to remove once notificationJobs.ts is fully verified in production.
+
 /**
  * Match Reminder Service
  * Sends 24-hour reminders for upcoming matches

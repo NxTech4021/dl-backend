@@ -96,6 +96,7 @@ export interface FormattedSeason {
   startDate: string | null;
   endDate: string | null;
   regiDeadline: string | null;
+  entryFee: number | null;
   status: string;
   current: boolean;
   createdAt: string;

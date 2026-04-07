@@ -1267,8 +1267,14 @@ export const updateDivision = async (req: Request, res: Response) => {
 
     return sendSuccess(res, division, "Division updated successfully");
   } catch (error: any) {
+    const message = error.message || "Failed to update division.";
+    // Structural change guards throw descriptive messages — return 409 Conflict
+    if (message.startsWith("Cannot change")) {
+      logger.warn('Division update rejected', { divisionId: id, reason: message });
+      return sendError(res, message, 409);
+    }
     logger.error('Error updating division', { divisionId: id }, error);
-    return sendError(res, error.message || "Failed to update division.", 500);
+    return sendError(res, message, 500);
   }
 };
 
@@ -1286,6 +1292,12 @@ export const deleteDivision = async (req: Request, res: Response) => {
     logger.info('Division deleted', { divisionId: id });
     return sendSuccess(res, null, "Division deleted successfully");
   } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to delete division.";
+    // Pre-flight safety checks throw descriptive messages — return 409 Conflict
+    if (message.startsWith("Cannot delete division:")) {
+      logger.warn('Division delete rejected', { divisionId: id, reason: message });
+      return sendError(res, message, 409);
+    }
     logger.error('Error deleting division', { divisionId: id }, error as Error);
     return sendError(res, "Failed to delete division.", 500);
   }

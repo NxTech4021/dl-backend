@@ -46,6 +46,47 @@ export const createPostHandler = async (req: AuthenticatedRequest, res: Response
       ? 'You have already posted this match'
       : 'Post created successfully';
 
+    // Notify friends about new post (fire-and-forget, non-blocking)
+    if (!result.alreadyExists) {
+      void (async () => {
+        try {
+          const friendships = await prisma.friendRequest.findMany({
+            where: {
+              OR: [
+                { requesterId: userId, status: 'ACCEPTED' },
+                { recipientId: userId, status: 'ACCEPTED' }
+              ]
+            },
+            select: { requesterId: true, recipientId: true }
+          });
+
+          const friendIds = friendships.map(f =>
+            f.requesterId === userId ? f.recipientId : f.requesterId
+          );
+
+          if (friendIds.length > 0) {
+            const user = await prisma.user.findUnique({
+              where: { id: userId },
+              select: { name: true }
+            });
+
+            const notif = socialCommunityNotifications.friendActivityPost(
+              user?.name || 'A friend',
+              `shared a match result`
+            );
+
+            await notificationService.createNotification({
+              ...notif,
+              userIds: friendIds,
+              metadata: { postId: result.post.id, matchId }
+            });
+          }
+        } catch (err) {
+          console.warn('Failed to notify friends about new post:', err);
+        }
+      })();
+    }
+
     return sendSuccess(res, { ...result.post, alreadyExists: result.alreadyExists }, message, statusCode);
   } catch (error: unknown) {
     console.error('Error creating post:', error);

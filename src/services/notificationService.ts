@@ -43,6 +43,10 @@ interface SendPushInput {
   data?: Record<string, string> | undefined;
 }
 
+// TODO(email): Email delivery infrastructure exists (sendEmail function) but is unused.
+// All notifications currently use PUSH and/or IN_APP channels only.
+// Enable email channel when transactional email service (SendGrid/SES) is configured.
+
 export class NotificationService {
   static sendNotification(arg0: {
     userId: string;

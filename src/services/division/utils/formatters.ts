@@ -21,6 +21,7 @@ export function formatSeason(season: any): FormattedSeason {
     startDate: toISODateStringOrNull(season?.startDate),
     endDate: toISODateStringOrNull(season?.endDate),
     regiDeadline: toISODateStringOrNull(season?.regiDeadline),
+    entryFee: season?.entryFee != null ? Number(season.entryFee) : null,
     status: season?.status ?? "UPCOMING",
     current:
       season && "current" in season

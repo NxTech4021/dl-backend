@@ -147,6 +147,10 @@ export class MatchCommentService {
     return newComment;
   }
 
+  // TODO(pagination): No pagination — fetches ALL comments for a match.
+  // Acceptable for match context (2-4 participants, typically <20 comments).
+  // Add skip/take params if comment volume increases.
+
   /**
    * Get all comments for a match
    */
@@ -241,6 +245,11 @@ export class MatchCommentService {
 
     return updatedComment;
   }
+
+  // TODO(soft-delete): Comments use hard delete (prisma.matchComment.delete).
+  // No audit trail — deleted comments are unrecoverable.
+  // To add soft delete: add isDeleted/deletedAt fields to MatchComment schema,
+  // update delete to set isDeleted=true, filter isDeleted=false in getComments.
 
   /**
    * Delete a comment
