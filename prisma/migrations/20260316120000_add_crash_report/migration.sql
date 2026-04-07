@@ -35,4 +35,4 @@ CREATE INDEX "CrashReport_severity_idx" ON "CrashReport"("severity");
 CREATE INDEX "CrashReport_errorMessage_screenName_appVersion_idx" ON "CrashReport"("errorMessage", "screenName", "appVersion");
 
 -- AddForeignKey
-ALTER TABLE "CrashReport" ADD CONSTRAINT "CrashReport_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE "CrashReport" ADD CONSTRAINT "CrashReport_userId_fkey" FOREIGN KEY ("userId") REFERENCES "user"("id") ON DELETE SET NULL ON UPDATE CASCADE;
