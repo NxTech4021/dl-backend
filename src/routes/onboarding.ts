@@ -511,7 +511,9 @@ router.post("/:sport/submit", questionnaireLimiter, verifyAuth, validateSportPar
       detail: detailPayload,
     };
 
-    // Check for resubmission — reject if questionnaire already completed
+    // Allow resubmission (retake from profile). The upsert below handles both
+    // first submission (create) and retake (update) correctly.
+    // Previous version blocked resubmission with 409, which broke the "retake from profile" flow.
     const existingCompleted = await prisma.questionnaireResponse.findUnique({
       where: {
         userId_sport: {
@@ -522,16 +524,11 @@ router.post("/:sport/submit", questionnaireLimiter, verifyAuth, validateSportPar
     });
 
     if (existingCompleted?.completedAt) {
-      logger.warn("Questionnaire resubmission rejected - already completed", {
+      logger.info("Questionnaire retake detected — will overwrite previous assessment", {
         userId: submissionRequest.userId,
         sport,
         requestId,
-        completedAt: existingCompleted.completedAt,
-      });
-      return res.status(409).json({
-        error: "Questionnaire already completed for this sport",
-        code: "ALREADY_COMPLETED",
-        success: false,
+        previousCompletedAt: existingCompleted.completedAt,
       });
     }
 
