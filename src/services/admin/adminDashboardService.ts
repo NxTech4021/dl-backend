@@ -139,8 +139,11 @@ export async function getDashboardKPIStats(): Promise<DashboardKPIStats> {
     ? Math.round((leagueParticipants / totalUsers) * 1000) / 10
     : 0;
 
-  // Revenue calculations (placeholder - would need actual payment/subscription model)
-  // For now, estimate based on paying members at RM30/month
+  // TODO(revenue): Replace estimate with actual Payment data.
+  // Currently: participants × RM30 (hardcoded). Seasons have variable entryFee.
+  // Fix: query Payment model where status=COMPLETED, sum(amount), group by period.
+  // Schema: Payment { amount Decimal, status PaymentStatus, seasonId, paidAt DateTime }
+  // Also update getSportMetrics() line 209 which uses the same RM30 estimate.
   const estimatedMonthlyFee = 30;
   const totalRevenue = leagueParticipants * estimatedMonthlyFee;
   const previousRevenue = previousLeagueParticipants * estimatedMonthlyFee;
@@ -205,7 +208,7 @@ export async function getSportMetrics(): Promise<SportMetrics[]> {
       },
     });
 
-    // Estimate revenue (RM30/month per paying member)
+    // TODO(revenue): Same RM30 estimate as KPI stats. See TODO at line 142.
     const revenue = payingMembers.length * 30;
 
     const sportName = sportType === 'TENNIS' ? 'Tennis'
