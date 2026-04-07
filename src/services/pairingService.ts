@@ -1000,6 +1000,15 @@ export const dissolvePartnership = async (
       };
     }
 
+    // TODO(dissolution-matches): No check for scheduled/pending matches before dissolution.
+    // If the team has upcoming matches, dissolution proceeds and those matches stay SCHEDULED
+    // with the departing player still listed as a participant. The remaining player (INCOMPLETE
+    // partnership) can't play those matches without a new partner. Options if stricter control needed:
+    //   1. Block dissolution if active matches exist (could trap players in unwanted partnerships)
+    //   2. Auto-cancel the affected matches and notify opponents
+    //   3. Warn the user but allow dissolution (current behavior, matches handled by admin)
+    // Current approach: admin handles orphaned matches separately via match management dashboard.
+
     // Validate: Cannot dissolve if season is completed
     if (partnership.season.status === 'FINISHED') {
       return {
