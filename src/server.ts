@@ -14,7 +14,7 @@ import { getInactivityService } from "./services/inactivityService";
 import { notificationService } from "./services/notificationService";
 import { getAdminUserIds } from "./services/notification/notificationPreferenceService";
 import { INACTIVITY_CONFIG } from "./config/inactivity.config";
-import { initializeNotificationJobs, schedulePushTokenCleanup, scheduleMatchStreakReEvaluation, scheduleSeasonAutoFinish } from "./jobs/notificationJobs";
+import { initializeCoreNotificationJobs, schedulePushTokenCleanup, scheduleMatchStreakReEvaluation, scheduleSeasonAutoFinish } from "./jobs/notificationJobs";
 import { getMatchInvitationService } from "./services/match/matchInvitationService";
 import { getMatchResultService } from "./services/match/matchResultService";
 import { logger } from "./utils/logger";
@@ -157,10 +157,17 @@ cron.schedule("0 * * * *", async () => {
   }
 }, CRON_TZ);
 
-// Phase 1 — Safe crons (DB operations only, no user notifications)
+// Infrastructure crons (DB maintenance, no user-facing notifications)
 schedulePushTokenCleanup();
 scheduleMatchStreakReEvaluation();
 scheduleSeasonAutoFinish();
 
-// Phase 2+ — All notification jobs (enable when push tokens verified & dedup tested)
-// initializeNotificationJobs();
+// Core notification crons (match reminders, season lifecycle, registration deadlines)
+// Tier 1+2: 14 crons — safe, dedup-protected, essential for user experience
+initializeCoreNotificationJobs();
+
+// TODO(production): When ready for full analytics notifications, replace with:
+//   import { initializeAllNotificationJobs } from "./jobs/notificationJobs";
+//   initializeAllNotificationJobs();
+// This adds Tier 3: mid-season updates, weekly rankings, monthly DMR recaps, profile reminders.
+// See notificationJobs.ts for prerequisites before enabling.
