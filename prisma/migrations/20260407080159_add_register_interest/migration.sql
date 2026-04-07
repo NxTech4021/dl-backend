@@ -5,7 +5,7 @@
 
 */
 -- AlterEnum
-ALTER TYPE "public"."SeasonStatus" ADD VALUE 'REGISTER_INTEREST';
+ALTER TYPE "public"."SeasonStatus" ADD VALUE IF NOT EXISTS 'REGISTER_INTEREST';
 
 -- DropForeignKey
 ALTER TABLE "public"."MatchParticipant" DROP CONSTRAINT "MatchParticipant_userId_fkey";
