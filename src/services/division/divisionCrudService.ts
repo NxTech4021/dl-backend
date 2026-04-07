@@ -1,5 +1,5 @@
 import { prisma } from '../../lib/prisma';
-import { Prisma, DivisionLevel, GameType, GenderType } from "@prisma/client";
+import { Prisma, DivisionLevel, GameType, GenderType, MatchStatus, TeamChangeRequestStatus } from "@prisma/client";
 import { formatDivision } from './utils/formatters';
 import { toEnum } from './utils/enums';
 import { CreateDivisionData, UpdateDivisionData, DivisionWithThread } from './utils/types';
@@ -198,6 +198,30 @@ export async function updateDivision(
     throw new Error("Division not found.");
   }
 
+  // Check if division has assigned players (needed for structural change guards)
+  const assignmentCount = await prisma.divisionAssignment.count({
+    where: { divisionId },
+  });
+  const hasPlayers = assignmentCount > 0;
+
+  // Guard: prevent seasonId change if players are assigned — would orphan SeasonMembership records
+  if (updates.seasonId !== undefined && updates.seasonId !== existing.seasonId) {
+    if (hasPlayers) {
+      throw new Error(
+        `Cannot change season: ${assignmentCount} player(s) are assigned. Remove or reassign them first.`
+      );
+    }
+  }
+
+  // Guard: prevent gameType change if players are assigned — would corrupt count fields
+  if (updates.gameType !== undefined && updates.gameType.toLowerCase() !== existing.gameType.toLowerCase()) {
+    if (hasPlayers) {
+      throw new Error(
+        `Cannot change game type: ${assignmentCount} player(s) are assigned. Remove or reassign them first.`
+      );
+    }
+  }
+
   // Build update data
   const data: Prisma.DivisionUpdateInput = {};
 
@@ -238,13 +262,24 @@ export async function updateDivision(
   }
 
   if (updates.maxSinglesPlayers !== undefined) {
-    data.maxSinglesPlayers =
-      updates.maxSinglesPlayers !== null ? Number(updates.maxSinglesPlayers) : null;
+    const newMax = updates.maxSinglesPlayers !== null ? Number(updates.maxSinglesPlayers) : null;
+    // Warn if reducing capacity below current count (doesn't block, but division becomes over-capacity)
+    if (newMax !== null && existing.currentSinglesCount !== null && newMax < existing.currentSinglesCount) {
+      console.warn(
+        `[Division ${divisionId}] maxSinglesPlayers reduced to ${newMax} but ${existing.currentSinglesCount} players assigned. Division is now over-capacity.`
+      );
+    }
+    data.maxSinglesPlayers = newMax;
   }
 
   if (updates.maxDoublesTeams !== undefined) {
-    data.maxDoublesTeams =
-      updates.maxDoublesTeams !== null ? Number(updates.maxDoublesTeams) : null;
+    const newMax = updates.maxDoublesTeams !== null ? Number(updates.maxDoublesTeams) : null;
+    if (newMax !== null && existing.currentDoublesCount !== null && newMax < existing.currentDoublesCount) {
+      console.warn(
+        `[Division ${divisionId}] maxDoublesTeams reduced to ${newMax} but ${existing.currentDoublesCount} teams assigned. Division is now over-capacity.`
+      );
+    }
+    data.maxDoublesTeams = newMax;
   }
 
   if (updates.autoAssignmentEnabled !== undefined) {
@@ -277,8 +312,48 @@ export async function updateDivision(
 
 /**
  * Delete division
+ * Pre-flight: rejects if division has active members, pending matches, or pending team change requests.
  * @param divisionId - Division ID
  */
 export async function deleteDivision(divisionId: string): Promise<void> {
+  // Safety check: members assigned to this division
+  const memberCount = await prisma.seasonMembership.count({
+    where: { divisionId },
+  });
+  if (memberCount > 0) {
+    throw new Error(
+      `Cannot delete division: ${memberCount} member(s) are still assigned. Remove or reassign them first.`
+    );
+  }
+
+  // Safety check: non-terminal matches in this division
+  const activeMatchCount = await prisma.match.count({
+    where: {
+      divisionId,
+      status: { notIn: [MatchStatus.COMPLETED, MatchStatus.CANCELLED, MatchStatus.VOID] },
+    },
+  });
+  if (activeMatchCount > 0) {
+    throw new Error(
+      `Cannot delete division: ${activeMatchCount} active match(es) exist. Complete, cancel, or void them first.`
+    );
+  }
+
+  // Safety check: pending team change requests referencing this division
+  const pendingRequestCount = await prisma.teamChangeRequest.count({
+    where: {
+      OR: [
+        { currentDivisionId: divisionId },
+        { requestedDivisionId: divisionId },
+      ],
+      status: TeamChangeRequestStatus.PENDING,
+    },
+  });
+  if (pendingRequestCount > 0) {
+    throw new Error(
+      `Cannot delete division: ${pendingRequestCount} pending team change request(s) reference this division. Resolve them first.`
+    );
+  }
+
   await prisma.division.delete({ where: { id: divisionId } });
 }
