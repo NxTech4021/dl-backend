@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { verifyAuth } from "../middlewares/auth.middleware";
-import { matchJoinLimiter, scoreSubmissionLimiter } from '../middlewares/rateLimiter';
+import { matchJoinLimiter, scoreSubmissionLimiter, commentLimiter } from '../middlewares/rateLimiter';
 import {
   createFriendlyMatch,
   getFriendlyMatches,
@@ -39,7 +39,7 @@ friendlyRoutes.post("/:id/cancel", cancelFriendlyMatch);
 
 // Comments
 friendlyRoutes.get("/:id/comments", getFriendlyMatchComments);
-friendlyRoutes.post("/:id/comment", postFriendlyMatchComment);
+friendlyRoutes.post("/:id/comment", commentLimiter, postFriendlyMatchComment);
 friendlyRoutes.put("/:id/comment/:commentId", updateFriendlyMatchComment);
 friendlyRoutes.delete("/:id/comment/:commentId", deleteFriendlyMatchComment);
 
