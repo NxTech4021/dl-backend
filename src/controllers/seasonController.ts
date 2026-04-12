@@ -700,8 +700,8 @@ export const updateSeasonStatus = async (req: Request, res: Response) => {
 
     const statusUpdate: Parameters<typeof updateSeasonStatusService>[1] = {};
     if (status !== undefined) {
-      if (status && ["UPCOMING", "ACTIVE", "REGISTER_INTEREST", "FINISHED", "CANCELLED"].includes(status)) {
-        statusUpdate.status = status as "UPCOMING" | "ACTIVE" | "REGISTER_INTEREST" | "FINISHED" | "CANCELLED";
+      if (status && ["UPCOMING", "ACTIVE", "FINISHED", "CANCELLED"].includes(status)) {
+        statusUpdate.status = status as "UPCOMING" | "ACTIVE" | "FINISHED" | "CANCELLED";
       }
     }
     if (isActive !== undefined) statusUpdate.isActive = isActive;
