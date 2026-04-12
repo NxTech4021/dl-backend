@@ -554,7 +554,7 @@ export class MatchResultService {
       }
 
       // Step 8: Evaluate achievements for all participants (fire-and-forget)
-      const participantUserIds = match.participants.map(p => p.userId);
+      const participantUserIds = match.participants.map(p => p.userId).filter((id): id is string => id !== null);
       for (const playerId of participantUserIds) {
         void evaluateMatchAchievementsSafe(playerId, {
           userId: playerId,
@@ -1098,13 +1098,13 @@ export class MatchResultService {
             logger.info(`Skipped auto-complete for match ${match.id} (disputed during processing)`);
           }
         } catch (error) {
-          logger.error(`Failed to auto-complete walkover for match ${match.id}:`, error as Error);
+          logger.error(`Failed to auto-complete walkover for match ${match.id}:`, {}, error as Error);
         }
       }
 
       return { walkoversChecked: pendingWalkovers.length, walkoversCompleted: completedCount };
     } catch (error) {
-      logger.error('Error in autoCompleteWalkovers:', error as Error);
+      logger.error('Error in autoCompleteWalkovers:', {}, error as Error);
       return { walkoversChecked: 0, walkoversCompleted: 0 };
     }
   }
