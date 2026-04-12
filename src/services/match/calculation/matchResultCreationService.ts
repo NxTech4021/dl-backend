@@ -96,10 +96,12 @@ export class MatchResultCreationService {
 
     if (match.matchType === 'SINGLES') {
       // For singles: first participant = team1, second = team2
-      participantsWithTeams = match.participants.map((p, index) => ({
-        userId: p.userId,
-        team: index === 0 ? 'team1' : 'team2'
-      }));
+      participantsWithTeams = match.participants
+        .filter(p => p.userId !== null)
+        .map((p, index) => ({
+          userId: p.userId!,
+          team: index === 0 ? 'team1' : 'team2'
+        }));
     } else {
       // For doubles: use existing team assignments (should already be team1/team2)
       // If somehow null, use array position as fallback
@@ -108,16 +110,20 @@ export class MatchResultCreationService {
 
       if (team1Count > 0 && team2Count > 0) {
         // Teams are properly assigned
-        participantsWithTeams = match.participants.map(p => ({
-          userId: p.userId,
-          team: p.team
-        }));
+        participantsWithTeams = match.participants
+          .filter(p => p.userId !== null)
+          .map(p => ({
+            userId: p.userId!,
+            team: p.team
+          }));
       } else {
         // Fallback: first 2 = team1, last 2 = team2
-        participantsWithTeams = match.participants.map((p, index) => ({
-          userId: p.userId,
-          team: index < 2 ? 'team1' : 'team2'
-        }));
+        participantsWithTeams = match.participants
+          .filter(p => p.userId !== null)
+          .map((p, index) => ({
+            userId: p.userId!,
+            team: index < 2 ? 'team1' : 'team2'
+          }));
         logger.warn(`Match ${matchId} had improper team assignments, using fallback`);
       }
     }
