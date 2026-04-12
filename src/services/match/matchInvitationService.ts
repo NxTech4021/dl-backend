@@ -1148,7 +1148,8 @@ export class MatchInvitationService {
       // Notify other participants
       const otherParticipants = match.participants
         .filter(p => p.userId !== userId)
-        .map(p => p.userId);
+        .map(p => p.userId)
+        .filter((id): id is string => id !== null);
 
       await this.notificationService.createNotification({
         type: accepted ? 'MATCH_INVITATION_ACCEPTED' : 'MATCH_INVITATION_DECLINED',
@@ -1178,7 +1179,7 @@ export class MatchInvitationService {
       if (!match || !match.matchDate) return;
 
       const confirmedTime = match.matchDate;
-      const participantIds = match.participants.map(p => p.userId);
+      const participantIds = match.participants.map(p => p.userId).filter((id): id is string => id !== null);
 
       // Format date and time for cleaner notification display
       const formattedDate = confirmedTime.toLocaleDateString('en-US', {
@@ -1592,7 +1593,7 @@ export class MatchInvitationService {
       });
 
       // Notify match creator and other participants
-      const notifyUserIds = match.participants.map(p => p.userId);
+      const notifyUserIds = match.participants.map(p => p.userId).filter((id): id is string => id !== null);
       if (match.createdById && !notifyUserIds.includes(match.createdById)) {
         notifyUserIds.push(match.createdById);
       }
