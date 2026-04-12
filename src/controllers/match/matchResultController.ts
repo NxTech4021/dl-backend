@@ -30,7 +30,7 @@ const getOpponentName = async (matchId: string, currentUserId: string): Promise<
       }
     },
   });
-  return participants[0]?.user.name || 'Opponent';
+  return participants[0]?.user?.name || 'Opponent';
 };
 
 /**
@@ -44,7 +44,7 @@ const getOtherParticipants = async (matchId: string, excludeUserId: string): Pro
     },
     select: { userId: true },
   });
-  return participants.map(p => p.userId);
+  return participants.map(p => p.userId).filter((id): id is string => id !== null);
 };
 
 /**
@@ -336,6 +336,10 @@ export const disputeWalkover = async (req: Request, res: Response) => {
 
     if (!reason?.trim()) {
       return sendError(res, 'Dispute reason is required', 400);
+    }
+
+    if (!id) {
+      return sendError(res, 'Match ID is required', 400);
     }
 
     const result = await matchResultService.disputeWalkover({
