@@ -19,19 +19,7 @@ import timezone from 'dayjs/plugin/timezone';
 dayjs.extend(utc);
 dayjs.extend(timezone);
 
-/**
- * Helper function to format date for notifications
- */
-const formatDate = (date: Date): string => {
-  return dayjs(date).format('MMM D, YYYY');
-};
-
-/**
- * Helper function to format time for notifications
- */
-const formatTime = (date: Date): string => {
-  return dayjs(date).format('h:mm A');
-};
+import { formatMatchDate, formatMatchTime, parseDateFromDevice } from '../../utils/timezone';
 
 const matchInvitationService = getMatchInvitationService();
 // notificationService singleton imported from notificationService.ts
@@ -78,31 +66,7 @@ export const createMatch = async (req: Request, res: Response) => {
     // TIMEZONE CONVERSION: Convert from device timezone to Malaysia timezone
     let parsedMatchDate: Date | undefined;
     if (matchDate) {
-      if (deviceTimezone && deviceTimezone !== 'Asia/Kuala_Lumpur') {
-        // User is NOT in Malaysia - convert their local time to Malaysia time
-        const deviceTime = dayjs.tz(matchDate, deviceTimezone);
-        const malaysiaTime = deviceTime.tz('Asia/Kuala_Lumpur');
-        parsedMatchDate = malaysiaTime.toDate();
-        
-        console.log('🌏 TIMEZONE CONVERSION - User Outside Malaysia:', {
-          userTimezone: deviceTimezone,
-          userSelectedTime: deviceTime.format('YYYY-MM-DD HH:mm (GMT Z)'),
-          malaysiaEquivalent: malaysiaTime.format('YYYY-MM-DD HH:mm (GMT+8)'),
-          storedUTC: parsedMatchDate.toISOString(),
-          explanation: `User selected ${deviceTime.format('h:mm A')} in ${deviceTimezone}, stored as ${malaysiaTime.format('h:mm A')} Malaysia time`
-        });
-      } else {
-        // User is in Malaysia OR no timezone provided (fallback to treating as Malaysia time)
-        const malaysiaTime = dayjs.tz(matchDate, 'Asia/Kuala_Lumpur');
-        parsedMatchDate = malaysiaTime.toDate();
-        
-        console.log('🕐 TIMEZONE CONVERSION - Malaysia User or Fallback:', {
-          receivedString: matchDate,
-          interpretedAs: 'Malaysia Time (GMT+8)',
-          malaysiaDateTime: malaysiaTime.format('YYYY-MM-DD HH:mm (GMT+8)'),
-          storedUTC: parsedMatchDate.toISOString()
-        });
-      }
+      parsedMatchDate = parseDateFromDevice(matchDate, deviceTimezone);
     }
 
     // COMMENTED OUT - Complex time parsing
@@ -185,8 +149,8 @@ export const createMatch = async (req: Request, res: Response) => {
           if (fullMatch && fullMatch.matchDate) {
             const notification = matchManagementNotifications.opponentPostedLeagueMatch(
               creator?.name || 'A player',
-              formatDate(fullMatch.matchDate),
-              formatTime(fullMatch.matchDate),
+              formatMatchDate(fullMatch.matchDate),
+              formatMatchTime(fullMatch.matchDate),
               fullMatch.venue || fullMatch.location || 'TBD'
             );
             
@@ -719,15 +683,9 @@ export const editMatch = async (req: Request, res: Response) => {
       expiresInHours
     } = req.body;
 
-    // #031: Use dayjs.tz for timezone conversion (same as create endpoint)
     let parsedMatchDate: Date | undefined;
     if (matchDate) {
-      if (deviceTimezone && deviceTimezone !== 'Asia/Kuala_Lumpur') {
-        const deviceTime = dayjs.tz(matchDate, deviceTimezone);
-        parsedMatchDate = deviceTime.tz('Asia/Kuala_Lumpur').toDate();
-      } else {
-        parsedMatchDate = dayjs.tz(matchDate, 'Asia/Kuala_Lumpur').toDate();
-      }
+      parsedMatchDate = parseDateFromDevice(matchDate, deviceTimezone);
     }
 
     const match = await matchInvitationService.editMatch(id, userId, {
@@ -803,7 +761,7 @@ export const postMatchToChat = async (req: Request, res: Response) => {
       location: match.location,
       venue: match.venue,
       date: match.matchDate || new Date().toISOString(),
-      time: match.matchDate ? new Date(match.matchDate).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : 'TBD',
+      time: match.matchDate ? formatMatchTime(match.matchDate) : 'TBD',
       matchDate: match.matchDate,
       duration: match.duration || 2,
       numberOfPlayers: match.matchType === 'DOUBLES' ? '4' : '2',
