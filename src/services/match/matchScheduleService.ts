@@ -10,6 +10,7 @@ import {
   InvitationStatus
 } from '@prisma/client';
 import { logger } from '../../utils/logger';
+import { formatMatchDate, formatMatchTime } from '../../utils/timezone';
 import { NotificationService, notificationService as notificationServiceSingleton } from '../notificationService';
 import { matchManagementNotifications } from '../../helpers/notifications/matchManagementNotifications';
 
@@ -181,8 +182,8 @@ export class MatchScheduleService {
       const isLeagueMatch = !!match.seasonId;
       const isDoublesMatch = match.matchType === 'DOUBLES';
       const opponentName = canceller?.name || 'Opponent';
-      const date = match.matchDate ? match.matchDate.toLocaleDateString() : '';
-      const time = match.matchDate ? match.matchDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+      const date = match.matchDate ? formatMatchDate(match.matchDate) : '';
+      const time = match.matchDate ? formatMatchTime(match.matchDate) : '';
       const venue = match.venue || '';
 
       let notificationPayload;
