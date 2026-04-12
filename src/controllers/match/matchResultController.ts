@@ -10,6 +10,7 @@ import { notificationService } from '../../services/notificationService';
 import { matchManagementNotifications } from '../../helpers/notifications/matchManagementNotifications';
 import { prisma } from '../../lib/prisma';
 import { sendSuccess, sendError } from '../../utils/response';
+import { formatMatchDate } from '../../utils/timezone';
 import { logMatchActivity } from '../../services/userActivityLogService';
 import { UserActionType } from '@prisma/client';
 
@@ -296,7 +297,7 @@ export const submitWalkover = async (req: Request, res: Response) => {
         // Notify reporter that opponent was claimed as no-show
         const opponentClaimsNotif = matchManagementNotifications.opponentClaimsNoShow(
           defaulter?.name || 'Player',
-          new Date().toLocaleDateString()
+          formatMatchDate(new Date())
         );
         
         await notificationService.createNotification({
