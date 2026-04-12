@@ -18,6 +18,7 @@ import {
 // Type alias until Prisma client is regenerated after migration
 type MatchFeeType = 'FREE' | 'SPLIT' | 'FIXED';
 import { logger } from '../../utils/logger';
+import { formatMatchDate, formatMatchTime } from '../../utils/timezone';
 import { NotificationService, notificationService as notificationServiceSingleton } from '../notificationService';
 
 // Types
@@ -1187,17 +1188,9 @@ export class MatchInvitationService {
       const confirmedTime = match.matchDate;
       const participantIds = match.participants.map(p => p.userId).filter((id): id is string => id !== null);
 
-      // Format date and time for cleaner notification display
-      const formattedDate = confirmedTime.toLocaleDateString('en-US', {
-        month: 'short',
-        day: 'numeric',
-        year: 'numeric'
-      });
-      const formattedTime = confirmedTime.toLocaleTimeString('en-US', {
-        hour: 'numeric',
-        minute: '2-digit',
-        hour12: true
-      });
+      // Format date and time in venue timezone (Malaysia)
+      const formattedDate = formatMatchDate(confirmedTime);
+      const formattedTime = formatMatchTime(confirmedTime);
       const venue = match.venue || match.location || 'TBD';
 
       await this.notificationService.createNotification({
