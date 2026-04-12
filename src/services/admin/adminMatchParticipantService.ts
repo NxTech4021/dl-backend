@@ -12,6 +12,7 @@ import {
   MatchAdminActionType
 } from '@prisma/client';
 import { logger } from '../../utils/logger';
+import { formatMatchDate } from '../../utils/timezone';
 import { NotificationService, notificationService as notificationServiceSingleton } from '../notificationService';
 import {
   ParticipantInput,
@@ -493,7 +494,7 @@ export class AdminMatchParticipantService {
     includeRecalcNote: boolean = false
   ): Promise<number> {
     let count = 0;
-    const matchInfo = `${match.division?.name || 'Match'} on ${new Date(match.matchDate).toLocaleDateString()}`;
+    const matchInfo = `${match.division?.name || 'Match'} on ${formatMatchDate(match.matchDate)}`;
     const recalcNote = includeRecalcNote ? ' Ratings and standings have been recalculated.' : '';
 
     // 1. Notify removed participants
