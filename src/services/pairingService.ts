@@ -1,13 +1,242 @@
 import { prisma } from '../lib/prisma';
-import { PrismaClient, PairRequestStatus } from '@prisma/client';
+import { Prisma, PrismaClient, PairRequestStatus } from '@prisma/client';
 import { enrichPlayerWithSkills } from './player/utils/playerTransformer';
 import { notificationTemplates } from '../helpers/notifications';
 import { notificationService } from './notificationService';
+import { io } from '../app';
+import { translateTransactionRaceError } from '../utils/prismaErrors';
 
 /**
  * Pairing Service
  * Handles all business logic for team pairing requests and partnerships
+ *
+ * Real-time: mutations emit `partnership_updated` or `pair_request_updated`
+ * socket events (fix for #103-2). Frontend screens listen for these in
+ * ManagePartnershipScreen.tsx / DoublesTeamPairingScreen.tsx.
+ *
+ * Concurrency: state-changing partnership writes use atomic `updateMany`
+ * status gates inside Serializable transactions (fix for #103-3, #103-8,
+ * #103-10, #103-11). See helper `updatePartnershipStatusGated` below.
  */
+
+// ==========================================
+// #103 SHARED HELPERS
+// ==========================================
+
+type PartnershipAction =
+  | 'created'
+  | 'partner_joined'
+  | 'dissolved'
+  | 'incomplete_cancelled'
+  | 'request_received'
+  | 'request_resolved';
+
+/**
+ * Emit `partnership_updated` socket event to both captain and (optional) partner.
+ * Used by every pairingService mutation that changes partnership state so that
+ * frontend listeners (ManagePartnershipScreen, DoublesTeamPairingScreen) can
+ * refresh without waiting for the 30-second poll.
+ *
+ * Fix for #103-2.
+ */
+function emitPartnershipUpdated(params: {
+  captainId: string;
+  partnerId?: string | null;
+  partnershipId: string;
+  seasonId: string;
+  status: string;
+  action: PartnershipAction;
+}): void {
+  try {
+    const payload = {
+      partnershipId: params.partnershipId,
+      seasonId: params.seasonId,
+      status: params.status,
+      action: params.action,
+    };
+    io.to(params.captainId).emit('partnership_updated', payload);
+    if (params.partnerId && params.partnerId !== params.captainId) {
+      io.to(params.partnerId).emit('partnership_updated', payload);
+    }
+  } catch (socketError) {
+    console.error('Error emitting partnership_updated socket event:', socketError);
+  }
+}
+
+/**
+ * Emit `pair_request_updated` socket event. Used for send/accept/deny/cancel
+ * of legacy pair requests (not partnerships) so both requester and recipient
+ * see real-time state changes.
+ *
+ * Fix for #103-2.
+ */
+function emitPairRequestUpdated(params: {
+  requesterId: string;
+  recipientId: string;
+  pairRequestId: string;
+  seasonId: string;
+  status: string;
+}): void {
+  try {
+    const payload = {
+      pairRequestId: params.pairRequestId,
+      seasonId: params.seasonId,
+      status: params.status,
+    };
+    io.to(params.requesterId).emit('pair_request_updated', payload);
+    io.to(params.recipientId).emit('pair_request_updated', payload);
+  } catch (socketError) {
+    console.error('Error emitting pair_request_updated socket event:', socketError);
+  }
+}
+
+/**
+ * Validate that two players satisfy the season category's gender restriction.
+ * Backs #103-14 — no gender enforcement on the invite/accept endpoints.
+ *
+ * Returns `{ valid: false, reason }` if the category requires a gender mix the
+ * two players don't satisfy. Returns `{ valid: true }` if the category has no
+ * restriction, no category, or both players match.
+ *
+ * Also validates that the category is a DOUBLES game type — rejects attempts
+ * to create partnerships in a singles category.
+ *
+ * Call from every path that creates/extends a partnership: send and accept
+ * entry points for pair requests and season invitations.
+ */
+export async function validateCategoryGenderMatch(
+  seasonId: string,
+  userAId: string,
+  userBId: string,
+  prismaClient: Prisma.TransactionClient | PrismaClient = prisma as PrismaClient,
+): Promise<{ valid: boolean; reason?: string }> {
+  try {
+    const season = await prismaClient.season.findUnique({
+      where: { id: seasonId },
+      select: {
+        category: {
+          select: {
+            genderCategory: true,
+            genderRestriction: true,
+            gameType: true,
+          },
+        },
+      },
+    });
+
+    const category = season?.category;
+    if (!category) {
+      // No category configured — skip gender validation (backward compat).
+      return { valid: true };
+    }
+
+    // The category must be a DOUBLES game type.
+    if (category.gameType && category.gameType !== 'DOUBLES') {
+      return {
+        valid: false,
+        reason: 'This season is not a doubles category',
+      };
+    }
+
+    const restriction = category.genderCategory ?? category.genderRestriction;
+    if (!restriction || restriction === 'OPEN') {
+      return { valid: true };
+    }
+
+    const [userA, userB] = await Promise.all([
+      prismaClient.user.findUnique({ where: { id: userAId }, select: { gender: true } }),
+      prismaClient.user.findUnique({ where: { id: userBId }, select: { gender: true } }),
+    ]);
+
+    const ag = userA?.gender?.toLowerCase();
+    const bg = userB?.gender?.toLowerCase();
+
+    if (restriction === 'MIXED') {
+      if (!ag || !bg || ag === bg) {
+        return {
+          valid: false,
+          reason: 'Mixed doubles requires one male and one female player',
+        };
+      }
+      return { valid: true };
+    }
+
+    if (restriction === 'MALE') {
+      if (ag !== 'male' || bg !== 'male') {
+        return {
+          valid: false,
+          reason: "This is a men's doubles category — both players must be male",
+        };
+      }
+      return { valid: true };
+    }
+
+    if (restriction === 'FEMALE') {
+      if (ag !== 'female' || bg !== 'female') {
+        return {
+          valid: false,
+          reason: "This is a women's doubles category — both players must be female",
+        };
+      }
+      return { valid: true };
+    }
+
+    return { valid: true };
+  } catch (error) {
+    console.error('Error validating category gender match:', error);
+    // Fail-open: if the validation itself errors, do not block the action.
+    // We prefer a rare false-negative over blocking legitimate pairings.
+    return { valid: true };
+  }
+}
+
+/**
+ * Check that a user has completed the season's sport questionnaire.
+ *
+ * Backs #103-15 — sendSeasonInvitation only checks the recipient, not the
+ * sender. This helper is called from every invite entry point to check both
+ * players before the partnership is created.
+ */
+export async function hasCompletedQuestionnaireForSeason(
+  userId: string,
+  seasonSport: string,
+  prismaClient: Prisma.TransactionClient | PrismaClient = prisma as PrismaClient,
+): Promise<boolean> {
+  const response = await prismaClient.questionnaireResponse.findFirst({
+    where: {
+      userId,
+      sport: { equals: seasonSport, mode: 'insensitive' },
+      completedAt: { not: null },
+    },
+    select: { id: true },
+  });
+  return !!response;
+}
+
+// `translateTransactionRaceError` was moved to src/utils/prismaErrors.ts in
+// #103 Part 5.2 so other services (match submission, chat, notifications)
+// can reuse it without importing from pairingService. The re-export below
+// preserves the historical import path for existing callers like
+// seasonWithdrawalService.ts.
+export { translateTransactionRaceError } from '../utils/prismaErrors';
+
+/**
+ * Best-effort helper to derive the season's sport from its league.
+ * Falls back to 'pickleball' to match the existing `seasonInvitationService`
+ * default at line ~55.
+ */
+async function getSeasonSport(
+  seasonId: string,
+  prismaClient: Prisma.TransactionClient | PrismaClient = prisma as PrismaClient,
+): Promise<string> {
+  const season = await prismaClient.season.findUnique({
+    where: { id: seasonId },
+    select: {
+      leagues: { select: { sportType: true }, take: 1 },
+    },
+  });
+  return season?.leagues[0]?.sportType?.toLowerCase() ?? 'pickleball';
+}
 
 interface SendPairRequestData {
   requesterId: string;
@@ -108,16 +337,18 @@ export const sendPairRequest = async (
       };
     }
 
-    // Check if season exists and is open for registration
+    // Check season exists and is open for registration.
+    // Fixes #103-13: previously the select fetched `startDate`, `status`,
+    // `categoryId` but never validated them. The function accepted pair
+    // requests for CANCELLED / FINISHED / singles seasons.
     const season = await prisma.season.findUnique({
       where: { id: seasonId },
       select: {
         id: true,
         name: true,
-        startDate: true,
         regiDeadline: true,
         status: true,
-        categoryId: true
+        leagues: { select: { sportType: true }, take: 1 },
       },
     });
 
@@ -128,12 +359,45 @@ export const sendPairRequest = async (
       };
     }
 
-    // Allow pairing as long as registration deadline hasn't passed (even after season starts)
+    if (season.status !== 'UPCOMING' && season.status !== 'ACTIVE') {
+      return {
+        success: false,
+        message: 'This season is not accepting registrations',
+      };
+    }
+
     const now = new Date();
     if (season.regiDeadline && now > season.regiDeadline) {
       return {
         success: false,
         message: 'Season registration deadline has passed',
+      };
+    }
+
+    // #103-14: enforce category gender restriction + doubles-only.
+    const genderCheck = await validateCategoryGenderMatch(seasonId, requesterId, recipientId);
+    if (!genderCheck.valid) {
+      return { success: false, message: genderCheck.reason || 'Players do not match the season category' };
+    }
+
+    // #103-15: both players must have completed the season sport questionnaire
+    // BEFORE a pair request can be sent. Previously only recipient was checked
+    // (and only at accept time, too late for the sender to back out).
+    const seasonSport = season.leagues[0]?.sportType?.toLowerCase() ?? 'pickleball';
+    const [requesterDone, recipientDone] = await Promise.all([
+      hasCompletedQuestionnaireForSeason(requesterId, seasonSport),
+      hasCompletedQuestionnaireForSeason(recipientId, seasonSport),
+    ]);
+    if (!requesterDone) {
+      return {
+        success: false,
+        message: 'Complete your questionnaire for this sport before inviting a partner',
+      };
+    }
+    if (!recipientDone) {
+      return {
+        success: false,
+        message: 'This player has not completed their questionnaire for this sport',
       };
     }
 
@@ -305,6 +569,15 @@ export const sendPairRequest = async (
 
     console.log(`Pair request sent from ${requesterId} to ${recipientId} for season ${seasonId}`);
 
+    // #103-2: notify both parties in real-time.
+    emitPairRequestUpdated({
+      requesterId,
+      recipientId,
+      pairRequestId: pairRequest.id,
+      seasonId,
+      status: 'PENDING',
+    });
+
     return {
       success: true,
       message: 'Pair request sent successfully',
@@ -320,7 +593,18 @@ export const sendPairRequest = async (
 };
 
 /**
- * Accept a pair request and create partnership
+ * Accept a pair request and create partnership.
+ *
+ * Fixes #103-8: The transaction now re-checks, under Serializable isolation,
+ * that neither player is in another ACTIVE/INCOMPLETE partnership for this
+ * season. Also auto-declines other pending pair requests from/to either
+ * player so the player's inbox is clean after accepting.
+ *
+ * Future: a filtered partial unique index on `(captainId, seasonId)` /
+ * `(partnerId, seasonId)` where status IN ('ACTIVE','INCOMPLETE') would make
+ * this impossible at the database layer. That requires a raw SQL migration
+ * (Prisma doesn't support partial uniqueness natively) — tracked as a
+ * follow-up in docs/issues/dissections/103-partnership-invite-edge-cases.md.
  */
 export const acceptPairRequest = async (
   requestId: string,
@@ -374,6 +658,23 @@ export const acceptPairRequest = async (
       };
     }
 
+    // #103 Part 5 finding: season must still be accepting registrations at
+    // accept time. Otherwise an invite sent before admin cancelled a season
+    // could still create a partnership in a CANCELLED / FINISHED season.
+    const seasonForCheck: any = pairRequest.season;
+    if (seasonForCheck.status !== 'UPCOMING' && seasonForCheck.status !== 'ACTIVE') {
+      return {
+        success: false,
+        message: 'This season is no longer accepting registrations',
+      };
+    }
+    if (seasonForCheck.regiDeadline && new Date(seasonForCheck.regiDeadline) < new Date()) {
+      return {
+        success: false,
+        message: 'Registration deadline has passed',
+      };
+    }
+
     // Check if recipient (the one accepting) has an INCOMPLETE partnership
     // If so, use special flow that updates their partnership instead of creating new
     const recipientIncompletePartnership = await prisma.partnership.findFirst({
@@ -421,8 +722,30 @@ export const acceptPairRequest = async (
     // Determine division: use existing division if available, otherwise assign based on divisions available
     const assignedDivisionId = existingMembership?.divisionId || pairRequest.season.divisions[0]?.id.toString();
 
-    // Use a transaction to ensure data consistency
+    // #103-8: Serializable transaction with re-checks inside the txn.
+    // Protects against: (a) state drift between send and accept, (b) two
+    // concurrent accepts by different recipients on requests from the same
+    // requester, (c) the requester having independently formed another
+    // partnership since the request was sent.
     const result = await prisma.$transaction(async (tx) => {
+      // #103-8 conflict check: neither player may be in another partnership.
+      const conflict = await tx.partnership.findFirst({
+        where: {
+          seasonId: pairRequest.seasonId,
+          status: { in: ['ACTIVE', 'INCOMPLETE'] },
+          OR: [
+            { captainId: pairRequest.requesterId },
+            { partnerId: pairRequest.requesterId },
+            { captainId: pairRequest.recipientId },
+            { partnerId: pairRequest.recipientId },
+          ],
+        },
+        select: { id: true, captainId: true, partnerId: true },
+      });
+      if (conflict) {
+        throw new Error('One or both players are already in a partnership for this season');
+      }
+
       // Update pair request status
       const updatedRequest = await tx.pairRequest.update({
         where: { id: requestId },
@@ -469,8 +792,41 @@ export const acceptPairRequest = async (
         },
       });
 
+      // #103-8: auto-decline every other pending pair request from/to either
+      // player for this season so their inboxes are clean.
+      await tx.pairRequest.updateMany({
+        where: {
+          seasonId: pairRequest.seasonId,
+          status: PairRequestStatus.PENDING,
+          id: { not: requestId },
+          OR: [
+            { requesterId: pairRequest.requesterId },
+            { recipientId: pairRequest.requesterId },
+            { requesterId: pairRequest.recipientId },
+            { recipientId: pairRequest.recipientId },
+          ],
+        },
+        data: { status: PairRequestStatus.AUTO_DENIED, respondedAt: new Date() },
+      });
+
+      // #103-18 scoped cleanup: auto-cancel any overlapping season invitations
+      // for either player so the two flows don't compete.
+      await tx.seasonInvitation.updateMany({
+        where: {
+          seasonId: pairRequest.seasonId,
+          status: 'PENDING',
+          OR: [
+            { senderId: pairRequest.requesterId },
+            { recipientId: pairRequest.requesterId },
+            { senderId: pairRequest.recipientId },
+            { recipientId: pairRequest.recipientId },
+          ],
+        },
+        data: { status: 'CANCELLED', respondedAt: new Date() },
+      });
+
       return { updatedRequest, partnership };
-    });
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 
       // Send notifications for partnership creation (both users) - PUSH
       try {
@@ -509,6 +865,23 @@ export const acceptPairRequest = async (
 
       console.log(`Pair request ${requestId} accepted, partnership created`);
 
+    // #103-2: emit real-time event so both parties see the transition.
+    emitPartnershipUpdated({
+      captainId: result.partnership.captainId,
+      partnerId: result.partnership.partnerId,
+      partnershipId: result.partnership.id,
+      seasonId: result.partnership.seasonId,
+      status: result.partnership.status,
+      action: 'created',
+    });
+    emitPairRequestUpdated({
+      requesterId: pairRequest.requesterId,
+      recipientId: pairRequest.recipientId,
+      pairRequestId: requestId,
+      seasonId: pairRequest.seasonId,
+      status: 'ACCEPTED',
+    });
+
     return {
       success: true,
       message: 'Pair request accepted successfully',
@@ -516,9 +889,11 @@ export const acceptPairRequest = async (
     };
   } catch (error) {
     console.error('Error accepting pair request:', error);
+    // Propagate the specific transaction error message (conflict / state drift)
+    const message = translateTransactionRaceError(error) ?? (error instanceof Error ? error.message : 'Failed to accept pair request');
     return {
       success: false,
-      message: 'Failed to accept pair request',
+      message,
     };
   }
 };
@@ -551,6 +926,25 @@ async function acceptPairRequestIntoIncomplete(
     );
 
     const result = await prisma.$transaction(async (tx) => {
+      // #103-8: conflict check — the requester (incoming new partner) must
+      // not already be in another partnership. The captain-side is inherently
+      // safe because we atomically gate the INCOMPLETE update below.
+      const requesterConflict = await tx.partnership.findFirst({
+        where: {
+          seasonId: pairRequest.seasonId,
+          status: { in: ['ACTIVE', 'INCOMPLETE'] },
+          id: { not: incompletePartnership.id },
+          OR: [
+            { captainId: newPartnerId },
+            { partnerId: newPartnerId },
+          ],
+        },
+        select: { id: true },
+      });
+      if (requesterConflict) {
+        throw new Error('This player is already in a partnership for this season');
+      }
+
       // 1. Update the pair request to ACCEPTED
       await tx.pairRequest.update({
         where: { id: requestId },
@@ -560,14 +954,23 @@ async function acceptPairRequestIntoIncomplete(
         },
       });
 
-      // 2. Update INCOMPLETE partnership: add partner, change status to ACTIVE
-      const updatedPartnership = await tx.partnership.update({
-        where: { id: incompletePartnership.id },
+      // 2. Update INCOMPLETE partnership: add partner, change status to ACTIVE.
+      //    #103-3/#103-10: use an atomic status gate — if the partnership has
+      //    been dissolved or completed by another path since we read it, this
+      //    updateMany returns count=0 and we abort.
+      const gatedUpdate = await tx.partnership.updateMany({
+        where: { id: incompletePartnership.id, status: 'INCOMPLETE' },
         data: {
           partnerId: newPartnerId,
           status: 'ACTIVE',
           pairRating,
         },
+      });
+      if (gatedUpdate.count === 0) {
+        throw new Error('Partnership is no longer accepting new partners');
+      }
+      const updatedPartnership = await tx.partnership.findUnique({
+        where: { id: incompletePartnership.id },
         include: {
           captain: { select: { id: true, name: true, username: true, image: true } },
           partner: { select: { id: true, name: true, username: true, image: true } },
@@ -575,6 +978,9 @@ async function acceptPairRequestIntoIncomplete(
           division: { select: { id: true, name: true } },
         },
       });
+      if (!updatedPartnership) {
+        throw new Error('Partnership disappeared after update');
+      }
 
       // 3. Create/update season membership for new partner
       const existingMembership = await tx.seasonMembership.findFirst({
@@ -622,8 +1028,23 @@ async function acceptPairRequestIntoIncomplete(
         },
       });
 
+      // #103-18: also cancel any overlapping season invitations for either player.
+      await tx.seasonInvitation.updateMany({
+        where: {
+          seasonId: pairRequest.seasonId,
+          status: 'PENDING',
+          OR: [
+            { senderId: acceptingUserId },
+            { recipientId: acceptingUserId },
+            { senderId: newPartnerId },
+            { recipientId: newPartnerId },
+          ],
+        },
+        data: { status: 'CANCELLED', respondedAt: new Date() },
+      });
+
       return updatedPartnership;
-    });
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 
     // Send notifications
     try {
@@ -664,6 +1085,23 @@ async function acceptPairRequestIntoIncomplete(
 
     console.log(`✅ Partnership ${result.id} transitioned from INCOMPLETE to ACTIVE. New partner: ${newPartnerId}`);
 
+    // #103-2: notify both players in real-time.
+    emitPartnershipUpdated({
+      captainId: result.captainId,
+      partnerId: result.partnerId,
+      partnershipId: result.id,
+      seasonId: result.seasonId,
+      status: result.status,
+      action: 'partner_joined',
+    });
+    emitPairRequestUpdated({
+      requesterId: pairRequest.requesterId,
+      recipientId: pairRequest.recipientId,
+      pairRequestId: requestId,
+      seasonId: pairRequest.seasonId,
+      status: 'ACCEPTED',
+    });
+
     return {
       success: true,
       message: 'Partner joined your team successfully!',
@@ -671,9 +1109,10 @@ async function acceptPairRequestIntoIncomplete(
     };
   } catch (error) {
     console.error('Error accepting pair request into incomplete partnership:', error);
+    const message = translateTransactionRaceError(error) ?? (error instanceof Error ? error.message : 'Failed to accept pair request');
     return {
       success: false,
-      message: 'Failed to accept pair request',
+      message,
     };
   }
 }
@@ -750,6 +1189,16 @@ export const denyPairRequest = async (
       console.error('❌ Failed to send decline notification to requester:', notifErr);
     }
 
+    // #103-2: emit socket event so the requester's UI (e.g. pending_sent state)
+    // transitions out immediately, not after the 30-second poll.
+    emitPairRequestUpdated({
+      requesterId: pairRequest.requesterId,
+      recipientId: pairRequest.recipientId,
+      pairRequestId: requestId,
+      seasonId: pairRequest.seasonId,
+      status: 'DENIED',
+    });
+
     return {
       success: true,
       message: 'Pair request denied',
@@ -810,6 +1259,15 @@ export const cancelPairRequest = async (
     });
 
     console.log(`Pair request ${requestId} cancelled by requester`);
+
+    // #103-2: emit socket event so the recipient's UI reflects the cancellation.
+    emitPairRequestUpdated({
+      requesterId: pairRequest.requesterId,
+      recipientId: pairRequest.recipientId,
+      pairRequestId: requestId,
+      seasonId: pairRequest.seasonId,
+      status: 'CANCELLED',
+    });
 
     return {
       success: true,
@@ -1017,6 +1475,85 @@ export const dissolvePartnership = async (
       };
     }
 
+    // #103-9: if this is an INCOMPLETE partnership, there is no "remaining player"
+    // to inherit. Treat the dissolve as a full cancellation for the captain: mark
+    // DISSOLVED, remove captain's membership, clean up their pending invitations.
+    // This is what gives INCOMPLETE captains a path to escape the season.
+    if (partnership.status === 'INCOMPLETE') {
+      if (partnership.captainId !== dissolvingUserId) {
+        return {
+          success: false,
+          message: 'Only the team captain can cancel an incomplete partnership',
+        };
+      }
+
+      const incompleteResult = await prisma.$transaction(async (tx) => {
+        // #103-3/#103-10: atomic status gate.
+        const gated = await tx.partnership.updateMany({
+          where: { id: partnershipId, status: 'INCOMPLETE' },
+          data: { status: 'DISSOLVED', dissolvedAt: new Date() },
+        });
+        if (gated.count === 0) {
+          throw new Error('Partnership is no longer active');
+        }
+
+        // Remove captain's membership so they can re-enter / be re-invited.
+        await tx.seasonMembership.updateMany({
+          where: {
+            userId: dissolvingUserId,
+            seasonId: partnership.seasonId,
+          },
+          data: { status: 'REMOVED' },
+        });
+
+        // #103-18: auto-cancel this player's pending pair requests and
+        // season invitations for the season.
+        await tx.pairRequest.updateMany({
+          where: {
+            seasonId: partnership.seasonId,
+            status: 'PENDING',
+            OR: [
+              { requesterId: dissolvingUserId },
+              { recipientId: dissolvingUserId },
+            ],
+          },
+          data: { status: PairRequestStatus.AUTO_DENIED, respondedAt: new Date() },
+        });
+
+        await tx.seasonInvitation.updateMany({
+          where: {
+            seasonId: partnership.seasonId,
+            status: 'PENDING',
+            OR: [
+              { senderId: dissolvingUserId },
+              { recipientId: dissolvingUserId },
+            ],
+          },
+          data: { status: 'CANCELLED', respondedAt: new Date() },
+        });
+
+        return partnership;
+      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+
+      // #103-2: emit real-time event.
+      emitPartnershipUpdated({
+        captainId: dissolvingUserId,
+        partnerId: null,
+        partnershipId: incompleteResult.id,
+        seasonId: incompleteResult.seasonId,
+        status: 'DISSOLVED',
+        action: 'incomplete_cancelled',
+      });
+
+      console.log(`Incomplete partnership ${partnershipId} cancelled by captain ${dissolvingUserId}`);
+
+      return {
+        success: true,
+        message: 'You have left the season. Your team slot is now released.',
+        data: { id: partnershipId, status: 'DISSOLVED' },
+      };
+    }
+
     // Determine remaining player (the one who is NOT dissolving)
     const remainingPlayerId = partnership.captainId === dissolvingUserId
       ? partnership.partnerId
@@ -1030,7 +1567,9 @@ export const dissolvePartnership = async (
       ? partnership.captain
       : partnership.partner;
 
-    // Check if remaining player exists (handle nullable partnerId)
+    // Defensive — this should never trigger for ACTIVE partnerships because
+    // partnerId is required when status=ACTIVE, but we keep the guard for
+    // schema-integrity anomalies.
     if (!remainingPlayerId || !remainingPlayer) {
       return {
         success: false,
@@ -1038,18 +1577,22 @@ export const dissolvePartnership = async (
       };
     }
 
-    // Update partnership status to DISSOLVED and create INCOMPLETE partnership for remaining player
+    // #103-3/#103-10/#103-18: atomic status-gated dissolve + cleanup sweep for
+    // the dissolving player's pending requests & invitations. Wrapped in
+    // Serializable isolation to defeat the concurrent-dissolve race AND the
+    // sequential stale-UI race (where a player taps Leave on a partnership
+    // that was already dissolved by the other player's tap).
     const result = await prisma.$transaction(async (tx) => {
-      // 1. Mark old partnership as DISSOLVED
-      const dissolved = await tx.partnership.update({
-        where: { id: partnershipId },
-        data: {
-          status: 'DISSOLVED',
-          dissolvedAt: new Date(),
-        },
+      // 1. Atomic gate: only proceed if partnership is still ACTIVE.
+      const gated = await tx.partnership.updateMany({
+        where: { id: partnershipId, status: 'ACTIVE' },
+        data: { status: 'DISSOLVED', dissolvedAt: new Date() },
       });
+      if (gated.count === 0) {
+        throw new Error('Partnership is no longer active');
+      }
 
-      // 2. Create new INCOMPLETE partnership for remaining player
+      // 2. Create new INCOMPLETE partnership for remaining player.
       const incompletePartnership = await tx.partnership.create({
         data: {
           captainId: remainingPlayerId,  // Remaining player becomes captain
@@ -1073,8 +1616,7 @@ export const dissolvePartnership = async (
         data: { partnershipId: incompletePartnership.id },
       });
 
-      // 4. Handle season memberships
-      // Only remove the departing player's membership
+      // 4. Only remove the departing player's membership
       await tx.seasonMembership.updateMany({
         where: {
           userId: dissolvingUserId,
@@ -1085,11 +1627,36 @@ export const dissolvePartnership = async (
         },
       });
 
-      // Keep remaining player's membership ACTIVE (if it exists)
-      // No need to update since it should already be ACTIVE
+      // 5. #103-18: auto-cancel the dissolving player's pending pair requests
+      // and season invitations for this season. We intentionally do NOT sweep
+      // the remaining player's pending rows — those may be their path to a
+      // new partner.
+      await tx.pairRequest.updateMany({
+        where: {
+          seasonId: partnership.seasonId,
+          status: 'PENDING',
+          OR: [
+            { requesterId: dissolvingUserId },
+            { recipientId: dissolvingUserId },
+          ],
+        },
+        data: { status: PairRequestStatus.AUTO_DENIED, respondedAt: new Date() },
+      });
 
-      return { dissolved, incompletePartnership };
-    });
+      await tx.seasonInvitation.updateMany({
+        where: {
+          seasonId: partnership.seasonId,
+          status: 'PENDING',
+          OR: [
+            { senderId: dissolvingUserId },
+            { recipientId: dissolvingUserId },
+          ],
+        },
+        data: { status: 'CANCELLED', respondedAt: new Date() },
+      });
+
+      return { incompletePartnership };
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 
     // Send notification to remaining player about partner leaving
     try {
@@ -1115,6 +1682,26 @@ export const dissolvePartnership = async (
 
     console.log(`Partnership ${partnershipId} dissolved by ${dissolvingUserId}. INCOMPLETE partnership ${result.incompletePartnership.id} created for ${remainingPlayerId}`);
 
+    // #103-2: notify both players in real-time.
+    // - The dissolving player needs to clear their active partnership state.
+    // - The remaining player needs to see their new INCOMPLETE partnership.
+    emitPartnershipUpdated({
+      captainId: partnership.captainId,
+      partnerId: partnership.partnerId,
+      partnershipId,
+      seasonId: partnership.seasonId,
+      status: 'DISSOLVED',
+      action: 'dissolved',
+    });
+    emitPartnershipUpdated({
+      captainId: remainingPlayerId,
+      partnerId: null,
+      partnershipId: result.incompletePartnership.id,
+      seasonId: partnership.seasonId,
+      status: 'INCOMPLETE',
+      action: 'created',
+    });
+
     return {
       success: true,
       message: 'Partnership dissolved successfully. Your partner can now find a new teammate.',
@@ -1122,9 +1709,10 @@ export const dissolvePartnership = async (
     };
   } catch (error) {
     console.error('Error dissolving partnership:', error);
+    const message = translateTransactionRaceError(error) ?? (error instanceof Error ? error.message : 'Failed to dissolve partnership');
     return {
       success: false,
-      message: 'Failed to dissolve partnership',
+      message,
     };
   }
 };
@@ -1312,11 +1900,24 @@ export const getActivePartnership = async (
 };
 
 /**
- * Expire old pending requests (to be run as a scheduled job)
+ * Expire old pending requests (to be run as a scheduled job).
+ *
+ * #103-1/#103-12: fan out `pair_request_updated` events after the bulk
+ * expire so any connected clients see their pending requests disappear
+ * immediately instead of on next poll.
  */
 export const expireOldRequests = async () => {
   try {
     const now = new Date();
+
+    const affected = await prisma.pairRequest.findMany({
+      where: {
+        status: PairRequestStatus.PENDING,
+        expiresAt: { lt: now },
+      },
+      select: { id: true, requesterId: true, recipientId: true, seasonId: true },
+    });
+
     const result = await prisma.pairRequest.updateMany({
       where: {
         status: PairRequestStatus.PENDING,
@@ -1327,6 +1928,16 @@ export const expireOldRequests = async () => {
         respondedAt: now,
       },
     });
+
+    for (const row of affected) {
+      emitPairRequestUpdated({
+        requesterId: row.requesterId,
+        recipientId: row.recipientId,
+        pairRequestId: row.id,
+        seasonId: row.seasonId,
+        status: 'EXPIRED',
+      });
+    }
 
     console.log(`Expired ${result.count} old pair requests`);
     return result;
@@ -1472,10 +2083,35 @@ export const inviteReplacementPartner = async (
     }
 
     // Validate: Season must still allow changes (not finished)
-    if (partnership.season.status === 'FINISHED') {
+    if (partnership.season.status === 'FINISHED' || partnership.season.status === 'CANCELLED') {
       return {
         success: false,
-        message: 'Cannot invite partners after the season has finished',
+        message: 'Cannot invite partners in a finished or cancelled season',
+      };
+    }
+
+    // #103-14: enforce category gender restriction + doubles-only.
+    const genderCheck = await validateCategoryGenderMatch(partnership.seasonId, captainId, recipientId);
+    if (!genderCheck.valid) {
+      return { success: false, message: genderCheck.reason || 'Players do not match the season category' };
+    }
+
+    // #103-15: both captain and recipient must have completed the sport questionnaire.
+    const seasonSport = await getSeasonSport(partnership.seasonId);
+    const [captainDone, recipientDone] = await Promise.all([
+      hasCompletedQuestionnaireForSeason(captainId, seasonSport),
+      hasCompletedQuestionnaireForSeason(recipientId, seasonSport),
+    ]);
+    if (!captainDone) {
+      return {
+        success: false,
+        message: 'Complete your questionnaire for this sport before inviting a partner',
+      };
+    }
+    if (!recipientDone) {
+      return {
+        success: false,
+        message: 'This player has not completed their questionnaire for this sport',
       };
     }
 
@@ -1569,6 +2205,15 @@ export const inviteReplacementPartner = async (
     } catch (notifErr) {
       console.error('❌ Failed to send replacement invite notifications:', notifErr);
     }
+
+    // #103-2: notify both captain and recipient of the new pending request.
+    emitPairRequestUpdated({
+      requesterId: captainId,
+      recipientId,
+      pairRequestId: pairRequest.id,
+      seasonId: partnership.seasonId,
+      status: 'PENDING',
+    });
 
     return {
       success: true,
@@ -1669,8 +2314,25 @@ export const acceptReplacementInvite = async (
       pairRequest.seasonId
     );
 
-    // Use a transaction to update everything atomically
+    // Serializable transaction + atomic status gate (fix for #103-3/#103-8/#103-10).
     const result = await prisma.$transaction(async (tx) => {
+      // Conflict check: the accepting user must not already be in another partnership.
+      const conflict = await tx.partnership.findFirst({
+        where: {
+          seasonId: pairRequest.seasonId,
+          status: { in: ['ACTIVE', 'INCOMPLETE'] },
+          id: { not: incompletePartnership.id },
+          OR: [
+            { captainId: acceptingUserId },
+            { partnerId: acceptingUserId },
+          ],
+        },
+        select: { id: true },
+      });
+      if (conflict) {
+        throw new Error('You are already in a partnership for this season');
+      }
+
       // 1. Update the pair request to ACCEPTED
       await tx.pairRequest.update({
         where: { id: requestId },
@@ -1680,14 +2342,20 @@ export const acceptReplacementInvite = async (
         },
       });
 
-      // 2. Update partnership: set partnerId, status to ACTIVE, recalculate pairRating
-      const updatedPartnership = await tx.partnership.update({
-        where: { id: incompletePartnership.id },
+      // 2. Atomic gate on partnership transition: INCOMPLETE -> ACTIVE
+      const gated = await tx.partnership.updateMany({
+        where: { id: incompletePartnership.id, status: 'INCOMPLETE' },
         data: {
           partnerId: acceptingUserId,
           status: 'ACTIVE',
           pairRating,
         },
+      });
+      if (gated.count === 0) {
+        throw new Error('Partnership is no longer accepting new partners');
+      }
+      const updatedPartnership = await tx.partnership.findUnique({
+        where: { id: incompletePartnership.id },
         include: {
           captain: { select: { id: true, name: true, username: true, image: true } },
           partner: { select: { id: true, name: true, username: true, image: true } },
@@ -1695,6 +2363,9 @@ export const acceptReplacementInvite = async (
           division: { select: { id: true, name: true } },
         },
       });
+      if (!updatedPartnership) {
+        throw new Error('Partnership disappeared after update');
+      }
 
       // 3. Create season membership for new partner (if not exists)
       const existingMembership = await tx.seasonMembership.findFirst({
@@ -1720,13 +2391,19 @@ export const acceptReplacementInvite = async (
         });
       }
 
-      // 4. Auto-decline all other pending pair requests for this partnership's captain
+      // 4. Auto-decline other pending pair requests for BOTH the captain and
+      // the new partner so their inboxes are clean.
       await tx.pairRequest.updateMany({
         where: {
-          requesterId: pairRequest.requesterId,
           seasonId: pairRequest.seasonId,
           status: PairRequestStatus.PENDING,
           id: { not: requestId },
+          OR: [
+            { requesterId: pairRequest.requesterId },
+            { recipientId: pairRequest.requesterId },
+            { requesterId: acceptingUserId },
+            { recipientId: acceptingUserId },
+          ],
         },
         data: {
           status: PairRequestStatus.AUTO_DENIED,
@@ -1734,8 +2411,23 @@ export const acceptReplacementInvite = async (
         },
       });
 
+      // #103-18: also cancel overlapping season invitations.
+      await tx.seasonInvitation.updateMany({
+        where: {
+          seasonId: pairRequest.seasonId,
+          status: 'PENDING',
+          OR: [
+            { senderId: pairRequest.requesterId },
+            { recipientId: pairRequest.requesterId },
+            { senderId: acceptingUserId },
+            { recipientId: acceptingUserId },
+          ],
+        },
+        data: { status: 'CANCELLED', respondedAt: new Date() },
+      });
+
       return updatedPartnership;
-    });
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 
     // Send notifications
     try {
@@ -1761,6 +2453,23 @@ export const acceptReplacementInvite = async (
 
     console.log(`Partnership ${result.id} transitioned from INCOMPLETE to ACTIVE. New partner: ${acceptingUserId}`);
 
+    // #103-2: notify both parties of the transition.
+    emitPartnershipUpdated({
+      captainId: result.captainId,
+      partnerId: result.partnerId,
+      partnershipId: result.id,
+      seasonId: result.seasonId,
+      status: result.status,
+      action: 'partner_joined',
+    });
+    emitPairRequestUpdated({
+      requesterId: pairRequest.requesterId,
+      recipientId: pairRequest.recipientId,
+      pairRequestId: requestId,
+      seasonId: pairRequest.seasonId,
+      status: 'ACCEPTED',
+    });
+
     return {
       success: true,
       message: 'You have joined the team successfully!',
@@ -1768,9 +2477,10 @@ export const acceptReplacementInvite = async (
     };
   } catch (error) {
     console.error('Error accepting replacement invite:', error);
+    const message = translateTransactionRaceError(error) ?? (error instanceof Error ? error.message : 'Failed to accept invitation');
     return {
       success: false,
-      message: 'Failed to accept invitation',
+      message,
     };
   }
 };
