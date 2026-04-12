@@ -44,7 +44,7 @@ const getOtherParticipants = async (matchId: string, excludeUserId?: string): Pr
     },
     select: { userId: true },
   });
-  return participants.map(p => p.userId);
+  return participants.map(p => p.userId).filter((id): id is string => id !== null);
 };
 
 const friendlyMatchService = getFriendlyMatchService();
