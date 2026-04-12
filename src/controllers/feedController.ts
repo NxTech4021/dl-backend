@@ -50,7 +50,7 @@ export const createPostHandler = async (req: AuthenticatedRequest, res: Response
     if (!result.alreadyExists) {
       void (async () => {
         try {
-          const friendships = await prisma.friendRequest.findMany({
+          const friendships = await prisma.friendship.findMany({
             where: {
               OR: [
                 { requesterId: userId, status: 'ACCEPTED' },
@@ -60,7 +60,7 @@ export const createPostHandler = async (req: AuthenticatedRequest, res: Response
             select: { requesterId: true, recipientId: true }
           });
 
-          const friendIds = friendships.map(f =>
+          const friendIds = friendships.map((f: { requesterId: string; recipientId: string }) =>
             f.requesterId === userId ? f.recipientId : f.requesterId
           );
 
