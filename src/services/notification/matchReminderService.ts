@@ -7,6 +7,7 @@
  */
 
 import { prisma } from '../../lib/prisma';
+import { formatMatchDateShort, formatMatchTime } from '../../utils/timezone';
 import { NotificationService, notificationService as notificationServiceSingleton } from '../notificationService';
 import { notificationTemplates } from '../../helpers/notifications';
 import { filterUsersByPreference } from './notificationPreferenceService';
@@ -96,18 +97,9 @@ export class MatchReminderService {
       return;
     }
 
-    // Format match time
-    const matchTime = new Date(match.matchDate);
-    const timeStr = matchTime.toLocaleTimeString('en-US', {
-      hour: 'numeric',
-      minute: '2-digit',
-      hour12: true
-    });
-    const dateStr = matchTime.toLocaleDateString('en-US', {
-      weekday: 'short',
-      month: 'short',
-      day: 'numeric'
-    });
+    // Format match time in venue timezone (Malaysia)
+    const timeStr = formatMatchTime(match.matchDate);
+    const dateStr = formatMatchDateShort(match.matchDate);
 
     // Get opponent name for each participant
     for (const recipientId of recipientIds) {
