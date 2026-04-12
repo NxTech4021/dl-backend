@@ -350,6 +350,7 @@ export class AdminMatchParticipantService {
         const best6Service = new Best6AlgorithmService();
 
         for (const userId of affectedUserIds) {
+          if (!userId) continue;
           await best6Service.applyBest6ToDatabase(
             userId,
             match.divisionId,
