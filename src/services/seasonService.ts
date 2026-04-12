@@ -167,8 +167,9 @@ export class SeasonService {
               joinedAt: 'asc'
             }
           } as any,
+          // #103-6: ACTIVE-only membership count.
           _count: {
-            select: { memberships: true }
+            select: { memberships: { where: { status: 'ACTIVE' } } }
           },
           divisions: {
             select: { id: true, name: true }
