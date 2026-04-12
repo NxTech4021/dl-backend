@@ -8,6 +8,7 @@ import { notificationTemplates } from '../../helpers/notifications';
 import { divisionNotifications } from '../../helpers/notifications/divisionNotifications';
 import { prisma } from '../../lib/prisma';
 import { logger } from '../../utils/logger';
+import { formatMatchDate } from '../../utils/timezone';
 import { MembershipStatus } from '@prisma/client';
 
 /**
@@ -353,7 +354,7 @@ export async function sendLeagueExtendedNotifications(
     const extendedNotif = notificationTemplates.league.leagueExtended(
       season.name,
       weeksExtended,
-      newEndDate.toLocaleDateString()
+      formatMatchDate(newEndDate)
     );
 
     await notificationService.createNotification({
@@ -393,7 +394,7 @@ export async function sendLeagueShortenedNotifications(
 
     const shortenedNotif = notificationTemplates.league.leagueShortened(
       season.name,
-      newEndDate.toLocaleDateString()
+      formatMatchDate(newEndDate)
     );
 
     await notificationService.createNotification({
