@@ -34,6 +34,7 @@ export async function handlePostMatchCreation(matchId: string): Promise<void> {
     const inactivityService = getInactivityService(notificationService);
 
     for (const participant of match.participants) {
+      if (!participant.userId) continue;
       await inactivityService.reactivateUser(participant.userId);
     }
 
