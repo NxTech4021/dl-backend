@@ -230,9 +230,10 @@ export async function getPlayerSeasonHistory(playerId: string) {
           isActiveDivision: true
         }
       },
+      // #103-6: ACTIVE-only membership count.
       _count: {
         select: {
-          memberships: true,
+          memberships: { where: { status: 'ACTIVE' } },
           divisions: true
         }
       }
