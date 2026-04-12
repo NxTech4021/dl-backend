@@ -374,7 +374,7 @@ export async function previewRecalculation(
           });
           changes.push({
             userId: p.userId,
-            userName: p.user.name || 'Unknown',
+            userName: p.user?.name || 'Unknown',
             currentRating: rating?.currentRating || 1500,
             projectedRating: rating?.currentRating || 1500, // Would need full calc
             delta: 0
