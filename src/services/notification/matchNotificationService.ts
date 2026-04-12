@@ -7,6 +7,7 @@ import { notificationService } from '../notificationService';
 import { notificationTemplates } from '../../helpers/notifications';
 import { prisma } from '../../lib/prisma';
 import { logger } from '../../utils/logger';
+import { formatMatchDate, formatMatchTime } from '../../utils/timezone';
 import { MatchStatus } from '@prisma/client';
 
 /**
@@ -35,8 +36,8 @@ export async function sendMatchScheduledNotification(
       return;
     }
 
-    const date = match.matchDate?.toLocaleDateString() || 'TBD';
-    const time = match.matchDate?.toLocaleTimeString() || 'TBD';
+    const date = match.matchDate ? formatMatchDate(match.matchDate) : 'TBD';
+    const time = match.matchDate ? formatMatchTime(match.matchDate) : 'TBD';
     const venue = match.venue || match.location || 'TBD';
 
     // Get player names
@@ -102,8 +103,8 @@ export async function sendMatchReminder24h(matchId: string): Promise<void> {
 
     if (!match || match.participants.length < 2) return;
 
-    const date = match.matchDate?.toLocaleDateString() || 'TBD';
-    const time = match.matchDate?.toLocaleTimeString() || 'TBD';
+    const date = match.matchDate ? formatMatchDate(match.matchDate) : 'TBD';
+    const time = match.matchDate ? formatMatchTime(match.matchDate) : 'TBD';
     const venue = match.venue || match.location || 'TBD';
 
     const player1 = match.participants[0];
@@ -166,7 +167,7 @@ export async function sendMatchReminder2h(matchId: string): Promise<void> {
 
     if (!match || match.participants.length < 2) return;
 
-    const time = match.matchDate?.toLocaleTimeString() || 'TBD';
+    const time = match.matchDate ? formatMatchTime(match.matchDate) : 'TBD';
     const venue = match.venue || match.location || 'TBD';
     const player1 = match.participants[0];
     const player2 = match.participants[1];
@@ -365,8 +366,8 @@ export async function sendMatchRescheduleRequest(
       select: { name: true }
     });
 
-    const date = newDate.toLocaleDateString();
-    const time = newDate.toLocaleTimeString();
+    const date = formatMatchDate(newDate);
+    const time = formatMatchTime(newDate);
     const venue = newVenue || 'TBD';
 
     const rescheduleNotif = notificationTemplates.match.matchRescheduleRequest(
