@@ -101,12 +101,14 @@ export function scheduleMatch24hReminders(): void {
             venue
           );
           
-          await notificationService.createNotification({
-            ...notif,
-            userIds: player.userId,
-            matchId: match.id,
-            skipDuplicateWithinMs: 25 * 60 * 60 * 1000,
-          });
+          if (player.userId) {
+            await notificationService.createNotification({
+              ...notif,
+              userIds: player.userId,
+              matchId: match.id,
+              skipDuplicateWithinMs: 25 * 60 * 60 * 1000,
+            });
+          }
         }
       }
 
@@ -191,12 +193,14 @@ export function scheduleMatch2hReminders(): void {
             venue
           );
           
-          await notificationService.createNotification({
-            ...notif,
-            userIds: player.userId,
-            matchId: match.id,
-            skipDuplicateWithinMs: 3 * 60 * 60 * 1000,
-          });
+          if (player.userId) {
+            await notificationService.createNotification({
+              ...notif,
+              userIds: player.userId,
+              matchId: match.id,
+              skipDuplicateWithinMs: 3 * 60 * 60 * 1000,
+            });
+          }
         }
       }
 
@@ -270,12 +274,14 @@ export function scheduleMatchMorningReminders(): void {
             venue
           );
           
-          await notificationService.createNotification({
-            ...notif,
-            userIds: player.userId,
-            matchId: match.id,
-            skipDuplicateWithinMs: 24 * 60 * 60 * 1000,
-          });
+          if (player.userId) {
+            await notificationService.createNotification({
+              ...notif,
+              userIds: player.userId,
+              matchId: match.id,
+              skipDuplicateWithinMs: 24 * 60 * 60 * 1000,
+            });
+          }
         }
       }
 
