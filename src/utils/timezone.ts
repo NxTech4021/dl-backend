@@ -79,6 +79,54 @@ export function getMalaysiaOffset(): string {
   return dayjs().tz(MALAYSIA_TIMEZONE).format('Z');
 }
 
+// ---- Display formatting helpers ----
+// All user-facing date/time strings should use these so times are always
+// shown in the venue's timezone (Malaysia for now). When the app expands
+// internationally, swap MALAYSIA_TIMEZONE for the league's own timezone field.
+
+/**
+ * Format a date for display: "Apr 9, 2026"
+ */
+export function formatMatchDate(date: Date | string): string {
+  return dayjs(date).tz(MALAYSIA_TIMEZONE).format('MMM D, YYYY');
+}
+
+/**
+ * Format a time for display: "3:00 PM"
+ */
+export function formatMatchTime(date: Date | string): string {
+  return dayjs(date).tz(MALAYSIA_TIMEZONE).format('h:mm A');
+}
+
+/**
+ * Format date + time for display: "Apr 9, 2026 at 3:00 PM"
+ */
+export function formatMatchDateTime(date: Date | string): string {
+  return dayjs(date).tz(MALAYSIA_TIMEZONE).format('MMM D, YYYY [at] h:mm A');
+}
+
+/**
+ * Format a date with weekday: "Wed, Apr 9"
+ * Used in match reminder notifications.
+ */
+export function formatMatchDateShort(date: Date | string): string {
+  return dayjs(date).tz(MALAYSIA_TIMEZONE).format('ddd, MMM D');
+}
+
+/**
+ * Parse a naive datetime string from a user's device and store as UTC.
+ * The deviceTimezone tells us what timezone the user intended.
+ * If device is already in Malaysia, we still parse explicitly to avoid
+ * Node.js interpreting naive strings as UTC.
+ *
+ * Usage: parseDateFromDevice("2026-04-09T14:50:00", "Asia/Kuala_Lumpur")
+ * Returns: Date object representing 14:50 MYT = 06:50 UTC
+ */
+export function parseDateFromDevice(naiveDateString: string, deviceTimezone?: string): Date {
+  const tz = deviceTimezone || MALAYSIA_TIMEZONE;
+  return dayjs.tz(naiveDateString, tz).toDate();
+}
+
 /**
  * Log timezone information for debugging
  */
