@@ -563,7 +563,7 @@ export class AdminMatchService {
 
     // Notify match participants that their dispute is being reviewed
     try {
-      const participantIds = updatedDispute.match?.participants?.map(p => p.userId).filter(Boolean) || [];
+      const participantIds = updatedDispute.match?.participants?.map(p => p.userId).filter((id): id is string => id !== null) || [];
       if (participantIds.length > 0) {
         await this.notificationService.createNotification({
           userIds: participantIds,
@@ -834,6 +834,7 @@ export class AdminMatchService {
           const { Best6AlgorithmService } = await import('../match/best6/best6AlgorithmService');
           const best6Service = new Best6AlgorithmService();
           for (const participant of resolvedMatch.participants) {
+            if (!participant.userId) continue;
             await best6Service.applyBest6ToDatabase(
               participant.userId,
               resolvedMatch.divisionId,
@@ -891,6 +892,9 @@ export class AdminMatchService {
     if (!match) {
       throw new Error('Match not found');
     }
+
+    // Capture original status before TypeScript narrows it inside the transaction callback
+    const originalStatus = match.status;
 
     // Store old values for audit
     const oldValue = {
@@ -974,7 +978,7 @@ export class AdminMatchService {
     // Trigger rating and standings recalculation for completed matches
     // Uses V2 standings (Best 6 based) + MatchResult refresh for consistency
     // #043 BUG 3: Also triggers if admin just completed the match (status was changed in transaction)
-    const isNowCompleted = match.status === MatchStatus.COMPLETED || (outcome && match.status !== MatchStatus.COMPLETED);
+    const isNowCompleted = originalStatus === MatchStatus.COMPLETED || (outcome && originalStatus !== MatchStatus.COMPLETED);
     if (isNowCompleted && match.divisionId && match.seasonId) {
       try {
         // Step 1: Refresh MatchResult records (V2 standings depends on these)
@@ -993,6 +997,7 @@ export class AdminMatchService {
         const { Best6AlgorithmService } = await import('../match/best6/best6AlgorithmService');
         const best6Service = new Best6AlgorithmService();
         for (const participant of match.participants) {
+          if (!participant.userId) continue;
           await best6Service.applyBest6ToDatabase(
             participant.userId,
             match.divisionId,
@@ -1354,7 +1359,7 @@ export class AdminMatchService {
       throw new Error('Match not found');
     }
 
-    const recipientIds = match.participants.map(p => p.userId);
+    const recipientIds = match.participants.map(p => p.userId).filter((id): id is string => id !== null);
     const deliveryResults = {
       inApp: 0,
       email: 0,
@@ -1492,7 +1497,7 @@ export class AdminMatchService {
       };
       const message = actionText[action] || 'Dispute resolved';
 
-      const recipientIds = dispute.match.participants.map(p => p.userId);
+      const recipientIds = dispute.match.participants.map(p => p.userId).filter((id): id is string => id !== null);
 
       await this.notificationService.createNotification({
         type: 'MATCH_DISPUTE_RESOLVED',
@@ -1519,7 +1524,7 @@ export class AdminMatchService {
 
       if (!match) return;
 
-      const recipientIds = match.participants.map(p => p.userId);
+      const recipientIds = match.participants.map(p => p.userId).filter((id): id is string => id !== null);
 
       await this.notificationService.createNotification({
         type: 'MATCH_RESULT_UPDATED',
@@ -1829,6 +1834,9 @@ export class AdminMatchService {
       });
 
       // Create walkover record with proper fields
+      if (!loserParticipant.userId) {
+        throw new Error('Defaulting player has no associated user');
+      }
       await tx.matchWalkover.create({
         data: {
           matchId,
@@ -1872,7 +1880,7 @@ export class AdminMatchService {
           '../match/calculation/matchResultCreationService'
         );
         const matchResultService = new MatchResultCreationService();
-        await matchResultService.createOrUpdateMatchResult(matchId);
+        await matchResultService.createMatchResults(matchId);
 
         // Step 2: Recalculate V2 standings (Best 6 based)
         const standingsV2 = new StandingsV2Service();
