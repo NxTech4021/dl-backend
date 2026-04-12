@@ -819,16 +819,15 @@ export class MatchResultService {
    */
   private getWalkoverScores(sport: string) {
     if (sport === 'PICKLEBALL') {
-      // Pickleball: 15-0, 15-0, 15-0 (best of 3 games)
+      // Pickleball: best-of-3 games, walkover needs 2 wins (matching Tennis pattern)
       return {
         walkoverScore: {
           games: [
             { gameNumber: 1, winner: 15, loser: 0 },
-            { gameNumber: 2, winner: 15, loser: 0 },
-            { gameNumber: 3, winner: 15, loser: 0 }
+            { gameNumber: 2, winner: 15, loser: 0 }
           ]
         },
-        setsWon: 3
+        setsWon: 2
       };
     } else {
       // Tennis/Padel: 6-0, 6-0
