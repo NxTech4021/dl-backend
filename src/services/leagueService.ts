@@ -89,9 +89,12 @@ export class LeagueService {
                 joinedAt: 'asc'
               }
             },
+            // #103-6: filter to ACTIVE-only so dissolved partnerships don't
+            // inflate the "N players joined" count. Prisma 6.x supports filtered
+            // relation counts natively (GA since 5.3).
             _count: {
               select: {
-                memberships: true
+                memberships: { where: { status: 'ACTIVE' } }
               }
             }
           }
@@ -210,9 +213,10 @@ export class LeagueService {
                 joinedAt: 'asc'
               }
             },
+            // #103-6: count ACTIVE memberships only.
             _count: {
               select: {
-                memberships: true
+                memberships: { where: { status: 'ACTIVE' } }
               }
             },
           },
@@ -515,8 +519,9 @@ export class LeagueService {
               joinedAt: 'asc'
             }
           } as any,
+          // #103-6: ACTIVE-only membership count.
           _count: {
-            select: { memberships: true }
+            select: { memberships: { where: { status: 'ACTIVE' } } }
           },
           divisions: {
             select: { id: true, name: true }

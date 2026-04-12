@@ -15,6 +15,7 @@ import {
   SportType
 } from '@prisma/client';
 import { logger } from '../../utils/logger';
+import { formatMatchDate, formatMatchTime } from '../../utils/timezone';
 import { NotificationService, notificationService as notificationServiceSingleton } from '../notificationService';
 import { NOTIFICATION_TYPES } from '../../types/notificationTypes';
 import { matchManagementNotifications } from '../../helpers/notifications/matchManagementNotifications';
@@ -322,8 +323,8 @@ export class FriendlyMatchService {
 
     // Send friendly match posted notification (In-App)
     try {
-      const matchDateFormatted = fullMatch.matchDate ? new Date(fullMatch.matchDate).toLocaleDateString() : 'TBD';
-      const matchTimeFormatted = fullMatch.matchDate ? new Date(fullMatch.matchDate).toLocaleTimeString() : 'TBD';
+      const matchDateFormatted = fullMatch.matchDate ? formatMatchDate(fullMatch.matchDate) : 'TBD';
+      const matchTimeFormatted = fullMatch.matchDate ? formatMatchTime(fullMatch.matchDate) : 'TBD';
       const venueText = fullMatch.venue || fullMatch.location || 'TBD';
 
       const notification = matchManagementNotifications.friendlyMatchPosted(
@@ -678,8 +679,8 @@ export class FriendlyMatchService {
       const hostUser = await prisma.user.findUnique({ where: { id: match.createdById }, select: { name: true } });
       
       if (joinerUser && hostUser) {
-        const matchDateFormatted = match.matchDate ? new Date(match.matchDate).toLocaleDateString() : 'TBD';
-        const matchTimeFormatted = match.matchDate ? new Date(match.matchDate).toLocaleTimeString() : 'TBD';
+        const matchDateFormatted = match.matchDate ? formatMatchDate(match.matchDate) : 'TBD';
+        const matchTimeFormatted = match.matchDate ? formatMatchTime(match.matchDate) : 'TBD';
         const venueText = match.venue || match.location || 'TBD';
         
         // Determine if this was a join request (requires approval) or auto-join
@@ -1122,8 +1123,8 @@ export class FriendlyMatchService {
       const requesterUser = await prisma.user.findUnique({ where: { id: match.createdById }, select: { name: true } });
       
       if (hostUser && requesterUser) {
-        const matchDateFormatted = match.matchDate ? new Date(match.matchDate).toLocaleDateString() : 'TBD';
-        const matchTimeFormatted = match.matchDate ? new Date(match.matchDate).toLocaleTimeString() : 'TBD';
+        const matchDateFormatted = match.matchDate ? formatMatchDate(match.matchDate) : 'TBD';
+        const matchTimeFormatted = match.matchDate ? formatMatchTime(match.matchDate) : 'TBD';
         const venueText = match.venue || match.location || 'TBD';
         
         const notification = matchManagementNotifications.friendlyMatchRequestAccepted(

@@ -223,16 +223,16 @@ export class MatchHistoryService {
               }
             })(),
         opponents: opponents.map(p => ({
-          id: p.user.id,
-          name: p.user.name,
-          username: p.user.username,
-          image: p.user.image
+          id: p.user?.id,
+          name: p.user?.name,
+          username: p.user?.username,
+          image: p.user?.image
         })),
         partner: partner ? {
-          id: partner.user.id,
-          name: partner.user.name,
-          username: partner.user.username,
-          image: partner.user.image
+          id: partner.user?.id,
+          name: partner.user?.name,
+          username: partner.user?.username,
+          image: partner.user?.image
         } : null,
         isWalkover: match.isWalkover,
         isDisputed: match.isDisputed,
@@ -772,16 +772,16 @@ export class MatchHistoryService {
           team2Points: g.player2Points
         })),
         team1Players: team1Players.map(p => ({
-          id: p.user.id,
-          name: p.user.name,
-          username: p.user.username,
-          image: p.user.image
+          id: p.user?.id,
+          name: p.user?.name,
+          username: p.user?.username,
+          image: p.user?.image
         })),
         team2Players: team2Players.map(p => ({
-          id: p.user.id,
-          name: p.user.name,
-          username: p.user.username,
-          image: p.user.image
+          id: p.user?.id,
+          name: p.user?.name,
+          username: p.user?.username,
+          image: p.user?.image
         })),
         isWalkover: match.isWalkover,
         notes: match.notes,

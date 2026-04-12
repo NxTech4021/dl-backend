@@ -10,6 +10,8 @@ import timezone from 'dayjs/plugin/timezone';
 dayjs.extend(utc);
 dayjs.extend(timezone);
 
+import { parseDateFromDevice, formatMatchDate, formatMatchTime } from '../utils/timezone';
+
 type MatchFeeType = 'FREE' | 'SPLIT' | 'FIXED';
 
 interface CreateMatchBody {
@@ -20,6 +22,7 @@ interface CreateMatchBody {
   opponentScore?: number;
   outcome?: string;
   matchDate?: string;
+  deviceTimezone?: string;
   location?: string;
   notes?: string;
   duration?: number;
@@ -46,7 +49,7 @@ interface UpdateMatchBody {
 }
 
 export const createMatch = async (req: Request, res: Response) => {
-  const { divisionId, sport, matchType, playerScore, opponentScore, outcome, matchDate, location, notes, duration, courtBooked, fee, feeAmount } = req.body as CreateMatchBody;
+  const { divisionId, sport, matchType, playerScore, opponentScore, outcome, matchDate, deviceTimezone, location, notes, duration, courtBooked, fee, feeAmount } = req.body as CreateMatchBody;
 
   if (!divisionId || !sport || !matchType) {
     return sendError(res, "divisionId, sport, and matchType are required.", 400);
@@ -63,7 +66,7 @@ export const createMatch = async (req: Request, res: Response) => {
       ...(playerScore !== undefined && { playerScore: playerScore ?? null }),
       ...(opponentScore !== undefined && { opponentScore: opponentScore ?? null }),
       ...(outcome !== undefined && { outcome: outcome ?? null }),
-      ...(matchDate !== undefined && { matchDate: new Date(matchDate) }),
+      ...(matchDate !== undefined && { matchDate: parseDateFromDevice(matchDate, deviceTimezone) }),
       ...(location !== undefined && { location: location ?? null }),
       ...(notes !== undefined && { notes: notes ?? null }),
       ...(duration !== undefined && { duration: duration ?? null }),
@@ -183,13 +186,7 @@ export const updateMatch = async (req: Request, res: Response) => {
     if (opponentScore !== undefined) updateData.opponentScore = opponentScore ?? null;
     if (outcome !== undefined) updateData.outcome = outcome ?? null;
     if (matchDate !== undefined) {
-      // #031: Use dayjs.tz for timezone conversion (same as create endpoint)
-      if (deviceTimezone && deviceTimezone !== 'Asia/Kuala_Lumpur') {
-        const deviceTime = dayjs.tz(matchDate, deviceTimezone);
-        updateData.matchDate = deviceTime.tz('Asia/Kuala_Lumpur').toDate();
-      } else {
-        updateData.matchDate = dayjs.tz(matchDate, 'Asia/Kuala_Lumpur').toDate();
-      }
+      updateData.matchDate = parseDateFromDevice(matchDate, deviceTimezone);
     }
     if (location !== undefined) updateData.location = location ?? null;
     if (notes !== undefined) updateData.notes = notes ?? null;
@@ -431,22 +428,9 @@ export const getMatchDetails = async (req: Request, res: Response) => {
     // Reject friendly matches — they must use the friendly endpoint
     if (!match || match.isFriendly) return sendError(res, "Match not found.", 404);
 
-    // Format match date and time
-    const matchDate = match.matchDate ? new Date(match.matchDate) : null;
-    const formattedDate = matchDate
-      ? matchDate.toLocaleDateString('en-US', {
-          month: 'short',
-          day: '2-digit',
-          year: 'numeric'
-        })
-      : null;
-    const formattedTime = matchDate
-      ? matchDate.toLocaleTimeString('en-US', {
-          hour: 'numeric',
-          minute: '2-digit',
-          hour12: true
-        })
-      : null;
+    // Format match date and time in venue timezone (Malaysia)
+    const formattedDate = match.matchDate ? formatMatchDate(match.matchDate) : null;
+    const formattedTime = match.matchDate ? formatMatchTime(match.matchDate) : null;
 
     // Format participants for the frontend
     // Sort by team and role for consistent display

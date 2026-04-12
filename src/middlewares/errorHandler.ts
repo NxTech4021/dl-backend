@@ -37,8 +37,14 @@ export const errorHandler = (
   res: Response,
   next: NextFunction
 ) => {
+  // Guard: if a controller already sent a partial response then threw,
+  // we must not try to send another response — delegate to Express default.
+  if (res.headersSent) {
+    return next(err);
+  }
+
   let error: AppError;
-  
+
   if (err instanceof AppError) {
     error = err;
   } else if (err instanceof Error) {
@@ -175,16 +181,21 @@ export const errorHandler = (
     });
   }
 
-  // Send error response
+  // Send error response.
+  // #10: aligned with sendError() shape { success, data, message } so both
+  // frontend and admin normalizers treat it the same as controller-level errors.
+  // The `code` field is kept for machine-readable error types (e.g. DUPLICATE_ENTRY).
   const response: {
     success: boolean;
-    error: string;
+    data: null;
+    message: string;
     code: string;
     stack?: string;
     details?: unknown;
   } = {
     success: false,
-    error: error.message || 'Internal server error',
+    data: null,
+    message: error.message || 'Internal server error',
     code: error.code || 'INTERNAL_ERROR',
   };
 

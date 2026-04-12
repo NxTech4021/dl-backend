@@ -62,16 +62,30 @@ httpServer.listen(PORT, () => {
 
 const CRON_TZ = { timezone: "Asia/Kuala_Lumpur" };
 
-// // Run daily at midnight to expire old invitations and pair requests
-// cron.schedule("0 0 * * *", async () => {
-//   try {
-//     const expiredInvitations = await expireOldSeasonInvitations();
-//     const expiredRequests = await expireOldRequests();
-//     logger.info("Cron: Expired old invitations", { expiredInvitations, expiredRequests });
-//   } catch (error) {
-//     logger.error("Cron: Failed to expire invitations", {}, error instanceof Error ? error : new Error(String(error)));
-//   }
-// }, CRON_TZ);
+// #103-12: daily cron at midnight (KL time) that expires stale pair requests
+// and season invitations. Lazy expiry-on-read inside the list/send endpoints
+// provides belt-and-suspenders coverage if the cron is paused or the server
+// restarts before the first daily run.
+cron.schedule(
+  "0 0 * * *",
+  async () => {
+    try {
+      const expiredInvitations = await expireOldSeasonInvitations();
+      const expiredRequests = await expireOldRequests();
+      logger.info("Cron: Expired old invitations", {
+        expiredInvitations,
+        expiredRequests: expiredRequests?.count ?? expiredRequests,
+      });
+    } catch (error) {
+      logger.error(
+        "Cron: Failed to expire invitations",
+        {},
+        error instanceof Error ? error : new Error(String(error)),
+      );
+    }
+  },
+  CRON_TZ,
+);
 
 // // Run inactivity check at configured time (default: daily at 2:00 AM)
 // cron.schedule(INACTIVITY_CONFIG.CRON_SCHEDULE, async () => {

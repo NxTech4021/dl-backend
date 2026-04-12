@@ -225,7 +225,7 @@ export async function getRecentSportContextsBatch(
   const sportContextsByPair = new Map<string, RecentSportContext>();
 
   for (const match of recentMatches) {
-    const participantIds = match.participants.map(p => p.userId);
+    const participantIds = match.participants.map(p => p.userId).filter((id): id is string => id !== null);
     const otherUserId = participantIds.find(
       id => id !== currentUserId && otherUserIds.includes(id)
     );

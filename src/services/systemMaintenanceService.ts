@@ -7,6 +7,7 @@ import { prisma } from '../lib/prisma';
 import { $Enums } from '@prisma/client';
 import { NotificationService, notificationService as notificationServiceSingleton } from './notificationService';
 import { logger } from '../utils/logger';
+import { formatMatchDateTime } from '../utils/timezone';
 import { accountNotifications } from '../helpers/notifications/accountNotifications';
 
 export interface CreateMaintenanceInput {
@@ -395,14 +396,7 @@ export class SystemMaintenanceService {
    * Helper: Format date and time for display
    */
   private formatDateTime(date: Date): string {
-    const options: Intl.DateTimeFormatOptions = {
-      month: 'short',
-      day: 'numeric',
-      hour: 'numeric',
-      minute: '2-digit',
-      hour12: true
-    };
-    return date.toLocaleDateString('en-US', options);
+    return formatMatchDateTime(date);
   }
 }
 

@@ -116,7 +116,7 @@ export function socketHandler(httpServer: HttpServer) {
       socket.join(userId);
       activeUsers.set(userId, socket.id);
       userSockets.set(userId, socket.id);
-      io.emit("user_status_change", { userId, isOnline: true });
+      io.emit("user_online", { userId });
 
       if (user.role === "ADMIN" || user.role === "SUPERADMIN") {
         socket.join("admin_room");
@@ -164,7 +164,7 @@ export function socketHandler(httpServer: HttpServer) {
       if (userId) {
         activeUsers.delete(userId);
         userSockets.delete(userId);
-        io.emit("user_status_change", { userId, isOnline: false });
+        io.emit("user_offline", { userId });
         console.log(`❌ User disconnected: ${socket.id} (userId: ${userId})`);
       } else {
         console.log(`❌ User disconnected: ${socket.id}`);
@@ -218,20 +218,22 @@ export function socketHandler(httpServer: HttpServer) {
     });
 
     // Typing indicators
-    socket.on("typing_start", ({ threadId, senderId }) => {
+    // #5: emit with same event names frontend listens for (typing_start/typing_stop)
+    // #25: use authenticated socket.data.userId instead of client-supplied senderId
+    socket.on("typing_start", ({ threadId }) => {
       socket
         .to(threadId)
-        .emit("typing_status", { threadId, senderId, isTyping: true });
+        .emit("typing_start", { threadId, senderId: userId, isTyping: true });
     });
 
     socket.on("typing", (data) => {
       socket.to(data.threadId).emit("user_typing", data);
     });
 
-    socket.on("typing_stop", ({ threadId, senderId }) => {
+    socket.on("typing_stop", ({ threadId }) => {
       socket
         .to(threadId)
-        .emit("typing_status", { threadId, senderId, isTyping: false });
+        .emit("typing_stop", { threadId, senderId: userId, isTyping: false });
     });
 
     // Thread room management

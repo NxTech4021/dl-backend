@@ -256,6 +256,7 @@ export async function updateMatchStandings(matchId: string): Promise<void> {
 
   // Update standings for each participant
   for (const participant of team1Participants) {
+    if (!participant.userId) continue;
     const adversaryId = team2Participants[0]?.userId;
     if (!adversaryId) continue;
 
@@ -271,6 +272,7 @@ export async function updateMatchStandings(matchId: string): Promise<void> {
   }
 
   for (const participant of team2Participants) {
+    if (!participant.userId) continue;
     const adversaryId = team1Participants[0]?.userId;
     if (!adversaryId) continue;
 

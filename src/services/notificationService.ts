@@ -888,7 +888,7 @@ export class NotificationService {
 
       // Batch update lastUsedAt for successfully sent tokens
       const successTokens = tokens
-        .filter((_, i) => results[i].status === 'fulfilled')
+        .filter((_, i) => results[i]?.status === 'fulfilled')
         .map(t => t.token);
       if (successTokens.length > 0) {
         await this.prisma.userPushToken.updateMany({

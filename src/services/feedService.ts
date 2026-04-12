@@ -165,10 +165,12 @@ export const createPost = async (data: CreatePostData): Promise<CreatePostResult
   // Extract winner/loser IDs based on team assignment
   const winnerIds = match.participants
     .filter(p => p.team === winningTeam)
-    .map(p => p.userId);
+    .map(p => p.userId)
+    .filter((id): id is string => id !== null);
   const loserIds = match.participants
     .filter(p => p.team !== winningTeam)
-    .map(p => p.userId);
+    .map(p => p.userId)
+    .filter((id): id is string => id !== null);
 
   // Determine game type (league vs friendly)
   const gameType = match.leagueId ? 'league' : 'friendly';

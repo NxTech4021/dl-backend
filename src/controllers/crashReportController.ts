@@ -61,13 +61,15 @@ export const createCrashReport = async (req: Request, res: Response) => {
       type === 'RENDER_ERROR' || type === 'JS_ERROR' ? 'HIGH' : 'MEDIUM'
     );
 
+    const sanitizedStackTrace = sanitizeTrace(stackTrace);
+    const sanitizedComponentStack = sanitizeTrace(componentStack);
     const report = await prisma.crashReport.create({
       data: {
         userId,
         type,
         errorMessage: errorMessage.slice(0, 2000),
-        stackTrace: sanitizeTrace(stackTrace),
-        componentStack: sanitizeTrace(componentStack),
+        ...(sanitizedStackTrace ? { stackTrace: sanitizedStackTrace } : {}),
+        ...(sanitizedComponentStack ? { componentStack: sanitizedComponentStack } : {}),
         screenName: screenName?.slice(0, 200) || null,
         platform: platform.slice(0, 20),
         osVersion: osVersion?.slice(0, 30) || null,
@@ -140,6 +142,7 @@ export const getCrashReports = async (req: Request, res: Response) => {
 export const getCrashReportById = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
+    if (!id) return sendError(res, 'ID required', 400);
     const report = await prisma.crashReport.findUnique({
       where: { id },
       include: {
@@ -158,6 +161,7 @@ export const getCrashReportById = async (req: Request, res: Response) => {
 export const updateCrashReport = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
+    if (!id) return sendError(res, 'ID required', 400);
     const { resolved, notes } = req.body;
 
     const updateData: any = {};

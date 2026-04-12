@@ -69,8 +69,9 @@ export async function getAllSeasons(): Promise<any[]> {
           joinedAt: 'asc'
         }
       },
+      // #103-6: ACTIVE-only membership count.
       _count: {
-        select: { memberships: true }
+        select: { memberships: { where: { status: 'ACTIVE' } } }
       },
       divisions: {
         select: { id: true, name: true }
@@ -80,7 +81,9 @@ export async function getAllSeasons(): Promise<any[]> {
 
   return seasons.map(season => ({
     ...season,
-    registeredUserCount: season.memberships?.length || 0,
+    // Keep using array length here because caller expected the legacy
+    // semantics; _count is the authoritative ACTIVE-filtered number.
+    registeredUserCount: season._count?.memberships ?? season.memberships?.length ?? 0,
   }));
 }
 

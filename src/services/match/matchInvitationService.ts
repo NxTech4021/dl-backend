@@ -18,6 +18,7 @@ import {
 // Type alias until Prisma client is regenerated after migration
 type MatchFeeType = 'FREE' | 'SPLIT' | 'FIXED';
 import { logger } from '../../utils/logger';
+import { formatMatchDate, formatMatchTime } from '../../utils/timezone';
 import { NotificationService, notificationService as notificationServiceSingleton } from '../notificationService';
 
 // Types
@@ -976,6 +977,12 @@ export class MatchInvitationService {
         throw new Error('Match not found');
       }
 
+      // RC-3: Re-check status inside transaction. The outer check at line 862 may
+      // be stale if the match was cancelled/started between the outer read and this tx.
+      if (freshMatch.status !== MatchStatus.SCHEDULED) {
+        throw new Error('This match is no longer available to join');
+      }
+
       // Determine role and team using fresh data
       let role: ParticipantRole = ParticipantRole.OPPONENT;
       let team: string | null = null;
@@ -1148,7 +1155,8 @@ export class MatchInvitationService {
       // Notify other participants
       const otherParticipants = match.participants
         .filter(p => p.userId !== userId)
-        .map(p => p.userId);
+        .map(p => p.userId)
+        .filter((id): id is string => id !== null);
 
       await this.notificationService.createNotification({
         type: accepted ? 'MATCH_INVITATION_ACCEPTED' : 'MATCH_INVITATION_DECLINED',
@@ -1178,19 +1186,11 @@ export class MatchInvitationService {
       if (!match || !match.matchDate) return;
 
       const confirmedTime = match.matchDate;
-      const participantIds = match.participants.map(p => p.userId);
+      const participantIds = match.participants.map(p => p.userId).filter((id): id is string => id !== null);
 
-      // Format date and time for cleaner notification display
-      const formattedDate = confirmedTime.toLocaleDateString('en-US', {
-        month: 'short',
-        day: 'numeric',
-        year: 'numeric'
-      });
-      const formattedTime = confirmedTime.toLocaleTimeString('en-US', {
-        hour: 'numeric',
-        minute: '2-digit',
-        hour12: true
-      });
+      // Format date and time in venue timezone (Malaysia)
+      const formattedDate = formatMatchDate(confirmedTime);
+      const formattedTime = formatMatchTime(confirmedTime);
       const venue = match.venue || match.location || 'TBD';
 
       await this.notificationService.createNotification({
@@ -1592,7 +1592,7 @@ export class MatchInvitationService {
       });
 
       // Notify match creator and other participants
-      const notifyUserIds = match.participants.map(p => p.userId);
+      const notifyUserIds = match.participants.map(p => p.userId).filter((id): id is string => id !== null);
       if (match.createdById && !notifyUserIds.includes(match.createdById)) {
         notifyUserIds.push(match.createdById);
       }

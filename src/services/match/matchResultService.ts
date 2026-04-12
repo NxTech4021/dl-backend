@@ -554,7 +554,7 @@ export class MatchResultService {
       }
 
       // Step 8: Evaluate achievements for all participants (fire-and-forget)
-      const participantUserIds = match.participants.map(p => p.userId);
+      const participantUserIds = match.participants.map(p => p.userId).filter((id): id is string => id !== null);
       for (const playerId of participantUserIds) {
         void evaluateMatchAchievementsSafe(playerId, {
           userId: playerId,
@@ -819,16 +819,15 @@ export class MatchResultService {
    */
   private getWalkoverScores(sport: string) {
     if (sport === 'PICKLEBALL') {
-      // Pickleball: 15-0, 15-0, 15-0 (best of 3 games)
+      // Pickleball: best-of-3 games, walkover needs 2 wins (matching Tennis pattern)
       return {
         walkoverScore: {
           games: [
             { gameNumber: 1, winner: 15, loser: 0 },
-            { gameNumber: 2, winner: 15, loser: 0 },
-            { gameNumber: 3, winner: 15, loser: 0 }
+            { gameNumber: 2, winner: 15, loser: 0 }
           ]
         },
-        setsWon: 3
+        setsWon: 2
       };
     } else {
       // Tennis/Padel: 6-0, 6-0
@@ -1098,13 +1097,13 @@ export class MatchResultService {
             logger.info(`Skipped auto-complete for match ${match.id} (disputed during processing)`);
           }
         } catch (error) {
-          logger.error(`Failed to auto-complete walkover for match ${match.id}:`, error as Error);
+          logger.error(`Failed to auto-complete walkover for match ${match.id}:`, {}, error as Error);
         }
       }
 
       return { walkoversChecked: pendingWalkovers.length, walkoversCompleted: completedCount };
     } catch (error) {
-      logger.error('Error in autoCompleteWalkovers:', error as Error);
+      logger.error('Error in autoCompleteWalkovers:', {}, error as Error);
       return { walkoversChecked: 0, walkoversCompleted: 0 };
     }
   }
@@ -1484,15 +1483,33 @@ export class MatchResultService {
 
       for (const match of matches) {
         try {
-          // Auto-approve the match and set status to COMPLETED
-          await prisma.match.update({
-            where: { id: match.id },
-            data: {
-              status: MatchStatus.COMPLETED,
-              isAutoApproved: true,
-              resultConfirmedAt: new Date()
-            }
+          // Race guard: use transaction to re-check status before completing.
+          // Without this, a user confirming via confirmResult() at the same moment
+          // the cron processes the match would cause both paths to apply DMR rating
+          // deltas — doubling the rating change. This matches the pattern used by
+          // autoCompleteWalkovers() above. See docs/issues/dissections/101-score-submission-races.md
+          const approved = await prisma.$transaction(async (tx) => {
+            const freshMatch = await tx.match.findUnique({
+              where: { id: match.id },
+              select: { status: true },
+            });
+            if (freshMatch?.status !== MatchStatus.ONGOING) return false;
+
+            await tx.match.update({
+              where: { id: match.id },
+              data: {
+                status: MatchStatus.COMPLETED,
+                isAutoApproved: true,
+                resultConfirmedAt: new Date()
+              }
+            });
+            return true;
           });
+
+          if (!approved) {
+            logger.info(`Skipped auto-approve for match ${match.id} (already confirmed or disputed)`);
+            continue;
+          }
 
           // Process ratings and standings (same as manual confirmation)
           try {
@@ -1529,7 +1546,7 @@ export class MatchResultService {
           // NOTE: V2 standings already recalculated above (line 1248) - removed duplicate call
 
           // Evaluate achievements for all participants (fire-and-forget)
-          const participantUserIds = match.participants.map(p => p.userId);
+          const participantUserIds = match.participants.map(p => p.userId).filter((id): id is string => id !== null);
           for (const playerId of participantUserIds) {
             void evaluateMatchAchievementsSafe(playerId, {
               userId: playerId,
@@ -1542,7 +1559,7 @@ export class MatchResultService {
           }
 
           // Notify all participants
-          const participantIds = match.participants.map(p => p.userId);
+          const participantIds = match.participants.map(p => p.userId).filter((id): id is string => id !== null);
           await this.notificationService.createNotification({
             type: 'MATCH_RESULT_AUTO_APPROVED',
             title: 'Match Result Auto-Approved',

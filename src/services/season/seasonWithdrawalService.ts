@@ -16,6 +16,7 @@ import {
   validateNoPartnerPendingRequest
 } from './seasonValidationService';
 import { formatWithdrawalRequest } from './utils/formatters';
+import { translateTransactionRaceError } from '../../utils/prismaErrors';
 
 /**
  * Submit a withdrawal request
@@ -125,14 +126,28 @@ export async function processWithdrawalRequest(
 
   const withdrawalRequest = validation.withdrawalRequest;
 
-  // Process in transaction to ensure atomicity
-  const result = await prisma.$transaction(async (tx) => {
-    // Step 1: Update withdrawal request status
+  // Process in transaction to ensure atomicity. We catch Prisma race errors
+  // (P2034 serialization failure from Serializable isolation) and translate
+  // them into a friendly "Partnership is no longer active" message via the
+  // shared helper. Verified by #103 Part 5 Scenario 12.
+  let result: any;
+  try {
+    result = await prisma.$transaction(async (tx) => {
+    // Step 1: Update withdrawal request status.
+    // #103 Part 5.1 finding: the previous code passed `processedByAdminId: id`
+    // directly, which failed at runtime because the deployed Prisma client
+    // was stale (the fields had been added to the schema but `prisma generate`
+    // was never re-run). Fix shipped in two parts:
+    //   1. `npm run dev` now runs `npx prisma generate` on startup
+    //      (package.json scripts) so the dev container always has a fresh client.
+    //   2. This code uses the relation-connect form for the admin FK which
+    //      works in both checked and unchecked Prisma input variants.
+    // Verified by `test-103.ts` Scenario 12 (idempotent race) + 12b (happy path).
     const updatedRequest = await tx.withdrawalRequest.update({
       where: { id: requestId },
       data: {
         status: status,
-        processedByAdminId: processedByAdminId,
+        processedByAdmin: { connect: { id: processedByAdminId } },
         adminNotes: adminNotes || null,
         processedAt: new Date(),
       },
@@ -168,14 +183,20 @@ export async function processWithdrawalRequest(
       });
 
       if (partnership) {
-        // 1. Mark old partnership as DISSOLVED
-        await tx.partnership.update({
-          where: { id: withdrawalRequest.partnershipId },
+        // 1. Mark old partnership as DISSOLVED using an atomic status gate.
+        //    Fix for #103-11: prevents creating a phantom INCOMPLETE when the
+        //    partnership has already been dissolved by another path (e.g. one of
+        //    the players hit "Leave" before admin approval processed).
+        const gated = await tx.partnership.updateMany({
+          where: { id: withdrawalRequest.partnershipId, status: 'ACTIVE' },
           data: {
-            status: "DISSOLVED",
-            dissolvedAt: new Date()
-          }
+            status: 'DISSOLVED',
+            dissolvedAt: new Date(),
+          },
         });
+        if (gated.count === 0) {
+          throw new Error('Partnership is no longer active — cannot process withdrawal');
+        }
 
         console.log(`✅ Partnership ${withdrawalRequest.partnershipId} dissolved due to approved withdrawal`);
 
@@ -222,8 +243,15 @@ export async function processWithdrawalRequest(
       }
     }
 
-    return updatedRequest;
-  });
+      return updatedRequest;
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+  } catch (err) {
+    const translated = translateTransactionRaceError(err);
+    if (translated) {
+      throw new Error(translated);
+    }
+    throw err;
+  }
 
   console.log(`✅ Withdrawal request ${requestId} ${status} by admin ${processedByAdminId}`);
 
