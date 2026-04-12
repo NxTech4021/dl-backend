@@ -976,6 +976,12 @@ export class MatchInvitationService {
         throw new Error('Match not found');
       }
 
+      // RC-3: Re-check status inside transaction. The outer check at line 862 may
+      // be stale if the match was cancelled/started between the outer read and this tx.
+      if (freshMatch.status !== MatchStatus.SCHEDULED) {
+        throw new Error('This match is no longer available to join');
+      }
+
       // Determine role and team using fresh data
       let role: ParticipantRole = ParticipantRole.OPPONENT;
       let team: string | null = null;
