@@ -1484,15 +1484,33 @@ export class MatchResultService {
 
       for (const match of matches) {
         try {
-          // Auto-approve the match and set status to COMPLETED
-          await prisma.match.update({
-            where: { id: match.id },
-            data: {
-              status: MatchStatus.COMPLETED,
-              isAutoApproved: true,
-              resultConfirmedAt: new Date()
-            }
+          // Race guard: use transaction to re-check status before completing.
+          // Without this, a user confirming via confirmResult() at the same moment
+          // the cron processes the match would cause both paths to apply DMR rating
+          // deltas — doubling the rating change. This matches the pattern used by
+          // autoCompleteWalkovers() above. See docs/issues/dissections/101-score-submission-races.md
+          const approved = await prisma.$transaction(async (tx) => {
+            const freshMatch = await tx.match.findUnique({
+              where: { id: match.id },
+              select: { status: true },
+            });
+            if (freshMatch?.status !== MatchStatus.ONGOING) return false;
+
+            await tx.match.update({
+              where: { id: match.id },
+              data: {
+                status: MatchStatus.COMPLETED,
+                isAutoApproved: true,
+                resultConfirmedAt: new Date()
+              }
+            });
+            return true;
           });
+
+          if (!approved) {
+            logger.info(`Skipped auto-approve for match ${match.id} (already confirmed or disputed)`);
+            continue;
+          }
 
           // Process ratings and standings (same as manual confirmation)
           try {
@@ -1529,7 +1547,7 @@ export class MatchResultService {
           // NOTE: V2 standings already recalculated above (line 1248) - removed duplicate call
 
           // Evaluate achievements for all participants (fire-and-forget)
-          const participantUserIds = match.participants.map(p => p.userId);
+          const participantUserIds = match.participants.map(p => p.userId).filter((id): id is string => id !== null);
           for (const playerId of participantUserIds) {
             void evaluateMatchAchievementsSafe(playerId, {
               userId: playerId,
@@ -1542,7 +1560,7 @@ export class MatchResultService {
           }
 
           // Notify all participants
-          const participantIds = match.participants.map(p => p.userId);
+          const participantIds = match.participants.map(p => p.userId).filter((id): id is string => id !== null);
           await this.notificationService.createNotification({
             type: 'MATCH_RESULT_AUTO_APPROVED',
             title: 'Match Result Auto-Approved',
