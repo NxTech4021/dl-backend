@@ -11,6 +11,7 @@ import { socketMiddleware } from "./middlewares/socketmiddleware";
 
 import router from "./routes/index";
 import { getApiPrefix, getTrustedOrigins } from "./config/network";
+import { notFoundHandler, errorHandler } from "./middlewares/errorHandler";
 // import pinoHttp from "pino-http";
 // import pino from "pino";
 import {
@@ -169,6 +170,14 @@ app.use(apiPrefix, router); // remmeber to remove the apiPrefix when deploying t
 app.get("/health", (req, res) => {
   res.json({ status: "OK", message: "Server is running" });
 });
+
+// #3: Error handling middleware — MUST be registered AFTER all routes.
+// notFoundHandler catches requests to unknown routes and returns JSON 404.
+// errorHandler catches any unhandled errors (Prisma, validation, auth, etc.)
+// and returns a consistent JSON error shape matching sendError().
+// Express 5 automatically routes async rejections here — no asyncHandler needed.
+app.use(notFoundHandler);
+app.use(errorHandler);
 
 export { httpServer, io };
 export default app;
