@@ -7,7 +7,7 @@
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
-    "dev": "npx tsx watch src/server.ts",
+    "dev": "npx prisma generate && npx tsx watch src/server.ts",
     "build": "tsc",
     "start": "node dist/server.js",
     "db:migrate": "npx prisma migrate dev",
