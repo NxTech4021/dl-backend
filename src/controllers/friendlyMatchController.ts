@@ -19,19 +19,9 @@ import { logMatchActivity } from '../services/userActivityLogService';
 dayjs.extend(utc);
 dayjs.extend(timezone);
 
-/**
- * Helper function to format date for notifications
- */
-const formatDate = (date: Date): string => {
-  return dayjs(date).format('MMM D, YYYY');
-};
-
-/**
- * Helper function to format time for notifications
- */
-const formatTime = (date: Date): string => {
-  return dayjs(date).format('h:mm A');
-};
+// Date formatting helpers imported from shared timezone utility.
+// All user-facing times are shown in venue timezone (Malaysia).
+import { formatMatchDate, formatMatchTime, parseDateFromDevice } from '../utils/timezone';
 
 /**
  * Helper function to get participant user IDs excluding a specific user
@@ -108,7 +98,7 @@ export const createFriendlyMatch = async (req: Request, res: Response) => {
 
     if (activePenalty) {
       const expiryMsg = activePenalty.expiresAt
-        ? ` Suspension ends ${activePenalty.expiresAt.toLocaleDateString()}.`
+        ? ` Suspension ends ${formatMatchDate(activePenalty.expiresAt)}.`
         : '';
       return sendError(res, `You are currently suspended and cannot create matches.${expiryMsg}`, 403);
     }
@@ -121,16 +111,8 @@ export const createFriendlyMatch = async (req: Request, res: Response) => {
       return sendError(res, 'At least one skillLevel is required', 400);
     }
 
-    // Timezone conversion
-    let parsedMatchDate: Date;
-    if (deviceTimezone && deviceTimezone !== 'Asia/Kuala_Lumpur') {
-      const deviceTime = dayjs.tz(matchDate, deviceTimezone);
-      const malaysiaTime = deviceTime.tz('Asia/Kuala_Lumpur');
-      parsedMatchDate = malaysiaTime.toDate();
-    } else {
-      const malaysiaTime = dayjs.tz(matchDate, 'Asia/Kuala_Lumpur');
-      parsedMatchDate = malaysiaTime.toDate();
-    }
+    // Timezone conversion: interpret the naive datetime in the device's timezone
+    const parsedMatchDate = parseDateFromDevice(matchDate, deviceTimezone);
 
     const match = await friendlyMatchService.createFriendlyMatch({
       createdById: userId,
@@ -288,23 +270,10 @@ export const getFriendlyMatchDetails = async (req: Request, res: Response) => {
       return sendError(res, 'Friendly match not found', 404);
     }
 
-    // Format match date and time
+    // Format match date and time in venue timezone (Malaysia)
     const matchDate = match.matchDate || match.scheduledStartTime;
-    const matchDateTime = matchDate ? new Date(matchDate) : null;
-    const formattedDate = matchDateTime
-      ? matchDateTime.toLocaleDateString('en-US', {
-          month: 'short',
-          day: '2-digit',
-          year: 'numeric'
-        })
-      : null;
-    const formattedTime = matchDateTime
-      ? matchDateTime.toLocaleTimeString('en-US', {
-          hour: 'numeric',
-          minute: '2-digit',
-          hour12: true
-        })
-      : null;
+    const formattedDate = matchDate ? formatMatchDate(matchDate) : null;
+    const formattedTime = matchDate ? formatMatchTime(matchDate) : null;
 
     // Format participants for the frontend
     // Sort by team and role for consistent display
@@ -442,7 +411,7 @@ export const joinFriendlyMatch = async (req: Request, res: Response) => {
 
     if (activePenalty) {
       const expiryMsg = activePenalty.expiresAt
-        ? ` Suspension ends ${activePenalty.expiresAt.toLocaleDateString()}.`
+        ? ` Suspension ends ${formatMatchDate(activePenalty.expiresAt)}.`
         : '';
       return sendError(res, `You are currently suspended and cannot join matches.${expiryMsg}`, 403);
     }
@@ -719,8 +688,8 @@ export const cancelFriendlyMatch = async (req: Request, res: Response) => {
       if (otherParticipants.length > 0) {
         const notification = matchManagementNotifications.friendlyMatchCancelled(
           canceller?.name || 'Host',
-          formatDate(match.matchDate),
-          formatTime(match.matchDate)
+          formatMatchDate(match.matchDate),
+          formatMatchTime(match.matchDate)
         );
         
         await notificationService.createNotification({
