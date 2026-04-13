@@ -99,6 +99,13 @@ export class MatchResultService {
       throw new Error('Match not found');
     }
 
+    // MT-5: Friendly matches must use the friendly result endpoint which skips
+    // ratings/standings processing. The league endpoint runs processMatchCompletion
+    // on confirmation, which would corrupt competitive data.
+    if (matchPreCheck.isFriendly) {
+      throw new Error('Friendly match results must be submitted through the friendly endpoint');
+    }
+
     // Verify submitter is a participant with ACCEPTED status
     const submitterParticipant = matchPreCheck.participants.find(
       p => p.userId === submittedById && p.invitationStatus === InvitationStatus.ACCEPTED
@@ -323,6 +330,13 @@ export class MatchResultService {
 
     if (!match) {
       throw new Error('Match not found');
+    }
+
+    // MT-5/Gap 4: Friendly matches must use the friendly confirm endpoint.
+    // The league dispute path creates requiresAdminReview which doesn't exist
+    // for friendlies. The friendly dispute path resets to SCHEDULED for re-submission.
+    if (match.isFriendly) {
+      throw new Error('Friendly match results must be confirmed through the friendly endpoint');
     }
 
     // Verify user is a participant
