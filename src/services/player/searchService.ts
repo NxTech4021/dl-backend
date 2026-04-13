@@ -141,28 +141,37 @@ export async function getAllPlayers(page = 1, limit = 20) {
 export async function searchPlayers(
   query?: string,
   sport?: string,
-  excludeUserId?: string
+  excludeUserId?: string,
+  page = 1,
+  limit = 20
 ) {
+  const take = Math.min(limit, 100);
+  const skip = (page - 1) * take;
+
   // Build where clause using helper
   const whereClause = buildSearchWhereClause(query, sport, excludeUserId);
 
-  const players = await prisma.user.findMany({
-    where: whereClause,
-    select: {
-      id: true,
-      name: true,
-      username: true,
-      displayUsername: true,
-      image: true,
-      bio: true,
-      area: true,
-      gender: true,
-      createdAt: true,
-      lastLogin: true,
-      status: true,
-    },
-    take: 20,
-  });
+  const [players, total] = await Promise.all([
+    prisma.user.findMany({
+      where: whereClause,
+      select: {
+        id: true,
+        name: true,
+        username: true,
+        displayUsername: true,
+        image: true,
+        bio: true,
+        area: true,
+        gender: true,
+        createdAt: true,
+        lastLogin: true,
+        status: true,
+      },
+      skip,
+      take,
+    }),
+    prisma.user.count({ where: whereClause }),
+  ]);
 
   // Enrich players with sports and ratings
   const playersWithDetails = await enrichPlayersWithSkills(players);
@@ -172,7 +181,15 @@ export async function searchPlayers(
     ? playersWithDetails.filter((p) => p.sports.includes((sport).toLowerCase()))
     : playersWithDetails;
 
-  return filteredPlayers;
+  return {
+    data: filteredPlayers,
+    pagination: {
+      page,
+      limit: take,
+      total,
+      totalPages: Math.ceil(total / take),
+    },
+  };
 }
 
 /**
