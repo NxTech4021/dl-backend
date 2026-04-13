@@ -1474,6 +1474,7 @@ export class MatchResultService {
       const matches = await prisma.match.findMany({
         where: {
           status: MatchStatus.ONGOING,
+          isFriendly: false,  // MT-32: friendly matches must NOT be auto-approved with ratings/standings
           resultSubmittedAt: { lte: twentyFourHoursAgo },
           resultConfirmedAt: null,
           isDisputed: false,
@@ -1592,6 +1593,76 @@ export class MatchResultService {
     } catch (error) {
       logger.error('Error in autoApproveResults:', {}, error as Error);
       throw error;
+    }
+  }
+
+  /**
+   * Auto-approve friendly match results after 24h.
+   * Unlike league matches, friendly matches do NOT affect ratings, standings, or Best 6.
+   * This simply marks the match as COMPLETED and notifies participants.
+   * Separated from autoApproveResults to prevent friendly results leaking into
+   * the competitive system (MT-32 fix).
+   */
+  async autoApproveFriendlyResults() {
+    try {
+      const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+      const matches = await prisma.match.findMany({
+        where: {
+          status: MatchStatus.ONGOING,
+          isFriendly: true,
+          resultSubmittedAt: { lte: twentyFourHoursAgo },
+          resultConfirmedAt: null,
+          isAutoApproved: false,
+        },
+        select: { id: true, participants: { select: { userId: true } } },
+      });
+
+      let count = 0;
+      for (const match of matches) {
+        try {
+          const approved = await prisma.$transaction(async (tx) => {
+            const fresh = await tx.match.findUnique({
+              where: { id: match.id },
+              select: { status: true },
+            });
+            if (fresh?.status !== MatchStatus.ONGOING) return false;
+
+            await tx.match.update({
+              where: { id: match.id },
+              data: {
+                status: MatchStatus.COMPLETED,
+                isAutoApproved: true,
+                resultConfirmedAt: new Date(),
+              },
+            });
+            return true;
+          });
+
+          if (approved) {
+            const participantIds = match.participants
+              .map(p => p.userId)
+              .filter((id): id is string => id !== null);
+
+            await this.notificationService.createNotification({
+              type: 'MATCH_RESULT_AUTO_APPROVED',
+              title: 'Match Result Auto-Approved',
+              message: 'The friendly match result has been automatically approved after 24 hours.',
+              category: 'MATCH',
+              matchId: match.id,
+              userIds: participantIds,
+            });
+            count++;
+          }
+        } catch (error) {
+          logger.error(`Failed to auto-approve friendly match ${match.id}:`, {}, error as Error);
+        }
+      }
+
+      return { matchesChecked: matches.length, autoApprovedCount: count };
+    } catch (error) {
+      logger.error('Error in autoApproveFriendlyResults:', {}, error as Error);
+      return { matchesChecked: 0, autoApprovedCount: 0 };
     }
   }
 
