@@ -676,6 +676,15 @@ export class MatchResultService {
    * Process match ratings using DMR (Glicko-2 based) algorithm
    * Handles both singles and doubles matches
    */
+  // TODO(#104 defense-in-depth): Add a `ratingsProcessedAt DateTime?` field to the Match
+  // model and check it here to prevent double rating application. Currently the upstream
+  // callers (confirmResult, autoApproveResults, autoCompleteWalkovers) all have transaction
+  // guards that prevent double calls. But if a new caller is added in the future without
+  // a guard, DMR ratings would be applied twice (deltas are not idempotent). The fix:
+  //   1. Add `ratingsProcessedAt DateTime?` to Match in schema.prisma
+  //   2. At the top of this function: if match.ratingsProcessedAt is set, log and return
+  //   3. At the bottom: set ratingsProcessedAt = new Date()
+  // This requires a Prisma migration. See docs/issues/dissections/104-dissolution-standings-and-notification.md
   private async processMatchRatings(match: any): Promise<void> {
     try {
       if (!match.seasonId) {
