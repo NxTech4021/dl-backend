@@ -133,12 +133,21 @@ cron.schedule("0 * * * *", async () => {
   try {
     const matchResultService = getMatchResultService(notificationService);
 
-    // Auto-approve regular score submissions after 24h
+    // Auto-approve league score submissions after 24h (with ratings/standings)
     const results = await matchResultService.autoApproveResults();
     if (results.autoApprovedCount > 0) {
-      logger.info("Cron: Auto-approved match results", {
+      logger.info("Cron: Auto-approved league match results", {
         matchesChecked: results.matchesChecked,
         autoApproved: results.autoApprovedCount,
+      });
+    }
+
+    // Auto-approve friendly score submissions after 24h (NO ratings/standings)
+    const friendlyResults = await matchResultService.autoApproveFriendlyResults();
+    if (friendlyResults.autoApprovedCount > 0) {
+      logger.info("Cron: Auto-approved friendly match results", {
+        matchesChecked: friendlyResults.matchesChecked,
+        autoApproved: friendlyResults.autoApprovedCount,
       });
     }
 
