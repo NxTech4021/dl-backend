@@ -155,6 +155,7 @@ export const NOTIFICATION_DELIVERY_MAP: Record<string, NotificationDeliveryType>
   LEAGUE_LEADER: NotificationDeliveryType.PUSH,
   WEEKLY_RANKING_UPDATE: NotificationDeliveryType.PUSH,
   DMR_INCREASED: NotificationDeliveryType.PUSH,
+  DMR_DECREASED: NotificationDeliveryType.PUSH,
   MONTHLY_DMR_RECAP: NotificationDeliveryType.PUSH,
   PERSONAL_BEST_RATING: NotificationDeliveryType.PUSH,
   RATING_MILESTONE: NotificationDeliveryType.PUSH,
