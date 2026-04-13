@@ -891,6 +891,13 @@ export class MatchResultService {
       throw new Error('Cannot report a walkover for your own team member');
     }
 
+    // MT-2: Friendly matches don't support walkovers — walkovers affect ratings/standings
+    // which should never happen for friendly matches. If the opposing team doesn't show,
+    // the friendly match should be cancelled, not resolved as a walkover.
+    if (match.isFriendly) {
+      throw new Error('Walkovers are not supported for friendly matches. Please cancel the match instead.');
+    }
+
     // SS-4: Status check — prevent walkover on completed/cancelled/void matches
     if (match.status !== MatchStatus.SCHEDULED && match.status !== MatchStatus.ONGOING) {
       throw new Error('Can only record walkover for scheduled or ongoing matches');
@@ -911,6 +918,20 @@ export class MatchResultService {
     const walkoverScores = this.getWalkoverScores(match.sport);
 
     await prisma.$transaction(async (tx) => {
+      // MT-15: Re-check match status inside transaction to prevent race with
+      // concurrent score submission. Without this, a score submitted between
+      // the outer read and this transaction could be overwritten by the walkover.
+      const freshMatch = await tx.match.findUnique({
+        where: { id: matchId },
+        select: { status: true, resultSubmittedAt: true },
+      });
+      if (!freshMatch || freshMatch.status !== MatchStatus.SCHEDULED) {
+        throw new Error('Match is no longer available for walkover');
+      }
+      if (freshMatch.resultSubmittedAt) {
+        throw new Error('A result has already been submitted for this match');
+      }
+
       // Create walkover record
       const walkoverData: any = {
         matchId,
