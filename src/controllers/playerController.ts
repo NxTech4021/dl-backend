@@ -388,20 +388,24 @@ export const uploadProfileImage = async (req: AuthenticatedRequest, res: Respons
 
 /**
  * Search for players by name or username
- * GET /api/player/search?q=searchTerm&sport=tennis
+ * GET /api/player/search?q=searchTerm&sport=tennis&page=1&limit=20
  */
 export const searchPlayers = async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const { q, sport } = req.query;
+    const { q, sport, page, limit } = req.query;
     const currentUserId = req.user?.id;
+    const pageNum = page ? parseInt(page as string, 10) : 1;
+    const limitNum = limit ? parseInt(limit as string, 10) : 20;
 
-    const filteredPlayers = await searchService.searchPlayers(
+    const result = await searchService.searchPlayers(
       q as string,
       sport as string,
-      currentUserId
+      currentUserId,
+      pageNum,
+      limitNum
     );
 
-    return sendSuccess(res, filteredPlayers, 'Players found successfully');
+    return sendPaginated(res, result.data, result.pagination, 'Players found successfully');
   } catch (error) {
     console.error('Error searching players:', error);
     return sendError(res, 'Failed to search players');

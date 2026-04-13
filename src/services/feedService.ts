@@ -384,6 +384,7 @@ export const getFeedPosts = async (
         team1Players,
         team2Players,
         isWalkover: match?.isWalkover || false,
+        isFriendly: post.gameType === 'friendly',
         location: match?.location,
         leagueName: (match as any)?.league?.name,
         seasonName: (match as any)?.season?.name,
