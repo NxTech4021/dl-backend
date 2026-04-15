@@ -8,7 +8,8 @@ import { AuthenticatedRequest } from '../middlewares/auth.middleware';
 import {
   getUserPreferences,
   updateUserPreferences,
-  NotificationPreferenceInput
+  NotificationPreferenceInput,
+  DEFAULT_PREFERENCES
 } from '../services/notification/notificationPreferenceService';
 import { logger } from '../utils/logger';
 import { sendSuccess, sendError } from '../utils/response';
@@ -87,30 +88,7 @@ export async function resetPreferences(req: Request, res: Response) {
       return sendError(res, 'Unauthorized', 401);
     }
 
-    // Update all to defaults
-    const defaultPreferences: NotificationPreferenceInput = {
-      matchReminders: true,
-      matchRescheduled: true,
-      matchCancelled: true,
-      matchResults: true,
-      partnerChange: true,
-      opponentChange: true,
-      ratingChange: true,
-      inactivityAlerts: true,
-      chatNotifications: true,
-      invitations: true,
-      seasonRegistration: true,
-      seasonUpdates: true,
-      disputeAlerts: true,
-      teamChangeRequests: true,
-      withdrawalRequests: true,
-      playerReports: true,
-      seasonJoinRequests: true,
-      pushEnabled: true,
-      emailEnabled: false
-    };
-
-    const updated = await updateUserPreferences(userId, defaultPreferences);
+    const updated = await updateUserPreferences(userId, DEFAULT_PREFERENCES);
 
     return sendSuccess(res, updated, 'Notification preferences reset to defaults');
   } catch (error) {
