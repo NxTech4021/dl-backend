@@ -293,18 +293,45 @@ export function socketHandler(httpServer: HttpServer) {
       }
     });
 
-    // Match room management (for real-time match updates and comments)
-    socket.on("join_match", (data: { matchId: string }) => {
+    // Match room management (for real-time match updates and comments).
+    // Security: only match participants may join match:<matchId> rooms — otherwise
+    // any authenticated user who knows a matchId could receive every comment event
+    // emitted to it (matchCommentService.ts:291). Mirrors the join_thread pattern above.
+    socket.on("join_match", async (data: { matchId: string }) => {
       if (!data.matchId) return;
 
-      const matchRoom = `match:${data.matchId}`;
-      socket.join(matchRoom);
-      console.log(`🎾 User ${userId} joined match room: ${matchRoom}`);
-      socket.emit("match_joined", {
-        matchId: data.matchId,
-        socketId: socket.id,
-        timestamp: new Date().toISOString(),
-      });
+      try {
+        const participation = await prisma.matchParticipant.findFirst({
+          where: { matchId: data.matchId, userId },
+          select: { id: true },
+        });
+
+        if (!participation) {
+          console.log(
+            `❌ Socket: User ${userId} denied access to match ${data.matchId} - not a participant`
+          );
+          socket.emit("match_join_error", {
+            matchId: data.matchId,
+            error: "Access denied: You are not a participant in this match",
+          });
+          return;
+        }
+
+        const matchRoom = `match:${data.matchId}`;
+        socket.join(matchRoom);
+        console.log(`🎾 User ${userId} joined match room: ${matchRoom}`);
+        socket.emit("match_joined", {
+          matchId: data.matchId,
+          socketId: socket.id,
+          timestamp: new Date().toISOString(),
+        });
+      } catch (error) {
+        console.error("❌ Socket: Error checking match participation:", error);
+        socket.emit("match_join_error", {
+          matchId: data.matchId,
+          error: "Failed to verify match access",
+        });
+      }
     });
 
     socket.on("leave_match", (data: { matchId: string }) => {
