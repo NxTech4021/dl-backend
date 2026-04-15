@@ -1,5 +1,9 @@
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
+  // Include linux-musl for Alpine container builds (ECS Fargate target).
+  // Ensures prisma generate produces the right engine binary regardless of
+  // host platform, avoiding cryptic runtime errors from binary mismatch.
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
 }
 
 datasource db {
