@@ -110,7 +110,9 @@ export async function sendMatchReminder24h(matchId: string): Promise<void> {
     const player1 = match.participants[0];
     const player2 = match.participants[1];
 
-    if (!player1 || !player2) return;
+    // Skip if either participant's userId is null (deleted user — onDelete:SetNull
+    // per Prisma schema). Previously only checked player existence, not userId.
+    if (!player1?.userId || !player2?.userId) return;
 
     const reminderP1 = notificationTemplates.match.matchReminder24h(
       player2.user?.name || 'Opponent',
@@ -172,7 +174,8 @@ export async function sendMatchReminder2h(matchId: string): Promise<void> {
     const player1 = match.participants[0];
     const player2 = match.participants[1];
 
-    if (!player1 || !player2) return;
+    // Skip if either participant's userId is null (deleted user — onDelete:SetNull).
+    if (!player1?.userId || !player2?.userId) return;
 
     const reminder2hP1 = notificationTemplates.match.matchReminder2h(
       player2.user?.name || 'Opponent',
@@ -248,6 +251,10 @@ export async function sendScoreSubmissionReminder(matchId: string): Promise<void
         ...reminderNotif(opponentName),
         userIds: participant.userId,
         matchId,
+        // One reminder per match per 24h max — the cron runs every 5 min over
+        // a 5-min window slot, so within-same-instance dedup isn't strictly needed,
+        // but this closes the multi-instance race (NS-16/NS-17).
+        skipDuplicateWithinMs: 24 * 60 * 60 * 1000,
       });
     }
 
