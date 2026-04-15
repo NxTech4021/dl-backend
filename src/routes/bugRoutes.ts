@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { verifyAuth, optionalAuth, requireAdmin } from "../middlewares/auth.middleware";
+import { bugReportLimiter, bugScreenshotLimiter } from "../middlewares/rateLimiter";
 import { upload } from "../services/player/utils/multerConfig";
 import {
   // Public endpoints (Widget)
@@ -46,7 +47,7 @@ bugRouter.get("/init/dlm", initDLMApp);
 
 // Create new bug report - Uses optional auth to capture logged-in user if available
 // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
-bugRouter.post("/reports", optionalAuth, createBugReport);
+bugRouter.post("/reports", bugReportLimiter, optionalAuth, createBugReport);
 
 // Get modules for a specific app (for dropdown) - Public
 bugRouter.get("/apps/:appId/modules", getModulesByApp);
@@ -69,11 +70,12 @@ bugRouter.post("/screenshots", verifyAuth, uploadScreenshot);
 
 // Upload screenshot file (handles actual file upload) - Public for anonymous reports
 // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
-bugRouter.post("/screenshots/upload", upload.single("screenshot"), uploadScreenshotFile);
+bugRouter.post("/screenshots/upload", bugScreenshotLimiter, upload.single("screenshot"), uploadScreenshotFile);
 
 // Sync bug report to Google Sheets - Public (called after screenshots uploaded)
+// Rate-limited via bugReportLimiter to prevent Google Sheets API quota exhaustion.
 // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
-bugRouter.post("/reports/:id/sync", syncBugReport);
+bugRouter.post("/reports/:id/sync", bugReportLimiter, syncBugReport);
 
 // Get all apps (for app selector)
 bugRouter.get("/apps", verifyAuth, getApps);
