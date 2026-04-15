@@ -43,7 +43,13 @@ export function getFiuuConfig(requestHost?: string | null): FiuuConfig {
     process.env.FIUU_PORTAL_URL?.replace(/\/$/, "") ||
     "https://sandbox-portal.fiuu.com";
 
-  // Prefer explicit public base URL when provided (e.g. ngrok domain)
+  // TODO(AWS-M-71, SECURITY): buildPublicBaseUrl builds returnUrl from the
+  // client-controlled Host header — open redirect / phishing vector if
+  // FIUU_PUBLIC_CALLBACK_URL is unset. Add a hard check here that throws
+  // in production when the env var is missing. BLOCKING PRECONDITION before
+  // shipping this fix: Addy must verify FIUU_PUBLIC_CALLBACK_URL is set in
+  // current prod .env — otherwise the throw takes current prod down on deploy.
+  // Track at docs/plans/2026-04-14-aws-migration-architecture-stress-tests.md.
   const callbackBaseUrl =
     process.env.FIUU_PUBLIC_CALLBACK_URL ??
     buildPublicBaseUrl(requestHost) ??
