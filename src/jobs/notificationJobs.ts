@@ -1204,7 +1204,9 @@ export function scheduleMatchStreakReEvaluation(): void {
 
 /**
  * Auto-finish seasons whose endDate has passed but status is still ACTIVE or UPCOMING.
- * Runs every hour.
+ * Runs daily at midnight (MYT). Daily cadence is sufficient because downstream
+ * lifecycle decisions key off `endDate` directly rather than `status`. Switch
+ * to '0 * * * *' if product ever wants hourly status flips.
  */
 export function scheduleSeasonAutoFinish(): void {
   scheduleCron('0 0 * * *', async () => {
@@ -1271,7 +1273,12 @@ export function initializeCoreNotificationJobs(): void {
   scheduleTeamRegistrationReminder24h(); // Daily 10am — doubles team deadline
   scheduleRegistrationDeadlineCaptain(); // Daily 8pm — captain reminder
 
-  logger.info("✅ Core notification jobs initialized (14 crons active)");
+  // This helper registers 14 crons. server.ts also wires 4 infrastructure crons
+  // (schedulePushTokenCleanup, scheduleMatchStreakReEvaluation, scheduleSeasonAutoFinish,
+  // scheduleSessionCleanup) plus 3 inline cron.schedule() business-logic jobs
+  // (expire invitations, match invitation expiration, auto-approval/walkover) —
+  // 21 crons total in production.
+  logger.info("Core notification jobs initialized (14 here, 21 total in prod)");
 }
 
 /**
