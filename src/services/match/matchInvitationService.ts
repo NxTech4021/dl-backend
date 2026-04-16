@@ -76,6 +76,10 @@ export class MatchInvitationService {
   /**
    * Create a new match with optional direct challenge
    */
+  // TODO(111-F-20): No idempotency guard — rapid double-click creates duplicate matches.
+  //   See docs/issues/backlog/match-stub-endpoints.md
+  // TODO(111-F-61/F-39): Add assertUserCanAct before creating — suspended/inactive users
+  //   can currently create league matches. See docs/issues/backlog/match-penalty-enforcement.md
   async createMatch(input: CreateMatchInput) {
     const {
       createdById,
@@ -775,6 +779,11 @@ export class MatchInvitationService {
     if (invitation.expiresAt < new Date()) {
       throw new Error('This invitation has expired');
     }
+
+    // TODO(111-F-17): Check invitation.match.status !== CANCELLED/VOID — user can currently
+    // accept invitation to a cancelled match. See docs/issues/backlog/match-cancel-status-whitelist.md
+    // TODO(111-F-61/F-39): Call assertUserCanAct(userId) — suspended/inactive users can currently
+    // accept league invitations. See docs/issues/backlog/match-penalty-enforcement.md
 
     // Check for time conflicts if accepting
     if (accept) {
