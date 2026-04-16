@@ -432,6 +432,11 @@ export async function applyMatchRatings(
 
 /**
  * Reverse rating changes for a voided match
+ *
+ * TODO(111-audit-B): not idempotent — same shape as dmrRatingService
+ * reverseMatchRatings; matchesPlayed double-decrements on re-entry and
+ * [REVERSED] marker is never read as a guard. Fix in both places together.
+ * See docs/issues/backlog/match-post-ship-audit-2026-04-16.md#issue-b
  */
 export async function reverseMatchRatings(matchId: string): Promise<void> {
   // Find all rating history entries for this match
