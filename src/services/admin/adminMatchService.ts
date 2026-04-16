@@ -1111,6 +1111,13 @@ export class AdminMatchService {
     // Audit-A: capture before update so post-write MatchWalkover cleanup is conditional.
     const wasWalkover = match.isWalkover;
 
+    // TODO(111-audit-B3): concurrent voidMatch race — two admins simultaneously
+    // read status=COMPLETED, both tx.match.update VOID-over-VOID (no WHERE
+    // status precondition), both capture wasCompleted=true, both call
+    // reverseMatchRatings → double decrement of matchesPlayed. Fix by using
+    // `tx.match.updateMany` with a status-predicate WHERE clause (optimistic
+    // lock) and throwing on zero-row update. See
+    // docs/issues/backlog/match-deferred-issues-deep-dive-2026-04-16.md#issue-b
     await prisma.$transaction(async (tx) => {
       await tx.match.update({
         where: { id: matchId },
@@ -1144,7 +1151,17 @@ export class AdminMatchService {
       });
     });
 
-    // Reverse ratings if match was completed
+    // Reverse ratings if match was completed.
+    // TODO(111-audit-B2): reverseMatchRatings runs OUTSIDE the outer
+    // transaction above — the status flip to VOID is already committed. On
+    // DB/network failure here, the error is caught+logged+swallowed, leaving
+    // Match.status=VOID but ratings still reflecting COMPLETED. Admin has no
+    // recovery endpoint; invoking recalculateMatchRatings later compounds
+    // the non-idempotency of reverseMatchRatings (see audit-B1). Move the
+    // rating + standings calls INSIDE the outer $transaction so partial
+    // failure rolls back the status flip too. Verify StandingsV2Service is
+    // tx-safe before moving. See
+    // docs/issues/backlog/match-deferred-issues-deep-dive-2026-04-16.md#issue-b
     if (wasCompleted) {
       try {
         const dmrService = new DMRRatingService(match.sport as any);
