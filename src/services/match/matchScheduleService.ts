@@ -76,6 +76,10 @@ export class MatchScheduleService {
     }
 
     // Check if match can be cancelled
+    // TODO(111-F-15): Whitelist cancellable statuses [DRAFT, SCHEDULED] only.
+    // Currently allows cancel on WALKOVER_PENDING (destroys dispute window),
+    // ONGOING (orphans submitted result), UNFINISHED, VOID, DRAFT.
+    // See docs/issues/backlog/match-cancel-status-whitelist.md
     if (match.status === MatchStatus.COMPLETED) {
       throw new Error('Cannot cancel a completed match');
     }

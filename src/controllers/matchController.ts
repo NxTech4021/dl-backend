@@ -48,6 +48,9 @@ export const getMatches = async (req: Request, res: Response) => {
   }
 };
 
+// TODO(111-F-28): Add canReadMatch auth guard — any authenticated user can currently query
+// any match's full PII. Fix needs participant-OR-divisionMember helper.
+// See docs/issues/backlog/match-auth-read-endpoints.md
 export const getMatchById = async (req: Request, res: Response) => {
   const { id } = req.params;
   if (!id) return sendError(res, "Match ID is required.", 400);
