@@ -83,6 +83,13 @@ export function scheduleMatch24hReminders(): void {
 
         // F-5: re-check status — the match may have been cancelled or completed
         // between the initial findMany and this iteration.
+        // TODO(111-audit-F1): this is N+1 — batch with findMany on collected
+        // ids at the top of the cron handler for O(1) extra queries.
+        // TODO(111-audit-D): participants pre-filtered to ACCEPTED means
+        // doubles matches with partial acceptance produce incomplete opponent
+        // names. Either gate on fully-accepted (matchType-aware length check)
+        // or query full roster and filter delivery.
+        // See docs/issues/backlog/match-post-ship-audit-2026-04-16.md
         const fresh = await prisma.match.findUnique({
           where: { id: match.id },
           select: { status: true },
@@ -186,6 +193,13 @@ export function scheduleMatch2hReminders(): void {
 
         // F-5: re-check status — the match may have been cancelled or completed
         // between the initial findMany and this iteration.
+        // TODO(111-audit-F1): this is N+1 — batch with findMany on collected
+        // ids at the top of the cron handler for O(1) extra queries.
+        // TODO(111-audit-D): participants pre-filtered to ACCEPTED means
+        // doubles matches with partial acceptance produce incomplete opponent
+        // names. Either gate on fully-accepted (matchType-aware length check)
+        // or query full roster and filter delivery.
+        // See docs/issues/backlog/match-post-ship-audit-2026-04-16.md
         const fresh = await prisma.match.findUnique({
           where: { id: match.id },
           select: { status: true },
@@ -274,6 +288,13 @@ export function scheduleMatchMorningReminders(): void {
 
         // F-5: re-check status — the match may have been cancelled or completed
         // between the initial findMany and this iteration.
+        // TODO(111-audit-F1): this is N+1 — batch with findMany on collected
+        // ids at the top of the cron handler for O(1) extra queries.
+        // TODO(111-audit-D): participants pre-filtered to ACCEPTED means
+        // doubles matches with partial acceptance produce incomplete opponent
+        // names. Either gate on fully-accepted (matchType-aware length check)
+        // or query full roster and filter delivery.
+        // See docs/issues/backlog/match-post-ship-audit-2026-04-16.md
         const fresh = await prisma.match.findUnique({
           where: { id: match.id },
           select: { status: true },
@@ -346,6 +367,10 @@ export function scheduleScoreSubmissionReminders(): void {
       for (const match of matches) {
         // F-7: re-check status — the match may have been cancelled or completed
         // between the initial findMany and this iteration.
+        // TODO(111-audit-F2): double-query — this findUnique + another one
+        // inside sendScoreSubmissionReminder. Collapse by passing status to
+        // the service or folding the status check in there.
+        // See docs/issues/backlog/match-post-ship-audit-2026-04-16.md#issue-f
         const fresh = await prisma.match.findUnique({
           where: { id: match.id },
           select: { status: true },
