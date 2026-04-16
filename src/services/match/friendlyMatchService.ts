@@ -1251,6 +1251,11 @@ export class FriendlyMatchService {
     }
 
     // Check if match can be cancelled (not already completed or cancelled)
+    // TODO(111-audit-E1): mirror the F-15 positive whitelist from
+    // matchScheduleService.cancelMatch — only DRAFT + SCHEDULED should
+    // be cancellable. Today, ONGOING / UNFINISHED / VOID are silently
+    // cancellable here, diverging from the league surface.
+    // See docs/issues/backlog/match-post-ship-audit-2026-04-16.md#issue-e
     if (match.status === MatchStatus.COMPLETED || match.status === MatchStatus.CANCELLED) {
       throw new Error('This match cannot be cancelled');
     }
