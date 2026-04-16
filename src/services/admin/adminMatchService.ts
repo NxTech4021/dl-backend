@@ -1111,16 +1111,14 @@ export class AdminMatchService {
     // Audit-A: capture before update so post-write MatchWalkover cleanup is conditional.
     const wasWalkover = match.isWalkover;
 
-    // TODO(111-audit-B3): concurrent voidMatch race — two admins simultaneously
-    // read status=COMPLETED, both tx.match.update VOID-over-VOID (no WHERE
-    // status precondition), both capture wasCompleted=true, both call
-    // reverseMatchRatings → double decrement of matchesPlayed. Fix by using
-    // `tx.match.updateMany` with a status-predicate WHERE clause (optimistic
-    // lock) and throwing on zero-row update. See
-    // docs/issues/backlog/match-deferred-issues-deep-dive-2026-04-16.md#issue-b
     await prisma.$transaction(async (tx) => {
-      await tx.match.update({
-        where: { id: matchId },
+      // Audit-B3: optimistic lock — only update if status is still what we
+      // observed pre-tx. Prevents two concurrent voidMatch calls from both
+      // crossing the F-11 guard, both flipping VOID, and both reaching
+      // reverseMatchRatings (double-decrement of matchesPlayed). The losing
+      // side gets count=0 and an explicit error.
+      const updated = await tx.match.updateMany({
+        where: { id: matchId, status: match.status },
         data: {
           status: MatchStatus.VOID,
           // Audit-A: VOID is semantically inconsistent with isWalkover=true.
@@ -1129,6 +1127,12 @@ export class AdminMatchService {
           adminNotes: reason
         }
       });
+
+      if (updated.count === 0) {
+        throw new Error(
+          `Match ${matchId} was modified concurrently. Please refresh and retry.`
+        );
+      }
 
       // Audit-A: delete the paired MatchWalkover row so admin UI (getAdminMatches,
       // getMatchById) stops surfacing stale winningPlayerId/defaultingPlayerId
