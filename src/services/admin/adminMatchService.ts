@@ -973,6 +973,15 @@ export class AdminMatchService {
         }
       }
 
+      // F-60: real set scores mean the match was actually played. Clear
+      // isWalkover (unless admin explicitly asserted it) so downstream
+      // matchResultCreationService uses the real outcome instead of
+      // synthesizing a 2-0 from the walkover branch.
+      if (setScores && setScores.length > 0 && isWalkover !== true) {
+        updateData.isWalkover = false;
+        updateData.walkoverReason = null;
+      }
+
       // #043 BUG 3: Auto-complete match when admin provides scores with outcome
       // Admin editing scores is an explicit decision — no reason to leave match ONGOING
       if (outcome && match.status !== MatchStatus.COMPLETED) {
