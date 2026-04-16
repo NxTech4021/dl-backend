@@ -329,105 +329,10 @@ export class MatchScheduleService {
     };
   }
 
-  /**
-   * Record a walkover (opponent 20+ minutes late)
-   */
-  async recordWalkover(matchId: string, reportedById: string, defaultingPlayerId: string, reason: string) {
-    const match = await prisma.match.findUnique({
-      where: { id: matchId },
-      include: {
-        participants: true
-      }
-    });
-
-    if (!match) {
-      throw new Error('Match not found');
-    }
-
-    // Verify reporter is a participant
-    const reporter = match.participants.find(p => p.userId === reportedById);
-    if (!reporter) {
-      throw new Error('Only match participants can report a walkover');
-    }
-
-    // Verify defaulting player is a participant
-    const defaultingPlayer = match.participants.find(p => p.userId === defaultingPlayerId);
-    if (!defaultingPlayer) {
-      throw new Error('Defaulting player must be a participant');
-    }
-
-    // Check if match is scheduled/ongoing
-    if (match.status !== MatchStatus.SCHEDULED && match.status !== MatchStatus.ONGOING) {
-      throw new Error('Can only record walkover for scheduled or ongoing matches');
-    }
-
-    // Check if opponent is actually late
-    const scheduledTime = match.matchDate;
-    if (scheduledTime) {
-      const minutesSinceScheduled = (Date.now() - scheduledTime.getTime()) / (1000 * 60);
-      if (minutesSinceScheduled < this.walkoverLateThresholdMinutes) {
-        throw new Error(`Opponent must be at least ${this.walkoverLateThresholdMinutes} minutes late to record a walkover`);
-      }
-    }
-
-    // Determine winning player
-    const winningPlayerId = reportedById;
-
-    // Create walkover record
-    await prisma.$transaction(async (tx) => {
-      // Check if walkover already exists
-      const existingWalkover = await tx.matchWalkover.findUnique({
-        where: { matchId }
-      });
-
-      if (existingWalkover) {
-        throw new Error('Walkover already recorded for this match');
-      }
-
-      // Create walkover
-      await tx.matchWalkover.create({
-        data: {
-          matchId,
-          walkoverReason: 'NO_SHOW',
-          walkoverReasonDetail: reason,
-          defaultingPlayerId,
-          winningPlayerId,
-          reportedBy: reportedById
-        }
-      });
-
-      // Update match status
-      await tx.match.update({
-        where: { id: matchId },
-        data: {
-          status: MatchStatus.COMPLETED,
-          isWalkover: true,
-          walkoverReason: 'NO_SHOW',
-          walkoverRecordedById: reportedById,
-          outcome: reporter.team || 'team1',
-          requiresAdminReview: true // Walkovers require admin confirmation
-        }
-      });
-    });
-
-    // Notify participants
-    const otherParticipants = match.participants
-      .filter(p => p.userId !== reportedById)
-      .map(p => p.userId);
-
-    await this.notificationService.createNotification({
-      type: 'MATCH_WALKOVER_WON',
-      title: 'Walkover Recorded',
-      message: 'A walkover has been recorded for this match. Admin will review.',
-      category: 'MATCH',
-      matchId,
-      userIds: otherParticipants
-    });
-
-    logger.info(`Walkover recorded for match ${matchId} by user ${reportedById}`);
-
-    return this.getMatchById(matchId);
-  }
+  // recordWalkover REMOVED — duplicate of matchResultService.submitWalkover which is the
+  // active walkover endpoint (POST /:id/walkover via matchResultController.submitWalkover).
+  // This method was never reachable because the route was never mounted (matchRoutes.ts:105).
+  // See docs/issues/dissections/111-singles-match-deep-stress.md §5 D-2.
 
   /**
    * Request to reschedule a match
