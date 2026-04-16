@@ -1,6 +1,6 @@
 import { prisma } from "../lib/prisma";
 import { Request, Response } from "express";
-import { Prisma, MatchType } from "@prisma/client";
+import { Prisma, MatchType, MatchStatus } from "@prisma/client";
 import { getMatchCommentService } from "../services/match/matchCommentService";
 import { sendSuccess, sendError } from '../utils/response';
 import dayjs from 'dayjs';
@@ -13,23 +13,6 @@ dayjs.extend(timezone);
 import { parseDateFromDevice, formatMatchDate, formatMatchTime } from '../utils/timezone';
 
 type MatchFeeType = 'FREE' | 'SPLIT' | 'FIXED';
-
-interface CreateMatchBody {
-  divisionId?: string;
-  sport?: string;
-  matchType?: MatchType;
-  playerScore?: number;
-  opponentScore?: number;
-  outcome?: string;
-  matchDate?: string;
-  deviceTimezone?: string;
-  location?: string;
-  notes?: string;
-  duration?: number;
-  courtBooked?: boolean;
-  fee?: MatchFeeType;
-  feeAmount?: number;
-}
 
 interface UpdateMatchBody {
   divisionId?: string;
@@ -48,44 +31,8 @@ interface UpdateMatchBody {
   feeAmount?: number;
 }
 
-export const createMatch = async (req: Request, res: Response) => {
-  const { divisionId, sport, matchType, playerScore, opponentScore, outcome, matchDate, deviceTimezone, location, notes, duration, courtBooked, fee, feeAmount } = req.body as CreateMatchBody;
-
-  if (!divisionId || !sport || !matchType) {
-    return sendError(res, "divisionId, sport, and matchType are required.", 400);
-  }
-
-  try {
-    const division = await prisma.division.findUnique({ where: { id: divisionId } });
-    if (!division) return sendError(res, "Division not found.", 404);
-
-    const matchData: Prisma.MatchCreateInput = {
-      division: { connect: { id: divisionId } },
-      sport,
-      matchType,
-      ...(playerScore !== undefined && { playerScore: playerScore ?? null }),
-      ...(opponentScore !== undefined && { opponentScore: opponentScore ?? null }),
-      ...(outcome !== undefined && { outcome: outcome ?? null }),
-      ...(matchDate !== undefined && { matchDate: parseDateFromDevice(matchDate, deviceTimezone) }),
-      ...(location !== undefined && { location: location ?? null }),
-      ...(notes !== undefined && { notes: notes ?? null }),
-      ...(duration !== undefined && { duration: duration ?? null }),
-      ...(courtBooked !== undefined && { courtBooked: courtBooked ?? null }),
-      ...(fee !== undefined && { fee: fee ?? null }),
-      ...(feeAmount !== undefined && { feeAmount: feeAmount ?? null }),
-    };
-
-    const match = await prisma.match.create({
-      data: matchData,
-      include: { participants: true },
-    });
-    sendSuccess(res, match, undefined, 201);
-  } catch (err: unknown) {
-    console.error("Create Match Error:", err);
-    const errorMessage = err instanceof Error ? err.message : "Failed to create match.";
-    sendError(res, errorMessage);
-  }
-};
+// Legacy createMatch removed — matchRoutes.ts imports createMatch from matchInvitationController
+// (see docs/issues/dissections/111-singles-match-deep-stress.md §5 D-1)
 
 export const getMatches = async (req: Request, res: Response) => {
   try {
@@ -212,9 +159,39 @@ export const deleteMatch = async (req: Request, res: Response) => {
   const { id } = req.params;
   if (!id) return sendError(res, "Match ID is required.", 400);
 
+  const userId = (req as any).user?.id;
+  if (!userId) return sendError(res, "Authentication required.", 401);
+
   try {
-    const existingMatch = await prisma.match.findUnique({ where: { id } });
+    const existingMatch = await prisma.match.findUnique({
+      where: { id },
+      select: { id: true, createdById: true, status: true },
+    });
     if (!existingMatch) return sendError(res, "Match not found.", 404);
+
+    // F-1: Only the match creator can delete — mirrors updateMatch (line 174)
+    if (existingMatch.createdById !== userId) {
+      return sendError(res, "Only the match creator can delete this match.", 403);
+    }
+
+    // Only allow delete on non-impactful states. Completed/void/walkover/ongoing/unfinished
+    // matches have ratings, standings, walkover records, or dispute history. Those must be
+    // handled via voidMatch (admin path) which properly reverses ratings and recalculates
+    // standings. Hard-deleting a completed match would leave stale PlayerRating deltas
+    // (RatingHistory.matchId cascades to NULL but deltas stay applied) and stale
+    // DivisionStanding rows.
+    const deletableStatuses: MatchStatus[] = [
+      MatchStatus.DRAFT,
+      MatchStatus.SCHEDULED,
+      MatchStatus.CANCELLED,
+    ];
+    if (!deletableStatuses.includes(existingMatch.status as MatchStatus)) {
+      return sendError(
+        res,
+        `Cannot delete a match in ${existingMatch.status} state. Completed matches must be voided by an admin.`,
+        400
+      );
+    }
 
     await prisma.match.delete({ where: { id } });
     sendSuccess(res, null, "Match deleted successfully.");
