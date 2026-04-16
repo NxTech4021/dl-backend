@@ -787,6 +787,13 @@ export class MatchInvitationService {
     // creator, voided by admin, or auto-declined). Accepting an invitation
     // to a non-SCHEDULED match would create an ACCEPTED participant on a
     // terminal/post-play match.
+    //
+    // TODO(111-audit-E2): over-strict — this blocks decline too, but
+    // declining a stale invitation for a CANCELLED/VOID/DRAFT match is
+    // harmless inbox hygiene. Gate on `accept === true` only.
+    // TODO(111-audit-E3): error surfaces raw enum token to user. Soften
+    // the client-facing message; keep enum in logger for debuggability.
+    // See docs/issues/backlog/match-post-ship-audit-2026-04-16.md#issue-e
     if (invitation.match.status !== MatchStatus.SCHEDULED) {
       throw new Error(`Cannot respond to invitation: match is ${invitation.match.status}`);
     }
