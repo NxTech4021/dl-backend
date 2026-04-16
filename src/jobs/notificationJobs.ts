@@ -81,6 +81,14 @@ export function scheduleMatch24hReminders(): void {
       for (const match of matches) {
         if (!match.participants || match.participants.length < 2) continue;
 
+        // F-5: re-check status — the match may have been cancelled or completed
+        // between the initial findMany and this iteration.
+        const fresh = await prisma.match.findUnique({
+          where: { id: match.id },
+          select: { status: true },
+        });
+        if (fresh?.status !== "SCHEDULED") continue;
+
         const date = match.matchDate ? dayjs(match.matchDate).tz(MYT).format('D MMM YYYY') : 'TBD';
         const time = match.matchDate ? dayjs(match.matchDate).tz(MYT).format('h:mm A') : 'TBD';
         const venue = match.venue || match.location || 'TBD';
@@ -175,20 +183,28 @@ export function scheduleMatch2hReminders(): void {
       // Send notifications for each match
       for (const match of matches) {
         if (!match.participants || match.participants.length < 2) continue;
-        
+
+        // F-5: re-check status — the match may have been cancelled or completed
+        // between the initial findMany and this iteration.
+        const fresh = await prisma.match.findUnique({
+          where: { id: match.id },
+          select: { status: true },
+        });
+        if (fresh?.status !== "SCHEDULED") continue;
+
         const time = match.matchDate ? dayjs(match.matchDate).tz(MYT).format('h:mm A') : 'TBD';
         const venue = match.venue || match.location || 'TBD';
-        
+
         for (const player of match.participants) {
           // Get opponents for this player
-          const opponents = match.participants.filter(p => 
-            p.userId !== player.userId && 
+          const opponents = match.participants.filter(p =>
+            p.userId !== player.userId &&
             (match.matchType === 'SINGLES' || p.team !== player.team)
           );
-          
+
           const opponentNames = opponents.map(opp => opp.user?.name || 'Player').join(' & ');
           const opponentName = opponentNames || 'Opponent';
-          
+
           const notif = matchManagementNotifications.matchReminder2h(
             opponentName,
             time,
@@ -256,6 +272,14 @@ export function scheduleMatchMorningReminders(): void {
       for (const match of matches) {
         if (!match.participants || match.participants.length < 2) continue;
 
+        // F-5: re-check status — the match may have been cancelled or completed
+        // between the initial findMany and this iteration.
+        const fresh = await prisma.match.findUnique({
+          where: { id: match.id },
+          select: { status: true },
+        });
+        if (fresh?.status !== "SCHEDULED") continue;
+
         const date = match.matchDate ? dayjs(match.matchDate).tz(MYT).format('D MMM YYYY') : 'TBD';
         const time = match.matchDate ? dayjs(match.matchDate).tz(MYT).format('h:mm A') : 'TBD';
         const venue = match.venue || match.location || 'TBD';
@@ -320,6 +344,14 @@ export function scheduleScoreSubmissionReminders(): void {
       });
 
       for (const match of matches) {
+        // F-7: re-check status — the match may have been cancelled or completed
+        // between the initial findMany and this iteration.
+        const fresh = await prisma.match.findUnique({
+          where: { id: match.id },
+          select: { status: true },
+        });
+        if (fresh?.status !== "SCHEDULED") continue;
+
         await sendScoreSubmissionReminder(match.id);
       }
 
