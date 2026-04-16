@@ -780,8 +780,14 @@ export class MatchInvitationService {
       throw new Error('This invitation has expired');
     }
 
-    // TODO(111-F-17): Check invitation.match.status !== CANCELLED/VOID — user can currently
-    // accept invitation to a cancelled match. See docs/issues/backlog/match-cancel-status-whitelist.md
+    // F-17: the match underneath can transition independently (cancelled by
+    // creator, voided by admin, or auto-declined). Accepting an invitation
+    // to a non-SCHEDULED match would create an ACCEPTED participant on a
+    // terminal/post-play match.
+    if (invitation.match.status !== MatchStatus.SCHEDULED) {
+      throw new Error(`Cannot respond to invitation: match is ${invitation.match.status}`);
+    }
+
     // TODO(111-F-61/F-39): Call assertUserCanAct(userId) — suspended/inactive users can currently
     // accept league invitations. See docs/issues/backlog/match-penalty-enforcement.md
 
