@@ -688,6 +688,9 @@ export class AdminMatchService {
           });
         }
       } else if (action === DisputeResolutionAction.VOID_MATCH) {
+        // TODO(111-audit-A): also `tx.matchWalkover.deleteMany({ where: { matchId } })`
+        // after this update — orphan MatchWalkover rows persist post-VOID.
+        // See docs/issues/backlog/match-post-ship-audit-2026-04-16.md#issue-a
         await tx.match.update({
           where: { id: dispute.matchId },
           data: {
@@ -977,6 +980,11 @@ export class AdminMatchService {
       // isWalkover (unless admin explicitly asserted it) so downstream
       // matchResultCreationService uses the real outcome instead of
       // synthesizing a 2-0 from the walkover branch.
+      //
+      // TODO(111-audit-A): when this branch clears isWalkover, also delete
+      // any stale MatchWalkover row via tx.matchWalkover.deleteMany —
+      // otherwise admin UI surfaces stale defaultingPlayer/winningPlayer.
+      // See docs/issues/backlog/match-post-ship-audit-2026-04-16.md#issue-a
       if (setScores && setScores.length > 0 && isWalkover !== true) {
         updateData.isWalkover = false;
         updateData.walkoverReason = null;
@@ -1068,6 +1076,10 @@ export class AdminMatchService {
   /**
    * Void a match (AS4)
    * Reverses ratings and recalculates standings
+   *
+   * TODO(111-audit-A): when voiding a WALKOVER_PENDING match, also delete the
+   * paired MatchWalkover row (tx.matchWalkover.deleteMany inside the transaction).
+   * See docs/issues/backlog/match-post-ship-audit-2026-04-16.md#issue-a
    */
   async voidMatch(matchId: string, adminId: string, reason: string) {
     const match = await prisma.match.findUnique({
