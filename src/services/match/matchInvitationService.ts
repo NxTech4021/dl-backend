@@ -788,14 +788,21 @@ export class MatchInvitationService {
     // to a non-SCHEDULED match would create an ACCEPTED participant on a
     // terminal/post-play match.
     //
-    // TODO(111-audit-E2): over-strict — this blocks decline too, but
-    // declining a stale invitation for a CANCELLED/VOID/DRAFT match is
-    // harmless inbox hygiene. Gate on `accept === true` only.
-    // TODO(111-audit-E3): error surfaces raw enum token to user. Soften
-    // the client-facing message; keep enum in logger for debuggability.
-    // See docs/issues/backlog/match-post-ship-audit-2026-04-16.md#issue-e
-    if (invitation.match.status !== MatchStatus.SCHEDULED) {
-      throw new Error(`Cannot respond to invitation: match is ${invitation.match.status}`);
+    // Audit-E2: decline on non-SCHEDULED is harmless inbox hygiene (the
+    // participant row is updated to DECLINED; no schema constraint or
+    // downstream flow cares about a declined participant on a terminal match),
+    // so we only gate accept.
+    //
+    // Audit-E3: client-facing message avoids the raw enum token; the actual
+    // status is still captured in the structured log below for debugging.
+    if (accept && invitation.match.status !== MatchStatus.SCHEDULED) {
+      logger.warn('Invitation accept rejected — match no longer SCHEDULED', {
+        invitationId,
+        userId,
+        matchId: invitation.matchId,
+        matchStatus: invitation.match.status,
+      });
+      throw new Error('This match is no longer available. Please refresh your invitations.');
     }
 
     // TODO(111-F-61/F-39): Call assertUserCanAct(userId) — suspended/inactive users can currently
