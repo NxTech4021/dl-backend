@@ -831,11 +831,10 @@ export class AdminMatchService {
             await recalculateMatchRatings(resolvedMatch.id, adminId);
           } else if (resolvedMatch.status === MatchStatus.VOID) {
             // F-4: Reverse ratings on dispute-voided matches. Mirrors the direct voidMatch
-            // path (line ~1074) which calls reverseMatchRatings. Without this, a VOID_MATCH
+            // path (line ~1091) which calls reverseMatchRatings. Without this, a VOID_MATCH
             // dispute resolution on a previously-completed match leaves phantom rating deltas.
             // reverseMatchRatings is safe on empty history (warns + returns early).
             try {
-              const { default: DMRRatingService } = await import('../rating/dmrRatingService');
               const dmrService = new DMRRatingService(resolvedMatch.sport as any);
               await dmrService.reverseMatchRatings(resolvedMatch.id);
               logger.info(`Reversed ratings for dispute-voided match ${resolvedMatch.id}`);
