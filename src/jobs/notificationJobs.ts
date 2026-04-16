@@ -64,8 +64,10 @@ export function scheduleMatch24hReminders(): void {
           status: "SCHEDULED",
         },
         include: {
+          // Audit-D: query the FULL roster so opponent-name construction
+          // stays complete for doubles matches where some invitees are still
+          // PENDING. Delivery is gated to ACCEPTED-only in the loop below.
           participants: {
-            where: { invitationStatus: "ACCEPTED" },
             include: {
               user: {
                 select: {
@@ -85,11 +87,6 @@ export function scheduleMatch24hReminders(): void {
         // between the initial findMany and this iteration.
         // TODO(111-audit-F1): this is N+1 — batch with findMany on collected
         // ids at the top of the cron handler for O(1) extra queries.
-        // TODO(111-audit-D): participants pre-filtered to ACCEPTED means
-        // doubles matches with partial acceptance produce incomplete opponent
-        // names. Either gate on fully-accepted (matchType-aware length check)
-        // or query full roster and filter delivery.
-        // See docs/issues/backlog/match-post-ship-audit-2026-04-16.md
         const fresh = await prisma.match.findUnique({
           where: { id: match.id },
           select: { status: true },
@@ -101,6 +98,10 @@ export function scheduleMatch24hReminders(): void {
         const venue = match.venue || match.location || 'TBD';
 
         for (const player of match.participants) {
+          // Audit-D: only notify ACCEPTED participants; the full roster above
+          // is kept so opponent-name computation reflects the intended lineup.
+          if (player.invitationStatus !== 'ACCEPTED') continue;
+
           // Get opponents for this player
           const opponents = match.participants.filter(p =>
             p.userId !== player.userId &&
@@ -159,8 +160,9 @@ export function scheduleMatch2hReminders(): void {
           status: "SCHEDULED",
         },
         include: {
+          // Audit-D: full roster for opponent-name construction; delivery
+          // gated to ACCEPTED-only in the loop below.
           participants: {
-            where: { invitationStatus: "ACCEPTED" },
             include: {
               user: {
                 select: {
@@ -195,11 +197,6 @@ export function scheduleMatch2hReminders(): void {
         // between the initial findMany and this iteration.
         // TODO(111-audit-F1): this is N+1 — batch with findMany on collected
         // ids at the top of the cron handler for O(1) extra queries.
-        // TODO(111-audit-D): participants pre-filtered to ACCEPTED means
-        // doubles matches with partial acceptance produce incomplete opponent
-        // names. Either gate on fully-accepted (matchType-aware length check)
-        // or query full roster and filter delivery.
-        // See docs/issues/backlog/match-post-ship-audit-2026-04-16.md
         const fresh = await prisma.match.findUnique({
           where: { id: match.id },
           select: { status: true },
@@ -210,6 +207,9 @@ export function scheduleMatch2hReminders(): void {
         const venue = match.venue || match.location || 'TBD';
 
         for (const player of match.participants) {
+          // Audit-D: only notify ACCEPTED participants.
+          if (player.invitationStatus !== 'ACCEPTED') continue;
+
           // Get opponents for this player
           const opponents = match.participants.filter(p =>
             p.userId !== player.userId &&
@@ -269,8 +269,9 @@ export function scheduleMatchMorningReminders(): void {
           status: "SCHEDULED",
         },
         include: {
+          // Audit-D: full roster for opponent-name construction; delivery
+          // gated to ACCEPTED-only in the loop below.
           participants: {
-            where: { invitationStatus: "ACCEPTED" },
             include: {
               user: {
                 select: {
@@ -290,11 +291,6 @@ export function scheduleMatchMorningReminders(): void {
         // between the initial findMany and this iteration.
         // TODO(111-audit-F1): this is N+1 — batch with findMany on collected
         // ids at the top of the cron handler for O(1) extra queries.
-        // TODO(111-audit-D): participants pre-filtered to ACCEPTED means
-        // doubles matches with partial acceptance produce incomplete opponent
-        // names. Either gate on fully-accepted (matchType-aware length check)
-        // or query full roster and filter delivery.
-        // See docs/issues/backlog/match-post-ship-audit-2026-04-16.md
         const fresh = await prisma.match.findUnique({
           where: { id: match.id },
           select: { status: true },
@@ -306,6 +302,9 @@ export function scheduleMatchMorningReminders(): void {
         const venue = match.venue || match.location || 'TBD';
 
         for (const player of match.participants) {
+          // Audit-D: only notify ACCEPTED participants.
+          if (player.invitationStatus !== 'ACCEPTED') continue;
+
           // Get opponents for this player
           const opponents = match.participants.filter(p =>
             p.userId !== player.userId &&
