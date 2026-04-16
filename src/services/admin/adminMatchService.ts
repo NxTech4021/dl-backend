@@ -1059,6 +1059,15 @@ export class AdminMatchService {
       throw new Error('Match not found');
     }
 
+    // F-11: block void on terminal / pre-schedule states — these have nothing to void.
+    if (
+      match.status === MatchStatus.VOID ||
+      match.status === MatchStatus.CANCELLED ||
+      match.status === MatchStatus.DRAFT
+    ) {
+      throw new Error(`Cannot void match in status ${match.status}`);
+    }
+
     // Only reverse ratings if match was previously completed
     const wasCompleted = match.status === MatchStatus.COMPLETED;
 
