@@ -794,6 +794,7 @@ export class AdminMatchService {
         select: {
           id: true,
           status: true,
+          sport: true,
           divisionId: true,
           seasonId: true,
           participants: { select: { userId: true } },
@@ -828,6 +829,19 @@ export class AdminMatchService {
           if (resolvedMatch.status === MatchStatus.COMPLETED) {
             const { recalculateMatchRatings } = await import('../rating/adminRatingService');
             await recalculateMatchRatings(resolvedMatch.id, adminId);
+          } else if (resolvedMatch.status === MatchStatus.VOID) {
+            // F-4: Reverse ratings on dispute-voided matches. Mirrors the direct voidMatch
+            // path (line ~1074) which calls reverseMatchRatings. Without this, a VOID_MATCH
+            // dispute resolution on a previously-completed match leaves phantom rating deltas.
+            // reverseMatchRatings is safe on empty history (warns + returns early).
+            try {
+              const { default: DMRRatingService } = await import('../rating/dmrRatingService');
+              const dmrService = new DMRRatingService(resolvedMatch.sport as any);
+              await dmrService.reverseMatchRatings(resolvedMatch.id);
+              logger.info(`Reversed ratings for dispute-voided match ${resolvedMatch.id}`);
+            } catch (ratingError) {
+              logger.error(`Failed to reverse ratings for dispute-voided match ${resolvedMatch.id}:`, {}, ratingError as Error);
+            }
           }
 
           // Step 3: Recalculate Best 6 (must run before V2 standings)
