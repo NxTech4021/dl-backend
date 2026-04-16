@@ -263,6 +263,13 @@ export async function sendScoreSubmissionReminder(matchId: string): Promise<void
 
     if (acceptedUserIds.length < 2) return;
 
+    // TODO(111-audit-D): `match.participants` is pre-filtered to ACCEPTED-only.
+    // For a doubles match with partial acceptance, the opponent-name computation
+    // below produces incomplete strings (e.g., "Alice" instead of "Alice & Bob").
+    // Either skip non-fully-accepted matches via matchType-aware expected count,
+    // or query all participants and gate delivery by status.
+    // See docs/issues/backlog/match-post-ship-audit-2026-04-16.md#issue-d
+
     // F-62: respect per-user matchReminders preference (score submission is a reminder).
     const allowed = new Set(
       await filterUsersByPreference(acceptedUserIds, 'matchReminders')
@@ -389,6 +396,12 @@ export async function sendMatchCancelledNotification(
     });
 
     // F-62: respect per-user matchCancelled preference.
+    // TODO(111-audit-C): this is a *critical* alert — muting it lets users
+    // show up at a cancelled match. Once the settings UI exposes the
+    // matchCancelled toggle, route in-app (UserNotification row) regardless
+    // of preference; gate only push delivery. Requires tagging critical
+    // types in notificationDeliveryTypes.ts.
+    // See docs/issues/backlog/match-post-ship-audit-2026-04-16.md#issue-c
     const allowed = await filterUsersByPreference([opponentId], 'matchCancelled');
     if (allowed.length === 0) return;
 
@@ -425,6 +438,10 @@ export async function sendMatchRescheduleRequest(
     });
 
     // F-62: respect per-user matchRescheduled preference.
+    // TODO(111-audit-C): like matchCancelled, this is critical — the
+    // opponent needs to SEE the request in-app to approve/reject it.
+    // Full suppression via preference is unsafe once the toggle ships.
+    // See docs/issues/backlog/match-post-ship-audit-2026-04-16.md#issue-c
     const allowed = await filterUsersByPreference([opponentId], 'matchRescheduled');
     if (allowed.length === 0) return;
 
