@@ -907,6 +907,17 @@ export class AdminMatchService {
       throw new Error('Match not found');
     }
 
+    // F-8: block edits on terminal/pre-schedule statuses — a CANCELLED, VOID,
+    // or DRAFT match has no result to edit. Admin must reinstate the match
+    // (via another endpoint) before submitting a result.
+    if (
+      match.status === MatchStatus.CANCELLED ||
+      match.status === MatchStatus.VOID ||
+      match.status === MatchStatus.DRAFT
+    ) {
+      throw new Error(`Cannot edit result of match in status ${match.status}`);
+    }
+
     // Capture original status before TypeScript narrows it inside the transaction callback
     const originalStatus = match.status;
 
