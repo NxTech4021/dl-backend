@@ -82,6 +82,8 @@ export class MatchResultService {
    * Either team's captain can submit the score, the OTHER team must approve/deny
    * If isUnfinished=true, match is marked UNFINISHED and score validation is skipped
    */
+  // TODO(111-F-61/F-39): Call assertUserCanAct(submittedById) — suspended/inactive users
+  // can currently submit league match results. See docs/issues/backlog/match-penalty-enforcement.md
   async submitResult(input: SubmitResultInput) {
     const { matchId, submittedById, setScores, gameScores, comment, evidence, isUnfinished } = input;
 
@@ -312,6 +314,8 @@ export class MatchResultService {
    * - Opponent confirms: Match completed, standings updated
    * - Opponent denies: Dispute created, sent to division admin
    */
+  // TODO(111-F-61/F-39): Call assertUserCanAct(userId) — suspended/inactive users
+  // can currently confirm league match results. See docs/issues/backlog/match-penalty-enforcement.md
   async confirmResult(input: ConfirmResultInput) {
     const {
       matchId,
