@@ -198,7 +198,10 @@ export class MatchInvitationService {
         league: {
           connect: { id: division.leagueId }
         },
-        sport: division.league?.sportType || 'PADEL',
+        // F-21: leagueId on Division is non-nullable and League.sportType is a
+        // non-null enum, so the previous `|| 'PADEL'` fallback only masked real
+        // data integrity failures. Drop it and let Prisma surface the error.
+        sport: division.league.sportType,
         matchType,
         format,
         status: MatchStatus.SCHEDULED,
