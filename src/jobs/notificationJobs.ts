@@ -65,6 +65,7 @@ export function scheduleMatch24hReminders(): void {
         },
         include: {
           participants: {
+            where: { invitationStatus: "ACCEPTED" },
             include: {
               user: {
                 select: {
@@ -79,21 +80,21 @@ export function scheduleMatch24hReminders(): void {
 
       for (const match of matches) {
         if (!match.participants || match.participants.length < 2) continue;
-        
+
         const date = match.matchDate ? dayjs(match.matchDate).tz(MYT).format('D MMM YYYY') : 'TBD';
         const time = match.matchDate ? dayjs(match.matchDate).tz(MYT).format('h:mm A') : 'TBD';
         const venue = match.venue || match.location || 'TBD';
-        
+
         for (const player of match.participants) {
           // Get opponents for this player
-          const opponents = match.participants.filter(p => 
-            p.userId !== player.userId && 
+          const opponents = match.participants.filter(p =>
+            p.userId !== player.userId &&
             (match.matchType === 'SINGLES' || p.team !== player.team)
           );
-          
+
           const opponentNames = opponents.map(opp => opp.user?.name || 'Player').join(' & ');
           const opponentName = opponentNames || 'Opponent';
-          
+
           const notif = matchManagementNotifications.matchReminder24h(
             opponentName,
             date,
@@ -144,6 +145,7 @@ export function scheduleMatch2hReminders(): void {
         },
         include: {
           participants: {
+            where: { invitationStatus: "ACCEPTED" },
             include: {
               user: {
                 select: {
@@ -238,6 +240,7 @@ export function scheduleMatchMorningReminders(): void {
         },
         include: {
           participants: {
+            where: { invitationStatus: "ACCEPTED" },
             include: {
               user: {
                 select: {
@@ -252,21 +255,21 @@ export function scheduleMatchMorningReminders(): void {
 
       for (const match of matches) {
         if (!match.participants || match.participants.length < 2) continue;
-        
+
         const date = match.matchDate ? dayjs(match.matchDate).tz(MYT).format('D MMM YYYY') : 'TBD';
         const time = match.matchDate ? dayjs(match.matchDate).tz(MYT).format('h:mm A') : 'TBD';
         const venue = match.venue || match.location || 'TBD';
-        
+
         for (const player of match.participants) {
           // Get opponents for this player
-          const opponents = match.participants.filter(p => 
-            p.userId !== player.userId && 
+          const opponents = match.participants.filter(p =>
+            p.userId !== player.userId &&
             (match.matchType === 'SINGLES' || p.team !== player.team)
           );
-          
+
           const opponentNames = opponents.map(opp => opp.user?.name || 'Player').join(' & ');
           const opponentName = opponentNames || 'Opponent';
-          
+
           const notif = matchManagementNotifications.matchMorningReminder(
             opponentName,
             date,
