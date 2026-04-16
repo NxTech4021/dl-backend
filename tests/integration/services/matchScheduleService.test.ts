@@ -111,7 +111,7 @@ describe('MatchScheduleService', () => {
           cancelledById: creator.id,
           reason: CancellationReason.OTHER,
         })
-      ).rejects.toThrow('Cannot cancel a completed match');
+      ).rejects.toThrow('Cannot cancel match in status COMPLETED');
     });
 
     it('should throw error if match is already cancelled', async () => {
@@ -137,7 +137,7 @@ describe('MatchScheduleService', () => {
           cancelledById: creator.id,
           reason: CancellationReason.OTHER,
         })
-      ).rejects.toThrow('Match is already cancelled');
+      ).rejects.toThrow('Cannot cancel match in status CANCELLED');
     });
 
     it('should throw error for non-existent match', async () => {
