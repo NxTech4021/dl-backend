@@ -592,99 +592,9 @@ export class MatchResultService {
     }
   }
 
-  /**
-   * Update standings for partnerships in doubles matches
-   * CRITICAL: Both partners on winning team AND both partners on losing team get standings updated
-   */
-  private async updatePartnershipStandings(matchId: string, match: any) {
-    try {
-      if (!match.divisionId) return;
-
-      // Get participants by team
-      const team1Participants = match.participants.filter((p: any) => p.team === 'team1');
-      const team2Participants = match.participants.filter((p: any) => p.team === 'team2');
-
-      // Calculate sets and games won by each team
-      let team1SetsWon = 0, team2SetsWon = 0;
-      let team1GamesWon = 0, team2GamesWon = 0;
-
-      if (match.sport === 'PICKLEBALL') {
-        for (const game of match.pickleballScores) {
-          if (game.player1Points > game.player2Points) {
-            team1SetsWon++;
-            team1GamesWon += game.player1Points;
-            team2GamesWon += game.player2Points;
-          } else {
-            team2SetsWon++;
-            team1GamesWon += game.player1Points;
-            team2GamesWon += game.player2Points;
-          }
-        }
-      } else {
-        // Tennis/Padel
-        for (const set of match.scores) {
-          if (set.player1Games > set.player2Games) {
-            team1SetsWon++;
-          } else {
-            team2SetsWon++;
-          }
-          team1GamesWon += set.player1Games;
-          team2GamesWon += set.player2Games;
-        }
-      }
-
-      const team1Won = match.outcome === 'team1';
-
-      // Import standings update function
-      const { updatePlayerStanding } = await import('../rating/standingsCalculationService');
-
-      // Update BOTH partners on team1
-      for (const participant of team1Participants) {
-        // Each partner's standing is updated against each opponent
-        const opponentIds = team2Participants.map((p: any) => p.userId);
-        for (const opponentId of opponentIds) {
-          try {
-            await updatePlayerStanding(participant.userId, match.divisionId, {
-              odlayerId: participant.userId,
-              odversaryId: opponentId,
-              userWon: team1Won,
-              userSetsWon: team1SetsWon,
-              userSetsLost: team2SetsWon,
-              userGamesWon: team1GamesWon,
-              userGamesLost: team2GamesWon
-            });
-          } catch (error) {
-            logger.error(`Failed to update standings for player ${participant.userId}`, {}, error as Error);
-          }
-        }
-      }
-
-      // Update BOTH partners on team2
-      for (const participant of team2Participants) {
-        const opponentIds = team1Participants.map((p: any) => p.userId);
-        for (const opponentId of opponentIds) {
-          try {
-            await updatePlayerStanding(participant.userId, match.divisionId, {
-              odlayerId: participant.userId,
-              odversaryId: opponentId,
-              userWon: !team1Won,
-              userSetsWon: team2SetsWon,
-              userSetsLost: team1SetsWon,
-              userGamesWon: team2GamesWon,
-              userGamesLost: team1GamesWon
-            });
-          } catch (error) {
-            logger.error(`Failed to update standings for player ${participant.userId}`, {}, error as Error);
-          }
-        }
-      }
-
-      logger.info(`Updated partnership standings for all ${team1Participants.length + team2Participants.length} participants in match ${matchId}`);
-
-    } catch (error) {
-      logger.error(`Failed to update partnership standings for match ${matchId}`, {}, error as Error);
-    }
-  }
+  // updatePartnershipStandings REMOVED — was causing triple counting.
+  // V2 service handles all standings from MatchResult records correctly.
+  // See docs/issues/dissections/111-singles-match-deep-stress.md §5 D-3.
 
   /**
    * Process match ratings using DMR (Glicko-2 based) algorithm
@@ -1536,9 +1446,12 @@ export class MatchResultService {
           const approved = await prisma.$transaction(async (tx) => {
             const freshMatch = await tx.match.findUnique({
               where: { id: match.id },
-              select: { status: true },
+              select: { status: true, isDisputed: true },
             });
-            if (freshMatch?.status !== MatchStatus.ONGOING) return false;
+            // F-2: Also re-check isDisputed inside tx — a dispute created between the outer
+            // findMany (which filters isDisputed:false) and this tx would otherwise be ignored,
+            // allowing the cron to auto-approve a match the user just disputed.
+            if (freshMatch?.status !== MatchStatus.ONGOING || freshMatch.isDisputed) return false;
 
             await tx.match.update({
               where: { id: match.id },
