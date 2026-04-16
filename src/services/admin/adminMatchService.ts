@@ -688,9 +688,6 @@ export class AdminMatchService {
           });
         }
       } else if (action === DisputeResolutionAction.VOID_MATCH) {
-        // TODO(111-audit-A): also `tx.matchWalkover.deleteMany({ where: { matchId } })`
-        // after this update — orphan MatchWalkover rows persist post-VOID.
-        // See docs/issues/backlog/match-post-ship-audit-2026-04-16.md#issue-a
         await tx.match.update({
           where: { id: dispute.matchId },
           data: {
@@ -700,6 +697,13 @@ export class AdminMatchService {
             adminNotes: reason
           }
         });
+        // Audit-A: delete the paired MatchWalkover row if present. The
+        // walkoverUpdate block below would otherwise mark adminVerified=true
+        // on an orphan we no longer want. The updateMany there will then
+        // run on zero rows (safe no-op).
+        if (dispute.match.isWalkover) {
+          await tx.matchWalkover.deleteMany({ where: { matchId: dispute.matchId } });
+        }
       } else if (action === DisputeResolutionAction.AWARD_WALKOVER) {
         await tx.match.update({
           where: { id: dispute.matchId },
@@ -750,6 +754,9 @@ export class AdminMatchService {
             where: { id: dispute.matchId },
             data: { isWalkover: false },
           });
+          // Audit-A: delete the MatchWalkover row — the walkover didn't
+          // happen. The subsequent updateMany will run on zero rows (no-op).
+          await tx.matchWalkover.deleteMany({ where: { matchId: dispute.matchId } });
         }
 
         await tx.matchWalkover.updateMany({
@@ -980,11 +987,6 @@ export class AdminMatchService {
       // isWalkover (unless admin explicitly asserted it) so downstream
       // matchResultCreationService uses the real outcome instead of
       // synthesizing a 2-0 from the walkover branch.
-      //
-      // TODO(111-audit-A): when this branch clears isWalkover, also delete
-      // any stale MatchWalkover row via tx.matchWalkover.deleteMany —
-      // otherwise admin UI surfaces stale defaultingPlayer/winningPlayer.
-      // See docs/issues/backlog/match-post-ship-audit-2026-04-16.md#issue-a
       if (setScores && setScores.length > 0 && isWalkover !== true) {
         updateData.isWalkover = false;
         updateData.walkoverReason = null;
@@ -1001,6 +1003,14 @@ export class AdminMatchService {
         where: { id: matchId },
         data: updateData
       });
+
+      // Audit-A: if the resulting Match explicitly has isWalkover=false (admin
+      // cleared it, or F-60 cleared it for real setScores), remove any stale
+      // MatchWalkover row so admin UI stops surfacing stale winner/defaulter.
+      // deleteMany is a no-op when no row exists (non-walkover matches).
+      if (updateData.isWalkover === false) {
+        await tx.matchWalkover.deleteMany({ where: { matchId } });
+      }
 
       // Log admin action
       await tx.matchAdminAction.create({
@@ -1076,10 +1086,6 @@ export class AdminMatchService {
   /**
    * Void a match (AS4)
    * Reverses ratings and recalculates standings
-   *
-   * TODO(111-audit-A): when voiding a WALKOVER_PENDING match, also delete the
-   * paired MatchWalkover row (tx.matchWalkover.deleteMany inside the transaction).
-   * See docs/issues/backlog/match-post-ship-audit-2026-04-16.md#issue-a
    */
   async voidMatch(matchId: string, adminId: string, reason: string) {
     const match = await prisma.match.findUnique({
@@ -1102,15 +1108,27 @@ export class AdminMatchService {
 
     // Only reverse ratings if match was previously completed
     const wasCompleted = match.status === MatchStatus.COMPLETED;
+    // Audit-A: capture before update so post-write MatchWalkover cleanup is conditional.
+    const wasWalkover = match.isWalkover;
 
     await prisma.$transaction(async (tx) => {
       await tx.match.update({
         where: { id: matchId },
         data: {
           status: MatchStatus.VOID,
+          // Audit-A: VOID is semantically inconsistent with isWalkover=true.
+          // Mirror the F-67 fix applied to resolveDispute(VOID_MATCH).
+          isWalkover: false,
           adminNotes: reason
         }
       });
+
+      // Audit-A: delete the paired MatchWalkover row so admin UI (getAdminMatches,
+      // getMatchById) stops surfacing stale winningPlayerId/defaultingPlayerId
+      // for a now-VOID match. No-op when wasWalkover=false.
+      if (wasWalkover) {
+        await tx.matchWalkover.deleteMany({ where: { matchId } });
+      }
 
       await tx.matchAdminAction.create({
         data: {
