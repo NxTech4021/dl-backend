@@ -75,17 +75,14 @@ export class MatchScheduleService {
       throw new Error('Only match participants can cancel the match');
     }
 
-    // Check if match can be cancelled
-    // TODO(111-F-15): Whitelist cancellable statuses [DRAFT, SCHEDULED] only.
-    // Currently allows cancel on WALKOVER_PENDING (destroys dispute window),
-    // ONGOING (orphans submitted result), UNFINISHED, VOID, DRAFT.
-    // See docs/issues/backlog/match-cancel-status-whitelist.md
-    if (match.status === MatchStatus.COMPLETED) {
-      throw new Error('Cannot cancel a completed match');
-    }
-
-    if (match.status === MatchStatus.CANCELLED) {
-      throw new Error('Match is already cancelled');
+    // F-15: cancel is only meaningful for pre-play states. ONGOING would
+    // orphan a submitted result, WALKOVER_PENDING would destroy the dispute
+    // window, UNFINISHED/COMPLETED/VOID are terminal, CANCELLED is idempotent.
+    if (
+      match.status !== MatchStatus.DRAFT &&
+      match.status !== MatchStatus.SCHEDULED
+    ) {
+      throw new Error(`Cannot cancel match in status ${match.status}`);
     }
 
     // Check if it's a late cancellation and requires admin review
