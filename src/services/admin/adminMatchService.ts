@@ -693,6 +693,7 @@ export class AdminMatchService {
           data: {
             status: MatchStatus.VOID,
             isDisputed: false,
+            isWalkover: false,
             adminNotes: reason
           }
         });
