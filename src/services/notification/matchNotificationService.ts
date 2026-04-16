@@ -243,8 +243,10 @@ export async function sendScoreSubmissionReminder(matchId: string): Promise<void
     const match = await prisma.match.findUnique({
       where: { id: matchId },
       select: {
+        matchType: true,
+        // Audit-D: full roster so opponent-name construction is complete even
+        // when some invitees are still PENDING; delivery gated below.
         participants: {
-          where: { invitationStatus: 'ACCEPTED' },
           include: {
             user: {
               select: { id: true, name: true }
@@ -254,21 +256,15 @@ export async function sendScoreSubmissionReminder(matchId: string): Promise<void
       },
     });
 
-    // Only send if at least 2 accepted participants (singles) or 4 (doubles)
     if (!match || match.participants.length < 2) return;
 
     const acceptedUserIds = match.participants
+      .filter(p => p.invitationStatus === 'ACCEPTED')
       .map(p => p.userId)
       .filter((id): id is string => id !== null);
 
+    // Only send if at least 2 accepted participants (singles) or 4 (doubles)
     if (acceptedUserIds.length < 2) return;
-
-    // TODO(111-audit-D): `match.participants` is pre-filtered to ACCEPTED-only.
-    // For a doubles match with partial acceptance, the opponent-name computation
-    // below produces incomplete strings (e.g., "Alice" instead of "Alice & Bob").
-    // Either skip non-fully-accepted matches via matchType-aware expected count,
-    // or query all participants and gate delivery by status.
-    // See docs/issues/backlog/match-post-ship-audit-2026-04-16.md#issue-d
 
     // F-62: respect per-user matchReminders preference (score submission is a reminder).
     const allowed = new Set(
@@ -280,13 +276,20 @@ export async function sendScoreSubmissionReminder(matchId: string): Promise<void
     // Send to each accepted participant with opponent name context
     for (const participant of match.participants) {
       if (!participant.userId) continue;
+      // Audit-D: only notify ACCEPTED participants.
+      if (participant.invitationStatus !== 'ACCEPTED') continue;
       if (!allowed.has(participant.userId)) continue;
 
-      // Find an opponent name for context
-      const opponent = match.participants.find(p =>
-        p.userId !== participant.userId && p.team !== participant.team
+      // Audit-D: build opponent-name string from ALL non-self opponents (not
+      // just the first one found). Previously `.find()` returned only one
+      // opponent, producing "Alice" instead of "Alice & Bob" for doubles even
+      // when all four players had accepted.
+      const opponents = match.participants.filter(p =>
+        p.userId !== participant.userId &&
+        (match.matchType === 'SINGLES' || p.team !== participant.team)
       );
-      const opponentName = opponent?.user?.name || 'Opponent';
+      const opponentName =
+        opponents.map(o => o.user?.name || 'Player').join(' & ') || 'Opponent';
 
       await notificationService.createNotification({
         ...reminderNotif(opponentName),
