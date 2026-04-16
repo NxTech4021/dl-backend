@@ -342,6 +342,9 @@ export class MatchScheduleService {
    * Request to reschedule a match
    * STUB - Time slot feature not yet implemented
    */
+  // TODO(111-F-13): Mounted route (POST /:id/reschedule) currently returns 500 via this throw.
+  // Either return 501 Not Implemented or remove the route until implemented.
+  // See docs/issues/backlog/match-stub-endpoints.md
   async requestReschedule(input: RequestRescheduleInput) {
     throw new Error('Reschedule feature not yet implemented');
   }
@@ -350,6 +353,9 @@ export class MatchScheduleService {
    * Continue an unfinished match (reschedule for completion)
    * COMMENTED OUT - matchTimeSlot model doesn't exist in schema
    */
+  // TODO(111-F-14): Mounted route (POST /:id/continue) currently returns 500 via this throw.
+  // Either return 501 Not Implemented or remove the route until implemented.
+  // See docs/issues/backlog/match-stub-endpoints.md
   async continueUnfinishedMatch(matchId: string, requestedById: string, proposedTimes: Date[], notes?: string) {
     throw new Error('Time slot feature not yet implemented');
     /*
