@@ -1318,6 +1318,14 @@ export class DMRRatingService {
 
   /**
    * Reverse rating changes for a voided match
+   *
+   * TODO(111-audit-B): not idempotent — matchesPlayed is unconditionally
+   * decremented per call. The [REVERSED] marker below is written but never
+   * read; a second call on the same matchId decrements again. Guard by
+   * filtering `{ notes: { not: { contains: '[REVERSED]' } } }` or add a
+   * `reversed: Boolean` column to RatingHistory. Same bug in the legacy
+   * ELO path at ratingCalculationService.ts:436-470.
+   * See docs/issues/backlog/match-post-ship-audit-2026-04-16.md#issue-b
    */
   async reverseMatchRatings(matchId: string): Promise<void> {
     const historyEntries = await this.prisma.ratingHistory.findMany({
