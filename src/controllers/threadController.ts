@@ -225,6 +225,7 @@ export const getThreads = async (req: Request, res: Response) => {
                 email: true,
                 phoneNumber: true,
                 image: true,
+                status: true,
               },
             },
           },
@@ -704,28 +705,30 @@ export const sendMessage = async (req: Request, res: Response) => {
           messagePreview
         });
 
-        // Send PUSH notification with message preview (NEW_MESSAGE type)
-        const pushNotif = {
-          type: 'NEW_MESSAGE' as const,
-          category: 'CHAT' as const,
-          title: pushTitle,
-          message: messagePreview,
-          metadata: {
-            senderName,
-            chatName: chatDisplayName,
-            messagePreview,
-            isGroupChat,
-          }
-        };
+        // Send PUSH notification with message preview (NEW_MESSAGE type) — group chats only
+        if (isGroupChat) {
+          const pushNotif = {
+            type: 'NEW_MESSAGE' as const,
+            category: 'CHAT' as const,
+            title: pushTitle,
+            message: messagePreview,
+            metadata: {
+              senderName,
+              chatName: chatDisplayName,
+              messagePreview,
+              isGroupChat,
+            }
+          };
 
-        // console.log('🔔 [ThreadController] Push notification:', pushNotif);
+          // console.log('🔔 [ThreadController] Push notification:', pushNotif);
 
-        await notificationService.createNotification({
-          userIds: otherMembers,
-          ...pushNotif,
-          threadId: threadId,
-          divisionId: thread.divisionId || undefined,
-        });
+          await notificationService.createNotification({
+            userIds: otherMembers,
+            ...pushNotif,
+            threadId: threadId,
+            divisionId: thread.divisionId || undefined,
+          });
+        }
 
         // Send IN-APP notification with unread counts for each user
         for (const userId of otherMembers) {
@@ -1157,13 +1160,14 @@ export const getAvailableUsers = async (req: Request, res: Response) => {
     const existingUserIds = existingChatUsers.map((ut: any) => ut.userId);
 
     // Get all regular users except current user and those with existing DMs
-    // Exclude ADMIN and SUPERADMIN accounts
+    // Exclude ADMIN and SUPERADMIN accounts, and exclude deleted/banned/suspended accounts
     const availableUsers = await prisma.user.findMany({
       where: {
         id: {
           notIn: [userId, ...existingUserIds],
         },
         role: "USER",
+        status: "ACTIVE",
       },
       select: {
         id: true,

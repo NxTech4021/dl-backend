@@ -42,7 +42,7 @@ import {
 import { notificationService } from '../services/notificationService';
 import { waitlistService } from '../services/waitlistService';
 
-import { leagueLifecycleNotifications } from '../helpers/notifications';
+import { leagueLifecycleNotifications, notificationTemplates } from '../helpers/notifications';
 import { NOTIFICATION_TYPES } from '../types/notificationTypes';
 import { notifyAdminsWithdrawalRequest } from '../services/notification/adminNotificationService';
 
@@ -187,6 +187,7 @@ export const createSeason = async (req: Request, res: Response) => {
     }
 
     const season = await createSeasonService(seasonData);
+    let announcementLeagueName = '';
 
     // 🆕 Send new season announcement to ALL users if season is active
     if (effectiveIsActive) {
@@ -209,11 +210,11 @@ export const createSeason = async (req: Request, res: Response) => {
           const league = seasonWithLeagues.leagues[0]; // needs to be updated
 
           // Only proceed if we have valid league data
-          if (league && league.location && league.sportType) {
+          if (league && league.name) {
+            announcementLeagueName = league.name;
             const notificationData = leagueLifecycleNotifications.newSeasonAnnouncement(
               season.name,
-              league.location,
-              league.sportType
+              league.name
             );
 
             // Get all users to broadcast to everyone
@@ -249,7 +250,8 @@ export const createSeason = async (req: Request, res: Response) => {
 
         if (registeredUsers.length > 0) {
           const notificationData = leagueLifecycleNotifications.seasonStarting3Days(
-            season.name
+            season.name,
+            announcementLeagueName
           );
 
           await notificationService.createNotification({
@@ -489,6 +491,13 @@ export const updateSeason = async (req: Request, res: Response) => {
       try {
         let notificationData;
 
+        // Fetch league name for use across all notification branches
+        const seasonLeagueInfo = await prisma.season.findUnique({
+          where: { id },
+          include: { leagues: { select: { name: true } } }
+        });
+        const notifLeagueName = seasonLeagueInfo?.leagues?.[0]?.name || '';
+
         if (effectiveNewStatus === 'FINISHED') {
           const registeredUsers = await prisma.seasonMembership.findMany({
             where: { seasonId: id },
@@ -496,7 +505,8 @@ export const updateSeason = async (req: Request, res: Response) => {
           });
           if (registeredUsers.length > 0) {
             notificationData = leagueLifecycleNotifications.leagueEndedFinalResults(
-              season.name
+              season.name,
+              notifLeagueName
             );
             await notificationService.createNotification({
               userIds: registeredUsers.map(u => u.userId),
@@ -511,6 +521,7 @@ export const updateSeason = async (req: Request, res: Response) => {
           });
           if (registeredUsers.length > 0) {
             notificationData = leagueLifecycleNotifications.leagueCancelled(
+              notifLeagueName,
               season.name
             );
             await notificationService.createNotification({
@@ -527,9 +538,9 @@ export const updateSeason = async (req: Request, res: Response) => {
           });
           if (seasonWithLeagues?.leagues?.[0]) {
             const league = seasonWithLeagues.leagues[0];
-            if (league.location && league.sportType) {
+            if (league.name) {
               const announcementData = leagueLifecycleNotifications.newSeasonAnnouncement(
-                season.name, league.location, league.sportType
+                season.name, league.name
               );
               const allUsers = await prisma.user.findMany({ select: { id: true } });
               await notificationService.createNotification({
@@ -619,9 +630,9 @@ export const goLiveSeason = async (req: Request, res: Response) => {
     // Send general "season is live" announcement
     try {
       const league = season.leagues?.[0];
-      if (league?.location && league?.sportType) {
+      if (league?.name) {
         const announcementData = leagueLifecycleNotifications.newSeasonAnnouncement(
-          season.name, league.location, league.sportType
+          season.name, league.name
         );
         const allUsers = await prisma.user.findMany({ select: { id: true } });
         await notificationService.createNotification({
@@ -1059,7 +1070,16 @@ export const registerPlayerToSeason = async (req: Request, res: Response) => {
           },
           include: {
             user: { select: { id: true, name: true } },
-            season: { select: { id: true, name: true, entryFee: true } }
+            season: {
+              select: {
+                id: true,
+                name: true,
+                entryFee: true,
+                startDate: true,
+                leagues: { select: { name: true } },
+                category: { select: { name: true } }
+              }
+            }
           }
         });
 
@@ -1072,6 +1092,9 @@ export const registerPlayerToSeason = async (req: Request, res: Response) => {
         try {
           const notificationData = leagueLifecycleNotifications.registrationConfirmed(
             seasonData.name,
+            seasonData.leagues?.[0]?.name || '',
+            seasonData.category?.name || '',
+            seasonData.startDate ? new Date(seasonData.startDate).toLocaleDateString() : 'TBD',
             `$${seasonData.entryFee}`
           );
 
@@ -1083,6 +1106,25 @@ export const registerPlayerToSeason = async (req: Request, res: Response) => {
         } catch (notificationError) {
           console.error('Error sending registration notification for doubles:', notificationError);
           // Don't fail the registration if notification fails
+        }
+      }
+
+      // NOTIF-032: Push to partner — captain completed registration
+      if (seasonData && partnerId) {
+        try {
+          const captainName = partnership.captain?.name || 'Your captain';
+          const partnerNotif = notificationTemplates.doubles.doublesTeamRegisteredPartner(
+            captainName,
+            seasonData.name,
+          );
+          await notificationService.createNotification({
+            userIds: partnerId,
+            ...partnerNotif,
+            seasonId,
+          });
+          console.log('✅ [NOTIF-032] Partner registration notification sent to', partnerId);
+        } catch (notifErr) {
+          console.error('❌ [NOTIF-032] Failed to send partner registration notification:', notifErr);
         }
       }
 
@@ -1124,13 +1166,22 @@ export const registerPlayerToSeason = async (req: Request, res: Response) => {
       // 🆕 Send registration confirmation notification
       const season = await prisma.season.findUnique({
         where: { id: seasonId },
-        select: { name: true, entryFee: true }
+        select: {
+          name: true,
+          entryFee: true,
+          startDate: true,
+          leagues: { select: { name: true } },
+          category: { select: { name: true } }
+        }
       });
 
       if (season) {
         try {
           const notificationData = leagueLifecycleNotifications.registrationConfirmed(
             season.name,
+            season.leagues?.[0]?.name || '',
+            season.category?.name || '',
+            season.startDate ? new Date(season.startDate).toLocaleDateString() : 'TBD',
             `$${season.entryFee}`
           );
 

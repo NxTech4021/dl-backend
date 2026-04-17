@@ -202,8 +202,7 @@ export const createLeague = async (req: Request, res: Response) => {
       if (users.length > 0) {
         const userIds = users.map(u => u.id);
         const notif = leagueLifecycleNotifications.newLeagueAnnouncement(
-          newLeague.location || 'your area',
-          newLeague.sportType || 'sport'
+          newLeague.name
         );
 
         // Ensure notification type maps to push by using LEAGUE_ANNOUNCEMENT
