@@ -536,7 +536,7 @@ export const sendPairRequest = async (
       },
     });
 
-    // Send notifications: recipient (PUSH) and sender (IN-APP)
+    // Send notifications: recipient gets BOTH push + in-app (NOTIF-021)
     try {
       const recipientNotif = notificationTemplates.doubles.partnerRequestReceived(
         pairRequest.requester.name || pairRequest.requester.username || 'Someone',
@@ -550,19 +550,19 @@ export const sendPairRequest = async (
         pairRequestId: pairRequest.id,
       });
 
-      const senderNotif = notificationTemplates.doubles.partnerRequestSent(
-        pairRequest.recipient.name || pairRequest.recipient.username || 'Someone',
-        pairRequest.season.name || 'this season'
-      );
+      // partnerRequestSent removed — sender confirmation not used
+      // const senderNotif = notificationTemplates.doubles.partnerRequestSent(
+      //   pairRequest.recipient.name || pairRequest.recipient.username || 'Someone',
+      //   pairRequest.season.name || 'this season'
+      // );
+      // await notificationService.createNotification({
+      //   userIds: pairRequest.requesterId,
+      //   ...senderNotif,
+      //   seasonId: pairRequest.season.id,
+      //   pairRequestId: pairRequest.id,
+      // });
 
-      await notificationService.createNotification({
-        userIds: pairRequest.requesterId,
-        ...senderNotif,
-        seasonId: pairRequest.season.id,
-        pairRequestId: pairRequest.id,
-      });
-
-      console.log('🔔 Pairing: created recipient PUSH and sender IN-APP notifications');
+      console.log('🔔 Pairing: created recipient PUSH notification');
     } catch (notifErr) {
       console.error('❌ Failed to create pair request notifications:', notifErr);
     }
@@ -844,21 +844,11 @@ export const acceptPairRequest = async (
           partnershipId: result.partnership.id,
         });
 
-        const partnerNotif = notificationTemplates.doubles.partnerRequestAcceptedPartner(
-          result.partnership.captain.name || result.partnership.captain.username || 'Captain',
-          leagueName
-        );
+        // partnerRequestAcceptedPartner removed — partner confirmation not used
+        // const partnerNotif = notificationTemplates.doubles.partnerRequestAcceptedPartner(...)
+        // await notificationService.createNotification({ userIds: result.partnership.partner.id, ... });
 
-        if (result.partnership.partner) {
-          await notificationService.createNotification({
-            userIds: result.partnership.partner.id,
-            ...partnerNotif,
-            seasonId: result.partnership.season.id,
-            partnershipId: result.partnership.id,
-          });
-        }
-
-        console.log('🔔 Pairing: partnership accepted notifications sent (captain + partner)');
+        console.log('🔔 Pairing: partnership accepted notification sent (captain only)');
       } catch (notifErr) {
         console.error('❌ Failed to create partnership notifications:', notifErr);
       }
@@ -1064,19 +1054,9 @@ async function acceptPairRequestIntoIncomplete(
         partnershipId: result.id,
       });
 
-      // Notification to new partner (the requester) that they joined the team
-      const partnerNotif = notificationTemplates.doubles.partnerRequestAcceptedPartner(
-        captainName,
-        leagueName
-      );
-      if (result.partner) {
-        await notificationService.createNotification({
-          userIds: result.partner.id,
-          ...partnerNotif,
-          seasonId: pairRequest.seasonId,
-          partnershipId: result.id,
-        });
-      }
+      // Notification to new partner removed — partnerRequestAcceptedPartner not used
+      // const partnerNotif = notificationTemplates.doubles.partnerRequestAcceptedPartner(captainName, leagueName);
+      // if (result.partner) { await notificationService.createNotification({ userIds: result.partner.id, ... }); }
 
       console.log(`🔔 Pair request ${requestId} accepted into INCOMPLETE partnership ${result.id}`);
     } catch (notifErr) {
@@ -2177,29 +2157,11 @@ export const inviteReplacementPartner = async (
       const captainName = partnership.captain?.name || partnership.captain?.username || 'A player';
       const recipientName = pairRequest.recipient?.name || pairRequest.recipient?.username || 'Partner';
 
-      // Notification to recipient (push)
-      const recipientNotif = notificationTemplates.doubles.replacementInviteReceived(
-        captainName,
-        leagueName
-      );
-      await notificationService.createNotification({
-        userIds: recipientId,
-        ...recipientNotif,
-        seasonId: partnership.seasonId,
-        pairRequestId: pairRequest.id,
-      });
-
-      // Notification to captain (in-app confirmation)
-      const captainNotif = notificationTemplates.doubles.replacementInviteSent(
-        recipientName,
-        leagueName
-      );
-      await notificationService.createNotification({
-        userIds: captainId,
-        ...captainNotif,
-        seasonId: partnership.seasonId,
-        pairRequestId: pairRequest.id,
-      });
+      // replacementInviteReceived / replacementInviteSent removed — not used
+      // const recipientNotif = notificationTemplates.doubles.replacementInviteReceived(captainName, leagueName);
+      // await notificationService.createNotification({ userIds: recipientId, ... });
+      // const captainNotif = notificationTemplates.doubles.replacementInviteSent(recipientName, leagueName);
+      // await notificationService.createNotification({ userIds: captainId, ... });
 
       console.log(`🔔 Replacement partner invitation sent from ${captainId} to ${recipientId}`);
     } catch (notifErr) {
