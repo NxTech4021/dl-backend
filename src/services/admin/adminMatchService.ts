@@ -1156,15 +1156,28 @@ export class AdminMatchService {
     });
 
     // Reverse ratings if match was completed.
+    //
     // TODO(111-audit-B2): reverseMatchRatings runs OUTSIDE the outer
-    // transaction above — the status flip to VOID is already committed. On
+    // transaction above — the VOID status is already committed. On
     // DB/network failure here, the error is caught+logged+swallowed, leaving
     // Match.status=VOID but ratings still reflecting COMPLETED. Admin has no
     // recovery endpoint; invoking recalculateMatchRatings later compounds
-    // the non-idempotency of reverseMatchRatings (see audit-B1). Move the
-    // rating + standings calls INSIDE the outer $transaction so partial
-    // failure rolls back the status flip too. Verify StandingsV2Service is
-    // tx-safe before moving. See
+    // the non-idempotency of reverseMatchRatings (see audit-B1).
+    //
+    // VERIFIED (2026-04-16): cannot move these calls into the outer
+    // $transaction. Both reverseMatchRatings (dmrRatingService.ts:1341) and
+    // recalculateDivisionStandings (via applyRankings,
+    // standingsV2Service.ts:384) open their own $transaction. Prisma runs
+    // nested $transaction calls on a SEPARATE connection that does not
+    // join the outer tx — outer rollback does NOT revert inner writes,
+    // and the inner waits on row locks held by the outer (deadlock risk).
+    // Same pattern already exists in resolveDispute.
+    //
+    // Optimal zero-risk fix: mirror the existing requiresAdminReview
+    // pattern — add a `requiresManualRatingReversal` flag to Match, flip
+    // it in the catch blocks below, expose an admin retry endpoint.
+    // Ship audit-B1 (idempotent reverseMatchRatings) first so retries
+    // are safe. See
     // docs/issues/backlog/match-deferred-issues-deep-dive-2026-04-16.md#issue-b
     if (wasCompleted) {
       try {
