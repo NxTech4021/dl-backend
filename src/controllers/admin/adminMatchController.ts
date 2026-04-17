@@ -24,6 +24,7 @@ import {
 import { sendSuccess, sendPaginated, sendError } from '../../utils/response';
 import { prisma } from '../../lib/prisma';
 import { notificationService } from '../../services/notificationService';
+import { matchManagementNotifications } from '../../helpers/notifications/matchManagementNotifications';
 
 const adminMatchService = getAdminMatchService();
 const participantService = new AdminMatchParticipantService();
@@ -362,7 +363,7 @@ export const voidMatch = async (req: Request, res: Response) => {
       return sendError(res, 'Match ID is required', 400);
     }
 
-    const { reason, notifyParticipants = false } = req.body;
+    const { reason, notifyParticipants = false, type } = req.body;
 
     if (!reason) {
       return sendError(res, 'reason is required', 400);
@@ -375,14 +376,31 @@ export const voidMatch = async (req: Request, res: Response) => {
       try {
         const participantIds = match.participants.map((p: any) => p.userId).filter(Boolean);
         if (participantIds.length > 0) {
-          await notificationService.createNotification({
-            userIds: participantIds,
-            type: 'ADMIN_MESSAGE',
-            category: 'MATCH',
-            title: 'Match Voided',
-            message: `Your match has been voided by an admin. Reason: ${reason}`,
-            matchId: id,
-          });
+          if (type === 'FORFEIT') {
+            // NOTIF-101: Disciplinary forfeit — send specific forfeit notification to each player
+            for (const playerId of participantIds) {
+              const opponent = participantIds.find((pid: string) => pid !== playerId);
+              let opponentName = 'Opponent';
+              if (opponent) {
+                const opponentUser = await prisma.user.findUnique({ where: { id: opponent }, select: { name: true } });
+                opponentName = opponentUser?.name || 'Opponent';
+              }
+              await notificationService.createNotification({
+                ...matchManagementNotifications.forfeitDisciplinary(opponentName),
+                userIds: [playerId],
+                matchId: id,
+              });
+            }
+          } else {
+            await notificationService.createNotification({
+              userIds: participantIds,
+              type: 'ADMIN_MESSAGE',
+              category: 'MATCH',
+              title: 'Match Voided',
+              message: `Your match has been voided by an admin. Reason: ${reason}`,
+              matchId: id,
+            });
+          }
         }
       } catch (notifError) {
         console.warn('Failed to notify participants about voided match:', notifError);

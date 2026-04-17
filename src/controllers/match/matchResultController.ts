@@ -8,6 +8,7 @@ import { getMatchResultService } from '../../services/match/matchResultService';
 import { DisputeCategory, WalkoverReason } from '@prisma/client';
 import { notificationService } from '../../services/notificationService';
 import { matchManagementNotifications } from '../../helpers/notifications/matchManagementNotifications';
+import { socialCommunityNotifications } from '../../helpers/notifications/socialCommunityNotifications';
 import { prisma } from '../../lib/prisma';
 import { sendSuccess, sendError } from '../../utils/response';
 import { formatMatchDate } from '../../utils/timezone';
@@ -164,22 +165,33 @@ export const confirmResult = async (req: Request, res: Response) => {
 
       if (otherParticipants.length > 0) {
         if (confirmed) {
-          // Score confirmed
-          let scoreDisplay = 'Final';
-          if (match.team1Score !== null && match.team2Score !== null) {
-            scoreDisplay = `${match.team1Score}-${match.team2Score}`;
-          }
-
-          const notification = matchManagementNotifications.scoreAutoConfirmed(
-            confirmerName,
-            scoreDisplay
-          );
-          
+          // NOTIF-096: Score manually confirmed — notify the submitter
+          const confirmedNotif = matchManagementNotifications.scoreConfirmed(confirmerName);
           await notificationService.createNotification({
-            ...notification,
+            ...confirmedNotif,
             userIds: otherParticipants,
             matchId: match.id,
           });
+
+          // NOTIF-122: Prompt all participants to share their scorecard (fire-and-forget)
+          void (async () => {
+            try {
+              const allParticipants = await prisma.matchParticipant.findMany({
+                where: { matchId: id, invitationStatus: 'ACCEPTED' },
+                select: { userId: true },
+              });
+              const allUserIds = allParticipants
+                .map(p => p.userId)
+                .filter((uid): uid is string => !!uid);
+              if (allUserIds.length > 0) {
+                await notificationService.createNotification({
+                  ...socialCommunityNotifications.shareScorecardPrompt(),
+                  userIds: allUserIds,
+                  matchId: match.id,
+                });
+              }
+            } catch (_) { /* non-blocking */ }
+          })();
         } else {
           // Score disputed
           const notification = matchManagementNotifications.scoreDisputeAlert(
@@ -294,9 +306,9 @@ export const submitWalkover = async (req: Request, res: Response) => {
           matchId: match.id,
         });
 
-        // Notify reporter that opponent was claimed as no-show
+        // NOTIF-092: Notify the accused player that the opponent claims they didn't show
         const opponentClaimsNotif = matchManagementNotifications.opponentClaimsNoShow(
-          defaulter?.name || 'Player',
+          reporter?.name || 'Opponent',  // reporter's name — "[Reporter] says you didn't show"
           formatMatchDate(new Date())
         );
         

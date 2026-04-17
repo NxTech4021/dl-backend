@@ -210,6 +210,7 @@ export const createLeague = async (req: Request, res: Response) => {
           userIds,
           ...notif,
           type: NOTIFICATION_TYPES.LEAGUE_ANNOUNCEMENT || notif.type,
+          metadata: { ...notif.metadata, leagueId: newLeague.id },
         });
       }
     } catch (err) {

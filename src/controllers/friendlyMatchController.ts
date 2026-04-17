@@ -14,6 +14,7 @@ import utc from 'dayjs/plugin/utc';
 import timezone from 'dayjs/plugin/timezone';
 import { notificationService } from '../services/notificationService';
 import { matchManagementNotifications } from '../helpers/notifications/matchManagementNotifications';
+import { socialCommunityNotifications } from '../helpers/notifications/socialCommunityNotifications';
 import { logMatchActivity } from '../services/userActivityLogService';
 
 dayjs.extend(utc);
@@ -21,7 +22,7 @@ dayjs.extend(timezone);
 
 // Date formatting helpers imported from shared timezone utility.
 // All user-facing times are shown in venue timezone (Malaysia).
-import { formatMatchDate, formatMatchTime, parseDateFromDevice } from '../utils/timezone';
+import { formatMatchDate, formatMatchTime, parseDateFromDevice, formatDynamicDate, formatDynamicDateWithOn } from '../utils/timezone';
 
 /**
  * Helper function to get participant user IDs excluding a specific user
@@ -555,22 +556,35 @@ export const confirmFriendlyResult = async (req: Request, res: Response) => {
       
       if (otherParticipants.length > 0) {
         if (confirmed) {
-          // Score confirmed - calculate score display
-          let scoreDisplay = 'Final';
-          if (match.team1Score !== null && match.team2Score !== null) {
-            scoreDisplay = `${match.team1Score}-${match.team2Score}`;
-          }
-
-          const notification = matchManagementNotifications.scoreAutoConfirmed(
-            confirmer?.name || 'Opponent',
-            scoreDisplay
+          // NOTIF-096: Score manually confirmed — notify the submitter
+          const confirmedNotif = matchManagementNotifications.scoreConfirmed(
+            confirmer?.name || 'Opponent'
           );
-          
           await notificationService.createNotification({
-            ...notification,
+            ...confirmedNotif,
             userIds: otherParticipants,
             matchId: match.id,
           });
+
+          // NOTIF-122: Prompt all participants to share their scorecard (fire-and-forget)
+          void (async () => {
+            try {
+              const allParticipants = await prisma.matchParticipant.findMany({
+                where: { matchId: id, invitationStatus: 'ACCEPTED' },
+                select: { userId: true },
+              });
+              const allUserIds = allParticipants
+                .map(p => p.userId)
+                .filter((uid): uid is string => !!uid);
+              if (allUserIds.length > 0) {
+                await notificationService.createNotification({
+                  ...socialCommunityNotifications.shareScorecardPrompt(),
+                  userIds: allUserIds,
+                  matchId: match.id,
+                });
+              }
+            } catch (_) { /* non-blocking */ }
+          })();
         } else {
           // Score disputed
           const notification = matchManagementNotifications.scoreDisputeAlert(
@@ -688,8 +702,8 @@ export const cancelFriendlyMatch = async (req: Request, res: Response) => {
       if (otherParticipants.length > 0) {
         const notification = matchManagementNotifications.friendlyMatchCancelled(
           canceller?.name || 'Host',
-          formatMatchDate(match.matchDate),
-          formatMatchTime(match.matchDate)
+          formatDynamicDateWithOn(match.matchDate),
+          (match as any).venue || (match as any).location || ''
         );
         
         await notificationService.createNotification({
@@ -707,6 +721,112 @@ export const cancelFriendlyMatch = async (req: Request, res: Response) => {
   } catch (error) {
     console.error('Cancel Friendly Match Error:', error);
     const message = error instanceof Error ? error.message : 'Failed to cancel friendly match';
+    sendError(res, message, 400);
+  }
+};
+
+/**
+ * NOTIF-080: Leave a friendly match (non-host participant removes themselves)
+ * POST /api/friendly/:id/leave
+ */
+export const leaveFriendlyMatch = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      return sendError(res, 'Authentication required', 401);
+    }
+
+    const { id } = req.params;
+    if (!id) {
+      return sendError(res, 'Match ID is required', 400);
+    }
+
+    const match = await friendlyMatchService.leaveFriendlyMatch(id, userId);
+
+    // Send NOTIF-080 to host
+    try {
+      const leaver = await prisma.user.findUnique({ where: { id: userId }, select: { name: true } });
+      const hostId = (match as any).createdById;
+      if (hostId && hostId !== userId) {
+        const notification = matchManagementNotifications.playerLeftFriendlyMatch(
+          leaver?.name || 'A player',
+          formatDynamicDate((match as any).matchDate),
+          formatMatchTime((match as any).matchDate)
+        );
+        await notificationService.createNotification({
+          ...notification,
+          userIds: [hostId],
+          matchId: id,
+        });
+      }
+    } catch (notifError) {
+      console.error('Failed to send player-left notification:', notifError);
+    }
+
+    sendSuccess(res, match);
+  } catch (error) {
+    console.error('Leave Friendly Match Error:', error);
+    const message = error instanceof Error ? error.message : 'Failed to leave match';
+    sendError(res, message, 400);
+  }
+};
+
+/**
+ * NOTIF-082: Update friendly match details (host only — time/venue changes)
+ * PATCH /api/friendly/:id/details
+ */
+export const updateFriendlyMatchDetails = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      return sendError(res, 'Authentication required', 401);
+    }
+
+    const { id } = req.params;
+    if (!id) {
+      return sendError(res, 'Match ID is required', 400);
+    }
+
+    const { matchDate, venue, location } = req.body;
+    const updateData: Record<string, any> = {};
+    if (matchDate !== undefined) updateData.matchDate = parseDateFromDevice(matchDate);
+    if (venue !== undefined) updateData.venue = venue;
+    if (location !== undefined) updateData.location = location;
+
+    if (Object.keys(updateData).length === 0) {
+      return sendError(res, 'No update fields provided', 400);
+    }
+
+    const match = await friendlyMatchService.updateFriendlyMatch(id, userId, updateData);
+
+    // Send NOTIF-082 to all other participants
+    try {
+      const host = await prisma.user.findUnique({ where: { id: userId }, select: { name: true } });
+      const otherParticipants = await getOtherParticipants(id, userId);
+      if (otherParticipants.length > 0) {
+        const newDate = formatMatchDate((match as any).matchDate);
+        const newTime = formatMatchTime((match as any).matchDate);
+        const newVenue = (match as any).venue || (match as any).location || '';
+        const notification = matchManagementNotifications.friendlyMatchDetailsChanged(
+          host?.name || 'Host',
+          newDate,
+          newTime,
+          newVenue
+        );
+        await notificationService.createNotification({
+          ...notification,
+          userIds: otherParticipants,
+          matchId: id,
+        });
+      }
+    } catch (notifError) {
+      console.error('Failed to send match-updated notification:', notifError);
+    }
+
+    sendSuccess(res, match);
+  } catch (error) {
+    console.error('Update Friendly Match Error:', error);
+    const message = error instanceof Error ? error.message : 'Failed to update match';
     sendError(res, message, 400);
   }
 };
