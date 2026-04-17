@@ -1244,10 +1244,9 @@ export class FriendlyMatchService {
       throw new Error('This is not a friendly match');
     }
 
-    // Check if user is a participant
-    const isParticipant = match.participants.some((p: any) => p.userId === userId);
-    if (!isParticipant) {
-      throw new Error('You are not a participant in this match');
+    // Only the host (creator) can cancel a friendly match
+    if (match.createdById !== userId) {
+      throw new Error('Only the host can cancel this match');
     }
 
     // Check if match can be cancelled (not already completed or cancelled)
@@ -1276,7 +1275,77 @@ export class FriendlyMatchService {
       });
     }
 
-    logger.info(`Friendly match ${matchId} cancelled by user ${userId}`);
+    return this.getFriendlyMatchById(matchId);
+  }
+
+  /**
+   * NOTIF-080: Leave a friendly match (non-host participant removes themselves).
+   * Only the joined player can call this; host must use cancelFriendlyMatch.
+   */
+  async leaveFriendlyMatch(matchId: string, userId: string) {
+    const match = await prisma.match.findUnique({
+      where: { id: matchId },
+      include: { participants: true }
+    }) as any;
+
+    if (!match || !match.isFriendly) {
+      throw new Error('Match not found');
+    }
+
+    if (match.status === MatchStatus.COMPLETED || match.status === MatchStatus.CANCELLED) {
+      throw new Error('Cannot leave a completed or cancelled match');
+    }
+
+    if (match.createdById === userId) {
+      throw new Error('Host must use cancel instead of leave');
+    }
+
+    const participant = match.participants.find((p: any) => p.userId === userId);
+    if (!participant) {
+      throw new Error('You are not a participant in this match');
+    }
+
+    await prisma.matchParticipant.delete({
+      where: { id: participant.id }
+    });
+
+    logger.info(`User ${userId} left friendly match ${matchId}`);
+    return this.getFriendlyMatchById(matchId);
+  }
+
+  /**
+   * NOTIF-082: Update friendly match details (host only).
+   * Sends notification to all other participants when time/venue changes.
+   */
+  async updateFriendlyMatch(matchId: string, userId: string, data: { matchDate?: Date; venue?: string; location?: string }) {
+    const match = await prisma.match.findUnique({
+      where: { id: matchId },
+      include: { participants: true }
+    }) as any;
+
+    if (!match || !match.isFriendly) {
+      throw new Error('Match not found');
+    }
+
+    if (match.createdById !== userId) {
+      throw new Error('Only the host can update match details');
+    }
+
+    if (match.status === MatchStatus.COMPLETED || match.status === MatchStatus.CANCELLED) {
+      throw new Error('Cannot update a completed or cancelled match');
+    }
+
+    const updateData: Record<string, any> = {};
+    if (data.matchDate !== undefined) updateData.matchDate = data.matchDate;
+    if (data.venue !== undefined) updateData.venue = data.venue;
+    if (data.location !== undefined) updateData.location = data.location;
+
+    await prisma.match.update({
+      where: { id: matchId },
+      data: updateData
+    });
+
+    logger.info(`Friendly match ${matchId} updated by host ${userId}`);
     return this.getFriendlyMatchById(matchId);
   }
 

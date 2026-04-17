@@ -10,7 +10,7 @@ import {
 } from "../../types/notificationTypes";
 
 export const matchManagementNotifications = {
-  // League match notifications
+
   matchScheduled: (
     opponentName: string,
     date: string,
@@ -54,21 +54,20 @@ export const matchManagementNotifications = {
     metadata: { streakCount, sportName },
   }),
 
-  // IN-APP NOTIFICATIONS
-
-  friendlyMatchPosted: (
-    date: string,
-    time: string,
-    venue: string
-  ): NotificationPayload => ({
-    type: NOTIFICATION_TYPES.FRIENDLY_MATCH_POSTED,
-    category: getCategoryForNotificationType(
-      NOTIFICATION_TYPES.FRIENDLY_MATCH_POSTED
-    ),
-    title: "Friendly Match Posted",
-    message: `📅 ${date} • ${time}\n📍 ${venue}`,
-    metadata: { date, time, venue },
-  }),
+ 
+  // friendlyMatchPosted: (
+  //   date: string,
+  //   time: string,
+  //   venue: string
+  // ): NotificationPayload => ({
+  //   type: NOTIFICATION_TYPES.FRIENDLY_MATCH_POSTED,
+  //   category: getCategoryForNotificationType(
+  //     NOTIFICATION_TYPES.FRIENDLY_MATCH_POSTED
+  //   ),
+  //   title: "Friendly Match Posted",
+  //   message: `📅 ${date} • ${time}\n📍 ${venue}`,
+  //   metadata: { date, time, venue },
+  // }),
 
   opponentReportedIssue: (opponentName: string): NotificationPayload => ({
     type: NOTIFICATION_TYPES.OPPONENT_REPORTED_ISSUE,
@@ -78,22 +77,6 @@ export const matchManagementNotifications = {
     title: "Issue Reported",
     message: `${opponentName} reported an issue. Admin will contact you if needed`,
     metadata: { opponentName },
-  }),
-
-  // PUSH NOTIFICATIONS
-
-  friendlyMatchJoinRequest: (
-    playerName: string,
-    date: string,
-    time: string
-  ): NotificationPayload => ({
-    type: NOTIFICATION_TYPES.FRIENDLY_MATCH_JOIN_REQUEST,
-    category: getCategoryForNotificationType(
-      NOTIFICATION_TYPES.FRIENDLY_MATCH_JOIN_REQUEST
-    ),
-    title: "Join Request",
-    message: `${playerName} wants to join your match\n📅 ${date} • ${time}`,
-    metadata: { playerName, date, time },
   }),
 
   friendlyMatchPlayerJoined: (
@@ -107,33 +90,8 @@ export const matchManagementNotifications = {
       NOTIFICATION_TYPES.FRIENDLY_MATCH_PLAYER_JOINED
     ),
     title: "Player Joined",
-    message: `${playerName} joined your match\n📅 ${date} • ${time}\n📍 ${venue}`,
+    message: `${playerName} joined your match\n📅 ${date} • ${time} at ${venue}`,
     metadata: { playerName, date, time, venue },
-  }),
-
-  friendlyMatchRequestAccepted: (
-    hostName: string,
-    date: string,
-    time: string,
-    venue: string
-  ): NotificationPayload => ({
-    type: NOTIFICATION_TYPES.FRIENDLY_MATCH_REQUEST_ACCEPTED,
-    category: getCategoryForNotificationType(
-      NOTIFICATION_TYPES.FRIENDLY_MATCH_REQUEST_ACCEPTED
-    ),
-    title: "Request Accepted!",
-    message: `${hostName} accepted your match request\n📅 ${date} • ${time}\n📍 ${venue}`,
-    metadata: { hostName, date, time, venue },
-  }),
-
-  friendlyMatchRequestDeclined: (hostName: string): NotificationPayload => ({
-    type: NOTIFICATION_TYPES.FRIENDLY_MATCH_REQUEST_DECLINED,
-    category: getCategoryForNotificationType(
-      NOTIFICATION_TYPES.FRIENDLY_MATCH_REQUEST_DECLINED
-    ),
-    title: "Request Declined",
-    message: `${hostName} declined your join request`,
-    metadata: { hostName },
   }),
 
   friendlyMatchCancelled: (
@@ -146,7 +104,7 @@ export const matchManagementNotifications = {
       NOTIFICATION_TYPES.FRIENDLY_MATCH_CANCELLED
     ),
     title: "Match Cancelled",
-    message: `${hostName} cancelled the match on ${date} at ${venue}.`,
+    message: `${hostName} cancelled the match ${date} at ${venue}`,
     metadata: { hostName, date, venue },
   }),
 
@@ -483,7 +441,7 @@ export const matchManagementNotifications = {
       NOTIFICATION_TYPES.LEAGUE_MATCH_CANCELLED_BY_OPPONENT
     ),
     title: "Match Cancelled",
-    message: `${opponentName} cancelled your league match on ${date}.`,
+    message: `${opponentName} cancelled your league match ${date}.`,
     metadata: { opponentName, date },
   }),
 };

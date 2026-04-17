@@ -395,9 +395,9 @@ export const leagueLifecycleNotifications = {
     seasonName: string,
     leagueName: string
   ): NotificationPayload => ({
-    type: NOTIFICATION_TYPES.SEASON_STARTING_SOON,
+    type: NOTIFICATION_TYPES.LEAGUE_STARTED_WELCOME,
     category: getCategoryForNotificationType(
-      NOTIFICATION_TYPES.SEASON_STARTING_SOON
+      NOTIFICATION_TYPES.LEAGUE_STARTED_WELCOME
     ),
     title: "🟢 Game On!",
     message: `${seasonName} of ${leagueName} is officially underway. View your division and line up your first match.`,
@@ -412,14 +412,14 @@ export const leagueLifecycleNotifications = {
     metadata: { seasonName, leagueName },
   }),
 
-  withdrawalApproved: (leagueName: string): NotificationPayload => ({
+  withdrawalApproved: (leagueName: string, categoryName: string): NotificationPayload => ({
     type: NOTIFICATION_TYPES.WITHDRAWAL_REQUEST_APPROVED,
     category: getCategoryForNotificationType(
       NOTIFICATION_TYPES.WITHDRAWAL_REQUEST_APPROVED
     ),
     title: "Withdrawal Confirmed",
-    message: `Your withdrawal from ${leagueName} is confirmed. Refund will be processed shortly`,
-    metadata: { leagueName },
+    message: `You've been withdrawn from ${leagueName} – ${categoryName}. Your refund will be processed shortly.`,
+    metadata: { leagueName, categoryName },
   }),
 
   refundProcessed: (
@@ -431,7 +431,7 @@ export const leagueLifecycleNotifications = {
       NOTIFICATION_TYPES.REFUND_PROCESSED
     ),
     title: "Refund on Its Way",
-    message: `Your RM-${amount} refund for [League Name] has been processed. Allow 3–7 business days.`,
+    message: `Your RM${amount} refund for ${leagueName} has been processed. Allow 3–7 business days.`,
     metadata: { amount, leagueName },
   }),
 
