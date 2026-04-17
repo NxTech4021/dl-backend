@@ -19,7 +19,8 @@
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "lint:check": "eslint . --max-warnings 0",
-    "seed-bug-tracking": "npx tsx prisma/bug-tracking.ts"
+    "seed-bug-tracking": "npx tsx prisma/bug-tracking.ts",
+    "test:notifications": "npx tsx scripts/test-notifications.ts"
   },
   "keywords": [],
   "author": "",
