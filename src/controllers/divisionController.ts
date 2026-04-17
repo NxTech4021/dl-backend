@@ -45,7 +45,7 @@ import { recalculateDivisionRanks } from '../services/rating/standingsCalculatio
 
 // 🆕 Notification imports
 import { notificationService } from '../services/notificationService';
-import { notificationTemplates } from '../helpers/notifications';
+import { notificationTemplates, leagueLifecycleNotifications } from '../helpers/notifications';
 import { logger } from '../utils/logger';
 
 interface CreateDivisionBody {
@@ -220,11 +220,13 @@ export const createDivision = async (req: Request, res: Response) => {
     if (recipientUserIds.length > 0) {
       try {
         // Use notification template with proper category
-        const divisionNotif = notificationTemplates.division.created(
-          result.division.name,
-          season?.name || 'Current Season',
-          adminRecord.user?.name 
-        );
+        const divisionNotif = {
+          type: 'DIVISION_CREATED',
+          category: 'SEASON' as const,
+          title: 'Division Created',
+          message: `Division ${result.division.name} has been created for ${season?.name || 'Current Season'}${adminRecord.user?.name ? ` by ${adminRecord.user.name}` : ''}`,
+          metadata: { divisionName: result.division.name, seasonName: season?.name || 'Current Season' },
+        };
 
         console.log("📧 Creating notification for season members:", {
           userCount: recipientUserIds.length,
@@ -758,10 +760,13 @@ export const assignPlayerToDivision = async (req: Request, res: Response) => {
 
         // Send notifications
         try {
-          const divisionNotif = notificationTemplates.division.assigned(
-            division.name,
-            season?.name || 'Current Season'
-          );
+          const divisionNotif = {
+            type: 'DIVISION_ASSIGNED',
+            category: 'SEASON' as const,
+            title: 'Division Assignment',
+            message: `You've been assigned to ${division.name} for ${season?.name || 'Current Season'}. Check out your division and start scheduling matches!`,
+            metadata: { divisionName: division.name, seasonName: season?.name || 'Current Season' },
+          };
 
           await notificationService.createNotification({
             userIds: userId,
@@ -786,6 +791,34 @@ export const assignPlayerToDivision = async (req: Request, res: Response) => {
           logger.notificationSent('GROUP_CHAT_ADDED', [userId], { threadId: divisionThread.id });
         } catch (notifError) {
           logger.error('Failed to send assignment notifications', { userId, divisionId }, notifError as Error);
+        }
+
+        // Notify all OTHER members of this division about the new player/team
+        try {
+          const otherMembers = await prisma.divisionAssignment.findMany({
+            where: { divisionId, userId: { not: userId } },
+            select: { userId: true },
+          });
+          if (otherMembers.length > 0) {
+            const leagueInfo = await prisma.season.findUnique({
+              where: { id: seasonId },
+              include: { leagues: { select: { name: true } } },
+            });
+            const leagueName = leagueInfo?.leagues?.[0]?.name || season?.name || 'the league';
+            const newPlayerNotif = leagueLifecycleNotifications.divisionUpdateNewPlayer(
+              leagueName,
+              division.gameType ?? undefined
+            );
+            await notificationService.createNotification({
+              ...newPlayerNotif,
+              userIds: otherMembers.map((m) => m.userId),
+              divisionId,
+              seasonId,
+            });
+            logger.notificationSent('DIVISION_UPDATE_NEW_PLAYER', otherMembers.map((m) => m.userId), { divisionId });
+          }
+        } catch (notifError) {
+          logger.error('Failed to send new-player division notification', { divisionId }, notifError as Error);
         }
 
         const assignedContext: Record<string, string> = {};
@@ -1040,11 +1073,13 @@ export const removePlayerFromDivision = async (req: Request, res: Response) => {
 
     // 🆕 Send removal notification
     try {
-      const notif = notificationTemplates.division.removed(
-        assignment.division.name,
-        assignment.division.season?.name || 'Current Season',
-        reason
-      );
+      const notif = {
+        type: 'DIVISION_REMOVED',
+        category: 'SEASON' as const,
+        title: 'Removed from Division',
+        message: `You've been removed from ${assignment.division.name} in ${assignment.division.season?.name || 'Current Season'}${reason ? `: ${reason}` : ''}`,
+        metadata: { divisionName: assignment.division.name, reason },
+      };
 
       await notificationService.createNotification({
         userIds: userId,
@@ -1135,11 +1170,13 @@ export const transferPlayerBetweenDivisions = async (req: Request, res: Response
     if ('fromDivision' in result && 'toDivision' in result && 'season' in result) {
       const transferResult = result as { fromDivision: { name: string }; toDivision: { name: string; seasonId: string }; season: { name: string } };
       try {
-        const notif = notificationTemplates.division.transferred(
-          transferResult.fromDivision.name,
-          transferResult.toDivision.name,
-          transferResult.season.name
-        );
+        const notif = {
+          type: 'DIVISION_TRANSFERRED',
+          category: 'SEASON' as const,
+          title: 'Division Transfer',
+          message: `You've been transferred from ${transferResult.fromDivision.name} to ${transferResult.toDivision.name} in ${transferResult.season.name}`,
+          metadata: { fromDivision: transferResult.fromDivision.name, toDivision: transferResult.toDivision.name, seasonName: transferResult.season.name },
+        };
 
         await notificationService.createNotification({
           userIds: userId,

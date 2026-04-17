@@ -10,33 +10,7 @@ import {
 } from "../../types/notificationTypes";
 
 export const doublesNotifications = {
-  // IN-APP NOTIFICATIONS
 
-  partnerRequestSent: (
-    partnerName: string,
-    leagueName: string
-  ): NotificationPayload => ({
-    type: NOTIFICATION_TYPES.PARTNER_REQUEST_SENT,
-    category: getCategoryForNotificationType(
-      NOTIFICATION_TYPES.PARTNER_REQUEST_SENT
-    ),
-    title: "Partner Request Sent",
-    message: `Waiting for ${partnerName} to accept your doubles request for ${leagueName}`,
-    metadata: { partnerName, leagueName },
-  }),
-
-  partnerRequestDeclinedPartner: (
-    playerName: string,
-    leagueName: string
-  ): NotificationPayload => ({
-    type: NOTIFICATION_TYPES.PAIR_REQUEST_REJECTED,
-    category: getCategoryForNotificationType(
-      NOTIFICATION_TYPES.PAIR_REQUEST_REJECTED
-    ),
-    title: "Request Declined",
-    message: `You declined ${playerName}'s doubles request for ${leagueName}`,
-    metadata: { playerName, leagueName },
-  }),
 
   waitingForCaptain: (
     captainName: string,
@@ -76,8 +50,6 @@ export const doublesNotifications = {
     message: `You and ${partnerName} are ready for ${leagueName}. Time to compete!`,
     metadata: { leagueName, partnerName },
   }),
-
-  // PUSH NOTIFICATIONS
 
   partnerRequestReceived: (
     playerName: string,
@@ -249,8 +221,6 @@ export const doublesNotifications = {
     message: `${newPartnerName} has joined your team for ${leagueName}. You're ready to play matches again!`,
     metadata: { newPartnerName, leagueName },
   }),
-
-  // DOUBLES MATCH INVITATION NOTIFICATIONS
 
   partnerPostedMatch: (
     partnerName: string,

@@ -41,16 +41,6 @@ export const accountNotifications = {
     metadata: {},
   }),
 
-  // firstMatchCompleted: (): NotificationPayload => ({
-  //   type: NOTIFICATION_TYPES.FIRST_MATCH_COMPLETED,
-  //   category: getCategoryForNotificationType(
-  //     NOTIFICATION_TYPES.FIRST_MATCH_COMPLETED
-  //   ),
-  //   title: "First Match Completed!",
-  //   message: "Your DEUCE journey has begun, thanks for playing!",
-  //   metadata: {},
-  // }),
-
   // matchesPlayedMilestone: (count: number): NotificationPayload => ({
   //   type: NOTIFICATION_TYPES.MATCHES_PLAYED_MILESTONE,
   //   category: getCategoryForNotificationType(
@@ -80,26 +70,6 @@ export const accountNotifications = {
   //   message: `${count} league seasons completed! You are a pro`,
   //   metadata: { count },
   // }),
-
-  perfectAttendance: (leagueName: string): NotificationPayload => ({
-    type: NOTIFICATION_TYPES.PERFECT_ATTENDANCE,
-    category: getCategoryForNotificationType(
-      NOTIFICATION_TYPES.PERFECT_ATTENDANCE
-    ),
-    title: "You Never Missed a Week",
-    message: `You played every week of ${leagueName}! Great commitment!`,
-    metadata: { leagueName },
-  }),
-
-  multiLeaguePlayer: (leagueCount: number): NotificationPayload => ({
-    type: NOTIFICATION_TYPES.MULTI_LEAGUE_PLAYER,
-    category: getCategoryForNotificationType(
-      NOTIFICATION_TYPES.MULTI_LEAGUE_PLAYER
-    ),
-    title: "Multi-league Player",
-    message: `You are competing in ${leagueCount} leagues! Looks like you're gearing up for a big season`,
-    metadata: { leagueCount },
-  }),
 
   newWeeklyStreak: (weeks: number): NotificationPayload => ({
     type: NOTIFICATION_TYPES.NEW_WEEKLY_STREAK,
@@ -162,15 +132,15 @@ export const accountNotifications = {
     metadata: { duration },
   }),
 
-  maintenanceCancelled: (reason?: string): NotificationPayload => ({
-    type: NOTIFICATION_TYPES.MAINTENANCE_CANCELLED,
-    category: getCategoryForNotificationType(
-      NOTIFICATION_TYPES.MAINTENANCE_CANCELLED
-    ),
-    title: "Maintenance Cancelled",
-    message: `The scheduled maintenance has been cancelled.${reason ? ` Reason: ${reason}` : " No disruption expected."}`,
-    metadata: { reason },
-  }),
+  // maintenanceCancelled: (reason?: string): NotificationPayload => ({
+  //   type: NOTIFICATION_TYPES.MAINTENANCE_CANCELLED,
+  //   category: getCategoryForNotificationType(
+  //     NOTIFICATION_TYPES.MAINTENANCE_CANCELLED
+  //   ),
+  //   title: "Maintenance Cancelled",
+  //   message: `The scheduled maintenance has been cancelled.${reason ? ` Reason: ${reason}` : " No disruption expected."}`,
+  //   metadata: { reason },
+  // }),
 
   withdrawalRequestSubmitted: (
     playerName: string,

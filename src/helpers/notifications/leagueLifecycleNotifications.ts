@@ -27,18 +27,18 @@ export const leagueLifecycleNotifications = {
     metadata: { seasonName, amount, leagueName, startDate, categoryName },
   }),
 
-  // paymentConfirmed: (
-  //   seasonName: string,
-  //   amount: string
-  // ): NotificationPayload => ({
-  //   type: NOTIFICATION_TYPES.PAYMENT_CONFIRMED,
-  //   category: getCategoryForNotificationType(
-  //     NOTIFICATION_TYPES.PAYMENT_CONFIRMED
-  //   ),
-  //   title: "Payment Successful",
-  //   message: `Payment confirmed for ${seasonName}. Get ready to play`,
-  //   metadata: { seasonName, amount },
-  // }),
+  paymentConfirmed: (
+    seasonName: string,
+    amount: string
+  ): NotificationPayload => ({
+    type: NOTIFICATION_TYPES.PAYMENT_CONFIRMED,
+    category: getCategoryForNotificationType(
+      NOTIFICATION_TYPES.PAYMENT_CONFIRMED
+    ),
+    title: "Payment Successful",
+    message: `Payment confirmed for ${seasonName}. Get ready to play`,
+    metadata: { seasonName, amount },
+  }),
 
   matchesRemaining: (
     leagueName: string,
@@ -68,28 +68,28 @@ export const leagueLifecycleNotifications = {
   }),
 
 
-  divisionRebalanced: (
-    newDivision: string,
-    leagueName: string
-  ): NotificationPayload => ({
-    type: NOTIFICATION_TYPES.DIVISION_TRANSFERRED,
-    category: getCategoryForNotificationType(
-      NOTIFICATION_TYPES.DIVISION_TRANSFERRED
-    ),
-    title: "🔄 You're in a New Division",
-    message: `You've been moved to ${newDivision} in ${leagueName} for competitive balance.`,
-    metadata: { newDivision, leagueName },
-  }),
+  // divisionRebalanced: (
+  //   newDivision: string,
+  //   leagueName: string
+  // ): NotificationPayload => ({
+  //   type: NOTIFICATION_TYPES.DIVISION_TRANSFERRED,
+  //   category: getCategoryForNotificationType(
+  //     NOTIFICATION_TYPES.DIVISION_TRANSFERRED
+  //   ),
+  //   title: "🔄 You're in a New Division",
+  //   message: `You've been moved to ${newDivision} in ${leagueName} for competitive balance.`,
+  //   metadata: { newDivision, leagueName },
+  // }),
 
-  divisionUpdateNewPlayer: (leagueName: string): NotificationPayload => ({
-    type: NOTIFICATION_TYPES.DIVISION_UPDATE_NEW_PLAYER,
-    category: getCategoryForNotificationType(
-      NOTIFICATION_TYPES.DIVISION_UPDATE_NEW_PLAYER
-    ),
-    title: "New Opponent Available",
-    message: `A new player has joined your division in ${leagueName}. Time to arrange a match!`,
-    metadata: { leagueName },
-  }),
+  // divisionUpdateNewPlayer: (leagueName: string): NotificationPayload => ({
+  //   type: NOTIFICATION_TYPES.DIVISION_UPDATE_NEW_PLAYER,
+  //   category: getCategoryForNotificationType(
+  //     NOTIFICATION_TYPES.DIVISION_UPDATE_NEW_PLAYER
+  //   ),
+  //   title: "New Opponent Available",
+  //   message: `A new player has joined your division in ${leagueName}. Time to arrange a match!`,
+  //   metadata: { leagueName },
+  // }),
 
   winningStreak: (streakCount: number): NotificationPayload => ({
     type: NOTIFICATION_TYPES.WINNING_STREAK,
@@ -417,7 +417,7 @@ export const leagueLifecycleNotifications = {
     category: getCategoryForNotificationType(
       NOTIFICATION_TYPES.WITHDRAWAL_REQUEST_APPROVED
     ),
-    title: "Withdrawal  Confirmed",
+    title: "Withdrawal Confirmed",
     message: `Your withdrawal from ${leagueName} is confirmed. Refund will be processed shortly`,
     metadata: { leagueName },
   }),
@@ -433,5 +433,13 @@ export const leagueLifecycleNotifications = {
     title: "Refund on Its Way",
     message: `Your RM-${amount} refund for [League Name] has been processed. Allow 3–7 business days.`,
     metadata: { amount, leagueName },
+  }),
+
+  divisionUpdateNewPlayer: (leagueName: string, gameType?: string): NotificationPayload => ({
+    type: NOTIFICATION_TYPES.DIVISION_UPDATE_NEW_PLAYER,
+    category: getCategoryForNotificationType(NOTIFICATION_TYPES.DIVISION_UPDATE_NEW_PLAYER),
+    title: "New Opponent in Your Division",
+    message: `A new ${gameType === 'DOUBLES' ? 'team' : 'player'} has joined your division in ${leagueName}. Time to arrange a match!`,
+    metadata: { leagueName, gameType: gameType ?? '' },
   }),
 };
