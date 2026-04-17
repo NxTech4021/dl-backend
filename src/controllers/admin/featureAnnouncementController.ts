@@ -145,3 +145,18 @@ export const archiveAnnouncement = async (req: Request, res: Response) => {
     sendError(res, message, 400);
   }
 };
+
+/**
+ * Notify all active users that Terms of Service have been updated
+ * POST /api/admin/system/tos/notify
+ */
+export const notifyTosUpdated = async (req: Request, res: Response) => {
+  try {
+    const result = await announcementService.sendTosUpdatedNotification();
+    sendSuccess(res, result, `TOS update notification sent to ${result.sentCount} user(s)`);
+  } catch (error) {
+    console.error('Notify TOS Updated Error:', error);
+    const message = error instanceof Error ? error.message : 'Failed to send TOS update notification';
+    sendError(res, message, 500);
+  }
+};
