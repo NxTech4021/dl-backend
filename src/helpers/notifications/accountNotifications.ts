@@ -10,27 +10,15 @@ import {
 } from "../../types/notificationTypes";
 
 export const accountNotifications = {
-  // IN-APP NOTIFICATIONS
-
-  welcomeToDeuce: (): NotificationPayload => ({
-    type: NOTIFICATION_TYPES.WELCOME_TO_DEUCE,
-    category: getCategoryForNotificationType(
-      NOTIFICATION_TYPES.WELCOME_TO_DEUCE
-    ),
-    title: "Welcome to Deuce!",
-    message:
-      "Explore leagues, connect with players in your area, and start playing",
-    metadata: {},
-  }),
 
   profileIncompleteReminder: (): NotificationPayload => ({
     type: NOTIFICATION_TYPES.PROFILE_INCOMPLETE_REMINDER,
     category: getCategoryForNotificationType(
       NOTIFICATION_TYPES.PROFILE_INCOMPLETE_REMINDER
     ),
-    title: "Complete Your Profile",
+    title: "How Good Are You?",
     message:
-      "Answer a quick questionnaire to get your starting DEUCE Match Rating (DMR)",
+      "Answer a few questions and we'll set your starting DMR.",
     metadata: {},
   }),
 
@@ -39,81 +27,59 @@ export const accountNotifications = {
     category: getCategoryForNotificationType(
       NOTIFICATION_TYPES.PROFILE_PHOTO_MISSING
     ),
-    title: "Add Profile Photo",
+    title: "Put a Face to the Game",
     message:
-      "Add a profile photo to help opponents recognize you at the courts",
+      "Add a profile photo so opponents know who they're up against.",
     metadata: {},
-  }),
-
-  profileVerificationNeeded: (): NotificationPayload => ({
-    type: NOTIFICATION_TYPES.PROFILE_VERIFICATION_NEEDED,
-    category: getCategoryForNotificationType(
-      NOTIFICATION_TYPES.PROFILE_VERIFICATION_NEEDED
-    ),
-    title: "Verification Required",
-    message: "Verify your account to continue using the app",
-    metadata: {},
-  }),
-
-  achievementUnlocked: (achievementName: string): NotificationPayload => ({
-    type: NOTIFICATION_TYPES.ACHIEVEMENT_UNLOCKED,
-    category: getCategoryForNotificationType(
-      NOTIFICATION_TYPES.ACHIEVEMENT_UNLOCKED
-    ),
-    title: "Achievement Unlocked",
-    message: achievementName,
-    metadata: { achievementName },
   }),
 
   tosUpdated: (): NotificationPayload => ({
     type: NOTIFICATION_TYPES.TOS_UPDATED,
     category: getCategoryForNotificationType(NOTIFICATION_TYPES.TOS_UPDATED),
-    title: "TOS Updated",
+    title: "Terms Updated",
     message: "Our Terms of Service have been updated. Please review",
     metadata: {},
   }),
 
-  // PUSH NOTIFICATIONS
+  // firstMatchCompleted: (): NotificationPayload => ({
+  //   type: NOTIFICATION_TYPES.FIRST_MATCH_COMPLETED,
+  //   category: getCategoryForNotificationType(
+  //     NOTIFICATION_TYPES.FIRST_MATCH_COMPLETED
+  //   ),
+  //   title: "First Match Completed!",
+  //   message: "Your DEUCE journey has begun, thanks for playing!",
+  //   metadata: {},
+  // }),
 
-  firstMatchCompleted: (): NotificationPayload => ({
-    type: NOTIFICATION_TYPES.FIRST_MATCH_COMPLETED,
-    category: getCategoryForNotificationType(
-      NOTIFICATION_TYPES.FIRST_MATCH_COMPLETED
-    ),
-    title: "First Match Completed!",
-    message: "Your DEUCE journey has begun, thanks for playing!",
-    metadata: {},
-  }),
+  // matchesPlayedMilestone: (count: number): NotificationPayload => ({
+  //   type: NOTIFICATION_TYPES.MATCHES_PLAYED_MILESTONE,
+  //   category: getCategoryForNotificationType(
+  //     NOTIFICATION_TYPES.MATCHES_PLAYED_MILESTONE
+  //   ),
+  //   title: "Milestone Reached",
+  //   message: `${count} matches played! You are becoming a DEUCE regular`,
+  //   metadata: { count },
+  // }),
 
-  matchesPlayedMilestone: (count: number): NotificationPayload => ({
-    type: NOTIFICATION_TYPES.MATCHES_PLAYED_MILESTONE,
-    category: getCategoryForNotificationType(
-      NOTIFICATION_TYPES.MATCHES_PLAYED_MILESTONE
-    ),
-    title: "Milestone Reached",
-    message: `${count} matches played! You are becoming a DEUCE regular`,
-    metadata: { count },
-  }),
+  // firstLeagueCompleted: (seasonName: string): NotificationPayload => ({
+  //   type: NOTIFICATION_TYPES.FIRST_LEAGUE_COMPLETED,
+  //   category: getCategoryForNotificationType(
+  //     NOTIFICATION_TYPES.FIRST_LEAGUE_COMPLETED
+  //   ),
+  //   title: "First League Complete",
+  //   message: `Thank you for completing your first DEUCE League season. We look forward to seeing you on court next season`,
+  //   metadata: { seasonName },
+  // }),
 
-  firstLeagueCompleted: (seasonName: string): NotificationPayload => ({
-    type: NOTIFICATION_TYPES.FIRST_LEAGUE_COMPLETED,
-    category: getCategoryForNotificationType(
-      NOTIFICATION_TYPES.FIRST_LEAGUE_COMPLETED
-    ),
-    title: "First League Complete",
-    message: `Thank you for completing your first DEUCE League season. We look forward to seeing you on court next season`,
-    metadata: { seasonName },
-  }),
-
-  leaguesCompletedMilestone: (count: number): NotificationPayload => ({
-    type: NOTIFICATION_TYPES.LEAGUES_COMPLETED_MILESTONE,
-    category: getCategoryForNotificationType(
-      NOTIFICATION_TYPES.LEAGUES_COMPLETED_MILESTONE
-    ),
-    title: "League Veteran",
-    message: `${count} league seasons completed! You are a pro`,
-    metadata: { count },
-  }),
+  // leaguesCompletedMilestone: (count: number): NotificationPayload => ({
+  //   type: NOTIFICATION_TYPES.LEAGUES_COMPLETED_MILESTONE,
+  //   category: getCategoryForNotificationType(
+  //     NOTIFICATION_TYPES.LEAGUES_COMPLETED_MILESTONE
+  //   ),
+  //   title: "League Veteran",
+  //   message: `${count} league seasons completed! You are a pro`,
+  //   metadata: { count },
+  // }),
 
   perfectAttendance: (leagueName: string): NotificationPayload => ({
     type: NOTIFICATION_TYPES.PERFECT_ATTENDANCE,
@@ -140,16 +106,16 @@ export const accountNotifications = {
     category: getCategoryForNotificationType(
       NOTIFICATION_TYPES.NEW_WEEKLY_STREAK
     ),
-    title: "Weekly Streak!",
-    message: `${weeks}-week streak! You've played matches for ${weeks} consecutive weeks`,
+    title: `🔥 ${weeks}-Week Streak!`,
+    message: `You've played matches ${weeks} weeks in a row, Keep it rolling.`,
     metadata: { weeks },
   }),
 
   streakAtRisk: (weeks: number, deadline: string): NotificationPayload => ({
     type: NOTIFICATION_TYPES.STREAK_AT_RISK,
     category: getCategoryForNotificationType(NOTIFICATION_TYPES.STREAK_AT_RISK),
-    title: "Streak Ending Soon",
-    message: `Your ${weeks}-week streak is at risk! Play a match before ${deadline} to keep it alive`,
+    title: "You're Losing Your Streak!",
+    message: `Your  ${weeks}-week streak is at risk! Play a match to keep it alive.`,
     metadata: { weeks, deadline },
   }),
 

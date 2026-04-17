@@ -12,16 +12,15 @@ import {
 
 export const socialCommunityNotifications = {
   friendActivityScorecard: (
-    friendName: string,
-    achievement: string
+    friendName: string
   ): NotificationPayload => ({
     type: NOTIFICATION_TYPES.FRIEND_ACTIVITY_SCORECARD,
     category: getCategoryForNotificationType(
       NOTIFICATION_TYPES.FRIEND_ACTIVITY_SCORECARD
     ),
-    title: "Friend Activity",
-    message: `${friendName} ${achievement}`,
-    metadata: { friendName, achievement },
+    title: `${friendName} played a match`,
+    message: "Go see how they did. They might need a like \ud83d\udc40",
+    metadata: { friendName },
   }),
 
   friendActivityPost: (
@@ -51,21 +50,21 @@ export const socialCommunityNotifications = {
     metadata: { playerName, rating, distance },
   }),
 
-  shareScorecardPrompt: (matchDetails: string): NotificationPayload => ({
+  shareScorecardPrompt: (): NotificationPayload => ({
     type: NOTIFICATION_TYPES.SHARE_SCORECARD_PROMPT,
     category: getCategoryForNotificationType(
       NOTIFICATION_TYPES.SHARE_SCORECARD_PROMPT
     ),
-    title: "Share Your Win!",
-    message: `Great match! Share your scorecard: ${matchDetails}`,
-    metadata: { matchDetails },
+    title: "Share Your Result?",
+    message: "Your scorecard is ready. Let everyone see how you played.",
+    metadata: {},
   }),
 
   friendRequest: (playerName: string): NotificationPayload => ({
     type: NOTIFICATION_TYPES.FRIEND_REQUEST,
     category: getCategoryForNotificationType(NOTIFICATION_TYPES.FRIEND_REQUEST),
     title: "Friend Request",
-    message: `${playerName} wants to connect with you`,
+    message: `${playerName} wants to connect.`,
     metadata: { playerName },
   }),
 
@@ -115,14 +114,27 @@ export const socialCommunityNotifications = {
   // Chat notifications
   newMessage: (
     senderName: string,
-    chatName: string,
     messagePreview: string
   ): NotificationPayload => ({
     type: NOTIFICATION_TYPES.NEW_MESSAGE,
     category: getCategoryForNotificationType(NOTIFICATION_TYPES.NEW_MESSAGE),
-    title: `${senderName} in ${chatName}`,
+    title: senderName,
     message: messagePreview,
-    metadata: { senderName, chatName, messagePreview },
+    metadata: { senderName, messagePreview },
+  }),
+
+  groupChatMessage: (
+    groupName: string,
+    senderName: string,
+    messagePreview: string
+  ): NotificationPayload => ({
+    type: NOTIFICATION_TYPES.GROUP_CHAT_ADDED,
+    category: getCategoryForNotificationType(
+      NOTIFICATION_TYPES.GROUP_CHAT_ADDED
+    ),
+    title: groupName,
+    message: `${senderName}: ${messagePreview}`,
+    metadata: { groupName, senderName, messagePreview },
   }),
 
   groupAdded: (groupName: string): NotificationPayload => ({

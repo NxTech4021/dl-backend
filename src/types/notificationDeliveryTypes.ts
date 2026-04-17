@@ -21,35 +21,33 @@ export const NOTIFICATION_DELIVERY_MAP: Record<string, NotificationDeliveryType>
   SEASON_CANCELLED: NotificationDeliveryType.PUSH,
   
   // Account & System - IN_APP
-  WELCOME_TO_DEUCE: NotificationDeliveryType.IN_APP,
   PROFILE_INCOMPLETE_REMINDER: NotificationDeliveryType.IN_APP,
   PROFILE_PHOTO_MISSING: NotificationDeliveryType.IN_APP,
-  PROFILE_VERIFICATION_NEEDED: NotificationDeliveryType.IN_APP,
   ACHIEVEMENT_UNLOCKED: NotificationDeliveryType.IN_APP,
   TOS_UPDATED: NotificationDeliveryType.IN_APP,
   FEATURE_ANNOUNCEMENT: NotificationDeliveryType.IN_APP,
   
   // Account & System - PUSH
-  FIRST_MATCH_COMPLETED: NotificationDeliveryType.PUSH,
-  MATCHES_PLAYED_MILESTONE: NotificationDeliveryType.PUSH,
-  FIRST_LEAGUE_COMPLETED: NotificationDeliveryType.PUSH,
-  LEAGUES_COMPLETED_MILESTONE: NotificationDeliveryType.PUSH,
-  PERFECT_ATTENDANCE: NotificationDeliveryType.PUSH,
-  MULTI_LEAGUE_PLAYER: NotificationDeliveryType.PUSH,
-  NEW_WEEKLY_STREAK: NotificationDeliveryType.PUSH,
+  // FIRST_MATCH_COMPLETED: NotificationDeliveryType.PUSH,
+  // MATCHES_PLAYED_MILESTONE: NotificationDeliveryType.PUSH,
+  // FIRST_LEAGUE_COMPLETED: NotificationDeliveryType.PUSH,
+  // LEAGUES_COMPLETED_MILESTONE: NotificationDeliveryType.PUSH,
+  // PERFECT_ATTENDANCE: NotificationDeliveryType.PUSH,
+  // MULTI_LEAGUE_PLAYER: NotificationDeliveryType.PUSH,
+  NEW_WEEKLY_STREAK: NotificationDeliveryType.IN_APP,
   STREAK_AT_RISK: NotificationDeliveryType.PUSH,
   APP_UPDATE_AVAILABLE: NotificationDeliveryType.PUSH,
   MAINTENANCE_SCHEDULED: NotificationDeliveryType.BOTH,
-  MAINTENANCE_IN_PROGRESS: NotificationDeliveryType.BOTH,
+  // MAINTENANCE_IN_PROGRESS: NotificationDeliveryType.BOTH,
   MAINTENANCE_COMPLETE: NotificationDeliveryType.BOTH,
-  MAINTENANCE_CANCELLED: NotificationDeliveryType.BOTH,
+  // MAINTENANCE_CANCELLED: NotificationDeliveryType.BOTH,
   // Backward compatibility aliases
-  SYSTEM_MAINTENANCE: NotificationDeliveryType.BOTH,
+  SYSTEM_MAINTENANCE: NotificationDeliveryType.PUSH,
   NEW_FEATURE: NotificationDeliveryType.IN_APP,
 
   // Admin-targeted notifications - BOTH (push to admin phones + in-app record)
   ADMIN_WITHDRAWAL_REQUEST: NotificationDeliveryType.BOTH,
-  ADMIN_DISPUTE_SUBMITTED: NotificationDeliveryType.BOTH,
+  ADMIN_DISPUTE_SUBMITTED: NotificationDeliveryType.IN_APP,
   ADMIN_TEAM_CHANGE_REQUEST: NotificationDeliveryType.BOTH,
   ADMIN_SEASON_JOIN_REQUEST: NotificationDeliveryType.BOTH,
   ADMIN_PLAYER_REPORT: NotificationDeliveryType.BOTH,
@@ -57,8 +55,6 @@ export const NOTIFICATION_DELIVERY_MAP: Record<string, NotificationDeliveryType>
   // Doubles League - IN_APP
   PARTNER_REQUEST_SENT: NotificationDeliveryType.IN_APP,
   PARTNER_REQUEST_DECLINED_PARTNER: NotificationDeliveryType.IN_APP,
-  WAITING_FOR_CAPTAIN: NotificationDeliveryType.IN_APP,
-  REGISTRATION_DEADLINE_PARTNER: NotificationDeliveryType.IN_APP,
   DOUBLES_TEAM_REGISTERED_CAPTAIN: NotificationDeliveryType.IN_APP,
   
   // Doubles League - PUSH
@@ -69,7 +65,18 @@ export const NOTIFICATION_DELIVERY_MAP: Record<string, NotificationDeliveryType>
   TEAM_REGISTRATION_REMINDER_2H: NotificationDeliveryType.PUSH,
   TEAM_REGISTRATION_REMINDER_24H: NotificationDeliveryType.PUSH,
   REGISTRATION_DEADLINE_CAPTAIN: NotificationDeliveryType.PUSH,
+  WAITING_FOR_CAPTAIN: NotificationDeliveryType.PUSH,
+  REGISTRATION_DEADLINE_PARTNER: NotificationDeliveryType.PUSH,
   DOUBLES_TEAM_REGISTERED_PARTNER: NotificationDeliveryType.PUSH,
+
+  // Doubles League - Match Invitation (PUSH)
+  DOUBLES_PARTNER_POSTED_MATCH: NotificationDeliveryType.PUSH,
+  DOUBLES_PARTNER_CONFIRMED_POSTED_MATCH: NotificationDeliveryType.PUSH,
+  DOUBLES_PARTNER_DECLINED_POSTED_MATCH: NotificationDeliveryType.PUSH,
+  DOUBLES_PARTNER_JOINED_MATCH: NotificationDeliveryType.PUSH,
+  DOUBLES_PARTNER_CONFIRMED_JOINED_MATCH: NotificationDeliveryType.PUSH,
+  DOUBLES_PARTNER_DECLINED_JOINED_MATCH: NotificationDeliveryType.PUSH,
+  DOUBLES_MATCH_CANCELLED_PARTNER_DECLINED: NotificationDeliveryType.PUSH,
   
   // League Lifecycle - IN_APP
   REGISTRATION_CONFIRMED: NotificationDeliveryType.IN_APP,
@@ -146,6 +153,7 @@ export const NOTIFICATION_DELIVERY_MAP: Record<string, NotificationDeliveryType>
   PENDING_SCORE_SUBMISSION: NotificationDeliveryType.PUSH,
   PENDING_SCORE_CONFIRMATION: NotificationDeliveryType.PUSH,
   SCORE_AUTO_CONFIRMED: NotificationDeliveryType.PUSH,
+  SCORE_CONFIRMED: NotificationDeliveryType.PUSH,
   FORFEIT_DISCIPLINARY: NotificationDeliveryType.PUSH,
   
   // Rating & Ranking - PUSH
@@ -160,16 +168,14 @@ export const NOTIFICATION_DELIVERY_MAP: Record<string, NotificationDeliveryType>
   RATING_MILESTONE: NotificationDeliveryType.PUSH,
   
   // Social & Community - PUSH
-  FRIEND_ACTIVITY_SCORECARD: NotificationDeliveryType.PUSH,
   FRIEND_ACTIVITY_POST: NotificationDeliveryType.PUSH,
-  SIMILAR_SKILL_PLAYER_NEARBY: NotificationDeliveryType.PUSH,
   SHARE_SCORECARD_PROMPT: NotificationDeliveryType.PUSH,
   FRIEND_REQUEST: NotificationDeliveryType.PUSH,
-  POST_LIKED: NotificationDeliveryType.PUSH,
-  POST_COMMENTED: NotificationDeliveryType.PUSH,
-  NEW_MESSAGE: NotificationDeliveryType.PUSH,
+  // POST_LIKED: NotificationDeliveryType.PUSH,
+  // POST_COMMENTED: NotificationDeliveryType.PUSH,
+  // NEW_MESSAGE: NotificationDeliveryType.PUSH,
+  Group_NEW_MESSAGE: NotificationDeliveryType.PUSH,
   GROUP_CHAT_ADDED: NotificationDeliveryType.PUSH,
-  UNREAD_MESSAGES: NotificationDeliveryType.IN_APP,
   
   // Promotional - PUSH
   NEXT_SEASON_OPENING_SOON: NotificationDeliveryType.PUSH,

@@ -139,15 +139,15 @@ export const matchManagementNotifications = {
   friendlyMatchCancelled: (
     hostName: string,
     date: string,
-    time: string
+    venue: string
   ): NotificationPayload => ({
     type: NOTIFICATION_TYPES.FRIENDLY_MATCH_CANCELLED,
     category: getCategoryForNotificationType(
       NOTIFICATION_TYPES.FRIENDLY_MATCH_CANCELLED
     ),
     title: "Match Cancelled",
-    message: `${hostName} cancelled the match\n📅 ${date} • ${time}`,
-    metadata: { hostName, date, time },
+    message: `${hostName} cancelled the match on ${date} at ${venue}.`,
+    metadata: { hostName, date, venue },
   }),
 
   playerLeftFriendlyMatch: (
@@ -159,8 +159,8 @@ export const matchManagementNotifications = {
     category: getCategoryForNotificationType(
       NOTIFICATION_TYPES.PLAYER_LEFT_FRIENDLY_MATCH
     ),
-    title: "Player Left Match",
-    message: `${playerName} left your match\n📅 ${date} • ${time}`,
+    title: "Player Left",
+    message: `${playerName} left your match scheduled for ${date} at ${time}.`,
     metadata: { playerName, date, time },
   }),
 
@@ -177,30 +177,30 @@ export const matchManagementNotifications = {
   }),
 
   friendlyMatchDetailsChanged: (
-    date: string,
-    time: string,
-    venue: string
+    hostName: string,
+    newDate: string,
+    newTime: string,
+    newVenue: string
   ): NotificationPayload => ({
     type: NOTIFICATION_TYPES.FRIENDLY_MATCH_DETAILS_CHANGED,
     category: getCategoryForNotificationType(
       NOTIFICATION_TYPES.FRIENDLY_MATCH_DETAILS_CHANGED
     ),
-    title: "Match Details Updated",
-    message: `Match details have been changed\n📅 ${date} • ${time}\n📍 ${venue}`,
-    metadata: { date, time, venue },
+    title: "Match Updated",
+    message: `${hostName} changed your match to ${newDate} at ${newTime} at ${newVenue}.`,
+    metadata: { hostName, newDate, newTime, newVenue },
   }),
 
   matchReminder24h: (
     opponentName: string,
-    date: string,
     time: string,
     venue: string
   ): NotificationPayload => ({
     type: NOTIFICATION_TYPES.MATCH_REMINDER,
     category: getCategoryForNotificationType(NOTIFICATION_TYPES.MATCH_REMINDER),
-    title: "Match Tomorrow",
-    message: `Match vs ${opponentName} is tomorrow\n📅 ${date} • ${time}\n📍 ${venue}`,
-    metadata: { opponentName, date, time, venue },
+    title: "📅 Match Tomorrow",
+    message: `You're playing ${opponentName} tomorrow at ${time}, ${venue}.`,
+    metadata: { opponentName, time, venue },
   }),
 
   matchReminder2h: (
@@ -210,14 +210,13 @@ export const matchManagementNotifications = {
   ): NotificationPayload => ({
     type: NOTIFICATION_TYPES.MATCH_REMINDER,
     category: getCategoryForNotificationType(NOTIFICATION_TYPES.MATCH_REMINDER),
-    title: "Match in 2 Hours",
-    message: `⏰ Match vs ${opponentName} starting soon\n🕐 ${time}\n📍 ${venue}`,
+    title: "⏰ Match in 2 Hours",
+    message: `You're playing ${opponentName} in 2 hours at ${venue}. Get ready.`,
     metadata: { opponentName, time, venue },
   }),
 
   matchMorningReminder: (
     opponentName: string,
-    date: string,
     time: string,
     venue: string
   ): NotificationPayload => ({
@@ -225,9 +224,9 @@ export const matchManagementNotifications = {
     category: getCategoryForNotificationType(
       NOTIFICATION_TYPES.MATCH_MORNING_REMINDER
     ),
-    title: "Match Day Reminder",
-    message: `Good morning! Your match vs ${opponentName} is today\n📅 ${date} • ${time}\n📍 ${venue}`,
-    metadata: { opponentName, date, time, venue },
+    title: "🎾 Game Day",
+    message: `You have a match vs ${opponentName} at ${time}, ${venue}. Bring your best!`,
+    metadata: { opponentName, time, venue },
   }),
 
   matchRescheduleRequest: (
@@ -281,7 +280,7 @@ export const matchManagementNotifications = {
       NOTIFICATION_TYPES.MATCH_WALKOVER_WON
     ),
     title: "Walkover Win",
-    message: `You've been awarded the match vs ${opponentName}`,
+    message: `Match vs ${opponentName} awarded to you.`,
     metadata: { opponentName },
   }),
 
@@ -290,8 +289,8 @@ export const matchManagementNotifications = {
     category: getCategoryForNotificationType(
       NOTIFICATION_TYPES.MATCH_WALKOVER_LOST
     ),
-    title: "No-show",
-    message: `You were marked as no-show vs ${opponentName}. Match recorded as loss`,
+    title: "No-Show Recorded",
+    message: `You didn't show for ${opponentName}. This one counts as a loss. Repeated no-shows may lead to suspension.`,
     metadata: { opponentName },
   }),
 
@@ -314,7 +313,7 @@ export const matchManagementNotifications = {
       NOTIFICATION_TYPES.OPPONENT_CLAIMS_NO_SHOW
     ),
     title: "No-show Claim",
-    message: `${opponentName} reported you as no-show for the match on ${date}. Confirm or dispute within 24 hours`,
+    message: `${opponentName} says you didn't show on ${date}. You have 24 hours to respond.`,
     metadata: { opponentName, date },
   }),
 
@@ -327,7 +326,7 @@ export const matchManagementNotifications = {
       NOTIFICATION_TYPES.HEAD_TO_HEAD_HISTORY
     ),
     title: "Head-to-Head",
-    message: `Your record vs ${opponentName}: ${record}`,
+    message: `You've played ${opponentName} before. Record: ${record}. View match history.`,
     metadata: { opponentName, record },
   }),
 
@@ -336,8 +335,8 @@ export const matchManagementNotifications = {
     category: getCategoryForNotificationType(
       NOTIFICATION_TYPES.SCORE_SUBMISSION_REMINDER
     ),
-    title: "Submit Match Result",
-    message: `How did the match go? Submit your match result vs ${opponentName}`,
+    title: "How'd your match go?",
+    message: `Add your score vs ${opponentName}.`,
     metadata: { opponentName },
   }),
 
@@ -356,55 +355,63 @@ export const matchManagementNotifications = {
     category: getCategoryForNotificationType(
       NOTIFICATION_TYPES.OPPONENT_SUBMITTED_SCORE
     ),
-    title: "Review Score",
-    message: `${opponentName} submitted match result. Review and confirm`,
+    title: "Confirm the Score",
+    message: `${opponentName} added the match result. Review and confirm.`,
     metadata: { opponentName },
   }),
 
-  pendingScoreSubmission: (): NotificationPayload => ({
+  pendingScoreSubmission: (opponentName: string): NotificationPayload => ({
     type: NOTIFICATION_TYPES.PENDING_SCORE_SUBMISSION,
     category: getCategoryForNotificationType(
       NOTIFICATION_TYPES.PENDING_SCORE_SUBMISSION
     ),
-    title: "Reminder to Submit Score",
-    message: "Last call to submit match result before it's locked",
-    metadata: {},
+    title: "Last Call \u2013 Submit Your Score",
+    message: `Add your result with ${opponentName} or this match will be marked as not played.`,
+    metadata: { opponentName },
   }),
 
-  pendingScoreConfirmation: (): NotificationPayload => ({
+  pendingScoreConfirmation: (opponentName: string): NotificationPayload => ({
     type: NOTIFICATION_TYPES.PENDING_SCORE_CONFIRMATION,
     category: getCategoryForNotificationType(
       NOTIFICATION_TYPES.PENDING_SCORE_CONFIRMATION
     ),
-    title: "Reminder to Confirm Score",
-    message: "Last call to confirm match result before it's locked",
-    metadata: {},
+    title: "Last Call \u2013 Confirm the Score",
+    message: `Confirm your match result with ${opponentName} before it's auto-confirmed.`,
+    metadata: { opponentName },
+  }),
+
+  scoreConfirmed: (opponentName: string): NotificationPayload => ({
+    type: NOTIFICATION_TYPES.SCORE_CONFIRMED,
+    category: getCategoryForNotificationType(
+      NOTIFICATION_TYPES.SCORE_CONFIRMED
+    ),
+    title: "\u2705 Score Confirmed",
+    message: `${opponentName} confirmed the match result. All set.`,
+    metadata: { opponentName },
   }),
 
   scoreAutoConfirmed: (
-    opponentName: string,
-    score: string
+    opponentName: string
   ): NotificationPayload => ({
     type: NOTIFICATION_TYPES.SCORE_AUTO_CONFIRMED,
     category: getCategoryForNotificationType(
       NOTIFICATION_TYPES.SCORE_AUTO_CONFIRMED
     ),
-    title: "Score Auto-confirmed",
-    message: `Match result vs ${opponentName} has been confirmed based on submitted score: ${score}`,
-    metadata: { opponentName, score },
+    title: "Result Confirmed Automatically",
+    message: `Looks like ${opponentName} missed the confirmation window. The submitted result has been auto-confirmed.`,
+    metadata: { opponentName },
   }),
 
   forfeitDisciplinary: (
-    opponentName: string,
-    reason: string
+    opponentName: string
   ): NotificationPayload => ({
     type: NOTIFICATION_TYPES.FORFEIT_DISCIPLINARY,
     category: getCategoryForNotificationType(
       NOTIFICATION_TYPES.FORFEIT_DISCIPLINARY
     ),
-    title: "Match Forfeited",
-    message: `Match vs ${opponentName} has been forfeited. Reason: ${reason}`,
-    metadata: { opponentName, reason },
+    title: "Match Forfeit",
+    message: `Your match vs ${opponentName} has been recorded as a forfeit due to a conduct violation.`,
+    metadata: { opponentName },
   }),
 
   opponentChanged: (
@@ -427,16 +434,15 @@ export const matchManagementNotifications = {
   opponentPostedLeagueMatch: (
     opponentName: string,
     date: string,
-    time: string,
-    venue: string
+    time: string
   ): NotificationPayload => ({
     type: NOTIFICATION_TYPES.OPPONENT_POSTED_LEAGUE_MATCH,
     category: getCategoryForNotificationType(
       NOTIFICATION_TYPES.OPPONENT_POSTED_LEAGUE_MATCH
     ),
-    title: "League Match Available",
-    message: `${opponentName} posted a league match\n📅 ${date} • ${time}\n📍 ${venue}`,
-    metadata: { opponentName, date, time, venue },
+    title: "\uD83C\uDFBE League Match Available",
+    message: `${opponentName} posted a league match for ${date} at ${time}. Game on?`,
+    metadata: { opponentName, date, time },
   }),
 
   leagueMatchConfirmedYouJoined: (
@@ -463,23 +469,21 @@ export const matchManagementNotifications = {
     category: getCategoryForNotificationType(
       NOTIFICATION_TYPES.LEAGUE_MATCH_CONFIRMED_OPPONENT_JOINED
     ),
-    title: "Opponent Joined Your Match",
-    message: `${opponentName} joined your league match\n📅 ${date} • ${time}\n📍 ${venue}`,
+    title: "\u2705 Game On!",
+    message: `${opponentName} just joined your match. Say hello and arrange your game!`,
     metadata: { opponentName, date, time, venue },
   }),
 
   leagueMatchCancelledByOpponent: (
     opponentName: string,
-    date: string,
-    time: string,
-    venue: string
+    date: string
   ): NotificationPayload => ({
     type: NOTIFICATION_TYPES.LEAGUE_MATCH_CANCELLED_BY_OPPONENT,
     category: getCategoryForNotificationType(
       NOTIFICATION_TYPES.LEAGUE_MATCH_CANCELLED_BY_OPPONENT
     ),
-    title: "League Match Cancelled",
-    message: `${opponentName} cancelled the league match\n📅 ${date} • ${time}\n📍 ${venue}`,
-    metadata: { opponentName, date, time, venue },
+    title: "Match Cancelled",
+    message: `${opponentName} cancelled your league match on ${date}.`,
+    metadata: { opponentName, date },
   }),
 };

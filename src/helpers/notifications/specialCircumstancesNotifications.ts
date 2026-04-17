@@ -18,8 +18,7 @@ export const specialCircumstancesNotifications = {
       NOTIFICATION_TYPES.DISPUTE_SUBMITTED
     ),
     title: "Dispute Submitted",
-    message:
-      "Your dispute has been received. We'll look into it and keep you updated",
+    message: "Your dispute has been received. We'll review it and keep you posted.",
     metadata: {},
   }),
 
@@ -31,7 +30,7 @@ export const specialCircumstancesNotifications = {
       NOTIFICATION_TYPES.DISPUTE_RESOLUTION_REQUIRED
     ),
     title: "Dispute Under Review",
-    message: `Your dispute with ${opponentName} is being reviewed. Check updates`,
+    message: `Your dispute with ${opponentName} is in our hands now. Sit tight.`,
     metadata: { opponentName },
   }),
 
@@ -41,7 +40,7 @@ export const specialCircumstancesNotifications = {
       NOTIFICATION_TYPES.DISPUTE_RESOLVED
     ),
     title: "Dispute Resolved",
-    message: `Your dispute with ${opponentName} has been resolved. View outcome`,
+    message: `Your dispute with ${opponentName} has been resolved. View the outcome.`,
     metadata: { opponentName },
   }),
 
@@ -50,9 +49,8 @@ export const specialCircumstancesNotifications = {
     category: getCategoryForNotificationType(
       NOTIFICATION_TYPES.CODE_OF_CONDUCT_WARNING
     ),
-    title: "Code of Conduct",
-    message:
-      "You've received a warning from the league admin. Please check the details and ensure your future conduct follows our guidelines",
+    title: "Conduct Warning",
+    message: "You've received a warning from the league admin. Review the details and ensure future conduct follows our guidelines.",
     metadata: {},
   }),
 
