@@ -6,6 +6,7 @@ import { PrismaClient } from "@prisma/client";
 import { createAuthMiddleware, emailOTP, username } from "better-auth/plugins";
 import { expo } from "@better-auth/expo";
 import { sendEmail } from "../config/nodemailer";
+import { initializeUserOnboarding } from "../services/notification/onboardingNotificationService";
 import {
   getBackendBaseURL,
   getAuthBasePath,
@@ -147,6 +148,10 @@ export const auth = betterAuth({
           } catch (error) {
             console.error("Failed to initialize onboardingStep for user", user.id, error);
           }
+          // Fire profile-reminder notifications (5s delay, non-blocking)
+          initializeUserOnboarding(user.id).catch((err) =>
+            console.error("Failed to initialize onboarding notifications for user", user.id, err)
+          );
         },
       },
     },

@@ -10,7 +10,7 @@ import {
   InvitationStatus
 } from '@prisma/client';
 import { logger } from '../../utils/logger';
-import { formatMatchDate, formatMatchTime } from '../../utils/timezone';
+import { formatMatchDate, formatMatchTime, formatDynamicDateWithOn } from '../../utils/timezone';
 import { NotificationService, notificationService as notificationServiceSingleton } from '../notificationService';
 import { matchManagementNotifications } from '../../helpers/notifications/matchManagementNotifications';
 
@@ -183,8 +183,6 @@ export class MatchScheduleService {
       const isLeagueMatch = !!match.seasonId;
       const isDoublesMatch = match.matchType === 'DOUBLES';
       const opponentName = canceller?.name || 'Opponent';
-      const date = match.matchDate ? formatMatchDate(match.matchDate) : '';
-      const time = match.matchDate ? formatMatchTime(match.matchDate) : '';
       const venue = match.venue || '';
 
       let notificationPayload;
@@ -192,16 +190,14 @@ export class MatchScheduleService {
         // League match cancellation
         notificationPayload = matchManagementNotifications.leagueMatchCancelledByOpponent(
           opponentName,
-          date,
-          time,
-          venue
+          match.matchDate ? formatDynamicDateWithOn(match.matchDate) : ''
         );
       } else if (isDoublesMatch) {
         // Friendly doubles match cancellation
         notificationPayload = matchManagementNotifications.friendlyMatchCancelled(
           opponentName,
-          date,
-          time
+          match.matchDate ? formatDynamicDateWithOn(match.matchDate) : '',
+          venue
         );
       } else {
         // Friendly singles match cancellation

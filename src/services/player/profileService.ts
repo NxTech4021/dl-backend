@@ -5,6 +5,86 @@
 
 import { prisma } from '../../lib/prisma';
 import { Role, GameType, SportType } from "@prisma/client";
+import dayjs from 'dayjs';
+import utc from 'dayjs/plugin/utc.js';
+import timezone from 'dayjs/plugin/timezone.js';
+import { MALAYSIA_TIMEZONE } from '../../utils/timezone';
+
+dayjs.extend(utc);
+dayjs.extend(timezone);
+
+// ─── Weekly Streak Helpers ────────────────────────────────────────────────────
+
+/**
+ * Returns the Monday date string (YYYY-MM-DD, Malaysia local time) for the
+ * week that contains the given UTC date. Used as a stable, human-readable
+ * week key. Week starts on Monday per ISO 8601.
+ */
+function getWeekStartKey(utcDate: Date): string {
+  const d = dayjs(utcDate).tz(MALAYSIA_TIMEZONE);
+  const day = d.day(); // 0=Sun, 1=Mon, …, 6=Sat
+  const daysFromMonday = day === 0 ? 6 : day - 1;
+  return d.subtract(daysFromMonday, 'day').startOf('day').format('YYYY-MM-DD');
+}
+
+/**
+ * Returns the week key (Monday date string) for the week immediately before
+ * the given key.
+ */
+function getPrevWeekKey(weekKey: string): string {
+  return dayjs.tz(weekKey, MALAYSIA_TIMEZONE).subtract(7, 'day').format('YYYY-MM-DD');
+}
+
+/**
+ * Calculates the number of consecutive weeks (Mon–Sun, Malaysia time) in
+ * which a player has completed at least one match (league or friendly).
+ *
+ * Rules:
+ *  - The current week counts if they've played this week.
+ *  - If they haven't played yet this week the streak is still alive and is
+ *    measured from last week (the week hasn't ended yet so it can't be broken).
+ *  - If there is no match in the most-recent eligible week the streak is 0.
+ */
+async function calculateWeeklyStreak(userId: string): Promise<number> {
+  const matches = await prisma.match.findMany({
+    where: {
+      participants: { some: { userId } },
+      status: 'COMPLETED',
+    },
+    select: { matchDate: true },
+  });
+
+  if (matches.length === 0) return 0;
+
+  // Collect the set of week keys the player has played in
+  const playedWeeks = new Set<string>();
+  for (const { matchDate } of matches) {
+    if (matchDate) {
+      playedWeeks.add(getWeekStartKey(matchDate));
+    }
+  }
+
+  const nowKey = getWeekStartKey(new Date());
+
+  // Start from the current week; if not played yet, fall back to last week
+  let startKey = nowKey;
+  if (!playedWeeks.has(startKey)) {
+    startKey = getPrevWeekKey(nowKey);
+    if (!playedWeeks.has(startKey)) return 0;
+  }
+
+  // Walk backwards counting consecutive weeks with a match
+  let streak = 0;
+  let cursor = startKey;
+  while (playedWeeks.has(cursor)) {
+    streak++;
+    cursor = getPrevWeekKey(cursor);
+  }
+
+  return streak;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 import { auth } from '../../lib/auth';
 import * as bcrypt from "bcryptjs";
 import {
@@ -388,6 +468,9 @@ export async function getPlayerProfile(userId: string) {
     }
   }
 
+  // Calculate weekly match streak (consecutive weeks with ≥1 completed match)
+  const weeklyStreak = await calculateWeeklyStreak(userId);
+
   return {
     id: player.id,
     name: player.name,
@@ -409,6 +492,7 @@ export async function getPlayerProfile(userId: string) {
     questionnaireStatus: questionnaireStatus,
     recentMatches: processedMatches,
     totalMatches,
+    weeklyStreak,
   };
 }
 

@@ -10,27 +10,6 @@ import { logger } from '../../utils/logger';
 import { MatchStatus, SeasonStatus } from '@prisma/client';
 
 /**
- * Send welcome notification to new user
- */
-export async function sendWelcomeNotification(userId: string): Promise<void> {
-  try {
-    console.log('🎉 [OnboardingNotification] Sending welcome notification to user:', userId);
-    const welcomeNotif = notificationTemplates.account.welcomeToDeuce();
-
-    await notificationService.createNotification({
-      ...welcomeNotif,
-      userIds: userId,
-    });
-
-    console.log('✅ [OnboardingNotification] Welcome notification sent successfully');
-    logger.info('Welcome notification sent', { userId });
-  } catch (error) {
-    console.error('❌ [OnboardingNotification] Failed to send welcome notification:', error);
-    logger.error('Failed to send welcome notification', { userId }, error as Error);
-  }
-}
-
-/**
  * Check if profile is incomplete and send reminder
  */
 export async function checkAndSendProfileReminders(userId: string): Promise<void> {
@@ -235,9 +214,6 @@ export async function checkLeaguesMilestone(userId: string): Promise<void> {
  */
 export async function initializeUserOnboarding(userId: string): Promise<void> {
   try {
-    // Send welcome notification immediately
-    await sendWelcomeNotification(userId);
-
     // Wait a bit before checking profile completeness
     // In production, this could be a scheduled job
     setTimeout(async () => {

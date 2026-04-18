@@ -3,6 +3,7 @@ import { Prisma, PrismaClient } from "@prisma/client";
 import { sendEmail } from "../config/nodemailer";
 import { randomUUID } from "crypto";
 import { createRemoteJWKSet, jwtVerify } from "jose";
+import { initializeUserOnboarding } from "./notification/onboardingNotificationService";
 
 
 const CUTE_ADJECTIVES = [
@@ -646,6 +647,10 @@ export const signInWithGoogleToken = async (
       });
 
       console.log("✅ New user created:", user.id);
+      // Fire profile-reminder notifications (non-blocking)
+      initializeUserOnboarding(user.id).catch((err) =>
+        console.error("Failed to initialize onboarding notifications (Google)", user.id, err)
+      );
     } else {
       console.log("👤 Existing user found:", user.id);
 
@@ -859,6 +864,10 @@ export const signInWithAppleToken = async (
       });
 
       console.log("✅ New user created:", user.id);
+      // Fire profile-reminder notifications (non-blocking)
+      initializeUserOnboarding(user.id).catch((err) =>
+        console.error("Failed to initialize onboarding notifications (Apple)", user.id, err)
+      );
     } else if (!account) {
       // User exists but Apple account not linked - link it
       console.log("🔗 Linking Apple account to existing user:", user.id);

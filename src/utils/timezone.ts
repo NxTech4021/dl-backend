@@ -114,6 +114,36 @@ export function formatMatchDateShort(date: Date | string): string {
 }
 
 /**
+ * Format a date dynamically relative to today (Malaysia time) for notification messages.
+ *  • Same day    → "today"
+ *  • +1 day      → "tomorrow"
+ *  • +2–6 days   → full day name, e.g. "Saturday"
+ *  • +7+ days (or past) → "D MMMM", e.g. "12 April"
+ */
+export function formatDynamicDate(date: Date | string): string {
+  const now = dayjs().tz(MALAYSIA_TIMEZONE).startOf('day');
+  const matchDay = dayjs(date).tz(MALAYSIA_TIMEZONE).startOf('day');
+  const diffDays = matchDay.diff(now, 'day');
+  if (diffDays === 0) return 'today';
+  if (diffDays === 1) return 'tomorrow';
+  if (diffDays >= 2 && diffDays <= 6) return dayjs(date).tz(MALAYSIA_TIMEZONE).format('dddd');
+  return dayjs(date).tz(MALAYSIA_TIMEZONE).format('D MMMM');
+}
+
+/**
+ * Same as formatDynamicDate but prefixes "on " for day/date labels (not today/tomorrow).
+ * Use for messages using the [(on) dynamic Day/Date] pattern, e.g.:
+ *   "today" → "today"
+ *   "tomorrow" → "tomorrow"
+ *   "Saturday" → "on Saturday"
+ *   "12 April" → "on 12 April"
+ */
+export function formatDynamicDateWithOn(date: Date | string): string {
+  const label = formatDynamicDate(date);
+  return label === 'today' || label === 'tomorrow' ? label : `on ${label}`;
+}
+
+/**
  * Parse a naive datetime string from a user's device and store as UTC.
  * The deviceTimezone tells us what timezone the user intended.
  * If device is already in Malaysia, we still parse explicitly to avoid

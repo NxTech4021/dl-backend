@@ -98,36 +98,40 @@ app.use(securityHeaders);
 // Set up CORS
 app.use(
   cors({
-    origin: getTrustedOrigins(),
-    // origin: [
-    //   "http://localhost:3030",
-    //   "http://localhost:82",
-    //   "http://localhost",
-    //   "http://localhost:3001",
-    //   "http://localhost:8081",
-    //   "http://192.168.1.3:3001", // Added current IP from logs
-    //   "http://192.168.1.7:3001",
-    //   "http://192.168.100.3:8081",
-    //   "exp://192.168.100.3:8081",
-    //   "http://192.168.100.53:8081",
-    //   "exp://192.168.100.53:8081",
-    //   "http://172.20.10.3:8081",
-    //   "exp://172.20.10.3:8081",
-    //   "http://10.72.179.58:8081",
-    //   "exp://10.72.179.58:8081",
-    //   "http://10.72.180.20:8081",
-    //   "exp://10.72.180.20:8081",
-    //   "https://staging.appdevelopers.my",
-    // ], // Allow nginx proxy, direct access, and local IP
+    // origin: getTrustedOrigins(),
+    origin: [
+      "http://localhost:3030",
+      "http://localhost:82",
+      "http://localhost",
+      "http://localhost:3001",
+      "http://localhost:8081",
+      "http://192.168.0.108", // Added current IP from logs
+      "http://192.168.0.108:8081",
+      "exp://192.168.0.108:8081",
+      "http://192.168.1.7:3001",
+      "http://192.168.100.3:8081",
+      "exp://192.168.100.3:8081",
+      "http://192.168.100.53:8081",
+      "exp://192.168.100.53:8081",
+      "http://172.20.10.3:8081",
+    
+      "exp://172.20.10.3:8081",
+      "http://10.72.179.58:8081",
+      "exp://10.72.179.58:8081",
+      "http://10.72.180.20:8081",
+      "exp://10.72.180.20:8081",
+      "https://staging.appdevelopers.my",
+    ], // Allow nginx proxy, direct access, and local IP
     credentials: true,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    // allowedHeaders: ["*"], // Allow all headers temporarily for debugging
     allowedHeaders: [
       "Content-Type",
       "Authorization",
       "X-Requested-With",
       "expo-origin",
-      "Cache-Control",
-      "Cookie",
+    "Cache-Control",
+      "Cookie", // Required for better-auth
     ],
   })
 );
@@ -188,3 +192,4 @@ app.use(errorHandler);
 
 export { httpServer, io };
 export default app;
+

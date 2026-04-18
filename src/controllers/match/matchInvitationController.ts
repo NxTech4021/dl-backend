@@ -19,7 +19,7 @@ import timezone from 'dayjs/plugin/timezone';
 dayjs.extend(utc);
 dayjs.extend(timezone);
 
-import { formatMatchDate, formatMatchTime, parseDateFromDevice } from '../../utils/timezone';
+import { formatMatchDate, formatMatchTime, parseDateFromDevice, formatDynamicDate } from '../../utils/timezone';
 
 const matchInvitationService = getMatchInvitationService();
 // notificationService singleton imported from notificationService.ts
@@ -149,9 +149,8 @@ export const createMatch = async (req: Request, res: Response) => {
           if (fullMatch && fullMatch.matchDate) {
             const notification = matchManagementNotifications.opponentPostedLeagueMatch(
               creator?.name || 'A player',
-              formatMatchDate(fullMatch.matchDate),
-              formatMatchTime(fullMatch.matchDate),
-              fullMatch.venue || fullMatch.location || 'TBD'
+              formatDynamicDate(fullMatch.matchDate),
+              formatMatchTime(fullMatch.matchDate)
             );
             
             console.log('📤 [Match Creation] Sending push notification to division:', {

@@ -8,6 +8,16 @@ import { notificationTemplates } from '../../helpers/notifications';
 import { filterUsersByPreference } from './notificationPreferenceService';
 import { NOTIFICATION_TYPES } from '../../types/notificationTypes';
 import { logger } from '../../utils/logger';
+import { prisma } from '../../lib/prisma';
+import { accountNotifications } from '../../helpers/notifications/accountNotifications';
+import { notificationService as defaultNotificationService } from '../notificationService';
+import dayjs from 'dayjs';
+import utc from 'dayjs/plugin/utc.js';
+import timezone from 'dayjs/plugin/timezone.js';
+import { MALAYSIA_TIMEZONE } from '../../utils/timezone';
+
+dayjs.extend(utc);
+dayjs.extend(timezone);
 
 /**
  * Notify player about opponent change
@@ -77,21 +87,11 @@ export async function notifyPartnerChange(
       return;
     }
 
-    const partnerChangeNotif = notificationTemplates.doubles.partnerChanged(
-      data.oldPartnerName,
-      data.newPartnerName,
-      data.matchDate,
-      data.matchTime,
-      data.location || 'TBD'
-    );
+    // partnerChanged removed — not used
+    // const partnerChangeNotif = notificationTemplates.doubles.partnerChanged(...);
+    // await notificationService.createNotification({ ...partnerChangeNotif, userIds: data.userId, matchId: data.matchId });
 
-    await notificationService.createNotification({
-      ...partnerChangeNotif,
-      userIds: data.userId,
-      matchId: data.matchId
-    });
-
-    logger.info('Partner change notification sent', { userId: data.userId, matchId: data.matchId });
+    logger.info('Partner change notification skipped (function removed)', { userId: data.userId, matchId: data.matchId });
   } catch (error) {
     logger.error('Failed to send partner change notification', { userId: data.userId }, error as Error);
   }
@@ -218,5 +218,83 @@ export async function notifyBatchRatingChanges(
       matchId: change.matchId,
       reason: 'Match result recorded.'
     });
+  }
+}
+
+// ─── Weekly Streak Helpers (mirrors profileService.ts) ───────────────────────
+
+function getWeekStartKey(utcDate: Date): string {
+  const d = dayjs(utcDate).tz(MALAYSIA_TIMEZONE);
+  const day = d.day(); // 0=Sun, 1=Mon, …, 6=Sat
+  const daysFromMonday = day === 0 ? 6 : day - 1;
+  return d.subtract(daysFromMonday, 'day').startOf('day').format('YYYY-MM-DD');
+}
+
+function getPrevWeekKey(weekKey: string): string {
+  return dayjs.tz(weekKey, MALAYSIA_TIMEZONE).subtract(7, 'day').format('YYYY-MM-DD');
+}
+
+async function getUserWeeklyStreak(userId: string): Promise<number> {
+  const matches = await prisma.match.findMany({
+    where: {
+      participants: { some: { userId } },
+      status: 'COMPLETED',
+    },
+    select: { matchDate: true },
+  });
+
+  if (matches.length === 0) return 0;
+
+  const playedWeeks = new Set<string>();
+  for (const { matchDate } of matches) {
+    if (matchDate) playedWeeks.add(getWeekStartKey(matchDate));
+  }
+
+  const nowKey = getWeekStartKey(new Date());
+  let startKey = nowKey;
+  if (!playedWeeks.has(startKey)) {
+    startKey = getPrevWeekKey(nowKey);
+    if (!playedWeeks.has(startKey)) return 0;
+  }
+
+  let streak = 0;
+  let cursor = startKey;
+  while (playedWeeks.has(cursor)) {
+    streak++;
+    cursor = getPrevWeekKey(cursor);
+  }
+  return streak;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * NOTIF-014: Check whether a user has reached a new weekly streak milestone
+ * (2+ consecutive weeks with ≥1 completed match) and send an in-app notification.
+ *
+ * Must be called fire-and-forget after a match is confirmed COMPLETED.
+ * Uses a 7-day dedup window so the same streak count is only celebrated once.
+ */
+export async function checkAndSendWeeklyStreakNotification(
+  userId: string,
+  matchId: string
+): Promise<void> {
+  try {
+    const streak = await getUserWeeklyStreak(userId);
+
+    // Only celebrate when the player has maintained the streak for at least 2 weeks
+    if (streak < 2) return;
+
+    await defaultNotificationService.createNotification({
+      ...accountNotifications.newWeeklyStreak(streak),
+      userIds: userId,
+      matchId,
+      // Deduplicate within a week — one celebration per streak increment
+      skipDuplicateWithinMs: 6 * 24 * 60 * 60 * 1000,
+    });
+
+    logger.info('NOTIF-014: Weekly streak notification sent', { userId, streak, matchId });
+  } catch (error) {
+    logger.error('NOTIF-014: Failed to send weekly streak notification', { userId }, error as Error);
   }
 }

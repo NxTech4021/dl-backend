@@ -20,6 +20,8 @@ type MatchFeeType = 'FREE' | 'SPLIT' | 'FIXED';
 import { logger } from '../../utils/logger';
 import { formatMatchDate, formatMatchTime } from '../../utils/timezone';
 import { NotificationService, notificationService as notificationServiceSingleton } from '../notificationService';
+import { doublesNotifications } from '../../helpers/notifications';
+import { matchManagementNotifications } from '../../helpers/notifications/matchManagementNotifications';
 
 // Types
 export interface CreateMatchInput {
@@ -1098,13 +1100,16 @@ export class MatchInvitationService {
     
     // Send invitation notification for partner if they were invited
     if (partnerId && match.matchType === MatchType.DOUBLES) {
+      const joiningUser = await prisma.user.findUnique({ where: { id: userId }, select: { name: true } });
+      const joinerName = joiningUser?.name || 'Your partner';
+      const date = match.matchDate ? formatMatchDate(match.matchDate) : 'TBD';
+      const time = match.matchDate ? formatMatchTime(match.matchDate) : 'TBD';
+      const venue = match.venue || match.location || 'TBD';
+      const notif = doublesNotifications.partnerJoinedMatch(joinerName, date, time, venue);
       await this.notificationService.createNotification({
+        ...notif,
+        matchId,
         userIds: [partnerId],
-        type: 'MATCH_INVITATION',
-        category: 'MATCH',
-        title: 'Match Invitation from Partner',
-        message: 'Your partner has joined a match and invited you to join.',
-        matchId
       });
     }
 
@@ -1138,26 +1143,56 @@ export class MatchInvitationService {
 
   /**
    * Send notifications for match invitations
+   * For DOUBLES matches, sends doubles-specific partner notification to the creator's partner.
    */
   private async sendMatchInvitationNotifications(matchId: string) {
     try {
-      const invitations = await prisma.matchInvitation.findMany({
-        where: { matchId },
+      const matchData = await prisma.match.findUnique({
+        where: { id: matchId },
         include: {
-          inviter: { select: { name: true } },
-          match: { include: { division: true } }
-        }
+          createdBy: { select: { id: true, name: true } },
+          division: { select: { name: true } },
+          participants: { select: { userId: true, role: true, team: true } },
+        },
       });
 
+      const invitations = await prisma.matchInvitation.findMany({
+        where: { matchId },
+        select: { inviteeId: true },
+      });
+
+      if (!matchData) return;
+
+      const date = matchData.matchDate ? formatMatchDate(matchData.matchDate) : 'TBD';
+      const time = matchData.matchDate ? formatMatchTime(matchData.matchDate) : 'TBD';
+      const venue = matchData.venue || matchData.location || 'TBD';
+      const creatorName = matchData.createdBy?.name || 'Your partner';
+
       for (const invitation of invitations) {
-        await this.notificationService.createNotification({
-          type: 'MATCH_INVITATION',
-          title: 'Match Invitation',
-          message: `${invitation.inviter.name} has invited you to a match in ${invitation.match.division?.name}`,
-          category: 'MATCH',
-          matchId,
-          userIds: [invitation.inviteeId]
-        });
+        // For doubles matches, check if this invitee is the creator's partner (team1, PARTNER role)
+        const isCreatorsPartner =
+          matchData.matchType === MatchType.DOUBLES &&
+          matchData.participants.some(
+            (p) => p.userId === invitation.inviteeId && p.role === ParticipantRole.PARTNER && p.team === 'team1'
+          );
+
+        if (isCreatorsPartner) {
+          const notif = doublesNotifications.partnerPostedMatch(creatorName, date, time, venue);
+          await this.notificationService.createNotification({
+            ...notif,
+            matchId,
+            userIds: [invitation.inviteeId],
+          });
+        } else {
+          await this.notificationService.createNotification({
+            type: 'MATCH_INVITATION',
+            title: 'Match Invitation',
+            message: `${creatorName} has invited you to a match in ${matchData.division?.name}`,
+            category: 'MATCH',
+            matchId,
+            userIds: [invitation.inviteeId],
+          });
+        }
       }
     } catch (error) {
       logger.error('Error sending match invitation notifications', {}, error as Error);
@@ -1165,7 +1200,11 @@ export class MatchInvitationService {
   }
 
   /**
-   * Send notification when invitation is responded to
+   * Send notification when invitation is responded to.
+   * For DOUBLES matches, sends doubles-specific partner notifications:
+   *   - Creator's partner responds → notify match creator (partnerConfirmed/DeclinedPostedMatch)
+   *   - Joining team's partner responds → notify the PLAYER on same team (partnerConfirmed/DeclinedJoinedMatch)
+   *   - All other cases → generic accepted/declined notification
    */
   private async sendInvitationResponseNotification(matchId: string, userId: string, accepted: boolean) {
     try {
@@ -1173,31 +1212,96 @@ export class MatchInvitationService {
         where: { id: matchId },
         include: {
           createdBy: { select: { id: true, name: true } },
-          participants: { select: { userId: true } }
-        }
+          participants: { select: { userId: true, role: true, team: true } },
+        },
       });
 
       if (!match) return;
 
       const user = await prisma.user.findUnique({
         where: { id: userId },
-        select: { name: true }
+        select: { name: true },
       });
+      const responderName = user?.name || 'Your partner';
 
-      // Notify other participants
+      const date = match.matchDate ? formatMatchDate(match.matchDate) : 'TBD';
+      const time = match.matchDate ? formatMatchTime(match.matchDate) : 'TBD';
+
+      if (match.matchType === MatchType.DOUBLES) {
+        // Find the responding participant's role and team
+        const responderParticipant = match.participants.find((p) => p.userId === userId);
+
+        if (responderParticipant?.role === ParticipantRole.PARTNER) {
+          if (responderParticipant.team === 'team1') {
+            // Creator's partner responded → notify the match creator
+            const creatorId = match.createdBy?.id;
+            if (creatorId) {
+              const notif = accepted
+                ? doublesNotifications.partnerConfirmedPostedMatch(responderName, date, time, match.venue || match.location || 'TBD')
+                : doublesNotifications.partnerDeclinedPostedMatch(responderName, date);
+              await this.notificationService.createNotification({
+                ...notif,
+                matchId,
+                userIds: [creatorId],
+              });
+            }
+          } else {
+            // Joining team's partner responded → notify the non-PARTNER on same team
+            const teamPlayer = match.participants.find(
+              (p) => p.team === responderParticipant.team && p.role !== ParticipantRole.PARTNER
+            );
+            if (teamPlayer?.userId) {
+              const notif = accepted
+                ? doublesNotifications.partnerConfirmedJoinedMatch(responderName, date, time, match.venue || match.location || 'TBD')
+                : doublesNotifications.partnerDeclinedJoinedMatch(responderName, date);
+              await this.notificationService.createNotification({
+                ...notif,
+                matchId,
+                userIds: [teamPlayer.userId],
+              });
+            }
+
+            // NOTIF-139: Joining team's partner declined — notify opposing team (team1)
+            if (!accepted) {
+              const team1Participants = match.participants
+                .filter((p) => p.team === 'team1')
+                .map((p) => p.userId)
+                .filter((id): id is string => id !== null);
+              if (team1Participants.length > 0) {
+                const notif139 = doublesNotifications.matchCancelledPartnerDeclined(
+                  date,
+                  time,
+                  match.venue || match.location || 'TBD'
+                );
+                await this.notificationService.createNotification({
+                  ...notif139,
+                  matchId,
+                  userIds: team1Participants,
+                });
+              }
+            }
+          }
+          // Partner-specific notification sent — return early
+          return;
+        }
+      }
+
+      // Generic fallback: notify all other participants
       const otherParticipants = match.participants
-        .filter(p => p.userId !== userId)
-        .map(p => p.userId)
+        .filter((p) => p.userId !== userId)
+        .map((p) => p.userId)
         .filter((id): id is string => id !== null);
 
-      await this.notificationService.createNotification({
-        type: accepted ? 'MATCH_INVITATION_ACCEPTED' : 'MATCH_INVITATION_DECLINED',
-        title: accepted ? 'Invitation Accepted' : 'Invitation Declined',
-        message: `${user?.name} has ${accepted ? 'accepted' : 'declined'} the match invitation`,
-        category: 'MATCH',
-        matchId,
-        userIds: otherParticipants
-      });
+      if (otherParticipants.length > 0) {
+        await this.notificationService.createNotification({
+          type: accepted ? 'MATCH_INVITATION_ACCEPTED' : 'MATCH_INVITATION_DECLINED',
+          title: accepted ? 'Invitation Accepted' : 'Invitation Declined',
+          message: `${responderName} has ${accepted ? 'accepted' : 'declined'} the match invitation`,
+          category: 'MATCH',
+          matchId,
+          userIds: otherParticipants,
+        });
+      }
     } catch (error) {
       logger.error('Error sending invitation response notification', {}, error as Error);
     }
@@ -1623,20 +1727,44 @@ export class MatchInvitationService {
         select: { name: true }
       });
 
+      const joinerName = joiner?.name || 'Opponent';
+      const date = match.matchDate ? formatMatchDate(match.matchDate) : 'TBD';
+      const time = match.matchDate ? formatMatchTime(match.matchDate) : 'TBD';
+      const venue = (match as any).venue || (match as any).location || 'TBD';
+
       // Notify match creator and other participants
       const notifyUserIds = match.participants.map(p => p.userId).filter((id): id is string => id !== null);
       if (match.createdById && !notifyUserIds.includes(match.createdById)) {
         notifyUserIds.push(match.createdById);
       }
 
+      const isLeagueMatch = !!(match as any).seasonId || !!(match as any).divisionId;
+
       if (notifyUserIds.length > 0) {
+        // NOTIF-077: use league-specific confirmation for league matches
+        const posterNotif = isLeagueMatch
+          ? matchManagementNotifications.leagueMatchConfirmedOpponentJoined(joinerName, date, time, venue)
+          : {
+              type: 'FRIENDLY_MATCH_PLAYER_JOINED' as const,
+              title: 'Player Joined Match',
+              message: `${joinerName} joined your match`,
+              category: 'MATCH' as const,
+              metadata: { joinerName, date, time, venue },
+            };
         await this.notificationService.createNotification({
-          type: 'FRIENDLY_MATCH_PLAYER_JOINED',
-          title: 'Player Joined Match',
-          message: `${joiner?.name} has joined your match${match.division ? ` in ${match.division.name}` : ''}`,
-          category: 'MATCH',
+          ...posterNotif,
           matchId,
-          userIds: notifyUserIds
+          userIds: notifyUserIds,
+        });
+      }
+
+      // Notify the joiner themselves for league matches (NOTIF-077 joiner side)
+      if (isLeagueMatch) {
+        const joinerNotif = matchManagementNotifications.leagueMatchConfirmedYouJoined(date, time, venue);
+        await this.notificationService.createNotification({
+          ...joinerNotif,
+          matchId,
+          userIds: [joinedUserId],
         });
       }
     } catch (error) {
@@ -1688,7 +1816,7 @@ export class MatchInvitationService {
       const opponentIds = new Set<string>();
       userMatches.forEach(match => {
         match.participants.forEach(participant => {
-          if (participant.userId !== userId) {
+          if (participant.userId && participant.userId !== userId) {
             opponentIds.add(participant.userId);
           }
         });

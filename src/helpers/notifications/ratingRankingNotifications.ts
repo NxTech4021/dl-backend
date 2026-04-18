@@ -13,64 +13,54 @@ import {
 export const ratingRankingNotifications = {
   movedUpInStandings: (
     newPosition: number,
+    divisionName: string,
     leagueName: string,
-    divisionName: string
+    categoryName: string
   ): NotificationPayload => ({
     type: NOTIFICATION_TYPES.MOVED_UP_IN_STANDINGS,
     category: getCategoryForNotificationType(
       NOTIFICATION_TYPES.MOVED_UP_IN_STANDINGS
     ),
-    title: "You Moved Up!",
-    message: `You are now #${newPosition} in ${leagueName} ${divisionName}`,
-    metadata: { newPosition, leagueName, divisionName },
+    title: "\ud83d\udcc8 You Moved Up!",
+    message: `#${newPosition} in ${divisionName}, ${leagueName} \u2022 ${categoryName}. Keep the momentum going! \ud83d\udd25`,
+    metadata: { newPosition, divisionName, leagueName, categoryName },
   }),
 
   enteredTop10: (
+    divisionName: string,
     leagueName: string,
-    divisionName: string
+    categoryName: string
   ): NotificationPayload => ({
     type: NOTIFICATION_TYPES.ENTERED_TOP_10,
     category: getCategoryForNotificationType(NOTIFICATION_TYPES.ENTERED_TOP_10),
-    title: "Top 5!",
-    message: `You are now in the top 5 of ${leagueName} ${divisionName}`,
-    metadata: { leagueName, divisionName },
+    title: "\u2b50 Top 5! Yes, Really.",
+    message: `You just cracked the top 5 in ${divisionName}, ${categoryName} \u2022 ${leagueName}.`,
+    metadata: { divisionName, leagueName, categoryName },
   }),
 
   enteredTop3: (
     position: number,
+    divisionName: string,
     leagueName: string,
-    divisionName: string
+    categoryName: string
   ): NotificationPayload => ({
     type: NOTIFICATION_TYPES.ENTERED_TOP_3,
     category: getCategoryForNotificationType(NOTIFICATION_TYPES.ENTERED_TOP_3),
-    title: "Top 3!",
-    message: `You are now #${position} in ${leagueName} ${divisionName}`,
-    metadata: { position, leagueName, divisionName },
+    title: "\ud83c\udfd6\ufe0f  You're on the Podium!",
+    message: `You're #${position} in ${divisionName}, ${categoryName} \u2022 ${leagueName}. The air's different up here \ud83d\udc40`,
+    metadata: { position, divisionName, leagueName, categoryName },
   }),
 
   leagueLeader: (
+    divisionName: string,
     leagueName: string,
-    divisionName: string
+    categoryName: string
   ): NotificationPayload => ({
     type: NOTIFICATION_TYPES.LEAGUE_LEADER,
     category: getCategoryForNotificationType(NOTIFICATION_TYPES.LEAGUE_LEADER),
-    title: "League Leader!",
-    message: `You are now leading ${leagueName} ${divisionName}! Keep it up!`,
-    metadata: { leagueName, divisionName },
-  }),
-
-  weeklyRankingUpdate: (
-    position: number,
-    leagueName: string,
-    weekNumber: number
-  ): NotificationPayload => ({
-    type: NOTIFICATION_TYPES.WEEKLY_RANKING_UPDATE,
-    category: getCategoryForNotificationType(
-      NOTIFICATION_TYPES.WEEKLY_RANKING_UPDATE
-    ),
-    title: `Week ${weekNumber} Rankings`,
-    message: `You are #${position} in ${leagueName}! Keep playing to climb higher`,
-    metadata: { position, leagueName, weekNumber },
+    title: "\ud83d\udc51 You're #1!",
+    message: `Top of ${divisionName}, ${leagueName} \u2022 ${categoryName}. Everyone's chasing you now.`,
+    metadata: { divisionName, leagueName, categoryName },
   }),
 
   dmrIncreased: (
@@ -80,19 +70,9 @@ export const ratingRankingNotifications = {
   ): NotificationPayload => ({
     type: NOTIFICATION_TYPES.DMR_INCREASED,
     category: getCategoryForNotificationType(NOTIFICATION_TYPES.DMR_INCREASED),
-    title: "DMR Increased",
-    message: `Your ${sport} DMR is now ${newRating} (+${change})`,
+    title: "\ud83d\udcc8 DMR Up!",
+    message: `${sport} DMR: ${newRating} (+${change}). Wins look good on you \ud83d\ude0f`,
     metadata: { sport, newRating, change },
-  }),
-
-  monthlyDmrRecap: (summary: string): NotificationPayload => ({
-    type: NOTIFICATION_TYPES.MONTHLY_DMR_RECAP,
-    category: getCategoryForNotificationType(
-      NOTIFICATION_TYPES.MONTHLY_DMR_RECAP
-    ),
-    title: "Your Monthly DMR Summary",
-    message: summary,
-    metadata: {},
   }),
 
   personalBestRating: (
@@ -103,20 +83,20 @@ export const ratingRankingNotifications = {
     category: getCategoryForNotificationType(
       NOTIFICATION_TYPES.PERSONAL_BEST_RATING
     ),
-    title: "Personal Best!",
-    message: `Your ${sport} DMR is now ${newRating} - your highest ever!`,
+    title: "\ud83c\udfc5 New Personal Best!",
+    message: `${sport} DMR: ${newRating}. Your highest ever.`,
     metadata: { sport, newRating },
   }),
 
-  ratingMilestone: (rating: number, sport: string): NotificationPayload => ({
-    type: NOTIFICATION_TYPES.RATING_MILESTONE,
-    category: getCategoryForNotificationType(
-      NOTIFICATION_TYPES.RATING_MILESTONE
-    ),
-    title: "Milestone Achieved!",
-    message: `You've reached ${rating} DMR in ${sport}`,
-    metadata: { rating, sport },
-  }),
+  // ratingMilestone: (rating: number, sport: string): NotificationPayload => ({
+  //   type: NOTIFICATION_TYPES.RATING_MILESTONE,
+  //   category: getCategoryForNotificationType(
+  //     NOTIFICATION_TYPES.RATING_MILESTONE
+  //   ),
+  //   title: "Milestone Achieved!",
+  //   message: `You've reached ${rating} DMR in ${sport}`,
+  //   metadata: { rating, sport },
+  // }),
 
   ratingUpdate: (
     oldRating: number,

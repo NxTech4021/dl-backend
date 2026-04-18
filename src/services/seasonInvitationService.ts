@@ -5,6 +5,8 @@ import {
   validateCategoryGenderMatch,
   hasCompletedQuestionnaireForSeason,
 } from './pairingService';
+import { notificationService } from './notificationService';
+import { notificationTemplates } from '../helpers/notifications';
 
 // #103-1 shared emit helper for season invitation state changes.
 function emitSeasonInvitationUpdated(params: {
@@ -74,6 +76,18 @@ export const sendSeasonInvitation = async (data: {
 
     if (!season) {
       return { success: false, message: 'Season not found' };
+    }
+
+    // Validate: Recipient account is still active
+    const recipient = await prisma.user.findUnique({
+      where: { id: recipientId },
+      select: { id: true, status: true },
+    });
+    if (!recipient) {
+      return { success: false, message: "This player's account is no longer available" };
+    }
+    if (recipient.status === 'DELETED' || recipient.status === 'BANNED') {
+      return { success: false, message: "This player's account is no longer available" };
     }
 
     // Get season sport type (from league sportType or infer from categories)
@@ -264,15 +278,30 @@ export const sendSeasonInvitation = async (data: {
     try {
       io.to(recipientId).emit('season_invitation_received', {
         invitationId: invitation.id,
-        sender: invitation.sender, // TypeScript should infer this from the include above
-        season: invitation.season, // TypeScript should infer this from the include above
+        sender: invitation.sender,
+        season: invitation.season,
         message: invitation.message,
         expiresAt: invitation.expiresAt
       });
       console.log(`📨 Socket.IO: Notified user ${recipientId} of new season invitation`);
     } catch (socketError) {
       console.error('Error emitting socket event:', socketError);
-      // Don't fail the whole operation if socket fails
+    }
+
+    // NOTIF-021: Push + in-app to recipient (partner request received)
+    try {
+      const senderName = invitation.sender.name || invitation.sender.username || 'Someone';
+      const seasonName = invitation.season.name || 'this league';
+      console.log(`🔔 [NOTIF-021] Sending invite notification to recipient: ${recipientId}`);
+      const notif = notificationTemplates.doubles.partnerRequestReceived(senderName, seasonName);
+      await notificationService.createNotification({
+        userIds: recipientId,
+        ...notif,
+        seasonId: invitation.season.id,
+      });
+      console.log('✅ [NOTIF-021] Partner request notification sent');
+    } catch (notifErr) {
+      console.error('❌ [NOTIF-021] Failed to send partner request notification:', notifErr);
     }
 
     return {
@@ -618,7 +647,6 @@ export const acceptSeasonInvitation = async (
 
     // ✅ Emit Socket.IO events to notify both users
     try {
-      // Notify sender that their invitation was accepted
       io.to(invitation.senderId).emit('season_invitation_accepted', {
         invitationId: invitation.id,
         acceptedBy: result.partner,
@@ -631,7 +659,6 @@ export const acceptSeasonInvitation = async (
       });
       console.log(`📨 Socket.IO: Notified sender ${invitation.senderId} of accepted invitation`);
 
-      // Notify recipient (acceptor) about successful partnership creation
       io.to(invitation.recipientId).emit('partnership_created', {
         partnership: {
           id: result.id,
@@ -643,7 +670,23 @@ export const acceptSeasonInvitation = async (
       console.log(`📨 Socket.IO: Notified recipient ${invitation.recipientId} of partnership creation`);
     } catch (socketError) {
       console.error('Error emitting socket events:', socketError);
-      // Don't fail the whole operation if socket fails
+    }
+
+    // NOTIF-022: Push + in-app to sender (captain) — their invite was accepted
+    try {
+      const partnerName = result.partner?.name || result.partner?.username || 'Your partner';
+      const seasonName = result.season?.name || 'this league';
+      console.log(`🔔 [NOTIF-022] Sending accepted notification to captain: ${invitation.senderId}`);
+      const notif = notificationTemplates.doubles.partnerRequestAcceptedCaptain(partnerName, seasonName);
+      await notificationService.createNotification({
+        userIds: invitation.senderId,
+        ...notif,
+        seasonId: result.seasonId,
+        partnershipId: result.id,
+      });
+      console.log('✅ [NOTIF-022] Captain notified of accepted invitation');
+    } catch (notifErr) {
+      console.error('❌ [NOTIF-022] Failed to notify captain of acceptance:', notifErr);
     }
 
     return {
@@ -672,7 +715,11 @@ export const denySeasonInvitation = async (
 ): Promise<ServiceResponse> => {
   try {
     const invitation = await prisma.seasonInvitation.findUnique({
-      where: { id: invitationId }
+      where: { id: invitationId },
+      include: {
+        recipient: { select: { id: true, name: true, username: true } },
+        season: { select: { id: true, name: true } },
+      },
     });
 
     if (!invitation) {
@@ -703,6 +750,22 @@ export const denySeasonInvitation = async (
       seasonId: invitation.seasonId,
       status: 'DENIED',
     });
+
+    // NOTIF-024: Push + in-app to sender (captain) — their invite was declined
+    try {
+      const declinerName = invitation.recipient.name || invitation.recipient.username || 'Someone';
+      const seasonName = invitation.season.name || 'this league';
+      console.log(`🔔 [NOTIF-024] Sending declined notification to captain: ${invitation.senderId}`);
+      const notif = notificationTemplates.doubles.partnerRequestDeclinedCaptain(declinerName, seasonName);
+      await notificationService.createNotification({
+        userIds: invitation.senderId,
+        ...notif,
+        seasonId: invitation.season.id,
+      });
+      console.log('✅ [NOTIF-024] Captain notified of declined invitation');
+    } catch (notifErr) {
+      console.error('❌ [NOTIF-024] Failed to notify captain of decline:', notifErr);
+    }
 
     return { success: true, message: 'Season invitation denied' };
   } catch (error) {

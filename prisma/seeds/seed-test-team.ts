@@ -132,6 +132,37 @@ async function seedTestTeam() {
 
     if (existingUser) {
       console.log(`   ⏭️  Skipped: ${member.name} (${member.email}) - already exists`);
+      // Still ensure questionnaire responses exist for existing users
+      for (const sport of member.sports) {
+        const existing = await prisma.questionnaireResponse.findFirst({
+          where: { userId: existingUser.id, sport },
+          select: { id: true },
+        });
+        if (!existing) {
+          const qResponse = await prisma.questionnaireResponse.create({
+            data: {
+              userId: existingUser.id,
+              sport,
+              qVersion: 1,
+              qHash: `seed-${existingUser.id}-${sport.toLowerCase()}`,
+              answersJson: { answers: ['option1', 'option2', 'option3'] },
+              completedAt: new Date(),
+            },
+          });
+          const baseRating = SKILL_TO_RATING[member.skillLevel];
+          await prisma.initialRatingResult.create({
+            data: {
+              responseId: qResponse.id,
+              source: 'questionnaire',
+              doubles: baseRating,
+              singles: baseRating - 50,
+              rd: 150,
+              confidence: 'HIGH',
+            },
+          });
+          console.log(`   ✅ Patched questionnaire for ${member.name} (${sport})`);
+        }
+      }
       createdUsers.push(existingUser);
       continue;
     }
@@ -184,10 +215,37 @@ async function seedTestTeam() {
       },
     });
 
-    // Create ratings for each sport
-    // Note: PlayerRating requires seasonId — ratings are created when
-    // users register for seasons, not during account seeding.
-    // The old `prisma.rating` model no longer exists.
+    // Create questionnaire responses for each sport so the user passes
+    // the hasCompletedQuestionnaireForSeason check when inviting partners.
+    for (const sport of member.sports) {
+      const existing = await prisma.questionnaireResponse.findFirst({
+        where: { userId: user.id, sport },
+        select: { id: true },
+      });
+      if (!existing) {
+        const qResponse = await prisma.questionnaireResponse.create({
+          data: {
+            userId: user.id,
+            sport,
+            qVersion: 1,
+            qHash: `seed-${user.id}-${sport.toLowerCase()}`,
+            answersJson: { answers: ['option1', 'option2', 'option3'] },
+            completedAt: new Date(),
+          },
+        });
+        const baseRating = SKILL_TO_RATING[member.skillLevel];
+        await prisma.initialRatingResult.create({
+          data: {
+            responseId: qResponse.id,
+            source: 'questionnaire',
+            doubles: baseRating,
+            singles: baseRating - 50,
+            rd: 150,
+            confidence: 'HIGH',
+          },
+        });
+      }
+    }
 
     console.log(`   ✅ Created: ${member.name} (${member.email}) - ${member.role}`);
     createdUsers.push(user);

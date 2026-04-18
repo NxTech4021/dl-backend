@@ -13,6 +13,8 @@ import {
   acceptFriendlyMatchRequest,
   declineFriendlyMatchRequest,
   cancelFriendlyMatch,
+  leaveFriendlyMatch,
+  updateFriendlyMatchDetails,
   getFriendlyMatchComments,
   postFriendlyMatchComment,
   updateFriendlyMatchComment,
@@ -36,6 +38,8 @@ friendlyRoutes.post("/:id/confirm", scoreSubmissionLimiter, confirmFriendlyResul
 friendlyRoutes.post("/:id/accept", acceptFriendlyMatchRequest);
 friendlyRoutes.post("/:id/decline", declineFriendlyMatchRequest);
 friendlyRoutes.post("/:id/cancel", cancelFriendlyMatch);
+friendlyRoutes.post("/:id/leave", leaveFriendlyMatch);
+friendlyRoutes.patch("/:id/details", updateFriendlyMatchDetails);
 
 // Comments
 friendlyRoutes.get("/:id/comments", getFriendlyMatchComments);

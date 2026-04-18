@@ -52,8 +52,8 @@ export const promotionalNotifications = {
     category: getCategoryForNotificationType(
       NOTIFICATION_TYPES.INACTIVE_PLAYER_14_DAYS
     ),
-    title: "Fun Games Are Calling!",
-    message: "Jump back in, play a match, and meet new people",
+    title: "It's Been a While",
+    message: "There are matches waiting for you. Jump back in.",
     metadata: {},
   }),
 
@@ -62,9 +62,8 @@ export const promotionalNotifications = {
     category: getCategoryForNotificationType(
       NOTIFICATION_TYPES.INACTIVE_PLAYER_30_DAYS
     ),
-    title: "We Miss You!",
-    message:
-      "It is been awhile, see new league or friendly matches and join the action!",
+    title: "Long Time No Match",
+    message: "New leagues and matches are available. Don't miss out.",
     metadata: {},
   }),
 
@@ -73,8 +72,8 @@ export const promotionalNotifications = {
     category: getCategoryForNotificationType(
       NOTIFICATION_TYPES.LEAGUE_BETWEEN_BREAKS
     ),
-    title: "Miss the Competition?",
-    message: `${leagueName} registration is open!`,
+    title: "\ud83c\udfc6 Back for More?",
+    message: `${leagueName} has a new season open. You know you want in.`,
     metadata: { leagueName },
   }),
 
@@ -83,8 +82,8 @@ export const promotionalNotifications = {
     category: getCategoryForNotificationType(
       NOTIFICATION_TYPES.INCOMPLETE_REGISTRATION
     ),
-    title: "Complete Registration",
-    message: `Complete your registration for ${leagueName} to secure your spot!`,
+    title: "Almost There!",
+    message: `You're one step away from ${leagueName}. Don't let your spot slip \ud83d\udc40`,
     metadata: { leagueName },
   }),
 

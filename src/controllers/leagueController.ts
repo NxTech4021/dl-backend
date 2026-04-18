@@ -202,8 +202,7 @@ export const createLeague = async (req: Request, res: Response) => {
       if (users.length > 0) {
         const userIds = users.map(u => u.id);
         const notif = leagueLifecycleNotifications.newLeagueAnnouncement(
-          newLeague.location || 'your area',
-          newLeague.sportType || 'sport'
+          newLeague.name
         );
 
         // Ensure notification type maps to push by using LEAGUE_ANNOUNCEMENT
@@ -211,6 +210,7 @@ export const createLeague = async (req: Request, res: Response) => {
           userIds,
           ...notif,
           type: NOTIFICATION_TYPES.LEAGUE_ANNOUNCEMENT || notif.type,
+          metadata: { ...notif.metadata, leagueId: newLeague.id },
         });
       }
     } catch (err) {
@@ -264,11 +264,6 @@ export const createLeague = async (req: Request, res: Response) => {
  * Admin only
  */
 export const updateLeague = async (req: Request, res: Response) => {
-  // console.log("---- updateLeague called ----");
-  // console.log("Request params:", req.params);
-  // console.log("Request body:", req.body);
-  // console.log("Request user:", req.user?.id);
-
   try {
     const id = req.params.id;
     const { name, location, description, rules, status } =

@@ -5,109 +5,23 @@ import {
 } from "../../types/notificationTypes";
 
 export const divisionNotifications = {
-  // Division lifecycle notifications
-  created: (
-    divisionName: string,
-    seasonName: string,
-    adminName?: string
-  ): NotificationPayload => ({
-    type: NOTIFICATION_TYPES.DIVISION_CREATED,
-    category: getCategoryForNotificationType(
-      NOTIFICATION_TYPES.DIVISION_CREATED
-    ),
-    title: "Division Created",
-    message: `Division ${divisionName} has been created for ${seasonName}${
-      adminName ? ` by ${adminName}` : ""
-    }`,
-    metadata: { divisionName, seasonName, adminName },
+
+//   // Division lifecycle notifications
+
+  divisionRebalanced: (newDivision: string, leagueName: string, gameType?: string): NotificationPayload => ({
+    type: NOTIFICATION_TYPES.DIVISION_REBALANCED,
+    category: getCategoryForNotificationType(NOTIFICATION_TYPES.DIVISION_REBALANCED),
+    title: "🔄 You're in a New Division",
+    message: `${gameType === 'DOUBLES' ? 'Your Team has' : 'You\'ve'} been moved to ${newDivision} in ${leagueName} for competitive balance.`,
+    metadata: { newDivision, leagueName, gameType: gameType ?? '' },
   }),
 
-  assigned: (
-    divisionName: string,
-    seasonName: string
-  ): NotificationPayload => ({
-    type: NOTIFICATION_TYPES.DIVISION_ASSIGNED,
-    category: getCategoryForNotificationType(
-      NOTIFICATION_TYPES.DIVISION_ASSIGNED
-    ),
-    title: "Division Assignment",
-    message: `You've been assigned to ${divisionName} for ${seasonName}. Check out your division and start scheduling matches!`,
-    metadata: { divisionName, seasonName },
-  }),
-
-  removed: (
-    divisionName: string,
-    seasonName: string,
-    reason?: string
-  ): NotificationPayload => ({
-    type: NOTIFICATION_TYPES.DIVISION_REMOVED,
-    category: getCategoryForNotificationType(
-      NOTIFICATION_TYPES.DIVISION_REMOVED
-    ),
-    title: "Removed from Division",
-    message: `You've been removed from ${divisionName} in ${seasonName}${
-      reason ? `: ${reason}` : ""
-    }`,
-    metadata: { divisionName, seasonName, reason },
-  }),
-
-  transferred: (
-    fromDivision: string,
-    toDivision: string,
-    seasonName: string
-  ): NotificationPayload => ({
-    type: NOTIFICATION_TYPES.DIVISION_TRANSFERRED,
-    category: getCategoryForNotificationType(
-      NOTIFICATION_TYPES.DIVISION_TRANSFERRED
-    ),
-    title: "Division Transfer",
-    message: `You've been transferred from ${fromDivision} to ${toDivision} in ${seasonName}`,
-    metadata: { fromDivision, toDivision, seasonName },
-  }),
-
-  divisionRebalanced: (
-    newDivision: string,
-    leagueName: string
-  ): NotificationPayload => ({
-    type: NOTIFICATION_TYPES.DIVISION_TRANSFERRED,
-    category: getCategoryForNotificationType(
-      NOTIFICATION_TYPES.DIVISION_TRANSFERRED
-    ),
-    title: "Division Change",
-    message: `You've been moved to Division ${newDivision} of ${leagueName} to balance the competition. View your new division`,
-    metadata: { newDivision, leagueName },
-  }),
-
-  divisionUpdateNewPlayer: (leagueName: string): NotificationPayload => ({
+  divisionUpdateNewPlayer: (leagueName: string, gameType?: string): NotificationPayload => ({
     type: NOTIFICATION_TYPES.DIVISION_UPDATE_NEW_PLAYER,
-    category: getCategoryForNotificationType(
-      NOTIFICATION_TYPES.DIVISION_UPDATE_NEW_PLAYER
-    ),
-    title: "Division Update",
-    message: `A new player has joined your division in ${leagueName}. You may now arrange matches with them`,
-    metadata: { leagueName },
+    category: getCategoryForNotificationType(NOTIFICATION_TYPES.DIVISION_UPDATE_NEW_PLAYER),
+    title: "New Opponent in Your Division",
+    message: `A new ${gameType === 'DOUBLES' ? 'team' : 'player'} has joined your division in ${leagueName}. Time to arrange a match!`,
+    metadata: { leagueName, gameType: gameType ?? '' },
   }),
 
-  midSeasonUpdate: (
-    position: number,
-    leagueName: string
-  ): NotificationPayload => ({
-    type: NOTIFICATION_TYPES.MID_SEASON_UPDATE,
-    category: getCategoryForNotificationType(
-      NOTIFICATION_TYPES.MID_SEASON_UPDATE
-    ),
-    title: "Halfway There!",
-    message: `You are #${position} in ${leagueName}`,
-    metadata: { position, leagueName },
-  }),
-
-  lateSeasonNudge: (): NotificationPayload => ({
-    type: NOTIFICATION_TYPES.LATE_SEASON_NUDGE,
-    category: getCategoryForNotificationType(
-      NOTIFICATION_TYPES.LATE_SEASON_NUDGE
-    ),
-    title: "Last Stretch",
-    message: "Schedule your remaining matches and finish the season strong",
-    metadata: {},
-  }),
 };

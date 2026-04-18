@@ -42,7 +42,7 @@ import {
 import { notificationService } from '../services/notificationService';
 import { waitlistService } from '../services/waitlistService';
 
-import { leagueLifecycleNotifications } from '../helpers/notifications';
+import { leagueLifecycleNotifications, notificationTemplates } from '../helpers/notifications';
 import { NOTIFICATION_TYPES } from '../types/notificationTypes';
 import { notifyAdminsWithdrawalRequest } from '../services/notification/adminNotificationService';
 
@@ -187,6 +187,7 @@ export const createSeason = async (req: Request, res: Response) => {
     }
 
     const season = await createSeasonService(seasonData);
+    let announcementLeagueName = '';
 
     // 🆕 Send new season announcement to ALL users if season is active
     if (effectiveIsActive) {
@@ -197,6 +198,7 @@ export const createSeason = async (req: Request, res: Response) => {
           include: {
             leagues: {
               select: {
+                id: true,
                 name: true,
                 location: true,
                 sportType: true
@@ -206,14 +208,14 @@ export const createSeason = async (req: Request, res: Response) => {
         });
 
         if (seasonWithLeagues && seasonWithLeagues.leagues.length > 0) {
-          const league = seasonWithLeagues.leagues[0]; // needs to be updated
+          const league = seasonWithLeagues.leagues[0] as typeof seasonWithLeagues.leagues[0] & { id: string };
 
           // Only proceed if we have valid league data
-          if (league && league.location && league.sportType) {
+          if (league && league.name) {
+            announcementLeagueName = league.name;
             const notificationData = leagueLifecycleNotifications.newSeasonAnnouncement(
               season.name,
-              league.location,
-              league.sportType
+              league.name
             );
 
             // Get all users to broadcast to everyone
@@ -224,6 +226,7 @@ export const createSeason = async (req: Request, res: Response) => {
             await notificationService.createNotification({
               ...notificationData,
               seasonId: season.id,
+              metadata: { ...notificationData.metadata, leagueId: (league as any).id },
               userIds
             });
           }
@@ -249,7 +252,8 @@ export const createSeason = async (req: Request, res: Response) => {
 
         if (registeredUsers.length > 0) {
           const notificationData = leagueLifecycleNotifications.seasonStarting3Days(
-            season.name
+            season.name,
+            announcementLeagueName
           );
 
           await notificationService.createNotification({
@@ -378,7 +382,7 @@ export const updateSeason = async (req: Request, res: Response) => {
   try {
     const currentSeason = await prisma.season.findUnique({
       where: { id },
-      select: { status: true, name: true, registeredUserCount: true }
+      select: { status: true, name: true, registeredUserCount: true, endDate: true }
     });
 
     if (!currentSeason) {
@@ -489,6 +493,14 @@ export const updateSeason = async (req: Request, res: Response) => {
       try {
         let notificationData;
 
+        // Fetch league name for use across all notification branches
+        const seasonLeagueInfo = await prisma.season.findUnique({
+          where: { id },
+          include: { leagues: { select: { id: true, name: true } } }
+        });
+        const notifLeagueId = seasonLeagueInfo?.leagues?.[0]?.id;
+        const notifLeagueName = seasonLeagueInfo?.leagues?.[0]?.name || '';
+
         if (effectiveNewStatus === 'FINISHED') {
           const registeredUsers = await prisma.seasonMembership.findMany({
             where: { seasonId: id },
@@ -496,7 +508,8 @@ export const updateSeason = async (req: Request, res: Response) => {
           });
           if (registeredUsers.length > 0) {
             notificationData = leagueLifecycleNotifications.leagueEndedFinalResults(
-              season.name
+              season.name,
+              notifLeagueName
             );
             await notificationService.createNotification({
               userIds: registeredUsers.map(u => u.userId),
@@ -507,41 +520,106 @@ export const updateSeason = async (req: Request, res: Response) => {
         } else if (effectiveNewStatus === 'CANCELLED') {
           const registeredUsers = await prisma.seasonMembership.findMany({
             where: { seasonId: id },
-            select: { userId: true }
+            select: { userId: true, paymentStatus: true }
           });
           if (registeredUsers.length > 0) {
             notificationData = leagueLifecycleNotifications.leagueCancelled(
+              notifLeagueName,
               season.name
             );
             await notificationService.createNotification({
               userIds: registeredUsers.map(u => u.userId),
               ...notificationData,
-              seasonId: id
+              seasonId: id,
+              metadata: { ...notificationData.metadata, ...(notifLeagueId ? { leagueId: notifLeagueId } : {}) },
             });
+
+            // NOTIF-068: Refund processed — notify all paid members
+            try {
+              const paidUserIds = registeredUsers
+                .filter(m => m.paymentStatus === 'COMPLETED')
+                .map(m => m.userId);
+              if (paidUserIds.length > 0) {
+                const seasonWithFee = await prisma.season.findUnique({
+                  where: { id },
+                  select: { entryFee: true }
+                });
+                const entryFeeAmount = seasonWithFee?.entryFee
+                  ? Number(seasonWithFee.entryFee).toFixed(2)
+                  : '0.00';
+                const refundNotif = leagueLifecycleNotifications.refundProcessed(entryFeeAmount, notifLeagueName);
+                await notificationService.createNotification({
+                  userIds: paidUserIds,
+                  ...refundNotif,
+                  seasonId: id,
+                  metadata: { ...refundNotif.metadata, ...(notifLeagueId ? { leagueId: notifLeagueId } : {}) },
+                });
+              }
+            } catch (refundNotifError) {
+              console.warn('Failed to send refund notifications on season cancellation:', refundNotifError);
+            }
           }
         } else if (effectiveNewStatus === 'ACTIVE') {
           // BUG 2: Send "season is live" announcement to all users
           const seasonWithLeagues = await prisma.season.findUnique({
             where: { id },
-            include: { leagues: { select: { name: true, location: true, sportType: true } } }
+            include: { leagues: { select: { id: true, name: true, location: true, sportType: true } } }
           });
           if (seasonWithLeagues?.leagues?.[0]) {
             const league = seasonWithLeagues.leagues[0];
-            if (league.location && league.sportType) {
+            if (league.name) {
               const announcementData = leagueLifecycleNotifications.newSeasonAnnouncement(
-                season.name, league.location, league.sportType
+                season.name, league.name
               );
               const allUsers = await prisma.user.findMany({ select: { id: true } });
               await notificationService.createNotification({
                 userIds: allUsers.map(u => u.id),
                 ...announcementData,
-                seasonId: id
+                seasonId: id,
+                metadata: { ...announcementData.metadata, leagueId: league.id },
               });
             }
           }
         }
       } catch (notificationError) {
         console.error("Error sending season status change notification:", notificationError);
+      }
+    }
+
+    // NOTIF-054/055: endDate change notifications (league extended or shortened)
+    if (seasonData.endDate && currentSeason?.endDate) {
+      try {
+        const oldEnd = new Date(currentSeason.endDate).getTime();
+        const newEnd = new Date(seasonData.endDate).getTime();
+        if (newEnd !== oldEnd) {
+          const endDateLeagueInfo = await prisma.season.findUnique({
+            where: { id },
+            include: { leagues: { select: { id: true, name: true } } },
+          });
+          const edLeagueId = endDateLeagueInfo?.leagues?.[0]?.id;
+          const edLeagueName = endDateLeagueInfo?.leagues?.[0]?.name ?? '';
+          const formattedNewEnd = new Date(seasonData.endDate).toLocaleDateString('en-MY', {
+            day: 'numeric', month: 'long', year: 'numeric',
+          });
+          const endDateMembers = await prisma.seasonMembership.findMany({
+            where: { seasonId: id, status: 'ACTIVE' },
+            select: { userId: true },
+          });
+          if (endDateMembers.length > 0) {
+            const endDateUserIds = endDateMembers.map(m => m.userId);
+            const endDateNotif = newEnd > oldEnd
+              ? leagueLifecycleNotifications.leagueExtended(edLeagueName, season.name, formattedNewEnd)
+              : leagueLifecycleNotifications.leagueShortened(edLeagueName, season.name, formattedNewEnd);
+            await notificationService.createNotification({
+              userIds: endDateUserIds,
+              ...endDateNotif,
+              seasonId: id,
+              metadata: { ...endDateNotif.metadata, seasonId: id, ...(edLeagueId ? { leagueId: edLeagueId } : {}) },
+            });
+          }
+        }
+      } catch (endDateNotifError) {
+        console.warn('Failed to send endDate change notifications:', endDateNotifError);
       }
     }
 
@@ -619,9 +697,9 @@ export const goLiveSeason = async (req: Request, res: Response) => {
     // Send general "season is live" announcement
     try {
       const league = season.leagues?.[0];
-      if (league?.location && league?.sportType) {
+      if (league?.name) {
         const announcementData = leagueLifecycleNotifications.newSeasonAnnouncement(
-          season.name, league.location, league.sportType
+          season.name, league.name
         );
         const allUsers = await prisma.user.findMany({ select: { id: true } });
         await notificationService.createNotification({
@@ -855,7 +933,14 @@ export const processWithdrawalRequest = async (req: AuthenticatedRequest, res: R
     const withdrawalRequest = await prisma.withdrawalRequest.findUnique({
       where: { id },
       include: {
-        season: { select: { name: true } },
+        season: {
+          select: {
+            name: true,
+            entryFee: true,
+            leagues: { select: { id: true, name: true } },
+            category: { select: { name: true } },
+          }
+        },
         partnership: {
           select: { captainId: true, partnerId: true }
         },
@@ -864,15 +949,15 @@ export const processWithdrawalRequest = async (req: AuthenticatedRequest, res: R
     });
 
     if (withdrawalRequest) {
+      const notifLeagueName = withdrawalRequest.season.leagues?.[0]?.name ?? withdrawalRequest.season.name;
+      const notifLeagueId = withdrawalRequest.season.leagues?.[0]?.id;
+      const notifCategoryName = withdrawalRequest.season.category?.name ?? '';
+
       let notificationData;
 
       if (status === 'APPROVED') {
-        notificationData = {
-          type: NOTIFICATION_TYPES.WITHDRAWAL_REQUEST_APPROVED,
-          category: 'GENERAL' as const,
-          title: 'Withdrawal Request Approved',
-          message: `Your withdrawal request for ${withdrawalRequest.season.name} has been approved. Your refund will be processed within 5-7 business days.`
-        };
+        // NOTIF-067: Withdrawal confirmed — use helper template
+        notificationData = leagueLifecycleNotifications.withdrawalApproved(notifLeagueName, notifCategoryName);
       } else {
         notificationData = {
           type: NOTIFICATION_TYPES.WITHDRAWAL_REQUEST_REJECTED,
@@ -887,8 +972,33 @@ export const processWithdrawalRequest = async (req: AuthenticatedRequest, res: R
         userIds: withdrawalRequest.userId,
         ...notificationData,
         seasonId: withdrawalRequest.seasonId,
-        withdrawalRequestId: id
+        withdrawalRequestId: id,
+        metadata: { ...notificationData.metadata, ...(notifLeagueId ? { leagueId: notifLeagueId } : {}) },
       });
+
+      // NOTIF-068: Refund processed — send to paid player when withdrawal is approved
+      if (status === 'APPROVED') {
+        try {
+          const paidMembership = await prisma.seasonMembership.findFirst({
+            where: { userId: withdrawalRequest.userId, seasonId: withdrawalRequest.seasonId, paymentStatus: 'COMPLETED' },
+            select: { id: true },
+          });
+          if (paidMembership) {
+            const entryFeeAmount = withdrawalRequest.season.entryFee
+              ? Number(withdrawalRequest.season.entryFee).toFixed(2)
+              : '0.00';
+            const refundNotif = leagueLifecycleNotifications.refundProcessed(entryFeeAmount, notifLeagueName);
+            await notificationService.createNotification({
+              userIds: withdrawalRequest.userId,
+              ...refundNotif,
+              seasonId: withdrawalRequest.seasonId,
+              metadata: { ...refundNotif.metadata, ...(notifLeagueId ? { leagueId: notifLeagueId } : {}) },
+            });
+          }
+        } catch (refundNotifError) {
+          console.warn('Failed to send refund notification:', refundNotifError);
+        }
+      }
 
       // Notify the remaining partner when a doubles withdrawal is approved
       if (status === 'APPROVED' && withdrawalRequest.partnership) {
@@ -1059,7 +1169,16 @@ export const registerPlayerToSeason = async (req: Request, res: Response) => {
           },
           include: {
             user: { select: { id: true, name: true } },
-            season: { select: { id: true, name: true, entryFee: true } }
+            season: {
+              select: {
+                id: true,
+                name: true,
+                entryFee: true,
+                startDate: true,
+                leagues: { select: { name: true } },
+                category: { select: { name: true } }
+              }
+            }
           }
         });
 
@@ -1072,6 +1191,9 @@ export const registerPlayerToSeason = async (req: Request, res: Response) => {
         try {
           const notificationData = leagueLifecycleNotifications.registrationConfirmed(
             seasonData.name,
+            seasonData.leagues?.[0]?.name || '',
+            seasonData.category?.name || '',
+            seasonData.startDate ? new Date(seasonData.startDate).toLocaleDateString() : 'TBD',
             `$${seasonData.entryFee}`
           );
 
@@ -1083,6 +1205,25 @@ export const registerPlayerToSeason = async (req: Request, res: Response) => {
         } catch (notificationError) {
           console.error('Error sending registration notification for doubles:', notificationError);
           // Don't fail the registration if notification fails
+        }
+      }
+
+      // NOTIF-032: Push to partner — captain completed registration
+      if (seasonData && partnerId) {
+        try {
+          const captainName = partnership.captain?.name || 'Your captain';
+          const partnerNotif = notificationTemplates.doubles.doublesTeamRegisteredPartner(
+            captainName,
+            seasonData.name,
+          );
+          await notificationService.createNotification({
+            userIds: partnerId,
+            ...partnerNotif,
+            seasonId,
+          });
+          console.log('✅ [NOTIF-032] Partner registration notification sent to', partnerId);
+        } catch (notifErr) {
+          console.error('❌ [NOTIF-032] Failed to send partner registration notification:', notifErr);
         }
       }
 
@@ -1124,13 +1265,22 @@ export const registerPlayerToSeason = async (req: Request, res: Response) => {
       // 🆕 Send registration confirmation notification
       const season = await prisma.season.findUnique({
         where: { id: seasonId },
-        select: { name: true, entryFee: true }
+        select: {
+          name: true,
+          entryFee: true,
+          startDate: true,
+          leagues: { select: { name: true } },
+          category: { select: { name: true } }
+        }
       });
 
       if (season) {
         try {
           const notificationData = leagueLifecycleNotifications.registrationConfirmed(
             season.name,
+            season.leagues?.[0]?.name || '',
+            season.category?.name || '',
+            season.startDate ? new Date(season.startDate).toLocaleDateString() : 'TBD',
             `$${season.entryFee}`
           );
 

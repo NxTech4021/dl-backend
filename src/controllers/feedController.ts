@@ -70,10 +70,13 @@ export const createPostHandler = async (req: AuthenticatedRequest, res: Response
               select: { name: true }
             });
 
-            const notif = socialCommunityNotifications.friendActivityPost(
-              user?.name || 'A friend',
-              `shared a match result`
-            );
+            // NOTIF-119: Use scorecard-specific notification when the post is linked to a match
+            const notif = matchId
+              ? socialCommunityNotifications.friendActivityScorecard(user?.name || 'A friend')
+              : socialCommunityNotifications.friendActivityPost(
+                  user?.name || 'A friend',
+                  `shared a match result`
+                );
 
             await notificationService.createNotification({
               ...notif,
