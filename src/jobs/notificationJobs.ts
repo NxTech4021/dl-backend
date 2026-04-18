@@ -43,6 +43,8 @@ import { checkAndSendProfileReminders } from "../services/notification/onboardin
 import { notificationService } from "../services/notificationService";
 import { accountNotifications } from "../helpers/notifications/accountNotifications";
 import { MALAYSIA_TIMEZONE } from "../utils/timezone";
+import { accountNotifications } from "../helpers/notifications/accountNotifications";
+import { MALAYSIA_TIMEZONE } from "../utils/timezone";
 
 /**
  * Check and send match reminders 24 hours before
