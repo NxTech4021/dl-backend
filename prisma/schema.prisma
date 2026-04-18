@@ -762,6 +762,17 @@ model Match {
   // Admin review
   requiresAdminReview Boolean @default(false)
 
+  // Audit-B2: set to true when reverseMatchRatings (or the standings
+  // recalc that follows it) fails after the outer voidMatch / resolveDispute
+  // transaction has already committed. Surfaces the split-brain state
+  // (match is VOID but rating state still reflects COMPLETED) for admin
+  // visibility and eventual manual retry. Cannot be atomically wrapped
+  // into the outer $transaction because both callees open their own
+  // $transaction on a separate pool connection — Prisma nests them
+  // independently, so inner commits survive outer rollback (see audit doc).
+  // Safe to flip idempotently thanks to audit-B1.
+  requiresManualRatingReversal Boolean @default(false)
+
   // Friendly match moderation (for admin visibility)
   isHiddenFromPublic Boolean              @default(false)
   hiddenAt           DateTime?
