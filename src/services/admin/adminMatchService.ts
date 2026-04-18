@@ -693,9 +693,17 @@ export class AdminMatchService {
           data: {
             status: MatchStatus.VOID,
             isDisputed: false,
+            isWalkover: false,
             adminNotes: reason
           }
         });
+        // Audit-A: delete the paired MatchWalkover row if present. The
+        // walkoverUpdate block below would otherwise mark adminVerified=true
+        // on an orphan we no longer want. The updateMany there will then
+        // run on zero rows (safe no-op).
+        if (dispute.match.isWalkover) {
+          await tx.matchWalkover.deleteMany({ where: { matchId: dispute.matchId } });
+        }
       } else if (action === DisputeResolutionAction.AWARD_WALKOVER) {
         await tx.match.update({
           where: { id: dispute.matchId },
@@ -746,6 +754,9 @@ export class AdminMatchService {
             where: { id: dispute.matchId },
             data: { isWalkover: false },
           });
+          // Audit-A: delete the MatchWalkover row — the walkover didn't
+          // happen. The subsequent updateMany will run on zero rows (no-op).
+          await tx.matchWalkover.deleteMany({ where: { matchId: dispute.matchId } });
         }
 
         await tx.matchWalkover.updateMany({
@@ -794,6 +805,7 @@ export class AdminMatchService {
         select: {
           id: true,
           status: true,
+          sport: true,
           divisionId: true,
           seasonId: true,
           participants: { select: { userId: true } },
@@ -828,6 +840,28 @@ export class AdminMatchService {
           if (resolvedMatch.status === MatchStatus.COMPLETED) {
             const { recalculateMatchRatings } = await import('../rating/adminRatingService');
             await recalculateMatchRatings(resolvedMatch.id, adminId);
+          } else if (resolvedMatch.status === MatchStatus.VOID) {
+            // F-4: Reverse ratings on dispute-voided matches. Mirrors the direct voidMatch
+            // path (line ~1091) which calls reverseMatchRatings. Without this, a VOID_MATCH
+            // dispute resolution on a previously-completed match leaves phantom rating deltas.
+            // reverseMatchRatings is safe on empty history (warns + returns early).
+            try {
+              const dmrService = new DMRRatingService(resolvedMatch.sport as any);
+              await dmrService.reverseMatchRatings(resolvedMatch.id);
+              logger.info(`Reversed ratings for dispute-voided match ${resolvedMatch.id}`);
+            } catch (ratingError) {
+              logger.error(`Failed to reverse ratings for dispute-voided match ${resolvedMatch.id}:`, {}, ratingError as Error);
+              // Audit-B2: flag for manual retry (same pattern as voidMatch).
+              await prisma.match.update({
+                where: { id: resolvedMatch.id },
+                data: { requiresManualRatingReversal: true },
+              }).catch(flagErr => {
+                logger.error(
+                  `Failed to set requiresManualRatingReversal flag on dispute-voided match ${resolvedMatch.id}`,
+                  {}, flagErr as Error
+                );
+              });
+            }
           }
 
           // Step 3: Recalculate Best 6 (must run before V2 standings)
@@ -861,6 +895,16 @@ export class AdminMatchService {
             matchId: resolvedMatch.id,
           }, error as Error);
           // Don't throw — dispute resolution succeeded, recalculation is secondary
+          //
+          // TODO(111-audit-postDisputeRecalc): this outer catch covers step 3
+          // (recalculateMatchRatings for COMPLETED dispute outcomes), step 4
+          // (Best6 per participant), and step 5 (V2 standings) — none of
+          // which have inner catches + flag flips. Failures here surface only
+          // via logs; no self-heal endpoint. Preferred fix: add a
+          // `requiresManualPostDisputeRecalc` flag (Option C) and a
+          // retryPostDisputeRecalc endpoint that re-runs the idempotent
+          // step 3/4/5 chain. Full design + migration/commit plan in
+          // docs/issues/backlog/match-post-dispute-recalc-recovery-2026-04-18.md
         }
       }
     }
@@ -891,6 +935,17 @@ export class AdminMatchService {
 
     if (!match) {
       throw new Error('Match not found');
+    }
+
+    // F-8: block edits on terminal/pre-schedule statuses — a CANCELLED, VOID,
+    // or DRAFT match has no result to edit. Admin must reinstate the match
+    // (via another endpoint) before submitting a result.
+    if (
+      match.status === MatchStatus.CANCELLED ||
+      match.status === MatchStatus.VOID ||
+      match.status === MatchStatus.DRAFT
+    ) {
+      throw new Error(`Cannot edit result of match in status ${match.status}`);
     }
 
     // Capture original status before TypeScript narrows it inside the transaction callback
@@ -948,6 +1003,15 @@ export class AdminMatchService {
         }
       }
 
+      // F-60: real set scores mean the match was actually played. Clear
+      // isWalkover (unless admin explicitly asserted it) so downstream
+      // matchResultCreationService uses the real outcome instead of
+      // synthesizing a 2-0 from the walkover branch.
+      if (setScores && setScores.length > 0 && isWalkover !== true) {
+        updateData.isWalkover = false;
+        updateData.walkoverReason = null;
+      }
+
       // #043 BUG 3: Auto-complete match when admin provides scores with outcome
       // Admin editing scores is an explicit decision — no reason to leave match ONGOING
       if (outcome && match.status !== MatchStatus.COMPLETED) {
@@ -959,6 +1023,14 @@ export class AdminMatchService {
         where: { id: matchId },
         data: updateData
       });
+
+      // Audit-A: if the resulting Match explicitly has isWalkover=false (admin
+      // cleared it, or F-60 cleared it for real setScores), remove any stale
+      // MatchWalkover row so admin UI stops surfacing stale winner/defaulter.
+      // deleteMany is a no-op when no row exists (non-walkover matches).
+      if (updateData.isWalkover === false) {
+        await tx.matchWalkover.deleteMany({ where: { matchId } });
+      }
 
       // Log admin action
       await tx.matchAdminAction.create({
@@ -1045,17 +1117,49 @@ export class AdminMatchService {
       throw new Error('Match not found');
     }
 
+    // F-11: block void on terminal / pre-schedule states — these have nothing to void.
+    if (
+      match.status === MatchStatus.VOID ||
+      match.status === MatchStatus.CANCELLED ||
+      match.status === MatchStatus.DRAFT
+    ) {
+      throw new Error(`Cannot void match in status ${match.status}`);
+    }
+
     // Only reverse ratings if match was previously completed
     const wasCompleted = match.status === MatchStatus.COMPLETED;
+    // Audit-A: capture before update so post-write MatchWalkover cleanup is conditional.
+    const wasWalkover = match.isWalkover;
 
     await prisma.$transaction(async (tx) => {
-      await tx.match.update({
-        where: { id: matchId },
+      // Audit-B3: optimistic lock — only update if status is still what we
+      // observed pre-tx. Prevents two concurrent voidMatch calls from both
+      // crossing the F-11 guard, both flipping VOID, and both reaching
+      // reverseMatchRatings (double-decrement of matchesPlayed). The losing
+      // side gets count=0 and an explicit error.
+      const updated = await tx.match.updateMany({
+        where: { id: matchId, status: match.status },
         data: {
           status: MatchStatus.VOID,
+          // Audit-A: VOID is semantically inconsistent with isWalkover=true.
+          // Mirror the F-67 fix applied to resolveDispute(VOID_MATCH).
+          isWalkover: false,
           adminNotes: reason
         }
       });
+
+      if (updated.count === 0) {
+        throw new Error(
+          `Match ${matchId} was modified concurrently. Please refresh and retry.`
+        );
+      }
+
+      // Audit-A: delete the paired MatchWalkover row so admin UI (getAdminMatches,
+      // getMatchById) stops surfacing stale winningPlayerId/defaultingPlayerId
+      // for a now-VOID match. No-op when wasWalkover=false.
+      if (wasWalkover) {
+        await tx.matchWalkover.deleteMany({ where: { matchId } });
+      }
 
       await tx.matchAdminAction.create({
         data: {
@@ -1071,7 +1175,16 @@ export class AdminMatchService {
       });
     });
 
-    // Reverse ratings if match was completed
+    // Audit-B2: reverseMatchRatings and recalculateDivisionStandings each
+    // open their own $transaction on a separate Prisma pool connection, so
+    // they cannot be wrapped in the outer $transaction above (inner writes
+    // survive outer rollback + deadlock risk — full analysis in the audit
+    // doc). Instead, on failure we flip `requiresManualRatingReversal` on
+    // the already-committed Match row so the split-brain state is
+    // surfaceable for admin follow-up. Idempotent retry path is safe now
+    // that audit-B1 landed (reverseMatchRatings no longer double-decrements).
+    // Admin retry endpoint is still TODO(111-audit-B2-retry); today the
+    // flag is visible via direct DB read / Prisma Studio.
     if (wasCompleted) {
       try {
         const dmrService = new DMRRatingService(match.sport as any);
@@ -1079,6 +1192,15 @@ export class AdminMatchService {
         logger.info(`Reversed ratings for voided match ${matchId}`);
       } catch (error) {
         logger.error(`Failed to reverse ratings for match ${matchId}:`, {}, error as Error);
+        await prisma.match.update({
+          where: { id: matchId },
+          data: { requiresManualRatingReversal: true },
+        }).catch(flagErr => {
+          logger.error(
+            `Failed to set requiresManualRatingReversal flag on match ${matchId}`,
+            {}, flagErr as Error
+          );
+        });
       }
 
       // Recalculate standings
@@ -1089,6 +1211,15 @@ export class AdminMatchService {
           logger.info(`Recalculated standings after voiding match ${matchId}`);
         } catch (error) {
           logger.error(`Failed to recalculate standings for match ${matchId}:`, {}, error as Error);
+          await prisma.match.update({
+            where: { id: matchId },
+            data: { requiresManualRatingReversal: true },
+          }).catch(flagErr => {
+            logger.error(
+              `Failed to set requiresManualRatingReversal flag on match ${matchId}`,
+              {}, flagErr as Error
+            );
+          });
         }
       }
     }
@@ -1098,6 +1229,92 @@ export class AdminMatchService {
     return prisma.match.findUnique({
       where: { id: matchId },
       include: { participants: { include: { user: true } } }
+    });
+  }
+
+  /**
+   * Retry the manual rating reversal for a match that was left in the
+   * split-brain state documented in audit-B2 (voidMatch or resolveDispute
+   * flipped status to VOID, but reverseMatchRatings or the following
+   * standings recalc threw after the outer transaction had already
+   * committed, so `requiresManualRatingReversal` is true).
+   *
+   * Safe to call multiple times thanks to audit-B1 (reverseMatchRatings is
+   * idempotent via the RatingHistory.isReversed column). The flag is only
+   * cleared if BOTH reversal and standings recalc complete without
+   * throwing; partial success keeps the flag true so the admin can retry
+   * again.
+   */
+  async retryManualRatingReversal(matchId: string, adminId: string, reason?: string) {
+    const match = await prisma.match.findUnique({
+      where: { id: matchId },
+      select: {
+        id: true,
+        status: true,
+        sport: true,
+        divisionId: true,
+        seasonId: true,
+        requiresManualRatingReversal: true,
+        participants: { select: { userId: true } },
+      },
+    });
+
+    if (!match) {
+      throw new Error('Match not found');
+    }
+
+    if (!match.requiresManualRatingReversal) {
+      throw new Error('Match is not flagged for manual rating reversal');
+    }
+
+    if (match.status !== MatchStatus.VOID) {
+      throw new Error(
+        `Cannot retry rating reversal: match status is ${match.status}, expected VOID`
+      );
+    }
+
+    // Both calls are idempotent. If either throws, we leave the flag set
+    // so the admin can retry again after investigating.
+    const dmrService = new DMRRatingService(match.sport as any);
+    await dmrService.reverseMatchRatings(matchId);
+    logger.info(`Retry reverseMatchRatings succeeded for match ${matchId}`);
+
+    if (match.divisionId && match.seasonId) {
+      const standingsV2 = new StandingsV2Service();
+      await standingsV2.recalculateDivisionStandings(match.divisionId, match.seasonId);
+      logger.info(`Retry recalculateDivisionStandings succeeded for match ${matchId}`);
+    }
+
+    // Both steps succeeded — clear the flag and audit the action atomically.
+    await prisma.$transaction(async (tx) => {
+      await tx.match.update({
+        where: { id: matchId },
+        data: { requiresManualRatingReversal: false },
+      });
+
+      await tx.matchAdminAction.create({
+        data: {
+          matchId,
+          adminId,
+          actionType: MatchAdminActionType.RETRY_RATING_REVERSAL,
+          oldValue: { requiresManualRatingReversal: true },
+          newValue: { requiresManualRatingReversal: false },
+          reason: reason ?? 'Manual rating reversal retry',
+          affectedUserIds: match.participants.map(p => p.userId),
+          triggeredRecalculation: true,
+        },
+      });
+    });
+
+    logger.info(`Manual rating reversal retry completed for match ${matchId} by admin ${adminId}`);
+
+    return prisma.match.findUnique({
+      where: { id: matchId },
+      select: {
+        id: true,
+        status: true,
+        requiresManualRatingReversal: true,
+      },
     });
   }
 

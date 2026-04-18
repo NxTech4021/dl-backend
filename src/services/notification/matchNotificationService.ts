@@ -9,6 +9,7 @@ import { prisma } from '../../lib/prisma';
 import { logger } from '../../utils/logger';
 import { formatMatchDate, formatMatchTime } from '../../utils/timezone';
 import { MatchStatus } from '@prisma/client';
+import { filterUsersByPreference } from './notificationPreferenceService';
 
 /**
  * Send match scheduled notification to both players
@@ -48,6 +49,11 @@ export async function sendMatchScheduledNotification(
 
     console.log('📅 [MatchNotification] Match details:', { date, time, venue, player1: player1?.name, player2: player2?.name });
 
+    // F-62: respect per-user matchReminders preference.
+    const recipients = new Set(
+      await filterUsersByPreference([player1Id, player2Id], 'matchReminders')
+    );
+
     // Notify both players
     const scheduledNotifP1 = notificationTemplates.match.matchScheduled(
       player2?.name || 'Opponent',
@@ -62,18 +68,22 @@ export async function sendMatchScheduledNotification(
       venue
     );
 
-    await Promise.all([
-      notificationService.createNotification({
+    const sends: Promise<unknown>[] = [];
+    if (recipients.has(player1Id)) {
+      sends.push(notificationService.createNotification({
         ...scheduledNotifP1,
         userIds: player1Id,
         matchId,
-      }),
-      notificationService.createNotification({
+      }));
+    }
+    if (recipients.has(player2Id)) {
+      sends.push(notificationService.createNotification({
         ...scheduledNotifP2,
         userIds: player2Id,
         matchId,
-      }),
-    ]);
+      }));
+    }
+    await Promise.all(sends);
 
     console.log('✅ [MatchNotification] Match scheduled notifications sent successfully');
     logger.info('Match scheduled notifications sent', { matchId, player1Id, player2Id });
@@ -110,7 +120,14 @@ export async function sendMatchReminder24h(matchId: string): Promise<void> {
     const player1 = match.participants[0];
     const player2 = match.participants[1];
 
-    if (!player1 || !player2) return;
+    // Skip if either participant's userId is null (deleted user — onDelete:SetNull
+    // per Prisma schema). Previously only checked player existence, not userId.
+    if (!player1?.userId || !player2?.userId) return;
+
+    // F-62: respect per-user matchReminders preference.
+    const recipients = new Set(
+      await filterUsersByPreference([player1.userId, player2.userId], 'matchReminders')
+    );
 
     const reminderP1 = notificationTemplates.match.matchReminder24h(
       player2.user?.name || 'Opponent',
@@ -125,18 +142,22 @@ export async function sendMatchReminder24h(matchId: string): Promise<void> {
       venue
     );
 
-    await Promise.all([
-      notificationService.createNotification({
+    const sends: Promise<unknown>[] = [];
+    if (recipients.has(player1.userId)) {
+      sends.push(notificationService.createNotification({
         ...reminderP1,
         userIds: player1.userId,
         matchId,
-      }),
-      notificationService.createNotification({
+      }));
+    }
+    if (recipients.has(player2.userId)) {
+      sends.push(notificationService.createNotification({
         ...reminderP2,
         userIds: player2.userId,
         matchId,
-      }),
-    ]);
+      }));
+    }
+    await Promise.all(sends);
 
     logger.info('24h match reminder sent', { matchId });
   } catch (error) {
@@ -172,7 +193,13 @@ export async function sendMatchReminder2h(matchId: string): Promise<void> {
     const player1 = match.participants[0];
     const player2 = match.participants[1];
 
-    if (!player1 || !player2) return;
+    // Skip if either participant's userId is null (deleted user — onDelete:SetNull).
+    if (!player1?.userId || !player2?.userId) return;
+
+    // F-62: respect per-user matchReminders preference.
+    const recipients = new Set(
+      await filterUsersByPreference([player1.userId, player2.userId], 'matchReminders')
+    );
 
     const reminder2hP1 = notificationTemplates.match.matchReminder2h(
       player2.user?.name || 'Opponent',
@@ -185,18 +212,22 @@ export async function sendMatchReminder2h(matchId: string): Promise<void> {
       venue
     );
 
-    await Promise.all([
-      notificationService.createNotification({
+    const sends: Promise<unknown>[] = [];
+    if (recipients.has(player1.userId)) {
+      sends.push(notificationService.createNotification({
         ...reminder2hP1,
         userIds: player1.userId,
         matchId,
-      }),
-      notificationService.createNotification({
+      }));
+    }
+    if (recipients.has(player2.userId)) {
+      sends.push(notificationService.createNotification({
         ...reminder2hP2,
         userIds: player2.userId,
         matchId,
-      }),
-    ]);
+      }));
+    }
+    await Promise.all(sends);
 
     logger.info('2h match reminder sent', { matchId });
   } catch (error) {
@@ -212,8 +243,10 @@ export async function sendScoreSubmissionReminder(matchId: string): Promise<void
     const match = await prisma.match.findUnique({
       where: { id: matchId },
       select: {
+        matchType: true,
+        // Audit-D: full roster so opponent-name construction is complete even
+        // when some invitees are still PENDING; delivery gated below.
         participants: {
-          where: { invitationStatus: 'ACCEPTED' },
           include: {
             user: {
               select: { id: true, name: true }
@@ -223,31 +256,49 @@ export async function sendScoreSubmissionReminder(matchId: string): Promise<void
       },
     });
 
-    // Only send if at least 2 accepted participants (singles) or 4 (doubles)
     if (!match || match.participants.length < 2) return;
 
     const acceptedUserIds = match.participants
+      .filter(p => p.invitationStatus === 'ACCEPTED')
       .map(p => p.userId)
       .filter((id): id is string => id !== null);
 
+    // Only send if at least 2 accepted participants (singles) or 4 (doubles)
     if (acceptedUserIds.length < 2) return;
+
+    // F-62: respect per-user matchReminders preference (score submission is a reminder).
+    const allowed = new Set(
+      await filterUsersByPreference(acceptedUserIds, 'matchReminders')
+    );
 
     const reminderNotif = notificationTemplates.match.scoreSubmissionReminder;
 
     // Send to each accepted participant with opponent name context
     for (const participant of match.participants) {
       if (!participant.userId) continue;
+      // Audit-D: only notify ACCEPTED participants.
+      if (participant.invitationStatus !== 'ACCEPTED') continue;
+      if (!allowed.has(participant.userId)) continue;
 
-      // Find an opponent name for context
-      const opponent = match.participants.find(p =>
-        p.userId !== participant.userId && p.team !== participant.team
+      // Audit-D: build opponent-name string from ALL non-self opponents (not
+      // just the first one found). Previously `.find()` returned only one
+      // opponent, producing "Alice" instead of "Alice & Bob" for doubles even
+      // when all four players had accepted.
+      const opponents = match.participants.filter(p =>
+        p.userId !== participant.userId &&
+        (match.matchType === 'SINGLES' || p.team !== participant.team)
       );
-      const opponentName = opponent?.user?.name || 'Opponent';
+      const opponentName =
+        opponents.map(o => o.user?.name || 'Player').join(' & ') || 'Opponent';
 
       await notificationService.createNotification({
         ...reminderNotif(opponentName),
         userIds: participant.userId,
         matchId,
+        // One reminder per match per 24h max — the cron runs every 5 min over
+        // a 5-min window slot, so within-same-instance dedup isn't strictly needed,
+        // but this closes the multi-instance race (NS-16/NS-17).
+        skipDuplicateWithinMs: 24 * 60 * 60 * 1000,
       });
     }
 
@@ -270,6 +321,10 @@ export async function sendOpponentSubmittedScoreNotification(
       where: { id: submitterId },
       select: { name: true },
     });
+
+    // F-62: respect per-user matchResults preference.
+    const allowed = await filterUsersByPreference([opponentId], 'matchResults');
+    if (allowed.length === 0) return;
 
     const notif = notificationTemplates.match.opponentSubmittedScore(submitter?.name || 'Opponent');
 
@@ -299,20 +354,29 @@ export async function sendScoreDisputeAlert(
       prisma.user.findUnique({ where: { id: player2Id }, select: { name: true } }),
     ]);
 
+    // F-62: respect per-user disputeAlerts preference.
+    const recipients = new Set(
+      await filterUsersByPreference([player1Id, player2Id], 'disputeAlerts')
+    );
+
     const disputeNotif = notificationTemplates.match.scoreDisputeAlert;
 
-    await Promise.all([
-      notificationService.createNotification({
+    const sends: Promise<unknown>[] = [];
+    if (recipients.has(player1Id)) {
+      sends.push(notificationService.createNotification({
         ...disputeNotif(player2?.name || 'Opponent'),
         userIds: player1Id,
         matchId,
-      }),
-      notificationService.createNotification({
+      }));
+    }
+    if (recipients.has(player2Id)) {
+      sends.push(notificationService.createNotification({
         ...disputeNotif(player1?.name || 'Opponent'),
         userIds: player2Id,
         matchId,
-      }),
-    ]);
+      }));
+    }
+    await Promise.all(sends);
 
     logger.info('Score dispute alert sent', { matchId });
   } catch (error) {
@@ -333,6 +397,16 @@ export async function sendMatchCancelledNotification(
       where: { id: cancelledById },
       select: { name: true }
     });
+
+    // F-62: respect per-user matchCancelled preference.
+    // TODO(111-audit-C): this is a *critical* alert — muting it lets users
+    // show up at a cancelled match. Once the settings UI exposes the
+    // matchCancelled toggle, route in-app (UserNotification row) regardless
+    // of preference; gate only push delivery. Requires tagging critical
+    // types in notificationDeliveryTypes.ts.
+    // See docs/issues/backlog/match-post-ship-audit-2026-04-16.md#issue-c
+    const allowed = await filterUsersByPreference([opponentId], 'matchCancelled');
+    if (allowed.length === 0) return;
 
     const cancelledNotif = notificationTemplates.match.matchCancelled(
       canceller?.name || 'Opponent'
@@ -365,6 +439,14 @@ export async function sendMatchRescheduleRequest(
       where: { id: requesterId },
       select: { name: true }
     });
+
+    // F-62: respect per-user matchRescheduled preference.
+    // TODO(111-audit-C): like matchCancelled, this is critical — the
+    // opponent needs to SEE the request in-app to approve/reject it.
+    // Full suppression via preference is unsafe once the toggle ships.
+    // See docs/issues/backlog/match-post-ship-audit-2026-04-16.md#issue-c
+    const allowed = await filterUsersByPreference([opponentId], 'matchRescheduled');
+    if (allowed.length === 0) return;
 
     const date = formatMatchDate(newDate);
     const time = formatMatchTime(newDate);
@@ -438,6 +520,10 @@ export async function checkAndSendWinningStreakNotification(
 
     // Send notification if streak is 2 or more
     if (streakCount >= 2) {
+      // F-62: respect per-user matchResults preference (streak fires on completion).
+      const allowed = await filterUsersByPreference([userId], 'matchResults');
+      if (allowed.length === 0) return;
+
       const streakNotif = notificationTemplates.match.winningStreak(streakCount);
 
       await notificationService.createNotification({

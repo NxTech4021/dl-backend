@@ -20,7 +20,8 @@ import {
   publishAnnouncement,
   sendAppUpdateNotification,
   getPublishedAnnouncements,
-  archiveAnnouncement
+  archiveAnnouncement,
+  notifyTosUpdated
 } from '../../controllers/admin/featureAnnouncementController';
 
 const adminSystemRoutes = Router();
@@ -41,5 +42,8 @@ adminSystemRoutes.get('/announcements/published', getPublishedAnnouncements);
 adminSystemRoutes.post('/announcements/:id/publish', publishAnnouncement);
 adminSystemRoutes.post('/announcements/:id/archive', archiveAnnouncement);
 adminSystemRoutes.post('/announcements/app-update', sendAppUpdateNotification);
+
+// TOS Routes
+adminSystemRoutes.post('/tos/notify', notifyTosUpdated);
 
 export default adminSystemRoutes;

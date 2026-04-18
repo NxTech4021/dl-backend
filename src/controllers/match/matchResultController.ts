@@ -14,6 +14,7 @@ import { sendSuccess, sendError } from '../../utils/response';
 import { formatMatchDate } from '../../utils/timezone';
 import { logMatchActivity } from '../../services/userActivityLogService';
 import { UserActionType } from '@prisma/client';
+import { checkAndSendWeeklyStreakNotification } from '../../services/notification/playerNotificationService';
 
 const matchResultService = getMatchResultService();
 
@@ -189,6 +190,21 @@ export const confirmResult = async (req: Request, res: Response) => {
                   userIds: allUserIds,
                   matchId: match.id,
                 });
+              }
+            } catch (_) { /* non-blocking */ }
+          })();
+
+          // NOTIF-014: Weekly streak celebration — fire-and-forget for all participants
+          void (async () => {
+            try {
+              const allParticipants = await prisma.matchParticipant.findMany({
+                where: { matchId: id, invitationStatus: 'ACCEPTED' },
+                select: { userId: true },
+              });
+              for (const { userId: participantId } of allParticipants) {
+                if (participantId) {
+                  await checkAndSendWeeklyStreakNotification(participantId, match.id);
+                }
               }
             } catch (_) { /* non-blocking */ }
           })();

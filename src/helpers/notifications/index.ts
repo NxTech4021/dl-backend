@@ -14,7 +14,7 @@
  */
 
 import { accountNotifications } from "./accountNotifications";
-import { divisionNotifications } from "./divisionNotifications";
+//  import { divisionNotifications } from "./divisionNotifications";
 import { doublesNotifications } from "./doublesNotifications";
 import { leagueLifecycleNotifications } from "./leagueLifecycleNotifications";
 import { matchManagementNotifications } from "./matchManagementNotifications";
@@ -25,7 +25,7 @@ import { specialCircumstancesNotifications } from "./specialCircumstancesNotific
 
 // Individual category exports
 export { accountNotifications } from "./accountNotifications";
-export { divisionNotifications } from "./divisionNotifications";
+//  export { divisionNotifications } from "./divisionNotifications";
 export { doublesNotifications } from "./doublesNotifications";
 export { leagueLifecycleNotifications } from "./leagueLifecycleNotifications";
 export { matchManagementNotifications } from "./matchManagementNotifications";
@@ -54,7 +54,7 @@ export { specialCircumstancesNotifications } from "./specialCircumstancesNotific
  */
 export const notificationTemplates = {
   account: accountNotifications,
-  division: divisionNotifications,
+  //  division: divisionNotifications,
   doubles: doublesNotifications,
   leagueLifecycle: leagueLifecycleNotifications,
   league: leagueLifecycleNotifications, // Alias for convenience

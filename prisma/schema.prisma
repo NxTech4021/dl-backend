@@ -1,5 +1,9 @@
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
+  // Include linux-musl for Alpine container builds (ECS Fargate target).
+  // Ensures prisma generate produces the right engine binary regardless of
+  // host platform, avoiding cryptic runtime errors from binary mismatch.
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
 }
 
 datasource db {
@@ -758,6 +762,17 @@ model Match {
   // Admin review
   requiresAdminReview Boolean @default(false)
 
+  // Audit-B2: set to true when reverseMatchRatings (or the standings
+  // recalc that follows it) fails after the outer voidMatch / resolveDispute
+  // transaction has already committed. Surfaces the split-brain state
+  // (match is VOID but rating state still reflects COMPLETED) for admin
+  // visibility and eventual manual retry. Cannot be atomically wrapped
+  // into the outer $transaction because both callees open their own
+  // $transaction on a separate pool connection — Prisma nests them
+  // independently, so inner commits survive outer rollback (see audit doc).
+  // Safe to flip idempotently thanks to audit-B1.
+  requiresManualRatingReversal Boolean @default(false)
+
   // Friendly match moderation (for admin visibility)
   isHiddenFromPublic Boolean              @default(false)
   hiddenAt           DateTime?
@@ -1289,6 +1304,14 @@ model RatingHistory {
   reason RatingChangeReason
   notes  String?
 
+  // Audit-B1: idempotency flag for reverseMatchRatings. Before this column
+  // existed, reversal wrote " [REVERSED]" to `notes` as a human-readable
+  // marker but never read it back — so a second call on the same matchId
+  // re-decremented matchesPlayed. Readers of rating history are free to
+  // ignore this column (pre-fix displays continue to work); only the
+  // reversal path filters on it.
+  isReversed Boolean @default(false)
+
   createdAt DateTime @default(now())
 
   // Relations
@@ -1297,6 +1320,7 @@ model RatingHistory {
 
   @@index([playerRatingId, createdAt(sort: Desc)])
   @@index([matchId])
+  @@index([matchId, isReversed])
   @@map("rating_history")
 }
 
@@ -2485,6 +2509,11 @@ enum AdminActionType {
   MATCH_EDIT_RESULT
   MATCH_EDIT_SCHEDULE
   MATCH_WALKOVER
+  // Audit-B2 retry: mirrors MatchAdminActionType.RETRY_RATING_REVERSAL so
+  // the outer AdminLog search can filter by actionType instead of message
+  // substring. Used when an admin re-runs the post-tx rating reversal
+  // chain on a split-brain VOID match.
+  MATCH_RETRY_RATING_REVERSAL
   // Dispute management
   DISPUTE_RESOLVE
   DISPUTE_OVERRIDE
@@ -2773,6 +2802,10 @@ enum MatchAdminActionType {
   UNHIDE_MATCH
   REPORT_ABUSE
   CLEAR_REPORT
+  // Audit-B2: recovery action for split-brain state caused by post-tx
+  // rating reversal failure (voidMatch / resolveDispute outer tx committed
+  // but inner reverseMatchRatings / standings-recalc threw).
+  RETRY_RATING_REVERSAL
 }
 
 // =============================================

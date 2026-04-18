@@ -5,7 +5,7 @@
 
 import { notificationService } from '../notificationService';
 import { notificationTemplates } from '../../helpers/notifications';
-import { divisionNotifications } from '../../helpers/notifications/divisionNotifications';
+//  import { divisionNotifications } from '../../helpers/notifications/divisionNotifications';
 import { prisma } from '../../lib/prisma';
 import { logger } from '../../utils/logger';
 import { formatMatchDate } from '../../utils/timezone';
@@ -21,14 +21,24 @@ export async function sendSeasonRegistrationConfirmed(
   try {
     const season = await prisma.season.findUnique({
       where: { id: seasonId },
-      select: { name: true },
+      include: {
+        leagues: { select: { name: true } },
+        category: { select: { name: true } },
+      },
     });
 
     if (!season) return;
 
+    const leagueName = season.leagues?.[0]?.name ?? '';
+    const categoryName = season.category?.name ?? '';
+    const startDate = season.startDate ? season.startDate.toLocaleDateString('en-MY', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
+
     const confirmationNotif = notificationTemplates.season.registrationConfirmed(
       season.name,
-      'Entry fee confirmed' // Amount would come from payment
+      leagueName,
+      categoryName,
+      startDate,
+      'Entry fee confirmed'
     );
 
     await notificationService.createNotification({
@@ -50,9 +60,8 @@ export async function sendSeasonStartingSoonNotifications(seasonId: string): Pro
   try {
     const season = await prisma.season.findUnique({
       where: { id: seasonId },
-      select: {
-        name: true,
-        startDate: true,
+      include: {
+        leagues: { select: { id: true, name: true } },
         memberships: {
           where: { status: MembershipStatus.ACTIVE },
           select: { userId: true },
@@ -62,16 +71,20 @@ export async function sendSeasonStartingSoonNotifications(seasonId: string): Pro
 
     if (!season || !season.startDate) return;
 
+    const league = season.leagues?.[0];
+    const leagueName = league?.name ?? '';
+    const leagueId = league?.id;
     const playerIds = season.memberships.map(m => m.userId);
 
     if (playerIds.length === 0) return;
 
-    const startingSoonNotif = notificationTemplates.league.seasonStarting3Days(season.name);
+    const startingSoonNotif = notificationTemplates.league.seasonStarting3Days(season.name, leagueName);
 
     await notificationService.createNotification({
       ...startingSoonNotif,
       userIds: playerIds,
       seasonId,
+      metadata: { ...startingSoonNotif.metadata, ...(leagueId ? { leagueId } : {}) },
     });
 
     logger.info('League starting soon notifications sent', { seasonId, playerCount: playerIds.length });
@@ -87,8 +100,8 @@ export async function sendSeasonStartsTomorrowNotifications(seasonId: string): P
   try {
     const season = await prisma.season.findUnique({
       where: { id: seasonId },
-      select: {
-        name: true,
+      include: {
+        leagues: { select: { name: true } },
         memberships: {
           where: { status: MembershipStatus.ACTIVE },
           select: { userId: true },
@@ -98,11 +111,12 @@ export async function sendSeasonStartsTomorrowNotifications(seasonId: string): P
 
     if (!season) return;
 
+    const leagueName = season.leagues?.[0]?.name ?? '';
     const playerIds = season.memberships.map(m => m.userId);
 
     if (playerIds.length === 0) return;
 
-    const startsTomorrowNotif = notificationTemplates.league.seasonStartsTomorrow(season.name, season.name);
+    const startsTomorrowNotif = notificationTemplates.league.seasonStartedWelcome(season.name, leagueName);
 
     await notificationService.createNotification({
       ...startsTomorrowNotif,
@@ -123,8 +137,8 @@ export async function sendSeasonWelcomeNotifications(seasonId: string): Promise<
   try {
     const season = await prisma.season.findUnique({
       where: { id: seasonId },
-      select: {
-        name: true,
+      include: {
+        leagues: { select: { id: true, name: true } },
         memberships: {
           where: { status: MembershipStatus.ACTIVE },
           select: { userId: true },
@@ -134,16 +148,20 @@ export async function sendSeasonWelcomeNotifications(seasonId: string): Promise<
 
     if (!season) return;
 
+    const league = season.leagues?.[0];
+    const leagueName = league?.name ?? '';
+    const leagueId = league?.id;
     const playerIds = season.memberships.map(m => m.userId);
 
     if (playerIds.length === 0) return;
 
-    const startedWelcomeNotif = notificationTemplates.league.seasonStartedWelcome(season.name, season.name);
+    const startedWelcomeNotif = notificationTemplates.league.seasonStartedWelcome(season.name, leagueName);
 
     await notificationService.createNotification({
       ...startedWelcomeNotif,
       userIds: playerIds,
       seasonId,
+      metadata: { ...startedWelcomeNotif.metadata, ...(leagueId ? { leagueId } : {}) },
     });
 
     logger.info('season started welcome notifications sent', { seasonId, playerCount: playerIds.length });
@@ -159,8 +177,8 @@ export async function sendFinalWeekAlertNotifications(seasonId: string): Promise
   try {
     const season = await prisma.season.findUnique({
       where: { id: seasonId },
-      select: {
-        name: true,
+      include: {
+        leagues: { select: { name: true } },
         memberships: {
           where: { status: MembershipStatus.ACTIVE },
           select: { userId: true },
@@ -170,9 +188,10 @@ export async function sendFinalWeekAlertNotifications(seasonId: string): Promise
 
     if (!season) return;
 
+    const leagueName = season.leagues?.[0]?.name ?? '';
     const playerIds = season.memberships.map(m => m.userId);
 
-    const finalWeekNotif = notificationTemplates.league.finalWeekAlert(season.name);
+    const finalWeekNotif = notificationTemplates.league.finalWeekAlert(season.name, leagueName);
 
     await notificationService.createNotification({
       ...finalWeekNotif,
@@ -193,8 +212,8 @@ export async function sendLeagueEndedNotifications(seasonId: string): Promise<vo
   try {
     const season = await prisma.season.findUnique({
       where: { id: seasonId },
-      select: {
-        name: true,
+      include: {
+        leagues: { select: { name: true } },
         memberships: {
           where: { status: MembershipStatus.ACTIVE },
           select: { userId: true },
@@ -204,9 +223,10 @@ export async function sendLeagueEndedNotifications(seasonId: string): Promise<vo
 
     if (!season) return;
 
+    const leagueName = season.leagues?.[0]?.name ?? '';
     const playerIds = season.memberships.map(m => m.userId);
 
-    const leagueEndedNotif = notificationTemplates.league.leagueEndedFinalResults(season.name);
+    const leagueEndedNotif = notificationTemplates.league.leagueEndedFinalResults(season.name, leagueName);
 
     await notificationService.createNotification({
       ...leagueEndedNotif,
@@ -229,14 +249,24 @@ export async function sendLeagueWinnerAnnouncement(
   divisionId: string
 ): Promise<void> {
   try {
-    const season = await prisma.season.findUnique({
-      where: { id: seasonId },
-      select: { name: true },
-    });
+    const [season, division] = await Promise.all([
+      prisma.season.findUnique({
+        where: { id: seasonId },
+        include: { leagues: { select: { name: true } }, category: { select: { name: true } } },
+      }),
+      prisma.division.findUnique({
+        where: { id: divisionId },
+        select: { name: true },
+      }),
+    ]);
 
     if (!season) return;
 
-    const winnerNotif = notificationTemplates.league.leagueWinner(season.name);
+    const leagueName = season.leagues?.[0]?.name ?? '';
+    const categoryName = season.category?.name ?? '';
+    const divisionName = division?.name ?? '';
+
+    const winnerNotif = notificationTemplates.league.leagueWinner(divisionName, leagueName, categoryName);
 
     await notificationService.createNotification({
       ...winnerNotif,
@@ -261,14 +291,24 @@ export async function sendTop3FinishNotification(
   divisionId: string
 ): Promise<void> {
   try {
-    const season = await prisma.season.findUnique({
-      where: { id: seasonId },
-      select: { name: true },
-    });
+    const [season, division] = await Promise.all([
+      prisma.season.findUnique({
+        where: { id: seasonId },
+        include: { leagues: { select: { name: true } }, category: { select: { name: true } } },
+      }),
+      prisma.division.findUnique({
+        where: { id: divisionId },
+        select: { name: true },
+      }),
+    ]);
 
     if (!season) return;
 
-    const top3Notif = notificationTemplates.league.top3Finish(position, season.name);
+    const leagueName = season.leagues?.[0]?.name ?? '';
+    const categoryName = season.category?.name ?? '';
+    const divisionName = division?.name ?? '';
+
+    const top3Notif = notificationTemplates.league.top3Finish(position, divisionName, leagueName, categoryName);
 
     await notificationService.createNotification({
       ...top3Notif,
@@ -295,7 +335,7 @@ export async function sendLeagueCompleteBannerNotifications(
     const [season, memberships] = await Promise.all([
       prisma.season.findUnique({
         where: { id: seasonId },
-        select: { name: true },
+        include: { leagues: { select: { name: true } } },
       }),
       prisma.seasonMembership.findMany({
         where: {
@@ -310,9 +350,10 @@ export async function sendLeagueCompleteBannerNotifications(
 
     if (!season || memberships.length === 0) return;
 
+    const leagueName = season.leagues?.[0]?.name ?? '';
     const playerIds = memberships.map(m => m.userId);
 
-    const completeBannerNotif = notificationTemplates.league.leagueCompleteBanner(season.name);
+    const completeBannerNotif = notificationTemplates.league.leagueCompleteBanner(leagueName, season.name);
 
     await notificationService.createNotification({
       ...completeBannerNotif,
@@ -338,8 +379,8 @@ export async function sendLeagueExtendedNotifications(
   try {
     const season = await prisma.season.findUnique({
       where: { id: seasonId },
-      select: {
-        name: true,
+      include: {
+        leagues: { select: { name: true } },
         memberships: {
           where: { status: MembershipStatus.ACTIVE },
           select: { userId: true },
@@ -349,11 +390,12 @@ export async function sendLeagueExtendedNotifications(
 
     if (!season) return;
 
+    const leagueName = season.leagues?.[0]?.name ?? '';
     const playerIds = season.memberships.map(m => m.userId);
 
     const extendedNotif = notificationTemplates.league.leagueExtended(
+      leagueName,
       season.name,
-      weeksExtended,
       formatMatchDate(newEndDate)
     );
 
@@ -379,8 +421,8 @@ export async function sendLeagueShortenedNotifications(
   try {
     const season = await prisma.season.findUnique({
       where: { id: seasonId },
-      select: {
-        name: true,
+      include: {
+        leagues: { select: { name: true } },
         memberships: {
           where: { status: MembershipStatus.ACTIVE },
           select: { userId: true },
@@ -390,9 +432,11 @@ export async function sendLeagueShortenedNotifications(
 
     if (!season) return;
 
+    const leagueName = season.leagues?.[0]?.name ?? '';
     const playerIds = season.memberships.map(m => m.userId);
 
     const shortenedNotif = notificationTemplates.league.leagueShortened(
+      leagueName,
       season.name,
       formatMatchDate(newEndDate)
     );
@@ -483,19 +527,30 @@ export async function sendMidSeasonUpdateNotifications(
   divisionId: string
 ): Promise<void> {
   try {
-    const [season, standings] = await Promise.all([
+    const [season, standings, division] = await Promise.all([
       prisma.season.findUnique({
         where: { id: seasonId },
-        select: { name: true },
+        include: {
+          leagues: { select: { name: true } },
+          category: { select: { name: true } },
+        },
       }),
       prisma.divisionStanding.findMany({
         where: { divisionId },
         orderBy: { totalPoints: 'desc' },
         select: { userId: true },
       }),
+      prisma.division.findUnique({
+        where: { id: divisionId },
+        select: { name: true },
+      }),
     ]);
 
     if (!season) return;
+
+    const leagueName = season.leagues?.[0]?.name ?? '';
+    const categoryName = season.category?.name ?? '';
+    const divisionName = division?.name ?? '';
 
     // Send to each player with their position
     for (let i = 0; i < standings.length; i++) {
@@ -504,7 +559,7 @@ export async function sendMidSeasonUpdateNotifications(
       if (!standing) continue;
       const playerId = standing.userId;
 
-      const midSeasonNotif = notificationTemplates.league.midSeasonUpdate(position, season.name);
+      const midSeasonNotif = notificationTemplates.league.midSeasonUpdate(position, divisionName, leagueName, categoryName);
 
       await notificationService.createNotification({
         ...midSeasonNotif,
@@ -523,107 +578,55 @@ export async function sendMidSeasonUpdateNotifications(
 /**
  * Notify users about a division reassignment
  */
-export async function notifyDivisionReassignment(userId: string, divisionId: string, adminId?: string): Promise<void> {
-  try {
-    const division = await prisma.division.findUnique({
-      where: { id: divisionId },
-      select: { name: true, league: { select: { name: true } } },
-    });
+// export async function notifyDivisionReassignment(userId: string, divisionId: string, adminId?: string): Promise<void> {
+//   try {
+//     const division = await prisma.division.findUnique({
+//       where: { id: divisionId },
+//       select: { name: true, league: { select: { name: true } } },
+//     });
 
-    if (!division) {
-      throw new Error("Division not found");
-    }
+//     if (!division) {
+//       throw new Error("Division not found");
+//     }
 
-    const notification = divisionNotifications.divisionRebalanced(division.name, division.league.name);
+//     const notification = divisionNotifications.divisionRebalanced(division.name, division.league.name);
 
-    await notificationService.createNotification({
-      ...notification,
-      userIds: [userId],
-      metadata: { divisionId },
-    });
-  } catch (error) {
-    logger.error("Failed to send division reassignment notification", { userId, divisionId }, error as Error);
-  }
-}
+//     await notificationService.createNotification({
+//       ...notification,
+//       userIds: [userId],
+//       metadata: { divisionId },
+//     });
+//   } catch (error) {
+//     logger.error("Failed to send division reassignment notification", { userId, divisionId }, error as Error);
+//   }
+// }
 
 /**
  * Notify users about a new player in their division
  */
-export async function notifyNewPlayerInDivision(userId: string, divisionId: string, newPlayerName: string): Promise<void> {
-  try {
-    const division = await prisma.division.findUnique({
-      where: { id: divisionId },
-      select: { name: true, league: { select: { name: true } } },
-    });
+// export async function notifyNewPlayerInDivision(userId: string, divisionId: string, newPlayerName: string): Promise<void> {
+//   try {
+//     const division = await prisma.division.findUnique({
+//       where: { id: divisionId },
+//       select: { name: true, league: { select: { name: true } } },
+//     });
 
-    if (!division) {
-      throw new Error("Division not found");
-    }
+//     if (!division) {
+//       throw new Error("Division not found");
+//     }
 
-    const notification = divisionNotifications.divisionUpdateNewPlayer(division.league.name);
+//     const notification = divisionNotifications.divisionUpdateNewPlayer(division.league.name);
 
-    await notificationService.createNotification({
-      ...notification,
-      userIds: [userId],
-      metadata: { divisionId },
-    });
-  } catch (error) {
-    logger.error("Failed to send new player in division notification", { userId, divisionId, newPlayerName }, error as Error);
-  }
-}
+//     await notificationService.createNotification({
+//       ...notification,
+//       userIds: [userId],
+//       metadata: { divisionId },
+//     });
+//   } catch (error) {
+//     logger.error("Failed to send new player in division notification", { userId, divisionId, newPlayerName }, error as Error);
+//   }
+// }
 
-/**
- * Notify users about a mid-season update
- */
-export async function notifyMidSeasonUpdate(userId: string, seasonId: string, position: number): Promise<void> {
-  try {
-    const season = await prisma.season.findUnique({
-      where: { id: seasonId },
-      select: { name: true, leagues: { select: { name: true }, take: 1 } },
-    });
-
-    if (!season) {
-      throw new Error("Season not found");
-    }
-
-    const leagueName = season.leagues[0]?.name || 'League';
-    const notification = divisionNotifications.midSeasonUpdate(position, leagueName);
-
-    await notificationService.createNotification({
-      ...notification,
-      userIds: [userId],
-      metadata: { seasonId },
-    });
-  } catch (error) {
-    logger.error("Failed to send mid-season update notification", { userId, seasonId, position }, error as Error);
-  }
-}
-
-/**
- * Notify users about a late-season nudge
- */
-export async function notifyLateSeasonNudge(userId: string, seasonId: string): Promise<void> {
-  try {
-    const season = await prisma.season.findUnique({
-      where: { id: seasonId },
-      select: { name: true },
-    });
-
-    if (!season) {
-      throw new Error("Season not found");
-    }
-
-    const notification = divisionNotifications.lateSeasonNudge();
-
-    await notificationService.createNotification({
-      ...notification,
-      userIds: [userId],
-      metadata: { seasonId },
-    });
-  } catch (error) {
-    logger.error("Failed to send late-season nudge notification", { userId, seasonId }, error as Error);
-  }
-}
 
 /**
  * Send registration closing 3 days notifications
@@ -714,8 +717,7 @@ export async function sendRegistrationClosing24hNotifications(seasonId: string):
     const leagueName = `${league.location} ${league.sportType} League`;
 
     const notificationData = notificationTemplates.leagueLifecycle.registrationClosing24Hours(
-      season.name,
-      leagueName
+      season.name
     );
 
     // Get all users to broadcast to everyone

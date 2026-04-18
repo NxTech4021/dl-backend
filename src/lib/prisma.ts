@@ -7,10 +7,20 @@ class PrismaService {
 
   private constructor() {
     const validLogLevels: Prisma.LogLevel[] = ['query', 'info', 'warn', 'error'];
-    const logLevels: Prisma.LogLevel[] = process.env.PRISMA_LOG
+    let logLevels: Prisma.LogLevel[] = process.env.PRISMA_LOG
       ? process.env.PRISMA_LOG.split(',')
           .filter((level): level is Prisma.LogLevel => validLogLevels.includes(level as Prisma.LogLevel))
       : ['warn', 'error'];
+
+    // Defense-in-depth: `query` log level prints every Prisma query with its
+    // parameters to stdout - including user emails, password hashes during
+    // auth queries, payment details, etc. In production, stdout flows to
+    // CloudWatch (queryable, retained). An operator enabling PRISMA_LOG=query
+    // to debug a slow query would silently leak PII. Drop it in prod.
+    if (process.env.NODE_ENV === 'production' && logLevels.includes('query')) {
+      console.warn('PRISMA_LOG=query is not allowed in production (PII leak risk); dropping query level');
+      logLevels = logLevels.filter(l => l !== 'query');
+    }
 
     const basePrisma = new PrismaClient({
       log: logLevels,
@@ -105,16 +115,33 @@ class PrismaService {
       },
     }) as unknown as PrismaClient;
 
-    // Handle connection errors - connect silently, only log errors
-    this.prisma.$connect()
-      .catch((error) => {
-        console.error('Database connection failed:', error);
-        process.exit(1);
-      });
+    // Connect with retry + exponential backoff. Transient RDS unavailability
+    // (failover, brief network blip, security group update) would otherwise
+    // cause a crash loop: task exits -> ECS respawns -> task exits again.
+    // Retries buy ~30s of resilience before giving up, enough to ride out
+    // most transient issues without noise.
+    void this.connectWithRetry();
 
     // Graceful shutdown
     process.on('SIGINT', this.shutdown.bind(this));
     process.on('SIGTERM', this.shutdown.bind(this));
+  }
+
+  private async connectWithRetry(attempts = 5): Promise<void> {
+    for (let i = 0; i < attempts; i++) {
+      try {
+        await this.prisma.$connect();
+        return;
+      } catch (error) {
+        if (i === attempts - 1) {
+          console.error('Database connection failed after retries:', error);
+          process.exit(1);
+        }
+        const delay = Math.min(30_000, 1000 * Math.pow(2, i));
+        console.warn(`DB connect attempt ${i + 1}/${attempts} failed, retrying in ${delay}ms`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    }
   }
 
   public static getInstance(): PrismaService {

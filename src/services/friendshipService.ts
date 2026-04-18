@@ -191,10 +191,10 @@ export const getFriends = async (userId: string) => {
     },
     include: {
       requester: {
-        select: { id: true, name: true, username: true, displayUsername: true, image: true },
+        select: { id: true, name: true, username: true, displayUsername: true, image: true, status: true },
       },
       recipient: {
-        select: { id: true, name: true, username: true, displayUsername: true, image: true },
+        select: { id: true, name: true, username: true, displayUsername: true, image: true, status: true },
       },
     },
     orderBy: { respondedAt: 'desc' },

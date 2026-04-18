@@ -226,6 +226,28 @@ export class FeatureAnnouncementService {
 
     return [];
   }
+
+  /**
+   * Notify all active users that Terms of Service have been updated
+   */
+  async sendTosUpdatedNotification(): Promise<{ sentCount: number }> {
+    const userIds = await this.getTargetUsers(['ALL']);
+
+    if (userIds.length === 0) {
+      logger.warn('No active users to notify of TOS update');
+      return { sentCount: 0 };
+    }
+
+    const notif = accountNotifications.tosUpdated();
+
+    await this.notificationService.createNotification({
+      ...notif,
+      userIds,
+    });
+
+    logger.info('TOS updated notifications sent', { userCount: userIds.length });
+    return { sentCount: userIds.length };
+  }
 }
 
 // Singleton instance

@@ -28,12 +28,6 @@ export const NOTIFICATION_DELIVERY_MAP: Record<string, NotificationDeliveryType>
   FEATURE_ANNOUNCEMENT: NotificationDeliveryType.IN_APP,
   
   // Account & System - PUSH
-  // FIRST_MATCH_COMPLETED: NotificationDeliveryType.PUSH,
-  // MATCHES_PLAYED_MILESTONE: NotificationDeliveryType.PUSH,
-  // FIRST_LEAGUE_COMPLETED: NotificationDeliveryType.PUSH,
-  // LEAGUES_COMPLETED_MILESTONE: NotificationDeliveryType.PUSH,
-  // PERFECT_ATTENDANCE: NotificationDeliveryType.PUSH,
-  // MULTI_LEAGUE_PLAYER: NotificationDeliveryType.PUSH,
   NEW_WEEKLY_STREAK: NotificationDeliveryType.IN_APP,
   STREAK_AT_RISK: NotificationDeliveryType.PUSH,
   APP_UPDATE_AVAILABLE: NotificationDeliveryType.PUSH,
@@ -41,7 +35,6 @@ export const NOTIFICATION_DELIVERY_MAP: Record<string, NotificationDeliveryType>
   // MAINTENANCE_IN_PROGRESS: NotificationDeliveryType.BOTH,
   MAINTENANCE_COMPLETE: NotificationDeliveryType.BOTH,
   // MAINTENANCE_CANCELLED: NotificationDeliveryType.BOTH,
-  // Backward compatibility aliases
   SYSTEM_MAINTENANCE: NotificationDeliveryType.PUSH,
   NEW_FEATURE: NotificationDeliveryType.IN_APP,
 
@@ -58,10 +51,10 @@ export const NOTIFICATION_DELIVERY_MAP: Record<string, NotificationDeliveryType>
   DOUBLES_TEAM_REGISTERED_CAPTAIN: NotificationDeliveryType.IN_APP,
   
   // Doubles League - PUSH
-  PARTNER_REQUEST_RECEIVED: NotificationDeliveryType.PUSH,
-  PARTNER_REQUEST_ACCEPTED_CAPTAIN: NotificationDeliveryType.PUSH,
-  PARTNER_REQUEST_ACCEPTED_PARTNER: NotificationDeliveryType.PUSH,
-  PARTNER_REQUEST_DECLINED_CAPTAIN: NotificationDeliveryType.PUSH,
+  
+  PAIR_REQUEST_RECEIVED: NotificationDeliveryType.PUSH,
+  PAIR_REQUEST_ACCEPTED: NotificationDeliveryType.PUSH,
+  PAIR_REQUEST_REJECTED: NotificationDeliveryType.PUSH,
   TEAM_REGISTRATION_REMINDER_2H: NotificationDeliveryType.PUSH,
   TEAM_REGISTRATION_REMINDER_24H: NotificationDeliveryType.PUSH,
   REGISTRATION_DEADLINE_CAPTAIN: NotificationDeliveryType.PUSH,
@@ -86,6 +79,7 @@ export const NOTIFICATION_DELIVERY_MAP: Record<string, NotificationDeliveryType>
   
   // League Lifecycle - PUSH
   DIVISION_REBALANCED: NotificationDeliveryType.PUSH,
+  DIVISION_TRANSFERRED: NotificationDeliveryType.PUSH,
   DIVISION_UPDATE_NEW_PLAYER: NotificationDeliveryType.PUSH,
   WINNING_STREAK: NotificationDeliveryType.PUSH,
   LEAGUE_ANNOUNCEMENT: NotificationDeliveryType.PUSH,
@@ -117,6 +111,7 @@ export const NOTIFICATION_DELIVERY_MAP: Record<string, NotificationDeliveryType>
   LEAGUE_STARTED_WELCOME: NotificationDeliveryType.PUSH,
   PAYMENT_FAILED: NotificationDeliveryType.PUSH,
   WITHDRAWAL_APPROVED: NotificationDeliveryType.PUSH,
+  WITHDRAWAL_REQUEST_APPROVED: NotificationDeliveryType.PUSH,
   REFUND_PROCESSED: NotificationDeliveryType.PUSH,
   
   // Match Management - IN_APP
@@ -137,6 +132,7 @@ export const NOTIFICATION_DELIVERY_MAP: Record<string, NotificationDeliveryType>
   SCHEDULING_CONFLICT_DETECTED: NotificationDeliveryType.PUSH,
   FRIENDLY_MATCH_DETAILS_CHANGED: NotificationDeliveryType.PUSH,
   MATCH_REMINDER_24H: NotificationDeliveryType.PUSH,
+  MATCH_REMINDER: NotificationDeliveryType.PUSH,
   MATCH_MORNING_REMINDER: NotificationDeliveryType.PUSH,
   MATCH_REMINDER_2H: NotificationDeliveryType.PUSH,
   MATCH_RESCHEDULE_REQUEST: NotificationDeliveryType.PUSH,
@@ -163,18 +159,19 @@ export const NOTIFICATION_DELIVERY_MAP: Record<string, NotificationDeliveryType>
   LEAGUE_LEADER: NotificationDeliveryType.PUSH,
   WEEKLY_RANKING_UPDATE: NotificationDeliveryType.PUSH,
   DMR_INCREASED: NotificationDeliveryType.PUSH,
+  DMR_DECREASED: NotificationDeliveryType.PUSH,
   MONTHLY_DMR_RECAP: NotificationDeliveryType.PUSH,
   PERSONAL_BEST_RATING: NotificationDeliveryType.PUSH,
   RATING_MILESTONE: NotificationDeliveryType.PUSH,
   
   // Social & Community - PUSH
   FRIEND_ACTIVITY_POST: NotificationDeliveryType.PUSH,
+  FRIEND_ACTIVITY_SCORECARD: NotificationDeliveryType.PUSH,
   SHARE_SCORECARD_PROMPT: NotificationDeliveryType.PUSH,
-  FRIEND_REQUEST: NotificationDeliveryType.PUSH,
+  FRIEND_REQUEST: NotificationDeliveryType.BOTH,
   // POST_LIKED: NotificationDeliveryType.PUSH,
-  // POST_COMMENTED: NotificationDeliveryType.PUSH,
-  // NEW_MESSAGE: NotificationDeliveryType.PUSH,
-  Group_NEW_MESSAGE: NotificationDeliveryType.PUSH,
+  // used for group messages only
+  NEW_MESSAGE: NotificationDeliveryType.PUSH,
   GROUP_CHAT_ADDED: NotificationDeliveryType.PUSH,
   
   // Promotional - PUSH

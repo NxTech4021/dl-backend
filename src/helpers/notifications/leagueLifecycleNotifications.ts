@@ -67,30 +67,6 @@ export const leagueLifecycleNotifications = {
     metadata: { leagueName, record, ratingChange },
   }),
 
-
-  // divisionRebalanced: (
-  //   newDivision: string,
-  //   leagueName: string
-  // ): NotificationPayload => ({
-  //   type: NOTIFICATION_TYPES.DIVISION_TRANSFERRED,
-  //   category: getCategoryForNotificationType(
-  //     NOTIFICATION_TYPES.DIVISION_TRANSFERRED
-  //   ),
-  //   title: "🔄 You're in a New Division",
-  //   message: `You've been moved to ${newDivision} in ${leagueName} for competitive balance.`,
-  //   metadata: { newDivision, leagueName },
-  // }),
-
-  // divisionUpdateNewPlayer: (leagueName: string): NotificationPayload => ({
-  //   type: NOTIFICATION_TYPES.DIVISION_UPDATE_NEW_PLAYER,
-  //   category: getCategoryForNotificationType(
-  //     NOTIFICATION_TYPES.DIVISION_UPDATE_NEW_PLAYER
-  //   ),
-  //   title: "New Opponent Available",
-  //   message: `A new player has joined your division in ${leagueName}. Time to arrange a match!`,
-  //   metadata: { leagueName },
-  // }),
-
   winningStreak: (streakCount: number): NotificationPayload => ({
     type: NOTIFICATION_TYPES.WINNING_STREAK,
     category: getCategoryForNotificationType(NOTIFICATION_TYPES.WINNING_STREAK),
@@ -433,13 +409,5 @@ export const leagueLifecycleNotifications = {
     title: "Refund on Its Way",
     message: `Your RM${amount} refund for ${leagueName} has been processed. Allow 3–7 business days.`,
     metadata: { amount, leagueName },
-  }),
-
-  divisionUpdateNewPlayer: (leagueName: string, gameType?: string): NotificationPayload => ({
-    type: NOTIFICATION_TYPES.DIVISION_UPDATE_NEW_PLAYER,
-    category: getCategoryForNotificationType(NOTIFICATION_TYPES.DIVISION_UPDATE_NEW_PLAYER),
-    title: "New Opponent in Your Division",
-    message: `A new ${gameType === 'DOUBLES' ? 'team' : 'player'} has joined your division in ${leagueName}. Time to arrange a match!`,
-    metadata: { leagueName, gameType: gameType ?? '' },
   }),
 };

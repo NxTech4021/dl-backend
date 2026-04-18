@@ -2,21 +2,6 @@
  * Rating Services - Barrel Export
  */
 
-// Old ELO-based rating service (deprecated - use DMR instead)
-export {
-  getRatingCalculationService,
-  getRatingConfig,
-  calculateMatchRatings,
-  applyMatchRatings,
-  reverseMatchRatings
-} from './ratingCalculationService';
-
-export type {
-  RatingUpdate as LegacyRatingUpdate,
-  MatchRatingResult as LegacyMatchRatingResult,
-  RatingConfig
-} from './ratingCalculationService';
-
 export * from './standingsCalculationService';
 export * from './playerRatingService';
 export * from './adminRatingService';

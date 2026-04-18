@@ -85,6 +85,8 @@ export function getBackendBaseURL(): string {
  */
 export function getTrustedOrigins(): string[] {
   const baseOrigins = [
+    "exp://192.168.0.101:8081",
+    "exp://192.168.0.107:8081",
     "http://localhost:3030",
     "http://localhost:82",
     "http://localhost:3001",

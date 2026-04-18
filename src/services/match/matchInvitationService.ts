@@ -78,6 +78,10 @@ export class MatchInvitationService {
   /**
    * Create a new match with optional direct challenge
    */
+  // TODO(111-F-20): No idempotency guard — rapid double-click creates duplicate matches.
+  //   See docs/issues/backlog/match-stub-endpoints.md
+  // TODO(111-F-61/F-39): Add assertUserCanAct before creating — suspended/inactive users
+  //   can currently create league matches. See docs/issues/backlog/match-penalty-enforcement.md
   async createMatch(input: CreateMatchInput) {
     const {
       createdById,
@@ -196,7 +200,10 @@ export class MatchInvitationService {
         league: {
           connect: { id: division.leagueId }
         },
-        sport: division.league?.sportType || 'PADEL',
+        // F-21: leagueId on Division is non-nullable and League.sportType is a
+        // non-null enum, so the previous `|| 'PADEL'` fallback only masked real
+        // data integrity failures. Drop it and let Prisma surface the error.
+        sport: division.league.sportType,
         matchType,
         format,
         status: MatchStatus.SCHEDULED,
@@ -777,6 +784,31 @@ export class MatchInvitationService {
     if (invitation.expiresAt < new Date()) {
       throw new Error('This invitation has expired');
     }
+
+    // F-17: the match underneath can transition independently (cancelled by
+    // creator, voided by admin, or auto-declined). Accepting an invitation
+    // to a non-SCHEDULED match would create an ACCEPTED participant on a
+    // terminal/post-play match.
+    //
+    // Audit-E2: decline on non-SCHEDULED is harmless inbox hygiene (the
+    // participant row is updated to DECLINED; no schema constraint or
+    // downstream flow cares about a declined participant on a terminal match),
+    // so we only gate accept.
+    //
+    // Audit-E3: client-facing message avoids the raw enum token; the actual
+    // status is still captured in the structured log below for debugging.
+    if (accept && invitation.match.status !== MatchStatus.SCHEDULED) {
+      logger.warn('Invitation accept rejected — match no longer SCHEDULED', {
+        invitationId,
+        userId,
+        matchId: invitation.matchId,
+        matchStatus: invitation.match.status,
+      });
+      throw new Error('This match is no longer available. Please refresh your invitations.');
+    }
+
+    // TODO(111-F-61/F-39): Call assertUserCanAct(userId) — suspended/inactive users can currently
+    // accept league invitations. See docs/issues/backlog/match-penalty-enforcement.md
 
     // Check for time conflicts if accepting
     if (accept) {

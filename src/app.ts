@@ -14,16 +14,17 @@ import { getApiPrefix, getTrustedOrigins } from "./config/network";
 import { notFoundHandler, errorHandler } from "./middlewares/errorHandler";
 // import pinoHttp from "pino-http";
 // import pino from "pino";
-import {
-  securityHeaders,
-  sanitizeInput,
-  preventSQLInjection,
-  ipBlocker,
-} from "./middlewares/security";
+import { securityHeaders } from "./middlewares/security";
 
 const app = express();
 
-app.set("trust proxy", true);
+// Trust exactly 1 reverse-proxy hop (nginx in dev, ALB in prod). With `true`,
+// Express takes the LEFTMOST X-Forwarded-For value as req.ip - allowing attackers
+// to spoof the header and bypass ALL per-IP rate limiters (authLimiter,
+// crashReportLimiter, generalLimiter, etc.). With `1`, Express takes the
+// RIGHTMOST value (the one the proxy actually injected). Integration tests
+// override this per-test via app.set('trust proxy', false) so they are unaffected.
+app.set("trust proxy", 1);
 
 // // Configure pino for clean, concise logging
 // const pinoLogger = pino({
@@ -77,50 +78,60 @@ app.set("trust proxy", true);
 // Initialize notification service with socket.io for real-time notifications
 
 // Apply security middlewares first
-
 app.use(securityHeaders);
 
-app.use(ipBlocker);
+// TODO(AWS-M-38): generalLimiter intentionally not applied until Phase 2 when
+// rate-limit-redis is wired to ElastiCache. In-memory rate limiting resets per
+// Fargate task, making a naively-applied limit N-multiply across tasks. Must
+// ship alongside Redis store. Track at docs/plans/2026-04-14-aws-migration-
+// architecture-stress-tests.md (M-4 / M-38).
+// app.use(generalLimiter);
 
-// app.use(generalLimiter); // Commented out for development
-app.use(sanitizeInput);
-
-app.use(preventSQLInjection);
+// Dead middleware removed in pre-Phase 0 cleanup (2026-04-15):
+//   - sanitizeInput: no-op (Express 5 req.query is read-only, middleware just called next())
+//   - preventSQLInjection: false-positive regex blocked legitimate English ("UPDATE", "DELETE", etc.)
+//                          Prisma's parameterized queries provide actual SQL injection protection.
+//   - ipBlocker: counter branch was unreachable (suspiciousActivity map never written)
+// AWS WAF managed rule sets will replace real defense-in-depth post-migration.
 // Request logging is now handled by pino-http with clean, concise output
 
 // Set up CORS
 app.use(
   cors({
-    origin: getTrustedOrigins(),
-    // origin: [
-    //   "http://localhost:3030",
-    //   "http://localhost:82",
-    //   "http://localhost",
-    //   "http://localhost:3001",
-    //   "http://localhost:8081",
-    //   "http://192.168.1.3:3001", // Added current IP from logs
-    //   "http://192.168.1.7:3001",
-    //   "http://192.168.100.3:8081",
-    //   "exp://192.168.100.3:8081",
-    //   "http://192.168.100.53:8081",
-    //   "exp://192.168.100.53:8081",
-    //   "http://172.20.10.3:8081",
-    //   "exp://172.20.10.3:8081",
-    //   "http://10.72.179.58:8081",
-    //   "exp://10.72.179.58:8081",
-    //   "http://10.72.180.20:8081",
-    //   "exp://10.72.180.20:8081",
-    //   "https://staging.appdevelopers.my",
-    // ], // Allow nginx proxy, direct access, and local IP
+    // origin: getTrustedOrigins(),
+    origin: [
+      "http://localhost:3030",
+      "http://localhost:82",
+      "http://localhost",
+      "http://localhost:3001",
+      "http://localhost:8081",
+      "http://192.168.0.108", // Added current IP from logs
+      "http://192.168.0.108:8081",
+      "exp://192.168.0.108:8081",
+      "http://192.168.1.7:3001",
+      "http://192.168.100.3:8081",
+      "exp://192.168.100.3:8081",
+      "http://192.168.100.53:8081",
+      "exp://192.168.100.53:8081",
+      "http://172.20.10.3:8081",
+    
+      "exp://172.20.10.3:8081",
+      "http://10.72.179.58:8081",
+      "exp://10.72.179.58:8081",
+      "http://10.72.180.20:8081",
+      "exp://10.72.180.20:8081",
+      "https://staging.appdevelopers.my",
+    ], // Allow nginx proxy, direct access, and local IP
     credentials: true,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    // allowedHeaders: ["*"], // Allow all headers temporarily for debugging
     allowedHeaders: [
       "Content-Type",
       "Authorization",
       "X-Requested-With",
       "expo-origin",
-      "Cache-Control",
-      "Cookie",
+    "Cache-Control",
+      "Cookie", // Required for better-auth
     ],
   })
 );
@@ -181,3 +192,4 @@ app.use(errorHandler);
 
 export { httpServer, io };
 export default app;
+

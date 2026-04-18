@@ -34,8 +34,13 @@ notificationRouter.get('/push-tokens', verifyAuth, getUserPushTokens);
 notificationRouter.delete('/:id', verifyAuth, deleteNotification);
 
 
-// Testing routes - separate endpoints for different notification types                          
-notificationRouter.post('/test/local', verifyAuth, sendTestLocalNotification);    
-notificationRouter.post('/test/push', verifyAuth, sendTestPushNotification);  
+// Testing routes - separate endpoints for different notification types.
+// NS-9 fix: these endpoints allow any authenticated user to send fake push
+// notifications to any other user (phishing vector). Gating by NODE_ENV removes
+// the attack surface entirely in production - test endpoints only exist in dev.
+if (process.env.NODE_ENV !== 'production') {
+  notificationRouter.post('/test/local', verifyAuth, sendTestLocalNotification);
+  notificationRouter.post('/test/push', verifyAuth, sendTestPushNotification);
+}
 
 export default notificationRouter;

@@ -98,15 +98,20 @@ export const ratingRankingNotifications = {
   //   metadata: { rating, sport },
   // }),
 
-  // ratingUpdate: (
-  //   oldRating: number,
-  //   newRating: number,
-  //   changeStr: string
-  // ): NotificationPayload => ({
-  //   type: NOTIFICATION_TYPES.DMR_INCREASED,
-  //   category: getCategoryForNotificationType(NOTIFICATION_TYPES.DMR_INCREASED),
-  //   title: "Rating Updated",
-  //   message: `Your rating has changed from ${oldRating} to ${newRating} (${changeStr})`,
-  //   metadata: { oldRating, newRating, changeStr },
-  // }),
+  ratingUpdate: (
+    oldRating: number,
+    newRating: number,
+    changeStr: string
+  ): NotificationPayload => {
+    const type = newRating >= oldRating
+      ? NOTIFICATION_TYPES.DMR_INCREASED
+      : NOTIFICATION_TYPES.DMR_DECREASED;
+    return {
+      type,
+      category: getCategoryForNotificationType(type),
+      title: newRating >= oldRating ? "Rating Increased" : "Rating Updated",
+      message: `Your rating has changed from ${oldRating} to ${newRating} (${changeStr})`,
+      metadata: { oldRating, newRating, changeStr },
+    };
+  },
 };

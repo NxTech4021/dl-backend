@@ -122,46 +122,10 @@ export const getCancellationRuleImpact = async (req: Request, res: Response) => 
   }
 };
 
-/**
- * Record a walkover (opponent 20+ minutes late)
- * POST /api/matches/:id/walkover
- */
-export const recordWalkover = async (req: Request, res: Response) => {
-  try {
-    const userId = req.user?.id;
-    if (!userId) {
-      return sendError(res, 'Authentication required', 401);
-    }
-
-    const { id } = req.params;
-    if (!id) {
-      return sendError(res, 'Match ID is required', 400);
-    }
-
-    const { defaultingPlayerId, reason } = req.body;
-
-    if (!defaultingPlayerId) {
-      return sendError(res, 'Defaulting player ID is required', 400);
-    }
-
-    if (!reason) {
-      return sendError(res, 'Reason is required', 400);
-    }
-
-    const match = await matchScheduleService.recordWalkover(
-      id,
-      userId,
-      defaultingPlayerId,
-      reason
-    );
-
-    sendSuccess(res, match);
-  } catch (error) {
-    console.error('Record Walkover Error:', error);
-    const message = error instanceof Error ? error.message : 'Failed to record walkover';
-    sendError(res, message, 400);
-  }
-};
+// recordWalkover controller REMOVED — duplicate of submitWalkover in matchResultController.
+// Route was never mounted (matchRoutes.ts:105 confirms "recordWalkover was never reachable").
+// Active walkover endpoint: POST /:id/walkover → matchResultController.submitWalkover.
+// See docs/issues/dissections/111-singles-match-deep-stress.md §5 D-2.
 
 /**
  * Continue an unfinished match
