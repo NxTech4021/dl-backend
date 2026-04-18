@@ -1317,25 +1317,24 @@ export class DMRRatingService {
   }
 
   /**
-   * Reverse rating changes for a voided match
+   * Reverse rating changes for a voided match.
    *
-   * TODO(111-audit-B1): not idempotent — matchesPlayed is unconditionally
-   * decremented per call. The [REVERSED] marker below is written but never
-   * read; a second call on the same matchId decrements again. Optimal fix
-   * (per deep-dive): add `isReversed Boolean @default(false)` to
-   * RatingHistory with `@@index([matchId, isReversed])`, filter by it here,
-   * and set it in the update. Preserves audit trail (unlike deletion) and
-   * is indexable (unlike substring match on notes).
-   * See docs/issues/backlog/match-deferred-issues-deep-dive-2026-04-16.md#issue-b
+   * Audit-B1: idempotent — filters on RatingHistory.isReversed=false and
+   * flips the column inside the same transaction that decrements
+   * matchesPlayed. A second call on the same matchId finds zero
+   * unreversed rows and short-circuits, so matchesPlayed is decremented
+   * at most once per history row. The " [REVERSED]" notes marker is
+   * retained alongside the flag for human-readable audit logs; the
+   * column is the authoritative guard.
    */
   async reverseMatchRatings(matchId: string): Promise<void> {
     const historyEntries = await this.prisma.ratingHistory.findMany({
-      where: { matchId },
+      where: { matchId, isReversed: false },
       include: { playerRating: true },
     });
 
     if (historyEntries.length === 0) {
-      logger.warn(`No rating history found for match ${matchId}`);
+      logger.warn(`No unreversed rating history found for match ${matchId}`);
       return;
     }
 
@@ -1354,6 +1353,7 @@ export class DMRRatingService {
         await tx.ratingHistory.update({
           where: { id: entry.id },
           data: {
+            isReversed: true,
             notes: `${entry.notes || ''} [REVERSED]`.trim(),
           },
         });
