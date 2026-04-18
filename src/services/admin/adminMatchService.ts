@@ -1223,6 +1223,92 @@ export class AdminMatchService {
   }
 
   /**
+   * Retry the manual rating reversal for a match that was left in the
+   * split-brain state documented in audit-B2 (voidMatch or resolveDispute
+   * flipped status to VOID, but reverseMatchRatings or the following
+   * standings recalc threw after the outer transaction had already
+   * committed, so `requiresManualRatingReversal` is true).
+   *
+   * Safe to call multiple times thanks to audit-B1 (reverseMatchRatings is
+   * idempotent via the RatingHistory.isReversed column). The flag is only
+   * cleared if BOTH reversal and standings recalc complete without
+   * throwing; partial success keeps the flag true so the admin can retry
+   * again.
+   */
+  async retryManualRatingReversal(matchId: string, adminId: string, reason?: string) {
+    const match = await prisma.match.findUnique({
+      where: { id: matchId },
+      select: {
+        id: true,
+        status: true,
+        sport: true,
+        divisionId: true,
+        seasonId: true,
+        requiresManualRatingReversal: true,
+        participants: { select: { userId: true } },
+      },
+    });
+
+    if (!match) {
+      throw new Error('Match not found');
+    }
+
+    if (!match.requiresManualRatingReversal) {
+      throw new Error('Match is not flagged for manual rating reversal');
+    }
+
+    if (match.status !== MatchStatus.VOID) {
+      throw new Error(
+        `Cannot retry rating reversal: match status is ${match.status}, expected VOID`
+      );
+    }
+
+    // Both calls are idempotent. If either throws, we leave the flag set
+    // so the admin can retry again after investigating.
+    const dmrService = new DMRRatingService(match.sport as any);
+    await dmrService.reverseMatchRatings(matchId);
+    logger.info(`Retry reverseMatchRatings succeeded for match ${matchId}`);
+
+    if (match.divisionId && match.seasonId) {
+      const standingsV2 = new StandingsV2Service();
+      await standingsV2.recalculateDivisionStandings(match.divisionId, match.seasonId);
+      logger.info(`Retry recalculateDivisionStandings succeeded for match ${matchId}`);
+    }
+
+    // Both steps succeeded — clear the flag and audit the action atomically.
+    await prisma.$transaction(async (tx) => {
+      await tx.match.update({
+        where: { id: matchId },
+        data: { requiresManualRatingReversal: false },
+      });
+
+      await tx.matchAdminAction.create({
+        data: {
+          matchId,
+          adminId,
+          actionType: MatchAdminActionType.RETRY_RATING_REVERSAL,
+          oldValue: { requiresManualRatingReversal: true },
+          newValue: { requiresManualRatingReversal: false },
+          reason: reason ?? 'Manual rating reversal retry',
+          affectedUserIds: match.participants.map(p => p.userId),
+          triggeredRecalculation: true,
+        },
+      });
+    });
+
+    logger.info(`Manual rating reversal retry completed for match ${matchId} by admin ${adminId}`);
+
+    return prisma.match.findUnique({
+      where: { id: matchId },
+      select: {
+        id: true,
+        status: true,
+        requiresManualRatingReversal: true,
+      },
+    });
+  }
+
+  /**
    * Get pending late cancellations for review (AS3)
    */
   async getPendingCancellations() {
