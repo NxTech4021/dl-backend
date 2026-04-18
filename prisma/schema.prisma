@@ -2509,6 +2509,11 @@ enum AdminActionType {
   MATCH_EDIT_RESULT
   MATCH_EDIT_SCHEDULE
   MATCH_WALKOVER
+  // Audit-B2 retry: mirrors MatchAdminActionType.RETRY_RATING_REVERSAL so
+  // the outer AdminLog search can filter by actionType instead of message
+  // substring. Used when an admin re-runs the post-tx rating reversal
+  // chain on a split-brain VOID match.
+  MATCH_RETRY_RATING_REVERSAL
   // Dispute management
   DISPUTE_RESOLVE
   DISPUTE_OVERRIDE
