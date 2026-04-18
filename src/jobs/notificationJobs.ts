@@ -41,6 +41,8 @@ import {
 } from "../services/notification/standingsNotificationService";
 import { checkAndSendProfileReminders } from "../services/notification/onboardingNotificationService";
 import { notificationService } from "../services/notificationService";
+import { accountNotifications } from "../helpers/notifications/accountNotifications";
+import { MALAYSIA_TIMEZONE } from "../utils/timezone";
 
 /**
  * Check and send match reminders 24 hours before
@@ -113,7 +115,6 @@ export function scheduleMatch24hReminders(): void {
 
           const notif = matchManagementNotifications.matchReminder24h(
             opponentName,
-            date,
             time,
             venue
           );
@@ -316,7 +317,6 @@ export function scheduleMatchMorningReminders(): void {
 
           const notif = matchManagementNotifications.matchMorningReminder(
             opponentName,
-            date,
             time,
             venue
           );
@@ -393,7 +393,88 @@ export function scheduleScoreSubmissionReminders(): void {
 }
 
 /**
- * Check and send Season Starting soon notifications (3 days before)
+ * NOTIF-098/099: Send pending score submission/confirmation reminders
+ * Runs hourly — checks for matches ~20h after they ended that still need action
+ */
+export function schedulePendingScoreNotifications(): void {
+  scheduleCron("0 * * * *", async () => {
+    try {
+      const now = new Date();
+      const twentyOneHoursAgo = new Date(now.getTime() - 21 * 60 * 60 * 1000);
+      const nineteenHoursAgo = new Date(now.getTime() - 19 * 60 * 60 * 1000);
+
+      // NOTIF-098: SCHEDULED matches (no score submitted) ending ~20h ago
+      const unsubmittedMatches = await prisma.match.findMany({
+        where: {
+          matchDate: { gte: twentyOneHoursAgo, lte: nineteenHoursAgo },
+          status: "SCHEDULED",
+          isFriendly: false,
+        },
+        include: {
+          participants: {
+            where: { invitationStatus: "ACCEPTED" },
+            include: { user: { select: { id: true, name: true } } },
+          },
+        },
+      });
+
+      for (const match of unsubmittedMatches) {
+        const participants = match.participants.filter((p: any) => p.userId);
+        for (const participant of participants) {
+          const others = participants.filter((p: any) => p.userId !== participant.userId);
+          const opponentName = others[0]?.user?.name || "Opponent";
+          await notificationService.createNotification({
+            ...matchManagementNotifications.pendingScoreSubmission(opponentName),
+            userIds: [participant.userId],
+            matchId: match.id,
+          });
+        }
+      }
+
+      if (unsubmittedMatches.length > 0) {
+        logger.info("NOTIF-098: Pending score submission reminders sent", { count: unsubmittedMatches.length });
+      }
+
+      // NOTIF-099: ONGOING matches (one submitted, other hasn't confirmed) ending ~20h ago
+      const unconfirmedMatches = await prisma.match.findMany({
+        where: {
+          matchDate: { gte: twentyOneHoursAgo, lte: nineteenHoursAgo },
+          status: "ONGOING",
+          isFriendly: false,
+        },
+        include: {
+          participants: {
+            where: { invitationStatus: "ACCEPTED" },
+            include: { user: { select: { id: true, name: true } } },
+          },
+        },
+      });
+
+      for (const match of unconfirmedMatches) {
+        const participants = match.participants.filter((p: any) => p.userId);
+        for (const participant of participants) {
+          const others = participants.filter((p: any) => p.userId !== participant.userId);
+          const opponentName = others[0]?.user?.name || "Opponent";
+          await notificationService.createNotification({
+            ...matchManagementNotifications.pendingScoreConfirmation(opponentName),
+            userIds: [participant.userId],
+            matchId: match.id,
+          });
+        }
+      }
+
+      if (unconfirmedMatches.length > 0) {
+        logger.info("NOTIF-099: Pending score confirmation reminders sent", { count: unconfirmedMatches.length });
+      }
+    } catch (error) {
+      logger.error("Failed to send pending score notifications", {}, error as Error);
+    }
+  });
+
+  logger.info("Pending score notification job scheduled (hourly)");
+}
+
+/**
  * Runs daily at 10:00 AM
  */
 export function scheduleSeasonStartingSoonNotifications(): void {
@@ -581,7 +662,7 @@ export function scheduleLastMatchDeadline48h(): void {
           endDate: { gte: in48Hours, lte: in49Hours },
           status: 'ACTIVE',
         },
-        select: { id: true, name: true },
+        include: { leagues: { select: { name: true } } },
       });
 
       for (const season of seasons) {
@@ -595,7 +676,8 @@ export function scheduleLastMatchDeadline48h(): void {
 
           const userIds = members.map(m => m.userId);
 
-          const notif = leagueLifecycleNotifications.lastMatchDeadline48h();
+          const leagueName48h = season.leagues?.[0]?.name ?? '';
+          const notif = leagueLifecycleNotifications.lastMatchDeadline48h(season.name, leagueName48h);
 
           await notificationService.createNotification({
             userIds,
@@ -891,18 +973,9 @@ export function scheduleTeamRegistrationReminder2h(): void {
             if (!captainMembership) {
               const partnerName = partnership.partner?.name || partnership.partner?.username || 'your partner';
 
-              const notif = doublesNotifications.teamRegistrationReminder2h(
-                season.name || 'this league',
-                partnerName
-              );
-
-              await notificationService.createNotification({
-                userIds: partnership.captainId,
-                ...notif,
-                seasonId: season.id,
-                partnershipId: partnership.id,
-                skipDuplicateWithinMs: 3 * 60 * 60 * 1000,
-              });
+              // teamRegistrationReminder2h removed — not used
+              // const notif = doublesNotifications.teamRegistrationReminder2h(season.name || 'this league', partnerName);
+              // await notificationService.createNotification({ userIds: partnership.captainId, ... });
             }
           }
 
@@ -923,52 +996,215 @@ export function scheduleTeamRegistrationReminder2h(): void {
  * Check and send team registration reminders (24 hours before deadline)
  * Runs daily at 10:00 AM
  */
+/**
+ * NOTIF-027: Complete Team Registration Reminder - 24 Hours (Captain)
+ * Fires exactly 24 hours after team (partnership) was confirmed, if captain hasn't registered.
+ * Runs every 30 minutes to catch partnerships that crossed the 24h mark.
+ */
 export function scheduleTeamRegistrationReminder24h(): void {
-  scheduleCron('0 10 * * *', async () => {
+  scheduleCron('*/30 * * * *', async () => {
     try {
-      logger.info('Running team registration 24h reminder job');
+      logger.info('Running team registration 24h reminder job (NOTIF-027)');
 
       const now = new Date();
-      const in24Hours = new Date(now.getTime() + 24 * 60 * 60 * 1000);
-      const in25Hours = new Date(now.getTime() + 25 * 60 * 60 * 1000);
+      const from23hAgo = new Date(now.getTime() - 25 * 60 * 60 * 1000);
+      const to23hAgo = new Date(now.getTime() - 23 * 60 * 60 * 1000);
 
-      // Find seasons with registration deadline in ~24 hours
+      // Find partnerships confirmed ~24h ago (within a 2h window) that are still ACTIVE
+      const partnerships = await prisma.partnership.findMany({
+        where: {
+          createdAt: {
+            gte: from23hAgo,
+            lte: to23hAgo,
+          },
+          status: 'ACTIVE',
+          partnerId: { not: null },
+        },
+        include: {
+          captain: {
+            select: { id: true, name: true, username: true },
+          },
+          season: {
+            select: { id: true, name: true, status: true, regiDeadline: true },
+          },
+        },
+      });
+
+      for (const partnership of partnerships) {
+        try {
+          // Only notify for upcoming seasons with an open registration window
+          if (partnership.season.status !== 'UPCOMING') continue;
+          if (partnership.season.regiDeadline && partnership.season.regiDeadline < now) continue;
+
+          // Check if captain has already registered
+          const captainMembership = await prisma.seasonMembership.findFirst({
+            where: {
+              userId: partnership.captainId,
+              seasonId: partnership.seasonId,
+              status: 'ACTIVE',
+            },
+          });
+
+          if (!captainMembership) {
+            const notif = doublesNotifications.teamRegistrationReminder24h(
+              partnership.season.name || 'this league'
+            );
+
+            await notificationService.createNotification({
+              userIds: partnership.captainId,
+              ...notif,
+              seasonId: partnership.seasonId,
+              partnershipId: partnership.id,
+              skipDuplicateWithinMs: 23 * 60 * 60 * 1000,
+            });
+          }
+        } catch (innerErr) {
+          logger.error('Failed sending NOTIF-027 for partnership', { partnershipId: partnership.id }, innerErr as Error);
+        }
+      }
+
+      logger.info('NOTIF-027 job complete', { checked: partnerships.length });
+    } catch (error) {
+      logger.error('Failed to run team registration 24h reminder job', {}, error as Error);
+    }
+  });
+
+  logger.info('Team registration 24h reminder job scheduled (NOTIF-027)');
+}
+
+/**
+ * NOTIF-029: Waiting for Captain to Register - Partner
+ * Fires exactly 24 hours after team (partnership) was confirmed, if captain hasn't registered.
+ * Notifies the PARTNER (not the captain).
+ * Runs every 30 minutes alongside NOTIF-027.
+ */
+export function scheduleWaitingForCaptain(): void {
+  scheduleCron('*/30 * * * *', async () => {
+    try {
+      logger.info('Running waiting-for-captain reminder job (NOTIF-029)');
+
+      const now = new Date();
+      const from23hAgo = new Date(now.getTime() - 25 * 60 * 60 * 1000);
+      const to23hAgo = new Date(now.getTime() - 23 * 60 * 60 * 1000);
+
+      const partnerships = await prisma.partnership.findMany({
+        where: {
+          createdAt: {
+            gte: from23hAgo,
+            lte: to23hAgo,
+          },
+          status: 'ACTIVE',
+          partnerId: { not: null },
+        },
+        include: {
+          captain: {
+            select: { id: true, name: true, username: true },
+          },
+          partner: {
+            select: { id: true, name: true, username: true },
+          },
+          season: {
+            select: { id: true, name: true, status: true, regiDeadline: true },
+          },
+        },
+      });
+
+      for (const partnership of partnerships) {
+        try {
+          if (!partnership.partnerId || !partnership.partner) continue;
+          if (partnership.season.status !== 'UPCOMING') continue;
+          if (partnership.season.regiDeadline && partnership.season.regiDeadline < now) continue;
+
+          // Only send if captain hasn't registered
+          const captainMembership = await prisma.seasonMembership.findFirst({
+            where: {
+              userId: partnership.captainId,
+              seasonId: partnership.seasonId,
+              status: 'ACTIVE',
+            },
+          });
+
+          if (!captainMembership) {
+            const captainName = partnership.captain.name || partnership.captain.username || 'Your captain';
+            const notif = doublesNotifications.waitingForCaptain(
+              captainName,
+              partnership.season.name || 'this league'
+            );
+
+            await notificationService.createNotification({
+              userIds: partnership.partnerId,
+              ...notif,
+              seasonId: partnership.seasonId,
+              partnershipId: partnership.id,
+              skipDuplicateWithinMs: 23 * 60 * 60 * 1000,
+            });
+          }
+        } catch (innerErr) {
+          logger.error('Failed sending NOTIF-029 for partnership', { partnershipId: partnership.id }, innerErr as Error);
+        }
+      }
+
+      logger.info('NOTIF-029 job complete', { checked: partnerships.length });
+    } catch (error) {
+      logger.error('Failed to run waiting-for-captain reminder job', {}, error as Error);
+    }
+  });
+
+  logger.info('Waiting-for-captain reminder job scheduled (NOTIF-029)');
+}
+
+/**
+ * NOTIF-030: Registration Deadline Approaching - Partner
+ * Fires 24 hours before registration closes, if captain hasn't registered.
+ * Notifies the PARTNER (not the captain).
+ * Runs daily at 8:00 PM alongside NOTIF-028.
+ */
+export function scheduleRegistrationDeadlinePartner(): void {
+  scheduleCron('0 20 * * *', async () => {
+    try {
+      logger.info('Running registration deadline partner reminder job (NOTIF-030)');
+
+      const tomorrow = new Date();
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      tomorrow.setHours(0, 0, 0, 0);
+
+      const dayAfterTomorrow = new Date(tomorrow);
+      dayAfterTomorrow.setDate(dayAfterTomorrow.getDate() + 1);
+
+      // Find seasons with registration deadline tomorrow
       const seasons = await prisma.season.findMany({
         where: {
           regiDeadline: {
-            gte: in24Hours,
-            lte: in25Hours,
+            gte: tomorrow,
+            lt: dayAfterTomorrow,
           },
           status: 'UPCOMING',
         },
-        select: {
-          id: true,
-          name: true,
-          regiDeadline: true,
-        },
+        select: { id: true, name: true },
       });
 
       for (const season of seasons) {
         try {
-          // Find partnerships for this season
           const partnerships = await prisma.partnership.findMany({
             where: {
               seasonId: season.id,
               status: 'ACTIVE',
+              partnerId: { not: null },
             },
             include: {
               captain: {
-                select: {
-                  id: true,
-                  name: true,
-                  username: true,
-                },
+                select: { id: true, name: true, username: true },
+              },
+              partner: {
+                select: { id: true, name: true, username: true },
               },
             },
           });
 
           for (const partnership of partnerships) {
-            // Check if captain has already registered
+            if (!partnership.partnerId || !partnership.partner) continue;
+
+            // Only send if captain hasn't registered
             const captainMembership = await prisma.seasonMembership.findFirst({
               where: {
                 userId: partnership.captainId,
@@ -977,14 +1213,15 @@ export function scheduleTeamRegistrationReminder24h(): void {
               },
             });
 
-            // Only send reminder if not registered
             if (!captainMembership) {
-              const notif = doublesNotifications.teamRegistrationReminder24h(
-                season.name || 'this league'
+              const captainName = partnership.captain.name || partnership.captain.username || 'your captain';
+              const notif = doublesNotifications.registrationDeadlinePartner(
+                season.name || 'this league',
+                captainName
               );
 
               await notificationService.createNotification({
-                userIds: partnership.captainId,
+                userIds: partnership.partnerId,
                 ...notif,
                 seasonId: season.id,
                 partnershipId: partnership.id,
@@ -993,17 +1230,17 @@ export function scheduleTeamRegistrationReminder24h(): void {
             }
           }
 
-          logger.info('Team registration 24h reminders sent', { seasonId: season.id, count: partnerships.length });
+          logger.info('NOTIF-030 partner deadline reminders sent', { seasonId: season.id });
         } catch (innerErr) {
-          logger.error('Failed sending team registration 24h reminders for season', { seasonId: season.id }, innerErr as Error);
+          logger.error('Failed sending NOTIF-030 for season', { seasonId: season.id }, innerErr as Error);
         }
       }
     } catch (error) {
-      logger.error('Failed to run team registration 24h reminder job', {}, error as Error);
+      logger.error('Failed to run registration deadline partner job', {}, error as Error);
     }
   });
 
-  logger.info('Team registration 24h reminder job scheduled');
+  logger.info('Registration deadline partner job scheduled (NOTIF-030)');
 }
 
 /**
@@ -1300,6 +1537,541 @@ export function scheduleSeasonAutoFinish(): void {
   logger.info('Season auto-finish job scheduled (every hour)');
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Activity Nudge Jobs (7 new jobs — per-user inactivity during active season)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * SCHEDULE_MATCH_SOON: Season started 7 days ago; user has 0 completed matches.
+ * Runs daily at 10:00 AM.
+ */
+export function scheduleMatchSoonNudges(): void {
+  scheduleCron('0 10 * * *', async () => {
+    try {
+      logger.info('Running scheduleMatchSoon nudge job');
+      const now = dayjs().tz(MYT);
+      const from = now.subtract(8, 'day').toDate();
+      const to = now.subtract(6, 'day').toDate();
+
+      const activeSeasons = await prisma.season.findMany({
+        where: { status: 'ACTIVE', startDate: { gte: from, lte: to } },
+        include: { divisions: { select: { id: true } } },
+      });
+
+      for (const season of activeSeasons) {
+        for (const division of season.divisions) {
+          const members = await prisma.divisionAssignment.findMany({
+            where: { divisionId: division.id },
+            select: { userId: true },
+          });
+          for (const member of members) {
+            const played = await prisma.match.count({
+              where: {
+                status: 'COMPLETED',
+                participants: { some: { userId: member.userId } },
+                divisionId: division.id,
+              },
+            });
+            if (played === 0) {
+              const notif = leagueLifecycleNotifications.scheduleMatchSoon();
+              await notificationService.createNotification({
+                ...notif,
+                userIds: member.userId,
+                divisionId: division.id,
+                seasonId: season.id,
+                skipDuplicateWithinMs: 7 * 24 * 60 * 60 * 1000,
+              });
+            }
+          }
+        }
+      }
+      logger.info('scheduleMatchSoon nudges complete');
+    } catch (error) {
+      logger.error('Failed to run scheduleMatchSoon nudge job', {}, error as Error);
+    }
+  });
+  logger.info('scheduleMatchSoon nudge job scheduled');
+}
+
+/**
+ * EARLY_SEASON_NUDGE: Season started 14 days ago; user has 0 completed matches.
+ * Runs daily at 10:00 AM.
+ */
+export function scheduleEarlySeasonNudges(): void {
+  scheduleCron('0 10 * * *', async () => {
+    try {
+      logger.info('Running earlySeasonNudge job');
+      const now = dayjs().tz(MYT);
+      const from = now.subtract(15, 'day').toDate();
+      const to = now.subtract(13, 'day').toDate();
+
+      const activeSeasons = await prisma.season.findMany({
+        where: { status: 'ACTIVE', startDate: { gte: from, lte: to } },
+        include: { divisions: { select: { id: true } } },
+      });
+
+      for (const season of activeSeasons) {
+        for (const division of season.divisions) {
+          const members = await prisma.divisionAssignment.findMany({
+            where: { divisionId: division.id },
+            select: { userId: true },
+          });
+          for (const member of members) {
+            const played = await prisma.match.count({
+              where: {
+                status: 'COMPLETED',
+                participants: { some: { userId: member.userId } },
+                divisionId: division.id,
+              },
+            });
+            if (played === 0) {
+              const notif = leagueLifecycleNotifications.earlySeasonNudge();
+              await notificationService.createNotification({
+                ...notif,
+                userIds: member.userId,
+                divisionId: division.id,
+                seasonId: season.id,
+                skipDuplicateWithinMs: 7 * 24 * 60 * 60 * 1000,
+              });
+            }
+          }
+        }
+      }
+      logger.info('earlySeasonNudge job complete');
+    } catch (error) {
+      logger.error('Failed to run earlySeasonNudge job', {}, error as Error);
+    }
+  });
+  logger.info('earlySeasonNudge job scheduled');
+}
+
+/**
+ * LATE_SEASON_NUDGE: Season ends in 14 days; sent to all division members.
+ * Runs daily at 10:00 AM.
+ */
+export function scheduleLateSeasonNudges(): void {
+  scheduleCron('0 10 * * *', async () => {
+    try {
+      logger.info('Running lateSeasonNudge job');
+      const now = dayjs().tz(MYT);
+      const from = now.add(13, 'day').toDate();
+      const to = now.add(15, 'day').toDate();
+
+      const activeSeasons = await prisma.season.findMany({
+        where: { status: 'ACTIVE', endDate: { gte: from, lte: to } },
+        include: { divisions: { select: { id: true } } },
+      });
+
+      for (const season of activeSeasons) {
+        for (const division of season.divisions) {
+          const members = await prisma.divisionAssignment.findMany({
+            where: { divisionId: division.id },
+            select: { userId: true },
+          });
+          const userIds = members.map((m) => m.userId);
+          if (userIds.length === 0) continue;
+          const notif = leagueLifecycleNotifications.lateSeasonNudge();
+          await notificationService.createNotification({
+            ...notif,
+            userIds,
+            divisionId: division.id,
+            seasonId: season.id,
+            skipDuplicateWithinMs: 7 * 24 * 60 * 60 * 1000,
+          });
+        }
+      }
+      logger.info('lateSeasonNudge job complete');
+    } catch (error) {
+      logger.error('Failed to run lateSeasonNudge job', {}, error as Error);
+    }
+  });
+  logger.info('lateSeasonNudge job scheduled');
+}
+
+/**
+ * INACTIVE_PLAYER_WARNING_7_DAYS: User's last COMPLETED match in division > 7 days ago.
+ * Runs daily at 10:00 AM.
+ */
+export function scheduleInactivePlayer7dWarnings(): void {
+  scheduleCron('0 10 * * *', async () => {
+    try {
+      logger.info('Running inactivePlayerWarning7d job');
+      const now = dayjs().tz(MYT);
+      const threshold = now.subtract(7, 'day').toDate();
+
+      const activeSeasons = await prisma.season.findMany({
+        where: { status: 'ACTIVE' },
+        include: { divisions: { select: { id: true } } },
+      });
+
+      for (const season of activeSeasons) {
+        for (const division of season.divisions) {
+          const members = await prisma.divisionAssignment.findMany({
+            where: { divisionId: division.id },
+            select: { userId: true },
+          });
+          for (const member of members) {
+            const lastMatch = await prisma.match.findFirst({
+              where: {
+                status: 'COMPLETED',
+                participants: { some: { userId: member.userId } },
+                divisionId: division.id,
+              },
+              orderBy: { matchDate: 'desc' },
+              select: { matchDate: true },
+            });
+            if (lastMatch?.matchDate && lastMatch.matchDate < threshold) {
+              const notif = leagueLifecycleNotifications.inactivePlayerWarning7Days();
+              await notificationService.createNotification({
+                ...notif,
+                userIds: member.userId,
+                divisionId: division.id,
+                seasonId: season.id,
+                skipDuplicateWithinMs: 7 * 24 * 60 * 60 * 1000,
+              });
+            }
+          }
+        }
+      }
+      logger.info('inactivePlayerWarning7d job complete');
+    } catch (error) {
+      logger.error('Failed to run inactivePlayerWarning7d job', {}, error as Error);
+    }
+  });
+  logger.info('inactivePlayerWarning7d job scheduled');
+}
+
+/**
+ * INACTIVITY_DURING_LEAGUE_SEASON_2_WEEKS: User has ≥1 match played AND last was > 14 days ago.
+ * Runs daily at 10:00 AM.
+ */
+export function scheduleInactivity2WeeksWarnings(): void {
+  scheduleCron('0 10 * * *', async () => {
+    try {
+      logger.info('Running inactivity2Weeks job');
+      const now = dayjs().tz(MYT);
+      const threshold = now.subtract(14, 'day').toDate();
+
+      const activeSeasons = await prisma.season.findMany({
+        where: { status: 'ACTIVE' },
+        include: { divisions: { select: { id: true } } },
+      });
+
+      for (const season of activeSeasons) {
+        for (const division of season.divisions) {
+          const members = await prisma.divisionAssignment.findMany({
+            where: { divisionId: division.id },
+            select: { userId: true },
+          });
+          for (const member of members) {
+            const lastMatch = await prisma.match.findFirst({
+              where: {
+                status: 'COMPLETED',
+                participants: { some: { userId: member.userId } },
+                divisionId: division.id,
+              },
+              orderBy: { matchDate: 'desc' },
+              select: { matchDate: true },
+            });
+            // Must have at least one match but last one is over 14 days ago
+            if (lastMatch?.matchDate && lastMatch.matchDate < threshold) {
+              const notif = leagueLifecycleNotifications.inactivityDuringLeagueSeason2Weeks();
+              await notificationService.createNotification({
+                ...notif,
+                userIds: member.userId,
+                divisionId: division.id,
+                seasonId: season.id,
+                skipDuplicateWithinMs: 7 * 24 * 60 * 60 * 1000,
+              });
+            }
+          }
+        }
+      }
+      logger.info('inactivity2Weeks job complete');
+    } catch (error) {
+      logger.error('Failed to run inactivity2Weeks job', {}, error as Error);
+    }
+  });
+  logger.info('inactivity2Weeks job scheduled');
+}
+
+/**
+ * INACTIVITY_DEADLINE_7_DAYS: User has 0 matches played AND the season midpoint is 7 days away.
+ * Runs daily at 10:00 AM.
+ */
+export function scheduleInactivityDeadline7d(): void {
+  scheduleCron('0 10 * * *', async () => {
+    try {
+      logger.info('Running inactivityDeadline7d job');
+      const now = dayjs().tz(MYT);
+
+      const activeSeasons = await prisma.season.findMany({
+        where: { status: 'ACTIVE', startDate: { not: null }, endDate: { not: null } },
+        include: {
+          divisions: { select: { id: true } },
+          leagues: { select: { name: true } },
+        },
+      });
+
+      for (const season of activeSeasons) {
+        if (!season.startDate || !season.endDate) continue;
+        const midpoint = dayjs(season.startDate).add(
+          (season.endDate.getTime() - season.startDate.getTime()) / 2,
+          'millisecond'
+        );
+        const daysUntilMidpoint = midpoint.diff(now, 'day');
+        if (daysUntilMidpoint < 6 || daysUntilMidpoint > 8) continue;
+
+        const midpointDateStr = midpoint.format('D MMM YYYY');
+
+        for (const division of season.divisions) {
+          const members = await prisma.divisionAssignment.findMany({
+            where: { divisionId: division.id },
+            select: { userId: true },
+          });
+          for (const member of members) {
+            const played = await prisma.match.count({
+              where: {
+                status: 'COMPLETED',
+                participants: { some: { userId: member.userId } },
+                divisionId: division.id,
+              },
+            });
+            if (played === 0) {
+              const notif = leagueLifecycleNotifications.inactivityDeadline7Days(midpointDateStr);
+              await notificationService.createNotification({
+                ...notif,
+                userIds: member.userId,
+                divisionId: division.id,
+                seasonId: season.id,
+                skipDuplicateWithinMs: 6 * 24 * 60 * 60 * 1000,
+              });
+            }
+          }
+        }
+      }
+      logger.info('inactivityDeadline7d job complete');
+    } catch (error) {
+      logger.error('Failed to run inactivityDeadline7d job', {}, error as Error);
+    }
+  });
+  logger.info('inactivityDeadline7d job scheduled');
+}
+
+/**
+ * INACTIVITY_DEADLINE_3_DAYS: User has 0 matches played AND the season midpoint is 3 days away.
+ * Runs daily at 10:00 AM.
+ */
+export function scheduleInactivityDeadline3d(): void {
+  scheduleCron('0 10 * * *', async () => {
+    try {
+      logger.info('Running inactivityDeadline3d job');
+      const now = dayjs().tz(MYT);
+
+      const activeSeasons = await prisma.season.findMany({
+        where: { status: 'ACTIVE', startDate: { not: null }, endDate: { not: null } },
+        include: {
+          divisions: { select: { id: true } },
+          leagues: { select: { name: true } },
+        },
+      });
+
+      for (const season of activeSeasons) {
+        if (!season.startDate || !season.endDate) continue;
+        const midpoint = dayjs(season.startDate).add(
+          (season.endDate.getTime() - season.startDate.getTime()) / 2,
+          'millisecond'
+        );
+        const daysUntilMidpoint = midpoint.diff(now, 'day');
+        if (daysUntilMidpoint < 2 || daysUntilMidpoint > 4) continue;
+
+        const midpointDateStr = midpoint.format('D MMM YYYY');
+        const leagueName = season.leagues?.[0]?.name ?? season.name ?? 'the league';
+
+        for (const division of season.divisions) {
+          const members = await prisma.divisionAssignment.findMany({
+            where: { divisionId: division.id },
+            select: { userId: true },
+          });
+          for (const member of members) {
+            const played = await prisma.match.count({
+              where: {
+                status: 'COMPLETED',
+                participants: { some: { userId: member.userId } },
+                divisionId: division.id,
+              },
+            });
+            if (played === 0) {
+              const notif = leagueLifecycleNotifications.inactivityDeadline3Days(midpointDateStr, leagueName);
+              await notificationService.createNotification({
+                ...notif,
+                userIds: member.userId,
+                divisionId: division.id,
+                seasonId: season.id,
+                skipDuplicateWithinMs: 2 * 24 * 60 * 60 * 1000,
+              });
+            }
+          }
+        }
+      }
+      logger.info('inactivityDeadline3d job complete');
+    } catch (error) {
+      logger.error('Failed to run inactivityDeadline3d job', {}, error as Error);
+    }
+  });
+  logger.info('inactivityDeadline3d job scheduled');
+}
+
+/**
+ * NOTIF-051: Season Complete Banner
+ * Runs daily at 8:00 PM (Malaysia time). Finds seasons whose endDate was
+ * yesterday and sends the "Season Results" banner to all active members.
+ */
+export function scheduleLeagueCompleteBannerNotifications(): void {
+  scheduleCron('0 20 * * *', async () => {
+    try {
+      logger.info('Running season complete banner job');
+
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+      yesterday.setHours(0, 0, 0, 0);
+
+      const endOfYesterday = new Date(yesterday);
+      endOfYesterday.setHours(23, 59, 59, 999);
+
+      const seasons = await prisma.season.findMany({
+        where: {
+          endDate: { gte: yesterday, lte: endOfYesterday },
+          status: { in: ['FINISHED', 'ACTIVE'] },
+        },
+        include: { leagues: { select: { id: true, name: true } } },
+      });
+
+      for (const season of seasons) {
+        try {
+          const members = await prisma.seasonMembership.findMany({
+            where: { seasonId: season.id, status: 'ACTIVE' },
+            select: { userId: true },
+          });
+          if (members.length === 0) continue;
+
+          const leagueName = season.leagues?.[0]?.name ?? '';
+          const leagueId = season.leagues?.[0]?.id;
+          const notif = leagueLifecycleNotifications.leagueCompleteBanner(leagueName, season.name);
+
+          await notificationService.createNotification({
+            userIds: members.map(m => m.userId),
+            ...notif,
+            seasonId: season.id,
+            metadata: { ...notif.metadata, seasonId: season.id, ...(leagueId ? { leagueId } : {}) },
+            skipDuplicateWithinMs: 25 * 60 * 60 * 1000,
+          });
+
+          logger.info('Season complete banner sent', { seasonId: season.id, seasonName: season.name, count: members.length });
+        } catch (innerErr) {
+          logger.error('Failed sending season complete banner', { seasonId: season.id }, innerErr as Error);
+        }
+      }
+
+      logger.info('Season complete banner job done', { seasons: seasons.length });
+    } catch (error) {
+      logger.error('Failed to run season complete banner job', {}, error as Error);
+    }
+  });
+  logger.info('Season complete banner job scheduled');
+}
+
+/**
+ * NOTIF-013: Streak At Risk — push notification sent when a player has an
+ * active weekly match streak but hasn't played in 6 days.
+ *
+ * Logic:
+ *  1. Find all users whose most-recent completed match was between 6 and 7
+ *     days ago (the critical "play today or lose your streak" window).
+ *  2. For each user, verify they have no completed match within the last 6
+ *     days (confirming 6 days ago is genuinely their most recent).
+ *  3. Check they played the week before that match — i.e. streak ≥ 2 — so
+ *     we only nudge players who actually have an ongoing streak.
+ *  4. Send a push notification with a 7-day dedup window.
+ *
+ * Runs daily at 9:00 AM Malaysia time.
+ */
+export function scheduleStreakAtRiskNotifications(): void {
+  scheduleCron('0 9 * * *', async () => {
+    try {
+      logger.info('Running NOTIF-013: streak-at-risk job');
+
+      const now = dayjs().tz(MALAYSIA_TIMEZONE);
+      const sixDaysAgo  = now.subtract(6, 'day').startOf('day').toDate();
+      const sevenDaysAgo = now.subtract(7, 'day').startOf('day').toDate();
+
+      // Collect userIds from matches completed in the 6-7 day window
+      const candidates = await prisma.matchParticipant.findMany({
+        where: {
+          match: {
+            status: 'COMPLETED',
+            matchDate: { gte: sevenDaysAgo, lt: sixDaysAgo },
+          },
+          userId: { not: null },
+        },
+        select: { userId: true },
+        distinct: ['userId'],
+      });
+
+      if (candidates.length === 0) return;
+
+      // Deadline label for the notification message (end of current week, Sunday)
+      const daysUntilSunday = (7 - now.day()) % 7 || 7; // 0=Sun, so today=Sun → 7
+      const deadline = now.add(daysUntilSunday, 'day').format('dddd, D MMM');
+
+      let sent = 0;
+      for (const { userId } of candidates) {
+        if (!userId) continue;
+
+        try {
+          // Guard: make sure they truly haven't played in the last 6 days
+          const recentMatch = await prisma.match.findFirst({
+            where: {
+              participants: { some: { userId } },
+              status: 'COMPLETED',
+              matchDate: { gte: sixDaysAgo },
+            },
+            select: { id: true },
+          });
+          if (recentMatch) continue; // played more recently — not at risk
+
+          // Guard: verify they have a streak ≥ 2 (played in the week before last match)
+          const weekBeforeWindow = now.subtract(14, 'day').startOf('day').toDate();
+          const matchInPriorWeek = await prisma.match.findFirst({
+            where: {
+              participants: { some: { userId } },
+              status: 'COMPLETED',
+              matchDate: { gte: weekBeforeWindow, lt: sevenDaysAgo },
+            },
+            select: { id: true },
+          });
+          if (!matchInPriorWeek) continue; // no prior-week match → no streak to protect
+
+          await notificationService.createNotification({
+            ...accountNotifications.streakAtRisk(2, deadline),
+            userIds: userId,
+            skipDuplicateWithinMs: 7 * 24 * 60 * 60 * 1000,
+          });
+          sent++;
+        } catch (innerErr) {
+          logger.error('NOTIF-013: Failed for user', { userId }, innerErr as Error);
+        }
+      }
+
+      logger.info('NOTIF-013: Streak-at-risk notifications sent', { sent, checked: candidates.length });
+    } catch (error) {
+      logger.error('NOTIF-013: Failed to run streak-at-risk job', {}, error as Error);
+    }
+  });
+
+  logger.info('NOTIF-013: Streak-at-risk job scheduled (daily 9am MYT)');
+}
+
 /**
  * Initialize core notification jobs (Tier 1 + Tier 2).
  * These are safe, well-tested, and essential for user experience.
@@ -1315,11 +2087,13 @@ export function initializeCoreNotificationJobs(): void {
   scheduleMatch2hReminders();            // Every 15min — 2h before match
   scheduleMatchMorningReminders();       // Daily 8am — match day reminder
   scheduleScoreSubmissionReminders();    // Every 5min — nudge 15min after match
+  schedulePendingScoreNotifications();   // Hourly — NOTIF-098/099: 20h after match, no score/confirm
 
   // ── Tier 1: Season lifecycle (directly satisfy testing requirements) ──
   scheduleSeasonStartingSoonNotifications();  // Daily 10am — 3 days before start
   scheduleSeasonStartsTomorrowNotifications(); // Daily 8pm — 1 day before start
   scheduleSeasonStartedNotifications();       // Daily 8am — season start day
+  scheduleLeagueCompleteBannerNotifications(); // Daily 8pm — day after season ends (NOTIF-051: Season Complete Banner)
 
   // ── Tier 1: Registration deadline reminders ──
   scheduleRegistrationClosing3Days();    // Daily 10am — 3 days before deadline
@@ -1328,16 +2102,30 @@ export function initializeCoreNotificationJobs(): void {
   // ── Tier 2: Secondary but useful ──
   scheduleFinalWeekAlerts();             // Mon 10am — last week of season
   scheduleLastMatchDeadline48h();        // Daily 10am — 48h before season end
-  scheduleTeamRegistrationReminder2h();  // Every 30min — doubles team deadline
-  scheduleTeamRegistrationReminder24h(); // Daily 10am — doubles team deadline
-  scheduleRegistrationDeadlineCaptain(); // Daily 8pm — captain reminder
+  scheduleTeamRegistrationReminder2h();      // Every 30min — doubles team deadline (legacy)
+  scheduleTeamRegistrationReminder24h();     // Every 30min — NOTIF-027: captain 24h after team confirmed
+  scheduleWaitingForCaptain();               // Every 30min — NOTIF-029: partner 24h after team confirmed
+  scheduleRegistrationDeadlineCaptain();     // Daily 8pm  — NOTIF-028: captain 24h before deadline
+  scheduleRegistrationDeadlinePartner();     // Daily 8pm  — NOTIF-030: partner 24h before deadline
+
+  // ── Tier 2: Activity nudge jobs ──
+  scheduleMatchSoonNudges();              // Daily 10am — 7d into season, no matches
+  scheduleEarlySeasonNudges();            // Daily 10am — 14d into season, no matches
+  scheduleLateSeasonNudges();             // Daily 10am — 14d before season end
+  scheduleInactivePlayer7dWarnings();     // Daily 10am — last match > 7d ago
+  scheduleInactivity2WeeksWarnings();     // Daily 10am — last match > 14d ago
+  scheduleInactivityDeadline7d();         // Daily 10am — 0 matches, midpoint 7d away
+  scheduleInactivityDeadline3d();         // Daily 10am — 0 matches, midpoint 3d away
+
+  // ── Tier 2: Streak gamification ──
+  scheduleStreakAtRiskNotifications();    // Daily 9am — NOTIF-013: streak at risk after 6d inactivity
 
   // This helper registers 14 crons. server.ts also wires 4 infrastructure crons
   // (schedulePushTokenCleanup, scheduleMatchStreakReEvaluation, scheduleSeasonAutoFinish,
   // scheduleSessionCleanup) plus 3 inline cron.schedule() business-logic jobs
   // (expire invitations, match invitation expiration, auto-approval/walkover) —
   // 21 crons total in production.
-  logger.info("Core notification jobs initialized (14 here, 21 total in prod)");
+  logger.info("Core notification jobs initialized (27 here, 21 total in prod)");
 }
 
 /**

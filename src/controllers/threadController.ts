@@ -738,35 +738,6 @@ export const sendMessage = async (req: Request, res: Response) => {
         // loop entirely OR batching into one createNotification call with a
         // per-user metadata payload. Also: neither this nor the NEW_MESSAGE call
         // above checks the chatNotifications preference (NS-6 instance).
-        // Send IN-APP notification with unread counts for each user
-        for (const userId of otherMembers) {
-          const userThread = result.updatedUserThreads.find(ut => ut.userId === userId);
-          const unreadCount = userThread?.unreadCount || 1;
-
-          const inAppNotif = {
-            type: 'UNREAD_MESSAGES' as const,
-            category: 'CHAT' as const,
-            title: 'Unread Messages',
-            message: `${unreadCount} unread ${unreadCount === 1 ? 'message' : 'messages'} from ${chatDisplayName}`,
-            metadata: {
-              senderName,
-              chatName: chatDisplayName,
-              unreadCount,
-              isGroupChat,
-            }
-          };
-
-          console.log('🔔 [ThreadController] IN-APP notification for user', userId, ':', inAppNotif);
-
-          await notificationService.createNotification({
-            userIds: [userId],
-            ...inAppNotif,
-            threadId: threadId,
-            divisionId: thread.divisionId || undefined,
-          });
-        }
-
-        console.log(`📧 Sent push + IN-APP notifications to ${otherMembers.length} members`);
       } else {
         console.log('⚠️  [ThreadController] No other members to notify (only sender in thread)');
       }
