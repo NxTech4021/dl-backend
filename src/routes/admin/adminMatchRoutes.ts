@@ -15,6 +15,7 @@ import {
   addDisputeNote,
   editMatchResult,
   voidMatch,
+  retryRatingReversal,
   getPendingCancellations,
   reviewCancellation,
   applyPenalty,
@@ -44,6 +45,8 @@ router.post('/matches/:id/message', messageParticipants);
 router.put('/matches/:id/result', editMatchResult);
 router.post('/matches/:id/void', voidMatch);
 router.post('/matches/:id/convert-walkover', convertToWalkover);
+// Audit-B2: retry rating reversal for a split-brain VOID match
+router.post('/matches/:id/retry-rating-reversal', retryRatingReversal);
 
 // AS7: Edit Match Participants
 router.put('/matches/:id/participants', editMatchParticipants);

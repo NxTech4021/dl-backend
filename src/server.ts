@@ -2,6 +2,14 @@
 import dotenv from "dotenv";
 dotenv.config();
 
+// Wire crash handlers BEFORE any other imports so we catch early startup errors.
+// Without this, unhandled rejections and uncaught exceptions crash the process
+// with no structured log (Node 15+ default is to terminate on unhandled rejection).
+// The handlers at errorHandler.ts:227-250 log context then process.exit(1).
+import { unhandledRejectionHandler, uncaughtExceptionHandler } from "./middlewares/errorHandler";
+unhandledRejectionHandler();
+uncaughtExceptionHandler();
+
 import { httpServer } from "./app";
 
 import cron from "node-cron";
@@ -15,6 +23,7 @@ import { notificationService } from "./services/notificationService";
 import { getAdminUserIds } from "./services/notification/notificationPreferenceService";
 import { INACTIVITY_CONFIG } from "./config/inactivity.config";
 import { initializeCoreNotificationJobs, schedulePushTokenCleanup, scheduleMatchStreakReEvaluation, scheduleSeasonAutoFinish } from "./jobs/notificationJobs";
+import { scheduleSessionCleanup, scheduleNotificationCleanup } from "./jobs/maintenanceJobs";
 import { getMatchInvitationService } from "./services/match/matchInvitationService";
 import { getMatchResultService } from "./services/match/matchResultService";
 import { logger } from "./utils/logger";
@@ -133,12 +142,21 @@ cron.schedule("0 * * * *", async () => {
   try {
     const matchResultService = getMatchResultService(notificationService);
 
-    // Auto-approve regular score submissions after 24h
+    // Auto-approve league score submissions after 24h (with ratings/standings)
     const results = await matchResultService.autoApproveResults();
     if (results.autoApprovedCount > 0) {
-      logger.info("Cron: Auto-approved match results", {
+      logger.info("Cron: Auto-approved league match results", {
         matchesChecked: results.matchesChecked,
         autoApproved: results.autoApprovedCount,
+      });
+    }
+
+    // Auto-approve friendly score submissions after 24h (NO ratings/standings)
+    const friendlyResults = await matchResultService.autoApproveFriendlyResults();
+    if (friendlyResults.autoApprovedCount > 0) {
+      logger.info("Cron: Auto-approved friendly match results", {
+        matchesChecked: friendlyResults.matchesChecked,
+        autoApproved: friendlyResults.autoApprovedCount,
       });
     }
 
@@ -163,7 +181,9 @@ cron.schedule("0 * * * *", async () => {
           });
         }
       } catch (notifError) {
-        logger.warn('Failed to notify admins about auto-completed walkovers', { error: notifError });
+        logger.warn('Failed to notify admins about auto-completed walkovers', {
+          error: notifError instanceof Error ? notifError.message : String(notifError),
+        });
       }
     }
   } catch (error) {
@@ -175,6 +195,8 @@ cron.schedule("0 * * * *", async () => {
 schedulePushTokenCleanup();
 scheduleMatchStreakReEvaluation();
 scheduleSeasonAutoFinish();
+scheduleSessionCleanup();
+scheduleNotificationCleanup();
 
 // Core notification crons (match reminders, season lifecycle, registration deadlines)
 // Tier 1+2: 14 crons — safe, dedup-protected, essential for user experience

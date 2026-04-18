@@ -111,7 +111,7 @@ describe('MatchScheduleService', () => {
           cancelledById: creator.id,
           reason: CancellationReason.OTHER,
         })
-      ).rejects.toThrow('Cannot cancel a completed match');
+      ).rejects.toThrow('Cannot cancel match in status COMPLETED');
     });
 
     it('should throw error if match is already cancelled', async () => {
@@ -137,7 +137,7 @@ describe('MatchScheduleService', () => {
           cancelledById: creator.id,
           reason: CancellationReason.OTHER,
         })
-      ).rejects.toThrow('Match is already cancelled');
+      ).rejects.toThrow('Cannot cancel match in status CANCELLED');
     });
 
     it('should throw error for non-existent match', async () => {
@@ -272,194 +272,9 @@ describe('MatchScheduleService', () => {
     });
   });
 
-  describe('recordWalkover', () => {
-    it('should record walkover for late opponent', async () => {
-      // Arrange
-      const { match, creator, opponent } = await createMatchWithOpponent();
-
-      // Accept opponent invitation
-      await prismaTest.matchParticipant.updateMany({
-        where: { matchId: match.id, userId: opponent.id },
-        data: { invitationStatus: InvitationStatus.ACCEPTED },
-      });
-
-      // Set match time to 30 minutes ago (past threshold)
-      const matchDate = new Date(Date.now() - 30 * 60 * 1000);
-      await prismaTest.match.update({
-        where: { id: match.id },
-        data: { matchDate },
-      });
-
-      // Act
-      const result = await service.recordWalkover(
-        match.id,
-        creator.id,
-        opponent.id,
-        'Opponent did not show up'
-      );
-
-      // Assert
-      expect(result?.status).toBe(MatchStatus.COMPLETED);
-      expect(result?.isWalkover).toBe(true);
-      expect(result?.requiresAdminReview).toBe(true);
-
-      // Check walkover record
-      const walkover = await prismaTest.matchWalkover.findUnique({
-        where: { matchId: match.id },
-      });
-
-      expect(walkover).toBeDefined();
-      expect(walkover?.defaultingPlayerId).toBe(opponent.id);
-      expect(walkover?.winningPlayerId).toBe(creator.id);
-    });
-
-    it('should throw error if opponent is not late enough', async () => {
-      // Arrange
-      const { match, creator, opponent } = await createMatchWithOpponent();
-
-      // Accept opponent invitation
-      await prismaTest.matchParticipant.updateMany({
-        where: { matchId: match.id, userId: opponent.id },
-        data: { invitationStatus: InvitationStatus.ACCEPTED },
-      });
-
-      // Set match time to 10 minutes ago (not past threshold)
-      const matchDate = new Date(Date.now() - 10 * 60 * 1000);
-      await prismaTest.match.update({
-        where: { id: match.id },
-        data: { matchDate },
-      });
-
-      // Act & Assert
-      await expect(
-        service.recordWalkover(
-          match.id,
-          creator.id,
-          opponent.id,
-          'Opponent is late'
-        )
-      ).rejects.toThrow('Opponent must be at least 20 minutes late to record a walkover');
-    });
-
-    it('should throw error if reporter is not a participant', async () => {
-      // Arrange
-      const { match, opponent } = await createMatchWithOpponent();
-      const nonParticipant = await createTestUser({ name: 'Non Participant' });
-
-      // Set match time to 30 minutes ago
-      const matchDate = new Date(Date.now() - 30 * 60 * 1000);
-      await prismaTest.match.update({
-        where: { id: match.id },
-        data: { matchDate },
-      });
-
-      // Act & Assert
-      await expect(
-        service.recordWalkover(
-          match.id,
-          nonParticipant.id,
-          opponent.id,
-          'Opponent did not show'
-        )
-      ).rejects.toThrow('Only match participants can report a walkover');
-    });
-
-    it('should throw error if defaulting player is not a participant', async () => {
-      // Arrange
-      const { match, creator, opponent } = await createMatchWithOpponent();
-      const nonParticipant = await createTestUser({ name: 'Non Participant' });
-
-      // Accept opponent invitation
-      await prismaTest.matchParticipant.updateMany({
-        where: { matchId: match.id, userId: opponent.id },
-        data: { invitationStatus: InvitationStatus.ACCEPTED },
-      });
-
-      // Set match time to 30 minutes ago
-      const matchDate = new Date(Date.now() - 30 * 60 * 1000);
-      await prismaTest.match.update({
-        where: { id: match.id },
-        data: { matchDate },
-      });
-
-      // Act & Assert
-      await expect(
-        service.recordWalkover(
-          match.id,
-          creator.id,
-          nonParticipant.id,
-          'Non-participant did not show'
-        )
-      ).rejects.toThrow('Defaulting player must be a participant');
-    });
-
-    it('should throw error for completed match', async () => {
-      // Arrange
-      const { match, creator, opponent } = await createMatchWithOpponent();
-
-      // Mark match as completed
-      await prismaTest.match.update({
-        where: { id: match.id },
-        data: { status: MatchStatus.COMPLETED },
-      });
-
-      // Set match time to 30 minutes ago
-      const matchDate = new Date(Date.now() - 30 * 60 * 1000);
-      await prismaTest.match.update({
-        where: { id: match.id },
-        data: { matchDate },
-      });
-
-      // Act & Assert
-      await expect(
-        service.recordWalkover(
-          match.id,
-          creator.id,
-          opponent.id,
-          'Opponent did not show'
-        )
-      ).rejects.toThrow('Can only record walkover for scheduled or ongoing matches');
-    });
-
-    it('should throw error if walkover already exists', async () => {
-      // Arrange
-      const { match, creator, opponent } = await createMatchWithOpponent();
-
-      // Accept opponent invitation
-      await prismaTest.matchParticipant.updateMany({
-        where: { matchId: match.id, userId: opponent.id },
-        data: { invitationStatus: InvitationStatus.ACCEPTED },
-      });
-
-      // Set match time to 30 minutes ago
-      const matchDate = new Date(Date.now() - 30 * 60 * 1000);
-      await prismaTest.match.update({
-        where: { id: match.id },
-        data: { matchDate },
-      });
-
-      // Create existing walkover
-      await prismaTest.matchWalkover.create({
-        data: {
-          matchId: match.id,
-          walkoverReason: 'NO_SHOW',
-          defaultingPlayerId: opponent.id,
-          winningPlayerId: creator.id,
-          reportedBy: creator.id,
-        },
-      });
-
-      // Act & Assert
-      await expect(
-        service.recordWalkover(
-          match.id,
-          creator.id,
-          opponent.id,
-          'Already recorded'
-        )
-      ).rejects.toThrow('Walkover already recorded for this match');
-    });
-  });
+  // recordWalkover describe block REMOVED — service method was unreachable and has been
+  // deleted. Active walkover flow lives in matchResultService.submitWalkover and is
+  // covered by its own tests. See docs/issues/dissections/111-singles-match-deep-stress.md §5 D-2.
 
   describe('requestReschedule', () => {
     it('should throw error - feature not implemented', async () => {

@@ -49,6 +49,36 @@ export interface NotificationPreferenceInput {
 }
 
 /**
+ * Single source of truth for notification preference defaults.
+ * Kept aligned with `prisma/schema.prisma` NotificationPreference model defaults.
+ * Used by:
+ *   - getUserPreferences() — returned when no row exists for the user
+ *   - resetPreferences controller — bulk reset to defaults
+ * Previously duplicated across 2 files (CI-18, NS-42).
+ */
+export const DEFAULT_PREFERENCES: Required<NotificationPreferenceInput> = {
+  matchReminders: true,
+  matchRescheduled: true,
+  matchCancelled: true,
+  matchResults: true,
+  partnerChange: true,
+  opponentChange: true,
+  ratingChange: true,
+  inactivityAlerts: true,
+  chatNotifications: true,
+  invitations: true,
+  seasonRegistration: true,
+  seasonUpdates: true,
+  disputeAlerts: true,
+  teamChangeRequests: true,
+  withdrawalRequests: true,
+  playerReports: true,
+  seasonJoinRequests: true,
+  pushEnabled: true,
+  emailEnabled: false,
+};
+
+/**
  * Get user notification preferences
  * Returns default preferences if none exist
  */
@@ -58,28 +88,7 @@ export async function getUserPreferences(userId: string) {
   });
 
   if (!preferences) {
-    // Return default preferences
-    return {
-      matchReminders: true,
-      matchRescheduled: true,
-      matchCancelled: true,
-      matchResults: true,
-      partnerChange: true,
-      opponentChange: true,
-      ratingChange: true,
-      inactivityAlerts: true,
-      chatNotifications: true,
-      invitations: true,
-      seasonRegistration: true,
-      seasonUpdates: true,
-      disputeAlerts: true,
-      teamChangeRequests: true,
-      withdrawalRequests: true,
-      playerReports: true,
-      seasonJoinRequests: true,
-      pushEnabled: true,
-      emailEnabled: false
-    };
+    return DEFAULT_PREFERENCES;
   }
 
   return preferences;

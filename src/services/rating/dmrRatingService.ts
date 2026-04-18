@@ -1317,16 +1317,24 @@ export class DMRRatingService {
   }
 
   /**
-   * Reverse rating changes for a voided match
+   * Reverse rating changes for a voided match.
+   *
+   * Audit-B1: idempotent — filters on RatingHistory.isReversed=false and
+   * flips the column inside the same transaction that decrements
+   * matchesPlayed. A second call on the same matchId finds zero
+   * unreversed rows and short-circuits, so matchesPlayed is decremented
+   * at most once per history row. The " [REVERSED]" notes marker is
+   * retained alongside the flag for human-readable audit logs; the
+   * column is the authoritative guard.
    */
   async reverseMatchRatings(matchId: string): Promise<void> {
     const historyEntries = await this.prisma.ratingHistory.findMany({
-      where: { matchId },
+      where: { matchId, isReversed: false },
       include: { playerRating: true },
     });
 
     if (historyEntries.length === 0) {
-      logger.warn(`No rating history found for match ${matchId}`);
+      logger.warn(`No unreversed rating history found for match ${matchId}`);
       return;
     }
 
@@ -1345,6 +1353,7 @@ export class DMRRatingService {
         await tx.ratingHistory.update({
           where: { id: entry.id },
           data: {
+            isReversed: true,
             notes: `${entry.notes || ''} [REVERSED]`.trim(),
           },
         });

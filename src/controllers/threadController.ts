@@ -727,6 +727,17 @@ export const sendMessage = async (req: Request, res: Response) => {
           divisionId: thread.divisionId || undefined,
         });
 
+        // TODO(NS-41, dissection #110): This per-user loop is wasteful and the
+        // UNREAD_MESSAGES in-app notification is largely redundant - the unread
+        // count is already delivered via socket (`unread_notifications_count` in
+        // socketconnection.ts:154) and shown on the tab badge. Each iteration runs
+        // a full createNotification (dedup query + user validation + DB writes +
+        // socket emit) - ~50-100ms per call. For a 5-person group chat this adds
+        // 250-500ms blocking per message and creates duplicate in-app entries
+        // (NEW_MESSAGE + UNREAD_MESSAGES per message). Consider dropping this
+        // loop entirely OR batching into one createNotification call with a
+        // per-user metadata payload. Also: neither this nor the NEW_MESSAGE call
+        // above checks the chatNotifications preference (NS-6 instance).
         // Send IN-APP notification with unread counts for each user
         for (const userId of otherMembers) {
           const userThread = result.updatedUserThreads.find(ut => ut.userId === userId);

@@ -1,6 +1,12 @@
 import rateLimit from 'express-rate-limit';
 import { Request, Response } from 'express';
 
+// TODO(AWS-M-4): Phase 2 work. Once ElastiCache Redis is provisioned, add
+// rate-limit-redis store to every limiter below for cross-task counter sharing.
+// Today's in-memory counters reset per Fargate task so multi-task deploys
+// effectively N-multiply each limit. Track in docs/plans/2026-04-14-aws-
+// migration-architecture-stress-tests.md (M-4 / M-38).
+
 // Shared handler factory — ensures all 429s have the same JSON shape
 // and retryAfter is always seconds remaining (a number), not a Date.
 function makeHandler(code: string, message: string) {
@@ -171,5 +177,38 @@ export const crashReportLimiter = rateLimit({
   handler: makeHandler(
     'CRASH_REPORT_RATE_LIMIT_EXCEEDED',
     'Too many crash reports submitted. Please try again later.'
+  ),
+});
+
+// ── Bug report limiter — public/anon endpoint protection ───────────────────
+// Applied to: POST /bug/reports, POST /bug/reports/:id/sync
+// 20 per 15 minutes. Matches crashReportLimiter's shape. Bug reports are
+// anon-accessible (optionalAuth) so IP-keyed for unauthenticated users.
+// Prevents cost-abuse attacks that would otherwise bloat S3 + NAT + RDS on AWS.
+export const bugReportLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: userKeyGenerator,
+  handler: makeHandler(
+    'BUG_REPORT_RATE_LIMIT_EXCEEDED',
+    'Too many bug reports submitted. Please try again later.'
+  ),
+});
+
+// ── Bug screenshot upload limiter — storage-abuse protection ───────────────
+// Applied to: POST /bug/screenshots/upload
+// 25 per 15 minutes. With 5MB cap per file, caps cost-abuse at ~125MB/window
+// per IP. Matches the 5 screenshots × 5 reports ceiling from bug report DB cap.
+export const bugScreenshotLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 25,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: userKeyGenerator,
+  handler: makeHandler(
+    'BUG_SCREENSHOT_RATE_LIMIT_EXCEEDED',
+    'Too many screenshot uploads. Please try again later.'
   ),
 });

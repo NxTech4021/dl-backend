@@ -36,6 +36,15 @@ export interface AuthenticatedRequest extends Request {
 
 // Better Auth middleware for authentication
 export const verifyAuth: RequestHandler = async (req, res, next) => {
+  // Idempotency guard: if a parent router already ran verifyAuth and attached
+  // req.user, skip the expensive session+DB lookup. Safe because req.user is
+  // only populated by this middleware (not client-controllable). Enables
+  // belt-and-suspenders re-mounting of verifyAuth on admin sub-routers without
+  // doubling session checks + DB fetches per request.
+  if (req.user) {
+    return next();
+  }
+
   try {
     let userId: string | undefined;
     let authMethod = 'none';

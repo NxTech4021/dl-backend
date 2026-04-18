@@ -64,6 +64,9 @@ export function scheduleMatch24hReminders(): void {
           status: "SCHEDULED",
         },
         include: {
+          // Audit-D: query the FULL roster so opponent-name construction
+          // stays complete for doubles matches where some invitees are still
+          // PENDING. Delivery is gated to ACCEPTED-only in the loop below.
           participants: {
             include: {
               user: {
@@ -79,21 +82,35 @@ export function scheduleMatch24hReminders(): void {
 
       for (const match of matches) {
         if (!match.participants || match.participants.length < 2) continue;
-        
+
+        // F-5: re-check status — the match may have been cancelled or completed
+        // between the initial findMany and this iteration.
+        // TODO(111-audit-F1): this is N+1 — batch with findMany on collected
+        // ids at the top of the cron handler for O(1) extra queries.
+        const fresh = await prisma.match.findUnique({
+          where: { id: match.id },
+          select: { status: true },
+        });
+        if (fresh?.status !== "SCHEDULED") continue;
+
         const date = match.matchDate ? dayjs(match.matchDate).tz(MYT).format('D MMM YYYY') : 'TBD';
         const time = match.matchDate ? dayjs(match.matchDate).tz(MYT).format('h:mm A') : 'TBD';
         const venue = match.venue || match.location || 'TBD';
-        
+
         for (const player of match.participants) {
+          // Audit-D: only notify ACCEPTED participants; the full roster above
+          // is kept so opponent-name computation reflects the intended lineup.
+          if (player.invitationStatus !== 'ACCEPTED') continue;
+
           // Get opponents for this player
-          const opponents = match.participants.filter(p => 
-            p.userId !== player.userId && 
+          const opponents = match.participants.filter(p =>
+            p.userId !== player.userId &&
             (match.matchType === 'SINGLES' || p.team !== player.team)
           );
-          
+
           const opponentNames = opponents.map(opp => opp.user?.name || 'Player').join(' & ');
           const opponentName = opponentNames || 'Opponent';
-          
+
           const notif = matchManagementNotifications.matchReminder24h(
             opponentName,
             date,
@@ -143,6 +160,8 @@ export function scheduleMatch2hReminders(): void {
           status: "SCHEDULED",
         },
         include: {
+          // Audit-D: full roster for opponent-name construction; delivery
+          // gated to ACCEPTED-only in the loop below.
           participants: {
             include: {
               user: {
@@ -173,20 +192,33 @@ export function scheduleMatch2hReminders(): void {
       // Send notifications for each match
       for (const match of matches) {
         if (!match.participants || match.participants.length < 2) continue;
-        
+
+        // F-5: re-check status — the match may have been cancelled or completed
+        // between the initial findMany and this iteration.
+        // TODO(111-audit-F1): this is N+1 — batch with findMany on collected
+        // ids at the top of the cron handler for O(1) extra queries.
+        const fresh = await prisma.match.findUnique({
+          where: { id: match.id },
+          select: { status: true },
+        });
+        if (fresh?.status !== "SCHEDULED") continue;
+
         const time = match.matchDate ? dayjs(match.matchDate).tz(MYT).format('h:mm A') : 'TBD';
         const venue = match.venue || match.location || 'TBD';
-        
+
         for (const player of match.participants) {
+          // Audit-D: only notify ACCEPTED participants.
+          if (player.invitationStatus !== 'ACCEPTED') continue;
+
           // Get opponents for this player
-          const opponents = match.participants.filter(p => 
-            p.userId !== player.userId && 
+          const opponents = match.participants.filter(p =>
+            p.userId !== player.userId &&
             (match.matchType === 'SINGLES' || p.team !== player.team)
           );
-          
+
           const opponentNames = opponents.map(opp => opp.user?.name || 'Player').join(' & ');
           const opponentName = opponentNames || 'Opponent';
-          
+
           const notif = matchManagementNotifications.matchReminder2h(
             opponentName,
             time,
@@ -237,6 +269,8 @@ export function scheduleMatchMorningReminders(): void {
           status: "SCHEDULED",
         },
         include: {
+          // Audit-D: full roster for opponent-name construction; delivery
+          // gated to ACCEPTED-only in the loop below.
           participants: {
             include: {
               user: {
@@ -252,21 +286,34 @@ export function scheduleMatchMorningReminders(): void {
 
       for (const match of matches) {
         if (!match.participants || match.participants.length < 2) continue;
-        
+
+        // F-5: re-check status — the match may have been cancelled or completed
+        // between the initial findMany and this iteration.
+        // TODO(111-audit-F1): this is N+1 — batch with findMany on collected
+        // ids at the top of the cron handler for O(1) extra queries.
+        const fresh = await prisma.match.findUnique({
+          where: { id: match.id },
+          select: { status: true },
+        });
+        if (fresh?.status !== "SCHEDULED") continue;
+
         const date = match.matchDate ? dayjs(match.matchDate).tz(MYT).format('D MMM YYYY') : 'TBD';
         const time = match.matchDate ? dayjs(match.matchDate).tz(MYT).format('h:mm A') : 'TBD';
         const venue = match.venue || match.location || 'TBD';
-        
+
         for (const player of match.participants) {
+          // Audit-D: only notify ACCEPTED participants.
+          if (player.invitationStatus !== 'ACCEPTED') continue;
+
           // Get opponents for this player
-          const opponents = match.participants.filter(p => 
-            p.userId !== player.userId && 
+          const opponents = match.participants.filter(p =>
+            p.userId !== player.userId &&
             (match.matchType === 'SINGLES' || p.team !== player.team)
           );
-          
+
           const opponentNames = opponents.map(opp => opp.user?.name || 'Player').join(' & ');
           const opponentName = opponentNames || 'Opponent';
-          
+
           const notif = matchManagementNotifications.matchMorningReminder(
             opponentName,
             date,
@@ -317,6 +364,18 @@ export function scheduleScoreSubmissionReminders(): void {
       });
 
       for (const match of matches) {
+        // F-7: re-check status — the match may have been cancelled or completed
+        // between the initial findMany and this iteration.
+        // TODO(111-audit-F2): double-query — this findUnique + another one
+        // inside sendScoreSubmissionReminder. Collapse by passing status to
+        // the service or folding the status check in there.
+        // See docs/issues/backlog/match-post-ship-audit-2026-04-16.md#issue-f
+        const fresh = await prisma.match.findUnique({
+          where: { id: match.id },
+          select: { status: true },
+        });
+        if (fresh?.status !== "SCHEDULED") continue;
+
         await sendScoreSubmissionReminder(match.id);
       }
 
@@ -1204,7 +1263,9 @@ export function scheduleMatchStreakReEvaluation(): void {
 
 /**
  * Auto-finish seasons whose endDate has passed but status is still ACTIVE or UPCOMING.
- * Runs every hour.
+ * Runs daily at midnight (MYT). Daily cadence is sufficient because downstream
+ * lifecycle decisions key off `endDate` directly rather than `status`. Switch
+ * to '0 * * * *' if product ever wants hourly status flips.
  */
 export function scheduleSeasonAutoFinish(): void {
   scheduleCron('0 0 * * *', async () => {
@@ -1271,7 +1332,12 @@ export function initializeCoreNotificationJobs(): void {
   scheduleTeamRegistrationReminder24h(); // Daily 10am — doubles team deadline
   scheduleRegistrationDeadlineCaptain(); // Daily 8pm — captain reminder
 
-  logger.info("✅ Core notification jobs initialized (14 crons active)");
+  // This helper registers 14 crons. server.ts also wires 4 infrastructure crons
+  // (schedulePushTokenCleanup, scheduleMatchStreakReEvaluation, scheduleSeasonAutoFinish,
+  // scheduleSessionCleanup) plus 3 inline cron.schedule() business-logic jobs
+  // (expire invitations, match invitation expiration, auto-approval/walkover) —
+  // 21 crons total in production.
+  logger.info("Core notification jobs initialized (14 here, 21 total in prod)");
 }
 
 /**

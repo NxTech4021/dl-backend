@@ -6,6 +6,7 @@ import {
   BugSeverity,
   BugReportType,
 } from "@prisma/client";
+import { fileTypeFromBuffer } from "file-type";
 import { syncBugReportToSheet } from "../services/bug/googleSheetsSync";
 import {
   notifyNewBugReport,
@@ -463,9 +464,17 @@ export const uploadScreenshotFile = async (req: Request, res: Response) => {
     return sendError(res, "No file uploaded.", 400);
   }
 
-  // Security: Validate file type on server-side
+  // Security: Validate file type on server-side.
+  // file.mimetype comes from the client's multipart Content-Type header which is
+  // spoofable. We do two checks: (1) the claimed mimetype is in our allowlist,
+  // (2) the actual magic bytes of the buffer match one of the allowed image types.
   if (!ALLOWED_IMAGE_TYPES.includes(file.mimetype)) {
     return sendError(res, "Invalid file type. Only JPEG, PNG, GIF, and WebP images are allowed.", 400);
+  }
+
+  const detectedType = await fileTypeFromBuffer(file.buffer);
+  if (!detectedType || !ALLOWED_IMAGE_TYPES.includes(detectedType.mime)) {
+    return sendError(res, "File contents do not match an allowed image type.", 400);
   }
 
   // Security: Validate file size on server-side

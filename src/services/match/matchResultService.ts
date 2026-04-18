@@ -82,6 +82,8 @@ export class MatchResultService {
    * Either team's captain can submit the score, the OTHER team must approve/deny
    * If isUnfinished=true, match is marked UNFINISHED and score validation is skipped
    */
+  // TODO(111-F-61/F-39): Call assertUserCanAct(submittedById) — suspended/inactive users
+  // can currently submit league match results. See docs/issues/backlog/match-penalty-enforcement.md
   async submitResult(input: SubmitResultInput) {
     const { matchId, submittedById, setScores, gameScores, comment, evidence, isUnfinished } = input;
 
@@ -97,6 +99,13 @@ export class MatchResultService {
 
     if (!matchPreCheck) {
       throw new Error('Match not found');
+    }
+
+    // MT-5: Friendly matches must use the friendly result endpoint which skips
+    // ratings/standings processing. The league endpoint runs processMatchCompletion
+    // on confirmation, which would corrupt competitive data.
+    if (matchPreCheck.isFriendly) {
+      throw new Error('Friendly match results must be submitted through the friendly endpoint');
     }
 
     // Verify submitter is a participant with ACCEPTED status
@@ -305,6 +314,8 @@ export class MatchResultService {
    * - Opponent confirms: Match completed, standings updated
    * - Opponent denies: Dispute created, sent to division admin
    */
+  // TODO(111-F-61/F-39): Call assertUserCanAct(userId) — suspended/inactive users
+  // can currently confirm league match results. See docs/issues/backlog/match-penalty-enforcement.md
   async confirmResult(input: ConfirmResultInput) {
     const {
       matchId,
@@ -323,6 +334,13 @@ export class MatchResultService {
 
     if (!match) {
       throw new Error('Match not found');
+    }
+
+    // MT-5/Gap 4: Friendly matches must use the friendly confirm endpoint.
+    // The league dispute path creates requiresAdminReview which doesn't exist
+    // for friendlies. The friendly dispute path resets to SCHEDULED for re-submission.
+    if (match.isFriendly) {
+      throw new Error('Friendly match results must be confirmed through the friendly endpoint');
     }
 
     // Verify user is a participant
@@ -578,104 +596,23 @@ export class MatchResultService {
     }
   }
 
-  /**
-   * Update standings for partnerships in doubles matches
-   * CRITICAL: Both partners on winning team AND both partners on losing team get standings updated
-   */
-  private async updatePartnershipStandings(matchId: string, match: any) {
-    try {
-      if (!match.divisionId) return;
-
-      // Get participants by team
-      const team1Participants = match.participants.filter((p: any) => p.team === 'team1');
-      const team2Participants = match.participants.filter((p: any) => p.team === 'team2');
-
-      // Calculate sets and games won by each team
-      let team1SetsWon = 0, team2SetsWon = 0;
-      let team1GamesWon = 0, team2GamesWon = 0;
-
-      if (match.sport === 'PICKLEBALL') {
-        for (const game of match.pickleballScores) {
-          if (game.player1Points > game.player2Points) {
-            team1SetsWon++;
-            team1GamesWon += game.player1Points;
-            team2GamesWon += game.player2Points;
-          } else {
-            team2SetsWon++;
-            team1GamesWon += game.player1Points;
-            team2GamesWon += game.player2Points;
-          }
-        }
-      } else {
-        // Tennis/Padel
-        for (const set of match.scores) {
-          if (set.player1Games > set.player2Games) {
-            team1SetsWon++;
-          } else {
-            team2SetsWon++;
-          }
-          team1GamesWon += set.player1Games;
-          team2GamesWon += set.player2Games;
-        }
-      }
-
-      const team1Won = match.outcome === 'team1';
-
-      // Import standings update function
-      const { updatePlayerStanding } = await import('../rating/standingsCalculationService');
-
-      // Update BOTH partners on team1
-      for (const participant of team1Participants) {
-        // Each partner's standing is updated against each opponent
-        const opponentIds = team2Participants.map((p: any) => p.userId);
-        for (const opponentId of opponentIds) {
-          try {
-            await updatePlayerStanding(participant.userId, match.divisionId, {
-              odlayerId: participant.userId,
-              odversaryId: opponentId,
-              userWon: team1Won,
-              userSetsWon: team1SetsWon,
-              userSetsLost: team2SetsWon,
-              userGamesWon: team1GamesWon,
-              userGamesLost: team2GamesWon
-            });
-          } catch (error) {
-            logger.error(`Failed to update standings for player ${participant.userId}`, {}, error as Error);
-          }
-        }
-      }
-
-      // Update BOTH partners on team2
-      for (const participant of team2Participants) {
-        const opponentIds = team1Participants.map((p: any) => p.userId);
-        for (const opponentId of opponentIds) {
-          try {
-            await updatePlayerStanding(participant.userId, match.divisionId, {
-              odlayerId: participant.userId,
-              odversaryId: opponentId,
-              userWon: !team1Won,
-              userSetsWon: team2SetsWon,
-              userSetsLost: team1SetsWon,
-              userGamesWon: team2GamesWon,
-              userGamesLost: team1GamesWon
-            });
-          } catch (error) {
-            logger.error(`Failed to update standings for player ${participant.userId}`, {}, error as Error);
-          }
-        }
-      }
-
-      logger.info(`Updated partnership standings for all ${team1Participants.length + team2Participants.length} participants in match ${matchId}`);
-
-    } catch (error) {
-      logger.error(`Failed to update partnership standings for match ${matchId}`, {}, error as Error);
-    }
-  }
+  // updatePartnershipStandings REMOVED — was causing triple counting.
+  // V2 service handles all standings from MatchResult records correctly.
+  // See docs/issues/dissections/111-singles-match-deep-stress.md §5 D-3.
 
   /**
    * Process match ratings using DMR (Glicko-2 based) algorithm
    * Handles both singles and doubles matches
    */
+  // TODO(#104 defense-in-depth): Add a `ratingsProcessedAt DateTime?` field to the Match
+  // model and check it here to prevent double rating application. Currently the upstream
+  // callers (confirmResult, autoApproveResults, autoCompleteWalkovers) all have transaction
+  // guards that prevent double calls. But if a new caller is added in the future without
+  // a guard, DMR ratings would be applied twice (deltas are not idempotent). The fix:
+  //   1. Add `ratingsProcessedAt DateTime?` to Match in schema.prisma
+  //   2. At the top of this function: if match.ratingsProcessedAt is set, log and return
+  //   3. At the bottom: set ratingsProcessedAt = new Date()
+  // This requires a Prisma migration. See docs/issues/dissections/104-dissolution-standings-and-notification.md
   private async processMatchRatings(match: any): Promise<void> {
     try {
       if (!match.seasonId) {
@@ -882,6 +819,13 @@ export class MatchResultService {
       throw new Error('Cannot report a walkover for your own team member');
     }
 
+    // MT-2: Friendly matches don't support walkovers — walkovers affect ratings/standings
+    // which should never happen for friendly matches. If the opposing team doesn't show,
+    // the friendly match should be cancelled, not resolved as a walkover.
+    if (match.isFriendly) {
+      throw new Error('Walkovers are not supported for friendly matches. Please cancel the match instead.');
+    }
+
     // SS-4: Status check — prevent walkover on completed/cancelled/void matches
     if (match.status !== MatchStatus.SCHEDULED && match.status !== MatchStatus.ONGOING) {
       throw new Error('Can only record walkover for scheduled or ongoing matches');
@@ -902,6 +846,20 @@ export class MatchResultService {
     const walkoverScores = this.getWalkoverScores(match.sport);
 
     await prisma.$transaction(async (tx) => {
+      // MT-15: Re-check match status inside transaction to prevent race with
+      // concurrent score submission. Without this, a score submitted between
+      // the outer read and this transaction could be overwritten by the walkover.
+      const freshMatch = await tx.match.findUnique({
+        where: { id: matchId },
+        select: { status: true, resultSubmittedAt: true },
+      });
+      if (!freshMatch || freshMatch.status !== MatchStatus.SCHEDULED) {
+        throw new Error('Match is no longer available for walkover');
+      }
+      if (freshMatch.resultSubmittedAt) {
+        throw new Error('A result has already been submitted for this match');
+      }
+
       // Create walkover record
       const walkoverData: any = {
         matchId,
@@ -1465,6 +1423,7 @@ export class MatchResultService {
       const matches = await prisma.match.findMany({
         where: {
           status: MatchStatus.ONGOING,
+          isFriendly: false,  // MT-32: friendly matches must NOT be auto-approved with ratings/standings
           resultSubmittedAt: { lte: twentyFourHoursAgo },
           resultConfirmedAt: null,
           isDisputed: false,
@@ -1491,9 +1450,12 @@ export class MatchResultService {
           const approved = await prisma.$transaction(async (tx) => {
             const freshMatch = await tx.match.findUnique({
               where: { id: match.id },
-              select: { status: true },
+              select: { status: true, isDisputed: true },
             });
-            if (freshMatch?.status !== MatchStatus.ONGOING) return false;
+            // F-2: Also re-check isDisputed inside tx — a dispute created between the outer
+            // findMany (which filters isDisputed:false) and this tx would otherwise be ignored,
+            // allowing the cron to auto-approve a match the user just disputed.
+            if (freshMatch?.status !== MatchStatus.ONGOING || freshMatch.isDisputed) return false;
 
             await tx.match.update({
               where: { id: match.id },
@@ -1583,6 +1545,76 @@ export class MatchResultService {
     } catch (error) {
       logger.error('Error in autoApproveResults:', {}, error as Error);
       throw error;
+    }
+  }
+
+  /**
+   * Auto-approve friendly match results after 24h.
+   * Unlike league matches, friendly matches do NOT affect ratings, standings, or Best 6.
+   * This simply marks the match as COMPLETED and notifies participants.
+   * Separated from autoApproveResults to prevent friendly results leaking into
+   * the competitive system (MT-32 fix).
+   */
+  async autoApproveFriendlyResults() {
+    try {
+      const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+      const matches = await prisma.match.findMany({
+        where: {
+          status: MatchStatus.ONGOING,
+          isFriendly: true,
+          resultSubmittedAt: { lte: twentyFourHoursAgo },
+          resultConfirmedAt: null,
+          isAutoApproved: false,
+        },
+        select: { id: true, participants: { select: { userId: true } } },
+      });
+
+      let count = 0;
+      for (const match of matches) {
+        try {
+          const approved = await prisma.$transaction(async (tx) => {
+            const fresh = await tx.match.findUnique({
+              where: { id: match.id },
+              select: { status: true },
+            });
+            if (fresh?.status !== MatchStatus.ONGOING) return false;
+
+            await tx.match.update({
+              where: { id: match.id },
+              data: {
+                status: MatchStatus.COMPLETED,
+                isAutoApproved: true,
+                resultConfirmedAt: new Date(),
+              },
+            });
+            return true;
+          });
+
+          if (approved) {
+            const participantIds = match.participants
+              .map(p => p.userId)
+              .filter((id): id is string => id !== null);
+
+            await this.notificationService.createNotification({
+              type: 'MATCH_RESULT_AUTO_APPROVED',
+              title: 'Match Result Auto-Approved',
+              message: 'The friendly match result has been automatically approved after 24 hours.',
+              category: 'MATCH',
+              matchId: match.id,
+              userIds: participantIds,
+            });
+            count++;
+          }
+        } catch (error) {
+          logger.error(`Failed to auto-approve friendly match ${match.id}:`, {}, error as Error);
+        }
+      }
+
+      return { matchesChecked: matches.length, autoApprovedCount: count };
+    } catch (error) {
+      logger.error('Error in autoApproveFriendlyResults:', {}, error as Error);
+      return { matchesChecked: 0, autoApprovedCount: 0 };
     }
   }
 

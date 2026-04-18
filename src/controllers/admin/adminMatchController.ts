@@ -408,6 +408,51 @@ export const voidMatch = async (req: Request, res: Response) => {
 };
 
 /**
+ * Audit-B2 retry endpoint — retry rating reversal + standings recalc for a
+ * match that was left in the split-brain state (status=VOID but
+ * requiresManualRatingReversal=true because the post-tx reversal threw).
+ * POST /api/admin/matches/:id/retry-rating-reversal
+ * Body: { reason?: string }
+ */
+export const retryRatingReversal = async (req: Request, res: Response) => {
+  try {
+    const authReq = req as AuthenticatedRequest;
+    const adminId = authReq.user?.adminId;
+    if (!adminId) {
+      return sendError(res, 'Admin authentication required', 401);
+    }
+
+    const { id } = req.params;
+    if (!id) {
+      return sendError(res, 'Match ID is required', 400);
+    }
+
+    const { reason } = (req.body ?? {}) as { reason?: string };
+
+    const result = await adminMatchService.retryManualRatingReversal(id, adminId, reason);
+
+    // Mirror the voidMatch controller pattern: create an AdminLog entry in
+    // addition to the MatchAdminAction record written inside the service.
+    // Uses the dedicated MATCH_RETRY_RATING_REVERSAL actionType so audit
+    // queries can filter by actionType rather than message substring.
+    await logMatchAction(
+      authReq.user?.id || adminId,
+      AdminActionType.MATCH_RETRY_RATING_REVERSAL,
+      id,
+      `Retried manual rating reversal${reason ? `: ${reason}` : ''}`,
+      { requiresManualRatingReversal: true },
+      { requiresManualRatingReversal: false }
+    );
+
+    sendSuccess(res, result);
+  } catch (error) {
+    console.error('Retry Rating Reversal Error:', error);
+    const message = error instanceof Error ? error.message : 'Failed to retry rating reversal';
+    sendError(res, message, 400);
+  }
+};
+
+/**
  * Get pending late cancellations (AS3)
  * GET /api/admin/cancellations/pending
  */

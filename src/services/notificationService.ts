@@ -48,15 +48,6 @@ interface SendPushInput {
 // Enable email channel when transactional email service (SendGrid/SES) is configured.
 
 export class NotificationService {
-  static sendNotification(arg0: {
-    userId: string;
-    type: string;
-    title: string;
-    message: string;
-    data: { matchId: string; inviterId: string };
-  }) {
-    throw new Error("Method not implemented.");
-  }
   private io: SocketIOServer | null = null;
   private prisma: PrismaClient;
 
@@ -700,46 +691,6 @@ export class NotificationService {
   }
 
   /**
-   * Send push notifications to multiple users
-   */
-  private async sendPushToUsers(
-    userIds: string[],
-    pushData: { title: string; body: string; data?: Record<string, any> }
-  ): Promise<void> {
-    const pushTokens = await prisma.userPushToken.findMany({
-      where: { userId: { in: userIds }, isActive: true },
-      select: { token: true },
-    });
-
-    if (pushTokens.length === 0) {
-      console.log("No active push tokens found for users:", userIds);
-      return;
-    }
-
-    const messages = pushTokens.map((tokenRecord) => ({
-      to: tokenRecord.token,
-      sound: "default",
-      title: pushData.title,
-      body: pushData.body,
-      data: pushData.data || {},
-    }));
-
-    const chunks = expo.chunkPushNotifications(messages);
-    const tickets = [];
-
-    for (const chunk of chunks) {
-      try {
-        const ticketChunk = await expo.sendPushNotificationsAsync(chunk);
-        tickets.push(...ticketChunk);
-      } catch (error) {
-        console.error("Error sending push notification chunk:", error);
-      }
-    }
-
-    console.log("Push notifications sent successfully:", tickets);
-  }
-
-  /**
    * Send push notification via Expo
    */
   async sendPushNotification(input: SendPushInput): Promise<void> {
@@ -869,33 +820,134 @@ export class NotificationService {
         return;
       }
 
-      logger.info("Sending push notifications", {
+      // Pre-filter invalid Expo tokens and batch-deactivate them before chunking.
+      // Previously done per-token inside sendPushNotification; doing it here once
+      // lets the chunked path assume all messages have valid 'to' fields.
+      const validTokens: { token: string; userId: string }[] = [];
+      const invalidTokens: string[] = [];
+      for (const t of tokens) {
+        if (Expo.isExpoPushToken(t.token)) {
+          validTokens.push(t);
+        } else {
+          invalidTokens.push(t.token);
+        }
+      }
+
+      if (invalidTokens.length > 0) {
+        logger.warn("Deactivating invalid Expo tokens", { count: invalidTokens.length });
+        await this.prisma.userPushToken.updateMany({
+          where: { token: { in: invalidTokens } },
+          data: { isActive: false, failureCount: { increment: 1 } },
+        }).catch((err) => logger.error(
+          "Failed to deactivate invalid tokens",
+          {},
+          err instanceof Error ? err : new Error(String(err))
+        ));
+      }
+
+      if (validTokens.length === 0) {
+        logger.debug("All tokens invalid — nothing to send", { userIds: eligibleUserIds });
+        return;
+      }
+
+      logger.info("Sending push notifications (chunked)", {
         eligibleUsers: eligibleUserIds.length,
-        tokens: tokens.length,
+        validTokens: validTokens.length,
+        invalidDeactivated: invalidTokens.length,
       });
 
-      // Send push notifications in parallel (with error handling per token)
-      const results = await Promise.allSettled(
-        tokens.map(({ token }) =>
-          this.sendPushNotification({
-            token,
-            title: notification.title,
-            body: notification.body,
-            data: notification.data,
-          })
-        )
-      );
+      // Build one messages array and let Expo chunk it (max 100 per chunk).
+      // TODO(NS-32, dissection #110): The tickets returned by sendPushNotificationsAsync
+      // are ACCEPTANCE tickets, not delivery confirmations. To catch DeviceNotRegistered
+      // errors that surface post-acceptance, persist ticket IDs and have a +30min cron
+      // call expo.getPushNotificationReceiptsAsync(ticketIds) to deactivate stale tokens.
+      // Currently we have NO receipt checking, so stale tokens accumulate until the
+      // 90-day inactivity cleanup catches them. Tracked at
+      // docs/issues/backlog/expo-push-receipt-cron.md.
+      const messages: ExpoPushMessage[] = validTokens.map(({ token }) => ({
+        to: token,
+        sound: 'default',
+        title: notification.title,
+        body: notification.body,
+        data: notification.data || {},
+      }));
 
-      // Batch update lastUsedAt for successfully sent tokens
-      const successTokens = tokens
-        .filter((_, i) => results[i]?.status === 'fulfilled')
-        .map(t => t.token);
+      const chunks = expo.chunkPushNotifications(messages);
+      const successTokens: string[] = [];
+      const deactivatePromises: Promise<void>[] = [];
+
+      // Send chunks sequentially. Each chunk is ONE HTTP POST to Expo with up to 100
+      // messages. For typical loads (1-500 tokens), this is 1-5 serial calls totaling
+      // under ~2 seconds — fewer round-trips and less connection overhead than the
+      // previous per-token parallel pattern.
+      for (const chunk of chunks) {
+        try {
+          const tickets = await expo.sendPushNotificationsAsync(chunk);
+
+          // Defensive: Expo guarantees ticket-chunk alignment by index. If the
+          // counts mismatch (API quirk), skip this chunk's ticket processing
+          // rather than indexing out-of-bounds.
+          if (tickets.length !== chunk.length) {
+            logger.error("Expo ticket count mismatch — skipping chunk", {
+              chunkLength: chunk.length,
+              ticketLength: tickets.length,
+            });
+            continue;
+          }
+
+          for (let i = 0; i < tickets.length; i++) {
+            const ticket = tickets[i];
+            const message = chunk[i];
+            // noUncheckedIndexedAccess guard: lengths verified above, but TS still
+            // types indexed access as T | undefined in strict mode.
+            if (!ticket || !message) continue;
+
+            const token = message.to as string;
+
+            if (ticket.status === 'error') {
+              logger.warn('Push ticket error', {
+                token,
+                message: ticket.message,
+                code: ticket.details?.error,
+              });
+
+              if (ticket.details?.error === 'DeviceNotRegistered') {
+                deactivatePromises.push(this.deactivatePushToken(token));
+              }
+            } else {
+              // ticket.status === 'ok' — tighter success semantics than the prior
+              // "Promise fulfilled" heuristic, which marked even DeviceNotRegistered
+              // tokens as successful.
+              successTokens.push(token);
+            }
+          }
+        } catch (err) {
+          logger.error("Expo chunk send failed", {
+            chunkSize: chunk.length,
+          }, err instanceof Error ? err : new Error(String(err)));
+          // Continue to next chunk — one chunk's failure doesn't block others.
+        }
+      }
+
+      // deactivatePushToken has its own internal try/catch, so allSettled here is
+      // belt-and-suspenders against any unexpected rejection.
+      if (deactivatePromises.length > 0) {
+        await Promise.allSettled(deactivatePromises);
+      }
+
+      // Update lastUsedAt only for tokens confirmed 'ok' by Expo.
       if (successTokens.length > 0) {
         await this.prisma.userPushToken.updateMany({
           where: { token: { in: successTokens } },
           data: { lastUsedAt: new Date() }
-        }).catch(err => logger.warn('Failed to update lastUsedAt for push tokens', { error: err }));
+        }).catch((err) => logger.warn('Failed to update lastUsedAt for push tokens', { error: err }));
       }
+
+      logger.info("Push notifications sent (chunked)", {
+        chunks: chunks.length,
+        sentOk: successTokens.length,
+        deactivated: deactivatePromises.length,
+      });
     } catch (error) {
       logger.error(
         "Error sending push notifications to users",

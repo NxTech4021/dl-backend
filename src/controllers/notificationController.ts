@@ -150,28 +150,10 @@ export const getUnreadCount = async (req: Request, res: Response) => {
   }
 };
 
-
-// Get notifications by category
-export const getNotificationsByCategory = async (req: Request, res: Response) => {
-  try {
-    const { category } = req.params;
-    const { limit = 100 } = req.query;
-
-    if (!category || !Object.values(NotificationCategory).includes(category as NotificationCategory)) {
-      return sendError(res, 'Valid notification category is required', 400);
-    }
-
-    const notifications = await notificationService.getNotificationsByCategory(
-      category as NotificationCategory,
-      Number(limit)
-    );
-
-    sendSuccess(res, notifications);
-  } catch (error) {
-    console.error('Error getting notifications by category:', error);
-    sendError(res, 'Failed to get notifications by category');
-  }
-};
+// NS-11 (dissection #110): getNotificationsByCategory controller handler deleted —
+// no route was ever registered and the service method (notificationService.ts:611)
+// queries ALL users' notifications without a userId filter (latent data-leak risk if
+// ever wired). Service method preserved because integration tests cover it.
 
 
 // Send test notification (admin only)

@@ -1250,9 +1250,15 @@ export class FriendlyMatchService {
       throw new Error('You are not a participant in this match');
     }
 
-    // Check if match can be cancelled (not already completed or cancelled)
-    if (match.status === MatchStatus.COMPLETED || match.status === MatchStatus.CANCELLED) {
-      throw new Error('This match cannot be cancelled');
+    // Audit-E1: mirror the F-15 positive whitelist from matchScheduleService.
+    // Only pre-play statuses are cancellable — ONGOING would orphan a submitted
+    // result, UNFINISHED/COMPLETED/VOID are terminal, CANCELLED is idempotent.
+    // Friendlies do not use WALKOVER_PENDING (league-only) so it's absent here.
+    if (
+      match.status !== MatchStatus.DRAFT &&
+      match.status !== MatchStatus.SCHEDULED
+    ) {
+      throw new Error(`Cannot cancel match in status ${match.status}`);
     }
 
     // Update match status to CANCELLED and create comment if provided
