@@ -264,11 +264,6 @@ export const createLeague = async (req: Request, res: Response) => {
  * Admin only
  */
 export const updateLeague = async (req: Request, res: Response) => {
-  // console.log("---- updateLeague called ----");
-  // console.log("Request params:", req.params);
-  // console.log("Request body:", req.body);
-  // console.log("Request user:", req.user?.id);
-
   try {
     const id = req.params.id;
     const { name, location, description, rules, status } =
