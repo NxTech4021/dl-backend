@@ -851,6 +851,16 @@ export class AdminMatchService {
               logger.info(`Reversed ratings for dispute-voided match ${resolvedMatch.id}`);
             } catch (ratingError) {
               logger.error(`Failed to reverse ratings for dispute-voided match ${resolvedMatch.id}:`, {}, ratingError as Error);
+              // Audit-B2: flag for manual retry (same pattern as voidMatch).
+              await prisma.match.update({
+                where: { id: resolvedMatch.id },
+                data: { requiresManualRatingReversal: true },
+              }).catch(flagErr => {
+                logger.error(
+                  `Failed to set requiresManualRatingReversal flag on dispute-voided match ${resolvedMatch.id}`,
+                  {}, flagErr as Error
+                );
+              });
             }
           }
 
@@ -1155,30 +1165,16 @@ export class AdminMatchService {
       });
     });
 
-    // Reverse ratings if match was completed.
-    //
-    // TODO(111-audit-B2): reverseMatchRatings runs OUTSIDE the outer
-    // transaction above — the VOID status is already committed. On
-    // DB/network failure here, the error is caught+logged+swallowed, leaving
-    // Match.status=VOID but ratings still reflecting COMPLETED. Admin has no
-    // recovery endpoint; invoking recalculateMatchRatings later compounds
-    // the non-idempotency of reverseMatchRatings (see audit-B1).
-    //
-    // VERIFIED (2026-04-16): cannot move these calls into the outer
-    // $transaction. Both reverseMatchRatings (dmrRatingService.ts:1341) and
-    // recalculateDivisionStandings (via applyRankings,
-    // standingsV2Service.ts:384) open their own $transaction. Prisma runs
-    // nested $transaction calls on a SEPARATE connection that does not
-    // join the outer tx — outer rollback does NOT revert inner writes,
-    // and the inner waits on row locks held by the outer (deadlock risk).
-    // Same pattern already exists in resolveDispute.
-    //
-    // Optimal zero-risk fix: mirror the existing requiresAdminReview
-    // pattern — add a `requiresManualRatingReversal` flag to Match, flip
-    // it in the catch blocks below, expose an admin retry endpoint.
-    // Ship audit-B1 (idempotent reverseMatchRatings) first so retries
-    // are safe. See
-    // docs/issues/backlog/match-deferred-issues-deep-dive-2026-04-16.md#issue-b
+    // Audit-B2: reverseMatchRatings and recalculateDivisionStandings each
+    // open their own $transaction on a separate Prisma pool connection, so
+    // they cannot be wrapped in the outer $transaction above (inner writes
+    // survive outer rollback + deadlock risk — full analysis in the audit
+    // doc). Instead, on failure we flip `requiresManualRatingReversal` on
+    // the already-committed Match row so the split-brain state is
+    // surfaceable for admin follow-up. Idempotent retry path is safe now
+    // that audit-B1 landed (reverseMatchRatings no longer double-decrements).
+    // Admin retry endpoint is still TODO(111-audit-B2-retry); today the
+    // flag is visible via direct DB read / Prisma Studio.
     if (wasCompleted) {
       try {
         const dmrService = new DMRRatingService(match.sport as any);
@@ -1186,6 +1182,15 @@ export class AdminMatchService {
         logger.info(`Reversed ratings for voided match ${matchId}`);
       } catch (error) {
         logger.error(`Failed to reverse ratings for match ${matchId}:`, {}, error as Error);
+        await prisma.match.update({
+          where: { id: matchId },
+          data: { requiresManualRatingReversal: true },
+        }).catch(flagErr => {
+          logger.error(
+            `Failed to set requiresManualRatingReversal flag on match ${matchId}`,
+            {}, flagErr as Error
+          );
+        });
       }
 
       // Recalculate standings
@@ -1196,6 +1201,15 @@ export class AdminMatchService {
           logger.info(`Recalculated standings after voiding match ${matchId}`);
         } catch (error) {
           logger.error(`Failed to recalculate standings for match ${matchId}:`, {}, error as Error);
+          await prisma.match.update({
+            where: { id: matchId },
+            data: { requiresManualRatingReversal: true },
+          }).catch(flagErr => {
+            logger.error(
+              `Failed to set requiresManualRatingReversal flag on match ${matchId}`,
+              {}, flagErr as Error
+            );
+          });
         }
       }
     }
