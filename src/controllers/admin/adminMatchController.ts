@@ -433,13 +433,15 @@ export const retryRatingReversal = async (req: Request, res: Response) => {
 
     // Mirror the voidMatch controller pattern: create an AdminLog entry in
     // addition to the MatchAdminAction record written inside the service.
+    // Uses the dedicated MATCH_RETRY_RATING_REVERSAL actionType so audit
+    // queries can filter by actionType rather than message substring.
     await logMatchAction(
       authReq.user?.id || adminId,
-      AdminActionType.OTHER,
+      AdminActionType.MATCH_RETRY_RATING_REVERSAL,
       id,
       `Retried manual rating reversal${reason ? `: ${reason}` : ''}`,
       { requiresManualRatingReversal: true },
-      { requiresManualRatingReversal: false, action: 'RETRY_RATING_REVERSAL' }
+      { requiresManualRatingReversal: false }
     );
 
     sendSuccess(res, result);
