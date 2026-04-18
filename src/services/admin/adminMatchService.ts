@@ -895,6 +895,16 @@ export class AdminMatchService {
             matchId: resolvedMatch.id,
           }, error as Error);
           // Don't throw — dispute resolution succeeded, recalculation is secondary
+          //
+          // TODO(111-audit-postDisputeRecalc): this outer catch covers step 3
+          // (recalculateMatchRatings for COMPLETED dispute outcomes), step 4
+          // (Best6 per participant), and step 5 (V2 standings) — none of
+          // which have inner catches + flag flips. Failures here surface only
+          // via logs; no self-heal endpoint. Preferred fix: add a
+          // `requiresManualPostDisputeRecalc` flag (Option C) and a
+          // retryPostDisputeRecalc endpoint that re-runs the idempotent
+          // step 3/4/5 chain. Full design + migration/commit plan in
+          // docs/issues/backlog/match-post-dispute-recalc-recovery-2026-04-18.md
         }
       }
     }
