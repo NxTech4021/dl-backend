@@ -2797,6 +2797,10 @@ enum MatchAdminActionType {
   UNHIDE_MATCH
   REPORT_ABUSE
   CLEAR_REPORT
+  // Audit-B2: recovery action for split-brain state caused by post-tx
+  // rating reversal failure (voidMatch / resolveDispute outer tx committed
+  // but inner reverseMatchRatings / standings-recalc threw).
+  RETRY_RATING_REVERSAL
 }
 
 // =============================================
