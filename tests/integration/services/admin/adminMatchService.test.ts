@@ -9,6 +9,7 @@
 
 import { prismaTest } from '../../../setup/prismaTestClient';
 import { createTestUser, createTestAdmin } from '../../../helpers/factories';
+import { createCompletedMatch } from '../../../helpers/factories/matchFactory';
 import {
   MatchStatus,
   DisputeStatus,
@@ -416,6 +417,93 @@ describe('AdminMatchService', () => {
           sendPush: false,
         })
       ).rejects.toThrow('Match not found');
+    });
+  });
+
+  // Audit-B2 retry endpoint (commits 214fb0f, 84a159a, f6aa7c3, b51872e).
+  // Exercises the service method that recovers a split-brain VOID match
+  // (status=VOID but requiresManualRatingReversal=true because the
+  // post-tx rating reversal failed). DMRRatingService and
+  // StandingsV2Service are mocked at the top of this file, so the retry
+  // method's internal calls return mocked null — we're only testing the
+  // preconditions + flag/audit state transitions.
+  describe('retryManualRatingReversal', () => {
+    it('should throw error for non-existent match', async () => {
+      await expect(
+        adminMatchService.retryManualRatingReversal('non-existent-match', 'admin-id')
+      ).rejects.toThrow('Match not found');
+    });
+
+    it('should throw when flag is not set', async () => {
+      const { match } = await createCompletedMatch();
+      // Move to VOID but DON'T set the flag.
+      await prismaTest.match.update({
+        where: { id: match.id },
+        data: { status: MatchStatus.VOID, requiresManualRatingReversal: false },
+      });
+
+      await expect(
+        adminMatchService.retryManualRatingReversal(match.id, 'admin-id')
+      ).rejects.toThrow('not flagged for manual rating reversal');
+    });
+
+    it('should throw when status is not VOID', async () => {
+      const { match } = await createCompletedMatch();
+      // Set flag but leave status as COMPLETED.
+      await prismaTest.match.update({
+        where: { id: match.id },
+        data: { requiresManualRatingReversal: true },
+      });
+
+      await expect(
+        adminMatchService.retryManualRatingReversal(match.id, 'admin-id')
+      ).rejects.toThrow('expected VOID');
+    });
+
+    it('should clear flag and log audit action on success', async () => {
+      const { admin } = await createTestAdmin();
+      const { match } = await createCompletedMatch();
+      await prismaTest.match.update({
+        where: { id: match.id },
+        data: {
+          status: MatchStatus.VOID,
+          requiresManualRatingReversal: true,
+        },
+      });
+
+      const result = await adminMatchService.retryManualRatingReversal(match.id, admin.id);
+
+      expect(result).toBeDefined();
+      expect(result?.requiresManualRatingReversal).toBe(false);
+      expect(result?.status).toBe(MatchStatus.VOID);
+
+      const auditRows = await prismaTest.matchAdminAction.findMany({
+        where: { matchId: match.id, actionType: 'RETRY_RATING_REVERSAL' },
+      });
+      expect(auditRows.length).toBe(1);
+      expect(auditRows[0]?.adminId).toBe(admin.id);
+    });
+
+    it('should preserve flag when retry is re-invoked after success', async () => {
+      // Audit-B1 makes the underlying reversal idempotent, but the retry
+      // endpoint itself intentionally rejects further calls once the flag
+      // is already cleared — the match is no longer in a broken state.
+      const { admin } = await createTestAdmin();
+      const { match } = await createCompletedMatch();
+      await prismaTest.match.update({
+        where: { id: match.id },
+        data: {
+          status: MatchStatus.VOID,
+          requiresManualRatingReversal: true,
+        },
+      });
+
+      await adminMatchService.retryManualRatingReversal(match.id, admin.id);
+
+      // Second call — flag is now false.
+      await expect(
+        adminMatchService.retryManualRatingReversal(match.id, admin.id)
+      ).rejects.toThrow('not flagged for manual rating reversal');
     });
   });
 
