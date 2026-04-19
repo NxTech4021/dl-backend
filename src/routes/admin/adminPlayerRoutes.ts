@@ -12,7 +12,8 @@ import {
   getPlayerStatusHistory,
   getPlayers,
   updatePlayer,
-  getPlayerDetails
+  getPlayerDetails,
+  warnPlayer,
 } from '../../controllers/admin/adminPlayerController';
 
 const router = Router();
@@ -25,6 +26,11 @@ router.get('/', getPlayers);
 // POST /api/admin/players/:id/ban
 // Body: { reason: string, notes?: string }
 router.post('/:id/ban', banPlayer);
+
+// Issue a code of conduct warning
+// POST /api/admin/players/:id/warn
+// Body: { reason: string, notes?: string }
+router.post('/:id/warn', warnPlayer);
 
 // Unban a player
 // POST /api/admin/players/:id/unban

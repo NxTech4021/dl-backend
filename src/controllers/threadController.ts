@@ -1211,8 +1211,6 @@ export const deleteMessage = async (req: Request, res: Response) => {
       },
     });
 
-    console.log(`✅ Message ${messageId} deleted by user ${userId}`);
-
     // 💡 SOCKET INTEGRATION: Broadcast deletion
     if (req.io) {
       req.io.to(message.threadId).emit('message_deleted', {

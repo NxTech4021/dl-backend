@@ -18,7 +18,7 @@ import {
 // Type alias until Prisma client is regenerated after migration
 type MatchFeeType = 'FREE' | 'SPLIT' | 'FIXED';
 import { logger } from '../../utils/logger';
-import { formatMatchDate, formatMatchTime } from '../../utils/timezone';
+import { formatMatchDate, formatMatchTime, formatDynamicDate, formatDynamicDateWithOn } from '../../utils/timezone';
 import { NotificationService, notificationService as notificationServiceSingleton } from '../notificationService';
 import { doublesNotifications } from '../../helpers/notifications';
 import { matchManagementNotifications } from '../../helpers/notifications/matchManagementNotifications';
@@ -1102,7 +1102,7 @@ export class MatchInvitationService {
     if (partnerId && match.matchType === MatchType.DOUBLES) {
       const joiningUser = await prisma.user.findUnique({ where: { id: userId }, select: { name: true } });
       const joinerName = joiningUser?.name || 'Your partner';
-      const date = match.matchDate ? formatMatchDate(match.matchDate) : 'TBD';
+      const date = match.matchDate ? formatDynamicDateWithOn(match.matchDate) : 'TBD';
       const time = match.matchDate ? formatMatchTime(match.matchDate) : 'TBD';
       const venue = match.venue || match.location || 'TBD';
       const notif = doublesNotifications.partnerJoinedMatch(joinerName, date, time, venue);
@@ -1163,7 +1163,7 @@ export class MatchInvitationService {
 
       if (!matchData) return;
 
-      const date = matchData.matchDate ? formatMatchDate(matchData.matchDate) : 'TBD';
+      const date = matchData.matchDate ? formatDynamicDate(matchData.matchDate) : 'TBD';
       const time = matchData.matchDate ? formatMatchTime(matchData.matchDate) : 'TBD';
       const venue = matchData.venue || matchData.location || 'TBD';
       const creatorName = matchData.createdBy?.name || 'Your partner';
@@ -1224,7 +1224,7 @@ export class MatchInvitationService {
       });
       const responderName = user?.name || 'Your partner';
 
-      const date = match.matchDate ? formatMatchDate(match.matchDate) : 'TBD';
+      const date = match.matchDate ? formatDynamicDateWithOn(match.matchDate) : 'TBD';
       const time = match.matchDate ? formatMatchTime(match.matchDate) : 'TBD';
 
       if (match.matchType === MatchType.DOUBLES) {
