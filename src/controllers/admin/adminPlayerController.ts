@@ -9,6 +9,8 @@ import * as adminPlayerService from '../../services/admin/adminPlayerService';
 import { logPlayerAction } from '../../services/admin/adminLogService';
 import { logger } from '../../utils/logger';
 import { sendSuccess, sendError, sendPaginated } from '../../utils/response';
+import { notificationService } from '../../services/notificationService';
+import { specialCircumstancesNotifications } from '../../helpers/notifications/specialCircumstancesNotifications';
 
 /**
  * Ban a player
@@ -394,5 +396,64 @@ export const getPlayerDetails = async (req: Request, res: Response) => {
     const statusCode = error.message === 'Player not found' ? 404 : 500;
 
     return sendError(res, error.message || 'Failed to get player details', statusCode);
+  }
+};
+
+/**
+ * Issue a code of conduct warning to a player
+ * POST /api/admin/players/:id/warn
+ * Body: { reason: string, notes?: string }
+ */
+export const warnPlayer = async (req: Request, res: Response) => {
+  try {
+    const adminId = (req as any).user?.id;
+    const { id: playerId } = req.params;
+    const { reason, notes } = req.body;
+
+    if (!adminId) {
+      return sendError(res, 'Admin not authenticated', 401);
+    }
+
+    if (!playerId) {
+      return sendError(res, 'Player ID is required', 400);
+    }
+
+    if (!reason || typeof reason !== 'string' || reason.trim().length === 0) {
+      return sendError(res, 'Warning reason is required', 400);
+    }
+
+    const result = await adminPlayerService.warnPlayer({
+      playerId,
+      adminId,
+      reason: reason.trim(),
+      notes: notes?.trim(),
+    });
+
+    await logPlayerAction(
+      adminId,
+      AdminActionType.OTHER,
+      playerId,
+      `Issued conduct warning: ${reason.trim()}`,
+      {},
+      {},
+      { notes: notes?.trim() }
+    );
+
+    await notificationService.createNotification({
+      ...specialCircumstancesNotifications.codeOfConductWarning(),
+      userIds: playerId,
+    }).catch(() => { /* non-blocking */ });
+
+    return sendSuccess(res, { player: result.player }, 'Conduct warning issued successfully');
+  } catch (error: any) {
+    logger.error('Warn player error:', error);
+
+    const statusCode =
+      error.message === 'Player not found' ? 404 :
+      error.message === 'Admin not found' ? 401 :
+      error.message.includes('deleted') ? 400 :
+      500;
+
+    return sendError(res, error.message || 'Failed to issue conduct warning', statusCode);
   }
 };

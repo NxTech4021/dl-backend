@@ -103,18 +103,6 @@ export const doublesNotifications = {
     metadata: { partnerName, leagueName },
   }),
 
-  // teamRegistrationReminder2h: (
-  //   leagueName: string,
-  //   partnerName: string
-  // ): NotificationPayload => ({
-  //   type: NOTIFICATION_TYPES.TEAM_REGISTRATION_REMINDER_2H,
-  //   category: getCategoryForNotificationType(
-  //     NOTIFICATION_TYPES.TEAM_REGISTRATION_REMINDER_2H
-  //   ),
-  //   title: "Complete Registration",
-  //   message: `⏰ Complete registration for your doubles team in ${leagueName} with ${partnerName}`,
-  //   metadata: { leagueName, partnerName },
-  // }),
 
   teamRegistrationReminder24h: (leagueName: string): NotificationPayload => ({
     type: NOTIFICATION_TYPES.TEAM_REGISTRATION_REMINDER_24H,
@@ -248,7 +236,7 @@ export const doublesNotifications = {
       NOTIFICATION_TYPES.DOUBLES_PARTNER_CONFIRMED_POSTED_MATCH
     ),
     title: "✅ Your Partner Confirmed the Match",
-    message: `${partnerName} confirmed the match on ${matchDate} at ${time}, ${venue}. You're both set.`,
+    message: `${partnerName} confirmed the match ${matchDate} at ${time}, ${venue}. You're both set.`,
     metadata: { partnerName, matchDate, time, venue },
   }),
 
@@ -261,7 +249,7 @@ export const doublesNotifications = {
       NOTIFICATION_TYPES.DOUBLES_PARTNER_DECLINED_POSTED_MATCH
     ),
     title: "❌ Your Partner Can't Make It",
-    message: `${partnerName} can't make the match on ${matchDate}. Reschedule or cancel the match?`,
+    message: `${partnerName} can't make the match ${matchDate}. Reschedule or cancel the match?`,
     metadata: { partnerName, matchDate },
   }),
 
@@ -276,7 +264,7 @@ export const doublesNotifications = {
       NOTIFICATION_TYPES.DOUBLES_PARTNER_JOINED_MATCH
     ),
     title: "🎾 Your Partner Accepted a Match",
-    message: `${partnerName} joined a match on ${matchDate} at ${time}, ${venue}. Can you join?`,
+    message: `${partnerName} joined a match ${matchDate} at ${time}, ${venue}. Can you join?`,
     metadata: { partnerName, matchDate, time, venue },
   }),
 
@@ -291,7 +279,7 @@ export const doublesNotifications = {
       NOTIFICATION_TYPES.DOUBLES_PARTNER_CONFIRMED_JOINED_MATCH
     ),
     title: "✅ Your Partner Confirmed the Match",
-    message: `${partnerName} confirmed the match on ${matchDate} at ${time}, ${venue}. You're both set.`,
+    message: `${partnerName} confirmed the match ${matchDate} at ${time}, ${venue}. You're both set.`,
     metadata: { partnerName, matchDate, time, venue },
   }),
 
@@ -304,7 +292,7 @@ export const doublesNotifications = {
       NOTIFICATION_TYPES.DOUBLES_PARTNER_DECLINED_JOINED_MATCH
     ),
     title: "❌ Your Partner Can't Make It",
-    message: `${partnerName} can't make the match on ${matchDate}. Reschedule the match?`,
+    message: `${partnerName} can't make the match ${matchDate}. Reschedule the match?`,
     metadata: { partnerName, matchDate },
   }),
 
@@ -318,7 +306,7 @@ export const doublesNotifications = {
       NOTIFICATION_TYPES.DOUBLES_MATCH_CANCELLED_PARTNER_DECLINED
     ),
     title: "🚫 Match Cancelled",
-    message: `Opponent team cancelled the match on ${matchDate} at ${time}, ${venue}.`,
+    message: `Opponent team cancelled the match ${matchDate} at ${time}, ${venue}.`,
     metadata: { matchDate, time, venue },
   }),
 };

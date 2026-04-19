@@ -18,6 +18,7 @@ import {
 } from '@prisma/client';
 import { logger } from '../../utils/logger';
 import { NotificationService, notificationService as notificationServiceSingleton } from '../notificationService';
+import { specialCircumstancesNotifications } from '../../helpers/notifications/specialCircumstancesNotifications';
 import { DMRRatingService } from '../rating/dmrRatingService';
 import { StandingsV2Service } from '../rating/standingsV2Service';
 
@@ -1698,32 +1699,36 @@ export class AdminMatchService {
       const dispute = await prisma.matchDispute.findUnique({
         where: { id: disputeId },
         include: {
-          match: { include: { participants: { select: { userId: true } } } }
-        }
+          match: {
+            include: {
+              participants: {
+                select: { userId: true },
+                where: { invitationStatus: 'ACCEPTED' },
+              },
+            },
+          },
+          submittedByUser: { select: { id: true, name: true } },
+        },
       });
 
       if (!dispute) return;
 
-      const actionText: Record<string, string> = {
-        'UPHOLD_ORIGINAL': 'Original score upheld',
-        'UPHOLD_DISPUTER': "Disputer's score accepted",
-        'CUSTOM_SCORE': 'Score adjusted by admin',
-        'VOID_MATCH': 'Match voided',
-        'AWARD_WALKOVER': 'Walkover awarded',
-        'REQUEST_MORE_INFO': 'More information requested'
-      };
-      const message = actionText[action] || 'Dispute resolved';
-
       const recipientIds = dispute.match.participants.map(p => p.userId).filter((id): id is string => id !== null);
+      const disputerName = (dispute as any).submittedByUser?.name || 'Your opponent';
 
-      await this.notificationService.createNotification({
-        type: 'MATCH_DISPUTE_RESOLVED',
-        title: 'Dispute Resolved',
-        message: `${message}. ${reason}`,
-        category: 'MATCH',
-        matchId: dispute.matchId,
-        userIds: recipientIds
-      });
+      // Send individual notifications so each recipient sees the correct opponent name
+      for (const recipientId of recipientIds) {
+        const opponentIds = recipientIds.filter(id => id !== recipientId);
+        if (opponentIds.length === 0) continue;
+        const opponentRecord = await prisma.user.findUnique({ where: { id: opponentIds[0]! }, select: { name: true } });
+        const opponentName = opponentRecord?.name || disputerName;
+        const notif = specialCircumstancesNotifications.disputeResolved(opponentName);
+        await this.notificationService.createNotification({
+          ...notif,
+          matchId: dispute.matchId,
+          userIds: [recipientId],
+        });
+      }
     } catch (error) {
       logger.error('Error sending dispute resolved notification', {}, error as Error);
     }

@@ -34,7 +34,7 @@ import {
   sendRegistrationClosing3DaysNotifications,
   sendRegistrationClosing24hNotifications,
 } from "../services/notification/leagueNotificationService";
-import { leagueLifecycleNotifications, matchManagementNotifications, doublesNotifications } from '../helpers/notifications';
+import { leagueLifecycleNotifications, matchManagementNotifications, doublesNotifications, promotionalNotifications } from '../helpers/notifications';
 import {
   sendWeeklyRankingUpdates,
   sendMonthlyDMRRecap,
@@ -2075,6 +2075,170 @@ export function scheduleStreakAtRiskNotifications(): void {
 }
 
 /**
+ * NOTIF-105: INACTIVE_PLAYER_14_DAYS — App-level re-engagement.
+ * Fires for users whose last activity was exactly 14 days ago (±1 day window).
+ * Runs daily at 10:00 AM.
+ */
+export function scheduleInactivePlayer14dNotifications(): void {
+  scheduleCron('0 10 * * *', async () => {
+    try {
+      logger.info('Running inactivePlayer14d job');
+      const now = dayjs().tz(MYT);
+      const threshold14 = now.subtract(14, 'day').toDate();
+      const threshold15 = now.subtract(15, 'day').toDate();
+
+      const users = await prisma.user.findMany({
+        where: {
+          lastActivityCheck: { gte: threshold15, lte: threshold14 },
+          status: { notIn: ['BANNED', 'DELETED'] },
+        },
+        select: { id: true },
+      });
+
+      for (const user of users) {
+        await notificationService.createNotification({
+          ...promotionalNotifications.inactivePlayer14Days(),
+          userIds: user.id,
+          skipDuplicateWithinMs: 13 * 24 * 60 * 60 * 1000,
+        });
+      }
+      logger.info('inactivePlayer14d job complete', { count: users.length });
+    } catch (error) {
+      logger.error('Failed to run inactivePlayer14d job', {}, error as Error);
+    }
+  });
+  logger.info('inactivePlayer14d job scheduled');
+}
+
+/**
+ * NOTIF-106: INACTIVE_PLAYER_30_DAYS — App-level re-engagement.
+ * Fires for users whose last activity was exactly 30 days ago (±1 day window).
+ * Runs daily at 10:00 AM.
+ */
+export function scheduleInactivePlayer30dNotifications(): void {
+  scheduleCron('0 10 * * *', async () => {
+    try {
+      logger.info('Running inactivePlayer30d job');
+      const now = dayjs().tz(MYT);
+      const threshold30 = now.subtract(30, 'day').toDate();
+      const threshold31 = now.subtract(31, 'day').toDate();
+
+      const users = await prisma.user.findMany({
+        where: {
+          lastActivityCheck: { gte: threshold31, lte: threshold30 },
+          status: { notIn: ['BANNED', 'DELETED'] },
+        },
+        select: { id: true },
+      });
+
+      for (const user of users) {
+        await notificationService.createNotification({
+          ...promotionalNotifications.inactivePlayer30Days(),
+          userIds: user.id,
+          skipDuplicateWithinMs: 13 * 24 * 60 * 60 * 1000,
+        });
+      }
+      logger.info('inactivePlayer30d job complete', { count: users.length });
+    } catch (error) {
+      logger.error('Failed to run inactivePlayer30d job', {}, error as Error);
+    }
+  });
+  logger.info('inactivePlayer30d job scheduled');
+}
+
+/**
+ * NOTIF-107: LEAGUE_BETWEEN_BREAKS — Re-engagement for past-season players.
+ * Targets users who completed a season but have not joined the next open one.
+ * Runs daily at 10:00 AM.
+ */
+export function scheduleLeagueBetweenBreaksNotifications(): void {
+  scheduleCron('0 10 * * *', async () => {
+    try {
+      logger.info('Running leagueBetweenBreaks job');
+
+      const leagues = await prisma.league.findMany({
+        where: {
+          seasons: { some: { status: { in: ['UPCOMING', 'ACTIVE'] } } },
+        },
+        include: {
+          seasons: {
+            where: { status: { in: ['FINISHED', 'UPCOMING', 'ACTIVE'] } },
+            include: { memberships: { select: { userId: true } } },
+          },
+        },
+      });
+
+      for (const league of leagues) {
+        const finishedSeasons = league.seasons.filter(s => s.status === 'FINISHED');
+        const openSeasons = league.seasons.filter(s => s.status === 'UPCOMING' || s.status === 'ACTIVE');
+        if (!finishedSeasons.length || !openSeasons.length) continue;
+
+        const openMemberIds = new Set(openSeasons.flatMap(s => s.memberships.map(m => m.userId)));
+        const notifiedIds = new Set<string>();
+
+        for (const season of finishedSeasons) {
+          for (const { userId } of season.memberships) {
+            if (!openMemberIds.has(userId) && !notifiedIds.has(userId)) {
+              notifiedIds.add(userId);
+              await notificationService.createNotification({
+                ...promotionalNotifications.leagueBetweenBreaks(league.name),
+                userIds: userId,
+                skipDuplicateWithinMs: 7 * 24 * 60 * 60 * 1000,
+              });
+            }
+          }
+        }
+      }
+      logger.info('leagueBetweenBreaks job complete');
+    } catch (error) {
+      logger.error('Failed to run leagueBetweenBreaks job', {}, error as Error);
+    }
+  });
+  logger.info('leagueBetweenBreaks job scheduled');
+}
+
+/**
+ * NOTIF-108: INCOMPLETE_REGISTRATION — Nudge users with pending payments.
+ * Targets SeasonMembership with PENDING paymentStatus on paid seasons.
+ * Free seasons (paymentRequired = false) are skipped automatically.
+ * Runs daily at 10:00 AM.
+ */
+export function scheduleIncompleteRegistrationNotifications(): void {
+  scheduleCron('0 10 * * *', async () => {
+    try {
+      logger.info('Running incompleteRegistration job');
+
+      const pendingMemberships = await prisma.seasonMembership.findMany({
+        where: {
+          paymentStatus: 'PENDING',
+          season: {
+            paymentRequired: true,
+            status: { in: ['UPCOMING', 'ACTIVE'] },
+          },
+        },
+        include: {
+          season: { include: { leagues: { select: { name: true } } } },
+        },
+      });
+
+      for (const membership of pendingMemberships) {
+        const leagueName = membership.season.leagues[0]?.name ?? membership.season.name;
+        await notificationService.createNotification({
+          ...promotionalNotifications.incompleteRegistration(leagueName),
+          userIds: membership.userId,
+          seasonId: membership.seasonId,
+          skipDuplicateWithinMs: 24 * 60 * 60 * 1000,
+        });
+      }
+      logger.info('incompleteRegistration job complete', { count: pendingMemberships.length });
+    } catch (error) {
+      logger.error('Failed to run incompleteRegistration job', {}, error as Error);
+    }
+  });
+  logger.info('incompleteRegistration job scheduled');
+}
+
+/**
  * Initialize core notification jobs (Tier 1 + Tier 2).
  * These are safe, well-tested, and essential for user experience.
  *
@@ -2118,6 +2282,10 @@ export function initializeCoreNotificationJobs(): void {
   scheduleInactivity2WeeksWarnings();     // Daily 10am — last match > 14d ago
   scheduleInactivityDeadline7d();         // Daily 10am — 0 matches, midpoint 7d away
   scheduleInactivityDeadline3d();         // Daily 10am — 0 matches, midpoint 3d away
+  scheduleInactivePlayer14dNotifications();  // Daily 10am — app-level inactive 14 days
+  scheduleInactivePlayer30dNotifications();  // Daily 10am — app-level inactive 30 days
+  scheduleLeagueBetweenBreaksNotifications(); // Daily 10am — past-season non-returners
+  scheduleIncompleteRegistrationNotifications(); // Daily 10am — pending payments on paid seasons
 
   // ── Tier 2: Streak gamification ──
   scheduleStreakAtRiskNotifications();    // Daily 9am — NOTIF-013: streak at risk after 6d inactivity

@@ -25,7 +25,7 @@ export async function checkAndSendStandingsNotifications(
       }),
       prisma.division.findUnique({
         where: { id: divisionId },
-        select: { name: true },
+        select: { name: true, gameType: true, genderCategory: true },
       }),
       prisma.divisionStanding.findMany({
         where: { divisionId },
@@ -41,6 +41,15 @@ export async function checkAndSendStandingsNotifications(
 
     if (!season || !division || standings.length === 0) return;
 
+    // Build category label from gameType + genderCategory
+    const buildCategoryName = (gameType: string, genderCategory?: string | null): string => {
+      const g = genderCategory?.toUpperCase();
+      const genderPrefix = g === 'MALE' ? "Men's " : g === 'FEMALE' ? "Women's " : g === 'MIXED' ? 'Mixed ' : '';
+      const game = gameType?.toUpperCase() === 'DOUBLES' ? 'Doubles' : gameType?.toUpperCase() === 'SINGLES' ? 'Singles' : gameType;
+      return `${genderPrefix}${game}`;
+    };
+    const categoryName = buildCategoryName((division as any).gameType || '', (division as any).genderCategory);
+
     // Check for each player's position
     for (let i = 0; i < standings.length; i++) {
       const position = i + 1;
@@ -54,8 +63,9 @@ export async function checkAndSendStandingsNotifications(
       // Check if player is #1 (League Leader)
       if (position === 1) {
         const leaderNotif = notificationTemplates.rating.leagueLeader(
+          division.name,
           season.name,
-          division.name
+          categoryName
         );
 
         await notificationService.createNotification({
@@ -70,8 +80,9 @@ export async function checkAndSendStandingsNotifications(
       if (position >= 2 && position <= 3) {
         const top3Notif = notificationTemplates.rating.enteredTop3(
           position,
+          division.name,
           season.name,
-          division.name
+          categoryName
         );
 
         await notificationService.createNotification({
@@ -85,8 +96,9 @@ export async function checkAndSendStandingsNotifications(
       // Check if player entered top 10 (actually top 5 based on template)
       if (position >= 4 && position <= 10) {
         const top10Notif = notificationTemplates.rating.enteredTop10(
+          division.name,
           season.name,
-          division.name
+          categoryName
         );
 
         await notificationService.createNotification({
@@ -279,16 +291,25 @@ export async function sendMovedUpInStandingsNotification(
       }),
       prisma.division.findUnique({
         where: { id: divisionId },
-        select: { name: true },
+        select: { name: true, gameType: true, genderCategory: true },
       }),
     ]);
 
     if (!season || !division) return;
 
+    const buildCategoryName = (gameType: string, genderCategory?: string | null): string => {
+      const g = genderCategory?.toUpperCase();
+      const genderPrefix = g === 'MALE' ? "Men's " : g === 'FEMALE' ? "Women's " : g === 'MIXED' ? 'Mixed ' : '';
+      const game = gameType?.toUpperCase() === 'DOUBLES' ? 'Doubles' : gameType?.toUpperCase() === 'SINGLES' ? 'Singles' : gameType;
+      return `${genderPrefix}${game}`;
+    };
+    const categoryName = buildCategoryName((division as any).gameType || '', (division as any).genderCategory);
+
     const movedUpNotif = notificationTemplates.rating.movedUpInStandings(
       newPosition,
+      division.name,
       season.name,
-      division.name
+      categoryName
     );
 
     await notificationService.createNotification({

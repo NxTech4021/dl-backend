@@ -9,6 +9,7 @@ import { DisputeCategory, WalkoverReason } from '@prisma/client';
 import { notificationService } from '../../services/notificationService';
 import { matchManagementNotifications } from '../../helpers/notifications/matchManagementNotifications';
 import { socialCommunityNotifications } from '../../helpers/notifications/socialCommunityNotifications';
+import { specialCircumstancesNotifications } from '../../helpers/notifications/specialCircumstancesNotifications';
 import { prisma } from '../../lib/prisma';
 import { sendSuccess, sendError } from '../../utils/response';
 import { formatMatchDate } from '../../utils/timezone';
@@ -209,7 +210,7 @@ export const confirmResult = async (req: Request, res: Response) => {
             } catch (_) { /* non-blocking */ }
           })();
         } else {
-          // Score disputed
+          // Score disputed — alert opponent and send in-app confirmation to disputer
           const notification = matchManagementNotifications.scoreDisputeAlert(
             confirmerName
           );
@@ -219,6 +220,44 @@ export const confirmResult = async (req: Request, res: Response) => {
             userIds: otherParticipants,
             matchId: match.id,
           });
+
+          // NOTIF-131: in-app confirmation to the player who disputed
+          const disputeSubmittedNotif = specialCircumstancesNotifications.disputeSubmitted();
+          await notificationService.createNotification({
+            ...disputeSubmittedNotif,
+            userIds: userId,
+            matchId: match.id,
+          }).catch(() => { /* non-blocking */ });
+
+          // NOTIF-128: in-app "under review" to both parties (fire-and-forget)
+          void (async () => {
+            try {
+              const participants = await prisma.matchParticipant.findMany({
+                where: { matchId: id, invitationStatus: 'ACCEPTED' },
+                include: { user: { select: { id: true, name: true } } },
+              });
+              const opponentName = participants
+                .filter(p => p.userId !== userId)
+                .map(p => p.user?.name || 'Opponent')
+                .join(' & ') || 'Opponent';
+
+              // Disputer: "your dispute with <opponent> is under review"
+              await notificationService.createNotification({
+                ...specialCircumstancesNotifications.disputeResolutionRequired(opponentName),
+                userIds: userId,
+                matchId: match.id,
+              });
+
+              // Opponents: "dispute from <disputer> is under review"
+              if (otherParticipants.length > 0) {
+                await notificationService.createNotification({
+                  ...specialCircumstancesNotifications.disputeResolutionRequired(confirmerName),
+                  userIds: otherParticipants,
+                  matchId: match.id,
+                });
+              }
+            } catch (_) { /* non-blocking */ }
+          })();
         }
       }
     } catch (notifError) {

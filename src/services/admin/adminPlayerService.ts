@@ -27,6 +27,18 @@ interface DeletePlayerInput {
   reason: string;
   hardDelete?: boolean;
 }
+interface WarnPlayerInput {
+  playerId: string;
+  adminId: string;
+  reason: string;
+  notes?: string;
+}
+interface WarnPlayerInput {
+  playerId: string;
+  adminId: string;
+  reason: string;
+  notes?: string;
+}
 
 interface UpdatePlayerStatusInput {
   playerId: string;
@@ -677,4 +689,31 @@ export async function getPlayerDetailsForAdmin(playerId: string) {
     ...player,
     skillRatings
   };
+}
+
+/**
+ * Issue a code of conduct warning to a player.
+ * Does not alter the player's status — only validates access and logs the action.
+ * The caller (controller) is responsible for sending the notification.
+ */
+export async function warnPlayer(input: WarnPlayerInput) {
+  const { playerId, adminId, reason } = input;
+
+  const player = await prisma.user.findUnique({
+    where: { id: playerId },
+    select: { id: true, status: true, name: true, email: true },
+  });
+
+  if (!player) throw new Error('Player not found');
+  if (player.status === UserStatus.DELETED) throw new Error('Cannot warn a deleted player');
+
+  const admin = await prisma.admin.findFirst({
+    where: { userId: adminId },
+    select: { id: true },
+  });
+  if (!admin) throw new Error('Admin not found');
+
+  logger.info(`Conduct warning issued to player ${playerId} by admin ${adminId}. Reason: ${reason}`);
+
+  return { player: { id: player.id, name: player.name, email: player.email } };
 }
