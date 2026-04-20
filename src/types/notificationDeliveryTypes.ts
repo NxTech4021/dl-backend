@@ -19,6 +19,7 @@ export const NOTIFICATION_DELIVERY_MAP: Record<string, NotificationDeliveryType>
   SEASON_STARTING_SOON: NotificationDeliveryType.PUSH,
   SEASON_ENDED: NotificationDeliveryType.PUSH,
   SEASON_CANCELLED: NotificationDeliveryType.PUSH,
+  SEASON_REGISTRATION_CONFIRMED: NotificationDeliveryType.PUSH,
   
   // Account & System - IN_APP
   PROFILE_INCOMPLETE_REMINDER: NotificationDeliveryType.IN_APP,

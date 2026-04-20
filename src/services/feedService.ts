@@ -343,7 +343,11 @@ export const getFeedPosts = async (
     
     if (match?.setScores) {
       try {
-        const scoresData = Array.isArray(match.setScores) ? match.setScores : JSON.parse(match.setScores as string);
+        const scoresData = Array.isArray(match.setScores)
+          ? match.setScores
+          : (typeof match.setScores === 'object' && match.setScores !== null)
+            ? [match.setScores]
+            : JSON.parse(match.setScores as string);
         
         // Determine if this is gameScores (pickleball) or setScores (tennis/padel)
         // Pickleball uses: gameNumber, team1Points, team2Points

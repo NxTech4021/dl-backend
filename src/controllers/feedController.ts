@@ -5,7 +5,7 @@ import { sendSuccess, sendError } from '../utils/response';
 import { AuthenticatedRequest } from '../middlewares/auth.middleware';
 import { socialCommunityNotifications } from '../helpers/notifications/socialCommunityNotifications';
 import { notificationService } from '../services/notificationService';
-import { addLikeToGroup } from '../services/notification/likeNotificationGroupingService';
+// import { addLikeToGroup } from '../services/notification/likeNotificationGroupingService';
 
 // ============================================
 // POST HANDLERS
@@ -228,25 +228,26 @@ export const toggleLikeHandler = async (req: AuthenticatedRequest, res: Response
 
     const result = await feedService.toggleLike(postId, userId);
 
+    // COMMENTED OUT FOR NOW, Client might want it again 
     // Send grouped notification if liked (not unliked) and not liking own post
     if (result.liked) {
       const post = await feedService.getPostById(postId);
-      if (post && post.authorId !== userId) {
-        const liker = await prisma.user.findUnique({
-          where: { id: userId },
-          select: { name: true, username: true },
-        });
+      // if (post && post.authorId !== userId) {
+      //   const liker = await prisma.user.findUnique({
+      //     where: { id: userId },
+      //     select: { name: true, username: true },
+      //   });
 
-        if (liker) {
-          // Use notification grouping service to batch multiple likes
-          await addLikeToGroup(
-            postId,
-            post.authorId,
-            userId,
-            liker.name || liker.username || 'Someone'
-          );
-        }
-      }
+        // if (liker) {
+        //   // Use notification grouping service to batch multiple likes
+        //   await addLikeToGroup(
+        //     postId,
+        //     post.authorId,
+        //     userId,
+        //     liker.name || liker.username || 'Someone'
+        //   );
+        // }
+      // }
     }
 
     return sendSuccess(res, result, result.liked ? 'Post liked' : 'Post unliked');
@@ -316,23 +317,24 @@ export const addCommentHandler = async (req: AuthenticatedRequest, res: Response
         select: { name: true, username: true },
       });
 
-      if (commenter) {
-        const commentPreview = text.length > 50 ? text.substring(0, 50) + '...' : text;
-        const notification = socialCommunityNotifications.postCommented(
-          commenter.name || commenter.username || 'Someone',
-          postId,
-          commentPreview
-        );
-        await notificationService.createNotification({
-          userIds: [post.authorId],
-          ...notification,
-          metadata: {
-            ...notification.metadata,
-            commenterId: userId,
-            commentId: comment.id,
-          },
-        });
-      }
+      // COMMENTED OUT FOR NOW, Client might want it again 
+      // if (commenter) {
+      //   const commentPreview = text.length > 50 ? text.substring(0, 50) + '...' : text;
+      //   const notification = socialCommunityNotifications.postCommented(
+      //     commenter.name || commenter.username || 'Someone',
+      //     postId,
+      //     commentPreview
+      //   );
+      //   await notificationService.createNotification({
+      //     userIds: [post.authorId],
+      //     ...notification,
+      //     metadata: {
+      //       ...notification.metadata,
+      //       commenterId: userId,
+      //       commentId: comment.id,
+      //     },
+      //   });
+      // }
     }
 
     return sendSuccess(res, comment, 'Comment added successfully', 201);

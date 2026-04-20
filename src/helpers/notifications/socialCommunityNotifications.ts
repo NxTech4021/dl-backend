@@ -36,19 +36,6 @@ export const socialCommunityNotifications = {
     metadata: { friendName, activity },
   }),
 
-  similarSkillPlayerNearby: (
-    playerName: string,
-    rating: number,
-    distance: string
-  ): NotificationPayload => ({
-    type: NOTIFICATION_TYPES.SIMILAR_SKILL_PLAYER_NEARBY,
-    category: getCategoryForNotificationType(
-      NOTIFICATION_TYPES.SIMILAR_SKILL_PLAYER_NEARBY
-    ),
-    title: "Player Nearby",
-    message: `${playerName} (DMR ${rating}) is ${distance} away. Connect and play!`,
-    metadata: { playerName, rating, distance },
-  }),
 
   shareScorecardPrompt: (): NotificationPayload => ({
     type: NOTIFICATION_TYPES.SHARE_SCORECARD_PROMPT,
@@ -68,48 +55,48 @@ export const socialCommunityNotifications = {
     metadata: { playerName },
   }),
 
-  postLiked: (likerName: string, postId: string): NotificationPayload => ({
-    type: NOTIFICATION_TYPES.POST_LIKED,
-    category: getCategoryForNotificationType(NOTIFICATION_TYPES.POST_LIKED),
-    title: "New Like",
-    message: `${likerName} liked your post`,
-    metadata: { likerName, postId },
-  }),
+  // postLiked: (likerName: string, postId: string): NotificationPayload => ({
+  //   type: NOTIFICATION_TYPES.POST_LIKED,
+  //   category: getCategoryForNotificationType(NOTIFICATION_TYPES.POST_LIKED),
+  //   title: "New Like",
+  //   message: `${likerName} liked your post`,
+  //   metadata: { likerName, postId },
+  // }),
 
-  postLikedGrouped: (
-    likerNames: string[],
-    postId: string,
-    totalCount: number
-  ): NotificationPayload => {
-    let message: string;
-    if (totalCount === 1) {
-      message = `${likerNames[0]} liked your post`;
-    } else if (totalCount === 2) {
-      message = `${likerNames[0]} and ${likerNames[1]} liked your post`;
-    } else {
-      const othersCount = totalCount - 1;
-      message = `${likerNames[0]} and ${othersCount} other${othersCount > 1 ? "s" : ""} liked your post`;
-    }
-    return {
-      type: NOTIFICATION_TYPES.POST_LIKED,
-      category: getCategoryForNotificationType(NOTIFICATION_TYPES.POST_LIKED),
-      title: "New Likes",
-      message,
-      metadata: { likerNames, postId, totalCount },
-    };
-  },
+  // postLikedGrouped: (
+  //   likerNames: string[],
+  //   postId: string,
+  //   totalCount: number
+  // ): NotificationPayload => {
+  //   let message: string;
+  //   if (totalCount === 1) {
+  //     message = `${likerNames[0]} liked your post`;
+  //   } else if (totalCount === 2) {
+  //     message = `${likerNames[0]} and ${likerNames[1]} liked your post`;
+  //   } else {
+  //     const othersCount = totalCount - 1;
+  //     message = `${likerNames[0]} and ${othersCount} other${othersCount > 1 ? "s" : ""} liked your post`;
+  //   }
+  //   return {
+  //     type: NOTIFICATION_TYPES.POST_LIKED,
+  //     category: getCategoryForNotificationType(NOTIFICATION_TYPES.POST_LIKED),
+  //     title: "New Likes",
+  //     message,
+  //     metadata: { likerNames, postId, totalCount },
+  //   };
+  // },
 
-  postCommented: (
-    commenterName: string,
-    postId: string,
-    commentPreview: string
-  ): NotificationPayload => ({
-    type: NOTIFICATION_TYPES.POST_COMMENTED,
-    category: getCategoryForNotificationType(NOTIFICATION_TYPES.POST_COMMENTED),
-    title: "New Comment",
-    message: `${commenterName} commented: ${commentPreview}`,
-    metadata: { commenterName, postId, commentPreview },
-  }),
+  // postCommented: (
+  //   commenterName: string,
+  //   postId: string,
+  //   commentPreview: string
+  // ): NotificationPayload => ({
+  //   type: NOTIFICATION_TYPES.POST_COMMENTED,
+  //   category: getCategoryForNotificationType(NOTIFICATION_TYPES.POST_COMMENTED),
+  //   title: "New Comment",
+  //   message: `${commenterName} commented: ${commentPreview}`,
+  //   metadata: { commenterName, postId, commentPreview },
+  // }),
 
   // Chat notifications
   newMessage: (

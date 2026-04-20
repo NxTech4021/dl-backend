@@ -321,29 +321,6 @@ export class FriendlyMatchService {
       throw new Error('Failed to retrieve created match');
     }
 
-    // Send friendly match posted notification (In-App)
-    try {
-      const matchDateFormatted = fullMatch.matchDate ? formatMatchDate(fullMatch.matchDate) : 'TBD';
-      const matchTimeFormatted = fullMatch.matchDate ? formatMatchTime(fullMatch.matchDate) : 'TBD';
-      const venueText = fullMatch.venue || fullMatch.location || 'TBD';
-
-      const notification = matchManagementNotifications.friendlyMatchPosted(
-        matchDateFormatted,
-        matchTimeFormatted,
-        venueText
-      );
-
-      await this.notificationService.createNotification({
-        ...notification,
-        userIds: [createdById],
-        matchId: fullMatch.id
-      });
-
-      logger.info('Friendly match posted notification sent', { matchId: fullMatch.id, userId: createdById });
-    } catch (notificationError) {
-      logger.error('Failed to send friendly match posted notification', { matchId: fullMatch.id }, notificationError as Error);
-    }
-
     return fullMatch;
   }
 
@@ -1117,35 +1094,6 @@ export class FriendlyMatchService {
       } as any
     });
 
-    // Send friendly match request accepted notification (Push)
-    try {
-      const hostUser = await prisma.user.findUnique({ where: { id: userId }, select: { name: true } });
-      const requesterUser = await prisma.user.findUnique({ where: { id: match.createdById }, select: { name: true } });
-      
-      if (hostUser && requesterUser) {
-        const matchDateFormatted = match.matchDate ? formatMatchDate(match.matchDate) : 'TBD';
-        const matchTimeFormatted = match.matchDate ? formatMatchTime(match.matchDate) : 'TBD';
-        const venueText = match.venue || match.location || 'TBD';
-        
-        const notification = matchManagementNotifications.friendlyMatchRequestAccepted(
-          hostUser.name || 'Host',
-          matchDateFormatted,
-          matchTimeFormatted,
-          venueText
-        );
-        
-        await this.notificationService.createNotification({
-          ...notification,
-          userIds: [match.createdById], // Notify the original requester
-          matchId: matchId
-        });
-        
-        logger.info('Friendly match request accepted notification sent', { matchId, hostId: userId, requesterId: match.createdById });
-      }
-    } catch (notificationError) {
-      logger.error('Failed to send friendly match request accepted notification', { matchId }, notificationError as Error);
-    }
-
     return this.getFriendlyMatchById(matchId);
   }
 
@@ -1199,28 +1147,6 @@ export class FriendlyMatchService {
         requestStatus: InvitationStatus.DECLINED
       } as any
     });
-
-    // Send friendly match request declined notification (Push)
-    try {
-      const hostUser = await prisma.user.findUnique({ where: { id: userId }, select: { name: true } });
-      const requesterUser = await prisma.user.findUnique({ where: { id: match.createdById }, select: { name: true } });
-      
-      if (hostUser && requesterUser) {
-        const notification = matchManagementNotifications.friendlyMatchRequestDeclined(
-          hostUser.name || 'Host'
-        );
-        
-        await this.notificationService.createNotification({
-          ...notification,
-          userIds: [match.createdById], // Notify the original requester
-          matchId: matchId
-        });
-        
-        logger.info('Friendly match request declined notification sent', { matchId, hostId: userId, requesterId: match.createdById });
-      }
-    } catch (notificationError) {
-      logger.error('Failed to send friendly match request declined notification', { matchId }, notificationError as Error);
-    }
 
     return this.getFriendlyMatchById(matchId);
   }

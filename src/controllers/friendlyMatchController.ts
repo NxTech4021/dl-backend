@@ -788,7 +788,6 @@ export const leaveFriendlyMatch = async (req: Request, res: Response) => {
 };
 
 /**
- * NOTIF-082: Update friendly match details (host only — time/venue changes)
  * PATCH /api/friendly/:id/details
  */
 export const updateFriendlyMatchDetails = async (req: Request, res: Response) => {
@@ -814,8 +813,7 @@ export const updateFriendlyMatchDetails = async (req: Request, res: Response) =>
     }
 
     const match = await friendlyMatchService.updateFriendlyMatch(id, userId, updateData);
-
-    // Send NOTIF-082 to all other participants
+    // Match Notification
     try {
       const host = await prisma.user.findUnique({ where: { id: userId }, select: { name: true } });
       const otherParticipants = await getOtherParticipants(id, userId);
@@ -893,35 +891,7 @@ export const postFriendlyMatchComment = async (req: Request, res: Response) => {
       comment,
     });
 
-    // Notify other participants about the new comment
-    try {
-      const commenter = await prisma.user.findUnique({
-        where: { id: userId },
-        select: { name: true }
-      });
-
-      const otherParticipants = await getOtherParticipants(id, userId);
-
-      if (otherParticipants.length > 0) {
-        await notificationService.createNotification({
-          type: 'NEW_MATCH_COMMENT',
-          category: 'MATCH',
-          title: 'New Comment',
-          message: `${commenter?.name || 'A player'} commented on your match`,
-          userIds: otherParticipants,
-          matchId: id,
-          metadata: {
-            commentId: newComment.id,
-            commenterName: commenter?.name || 'A player',
-          }
-        });
-      }
-    } catch (notifError) {
-      console.error('Failed to send comment notification:', notifError);
-      // Don't fail the request if notification fails
-    }
-
-    sendSuccess(res, newComment, undefined, 201);
+    return sendSuccess(res, newComment, undefined, 201);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to post comment';
 
