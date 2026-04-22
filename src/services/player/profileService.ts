@@ -616,6 +616,16 @@ export async function getPublicPlayerProfile(userId: string, viewerId?: string) 
       })
     : null;
 
+  // Count total accepted friends for this player
+  const friendsCount = await prisma.friendship.count({
+    where: {
+      OR: [
+        { requesterId: userId, status: 'ACCEPTED' },
+        { recipientId: userId, status: 'ACCEPTED' },
+      ],
+    },
+  });
+
   return {
     ...player,
     sports,
@@ -623,6 +633,8 @@ export async function getPublicPlayerProfile(userId: string, viewerId?: string) 
     selfAssessedSkillLevels: Object.keys(selfAssessedSkillLevels).length > 0 ? selfAssessedSkillLevels : null,
     recentMatches,
     totalMatches,
+    weeklyStreak: await calculateWeeklyStreak(userId),
+    friendsCount,
     isFriend: !!isFriend,
   };
 }

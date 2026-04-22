@@ -1139,13 +1139,14 @@ export const getAvailableUsers = async (req: Request, res: Response) => {
     const existingUserIds = existingChatUsers.map((ut: any) => ut.userId);
 
     // Get all regular users except current user and those with existing DMs
-    // Exclude ADMIN and SUPERADMIN accounts
+    // Exclude ADMIN and SUPERADMIN accounts and DELETED users
     const availableUsers = await prisma.user.findMany({
       where: {
         id: {
           notIn: [userId, ...existingUserIds],
         },
         role: "USER",
+        status: { not: "DELETED" },
       },
       select: {
         id: true,

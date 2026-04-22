@@ -180,13 +180,14 @@ export async function getPlayerRatingHistoryById(req: Request, res: Response) {
       return sendError(res, 'User ID is required', 400);
     }
 
-    const { seasonId, gameType, limit } = req.query;
+    const { seasonId, gameType, limit, sport } = req.query;
 
     const history = await getPlayerRatingHistory(
       userId,
       seasonId as string | undefined,
       (gameType as GameType) || GameType.SINGLES,
-      parseInt(limit as string) || 50
+      parseInt(limit as string) || 50,
+      sport ? (sport as SportType) : undefined
     );
 
     return sendSuccess(res, history);

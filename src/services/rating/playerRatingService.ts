@@ -184,23 +184,26 @@ export async function getPlayerRatingHistory(
   limit: number = 50,
   sport?: SportType
 ): Promise<RatingHistoryEntry[]> {
-  // First get the player's rating
-  const rating = await prisma.playerRating.findFirst({
+  // Find ALL matching PlayerRating records (one per season per sport/gameType combo)
+  const ratings = await prisma.playerRating.findMany({
     where: {
       userId,
       ...(seasonId ? { seasonId } : {}),
       ...(sport ? { sport } : {}),
       gameType
-    }
+    },
+    select: { id: true }
   });
 
-  if (!rating) {
+  if (ratings.length === 0) {
     return [];
   }
 
-  // Get history entries with full match details
+  const playerRatingIds = ratings.map(r => r.id);
+
+  // Get history entries across ALL seasons for this player/sport/gameType
   const history = await prisma.ratingHistory.findMany({
-    where: { playerRatingId: rating.id },
+    where: { playerRatingId: { in: playerRatingIds } },
     include: {
       match: {
         select: {
