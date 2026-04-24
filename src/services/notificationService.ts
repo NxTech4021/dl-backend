@@ -64,6 +64,16 @@ export class NotificationService {
     logger.info("Socket.IO instance set for NotificationService");
   }
 
+  // TODO (2026-04-22, docs/issues/backlog/notification-cron-timing-audit-round-9-2026-04-22.md R4 + O1):
+  // R4: no per-user rate limit here. `skipDuplicateWithinMs` only dedups same
+  //     type+entity. Many different types firing for the same user in a short
+  //     window have no cap. A buggy cron loop or admin mass-send could spam.
+  //     Fix: add a counter per (userId, hour) key (in-memory or Redis) and reject
+  //     inserts above e.g. 20/hour.
+  // O1: no time-series metrics emitted from this service. Push delivery failures
+  //     surface only via logger.error — no dashboard/alert surface. Instrument
+  //     with Prometheus counters: notifications_sent_total{type, category,
+  //     delivery_type}, push_failures_total{reason}, dedup_skipped_total{type}.
   /**
    * Create and send notification(s)
    */
@@ -155,6 +165,18 @@ export class NotificationService {
         }
       }
 
+      // TODO (2026-04-22, docs/issues/backlog/notification-cron-timing-audit-round-4-2026-04-22.md U1):
+      // Only validates user EXISTS, not status. Banned/deleted/suspended users
+      // still receive notifications (in-app AND, if token is active, push).
+      // Only 2 of 30 crons (scheduleInactivePlayer14d/30d) filter status at
+      // the query layer. Fix once at this centralized choke-point covers ALL
+      // crons + event-driven callers:
+      //   where: {
+      //     id: { in: userIdArray },
+      //     status: { notIn: ['BANNED', 'DELETED', 'SUSPENDED'] },
+      //   }
+      // Zero-risk: can only drop notifications, never add. Verify enum values
+      // in schema.prisma (UserStatus) before using — current enum is 'Statuses'.
       // Validate users exist
       const users = await this.prisma.user.findMany({
         where: { id: { in: userIdArray } },
@@ -461,6 +483,13 @@ export class NotificationService {
 
   async markAllAsRead(userId: string): Promise<{ count: number }> {
     try {
+      // TODO (2026-04-22, docs/issues/backlog/notification-cron-timing-audit-round-10-2026-04-22.md C2):
+      // This marks ALL unread notifications read, including archived ones. Standard
+      // UX expects "mark all as read" to apply only to visible/active items.
+      // User with 8 active unread + 3 archived unread gets all 11 marked — the
+      // archive status count shifts unexpectedly. Fix: add `archive: false` to
+      // where (consistent with getUnreadCount at line 545) OR commit to the
+      // opposite semantic and fix C1 inverse. Paths should be consistent.
       const result = await this.prisma.userNotification.updateMany({
         where: {
           userId,
@@ -539,6 +568,12 @@ export class NotificationService {
 
   async getNotificationStats(userId: string): Promise<NotificationStats> {
     try {
+      // TODO (2026-04-22, docs/issues/backlog/notification-cron-timing-audit-round-10-2026-04-22.md C1):
+      // This `unread` count does NOT filter archive: false — so it includes
+      // archived-but-unread notifications. `getUnreadCount` at line 545 does
+      // filter archive — so the two return different numbers for the same user.
+      // Frontend badge (via getUnreadCount) may say "3" while stats page (via
+      // this) says "5". Fix: add `archive: false` to this where clause.
       const [total, unread, archived, byTypeData, byCategoryData] =
         await Promise.all([
           this.prisma.userNotification.count({ where: { userId } }),
@@ -791,6 +826,17 @@ export class NotificationService {
     if (userIds.length === 0) return;
 
     try {
+      // TODO (2026-04-22, docs/issues/backlog/notification-cron-timing-audit-round-8-2026-04-22.md P2):
+      // Only `pushEnabled` (global on/off) is checked. NotificationPreference has
+      // 12 GRANULAR toggles (matchReminders, matchRescheduled, matchCancelled,
+      // matchResults, partnerChange, opponentChange, ratingChange, inactivityAlerts,
+      // chatNotifications, invitations, seasonRegistration, seasonUpdates) that
+      // users can toggle in settings — but none are consulted here. A user who
+      // disables "match reminders" still gets them. All 12 toggles are cosmetic.
+      // Fix: build a Record<NotificationType, keyof NotificationPreference> map,
+      // then add a second filter layer that removes users who disabled the
+      // specific type's preference. Existing TODO at threadController.ts:740
+      // already acknowledges this for chatNotifications specifically.
       // Get users who have push disabled (batch query instead of N+1)
       const disabledPrefs = await this.prisma.notificationPreference.findMany({
         where: { userId: { in: userIds }, pushEnabled: false },
@@ -864,6 +910,16 @@ export class NotificationService {
       // Currently we have NO receipt checking, so stale tokens accumulate until the
       // 90-day inactivity cleanup catches them. Tracked at
       // docs/issues/backlog/expo-push-receipt-cron.md.
+      // TODO (2026-04-22, docs/issues/backlog/notification-cron-timing-audit-round-8-2026-04-22.md P3):
+      // Every push uses sound: 'default' with no priority override. Expo supports
+      // `priority: 'high'` which wakes Android devices from doze mode (and maps
+      // to apns-priority on iOS). Spec priorities (Critical/High/Medium/Low) are
+      // not mapped to push priority headers. Critical notifications like
+      // NOTIF-066 (Payment Failed) / NOTIF-053 (League Cancelled) / NOTIF-130
+      // (Conduct Warning) should use 'high'; Low-priority (NOTIF-035, 105, 106,
+      // 119, 123, 125) can use 'default' to respect doze mode.
+      // Fix: build a Record<NotificationType, 'default' | 'high'> map and pass
+      // `priority: PRIORITY_BY_TYPE[type] ?? 'default'` here.
       const messages: ExpoPushMessage[] = validTokens.map(({ token }) => ({
         to: token,
         sound: 'default',
