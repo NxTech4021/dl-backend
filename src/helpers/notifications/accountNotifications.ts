@@ -1,6 +1,16 @@
 /**
  * Account & System Notification Templates
  * Category: Account & System (from masterlist)
+ *
+ * TODO (2026-04-22, docs/issues/backlog/notification-cron-timing-audit-round-9-2026-04-22.md I4):
+ * All notification templates across this directory hardcode English strings
+ * (title + message). No locale parameter. Malaysia context suggests Malay
+ * and Chinese speakers may want localized pushes. If/when product requires
+ * i18n:
+ *   1. Add User.locale String @default("en") column.
+ *   2. Wrap template strings in t(key, params, locale) with a JSON catalog.
+ *   3. Pass user's locale at construction time.
+ * Not a bug today — deferred pending product decision.
  */
 
 import {
