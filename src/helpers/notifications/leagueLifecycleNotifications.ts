@@ -40,6 +40,9 @@ export const leagueLifecycleNotifications = {
     metadata: { seasonName, amount },
   }),
 
+  // NOTIF-045: invoked by scheduleMatchesRemaining in jobs/notificationJobs.ts
+  // (Mon 10am MYT, 14-21d before endDate, per-user played<6 COMPLETED matches,
+  // 8-day dedup). Wired in M1 (2026-04-24).
   matchesRemaining: (
     leagueName: string,
     matchesPlayed: number
