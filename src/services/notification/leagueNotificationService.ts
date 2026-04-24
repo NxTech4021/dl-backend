@@ -162,6 +162,12 @@ export async function sendSeasonWelcomeNotifications(seasonId: string): Promise<
       userIds: playerIds,
       seasonId,
       metadata: { ...startedWelcomeNotif.metadata, ...(leagueId ? { leagueId } : {}) },
+      // G1: 30-day per-user+seasonId dedup. Prevents the widened 7-day
+      // startDate window in scheduleSeasonStartedNotifications from re-firing
+      // on subsequent cron ticks, and also blocks day-of firing when the
+      // day-before notification (scheduleSeasonStartsTomorrowNotifications,
+      // same LEAGUE_STARTED_WELCOME type) already fired within 30d.
+      skipDuplicateWithinMs: 30 * 24 * 60 * 60 * 1000,
     });
 
     logger.info('season started welcome notifications sent', { seasonId, playerCount: playerIds.length });
@@ -629,7 +635,18 @@ export async function sendMidSeasonUpdateNotifications(
 
 
 /**
- * Send registration closing 3 days notifications
+ * Send registration closing 3 days notifications (NOTIF-059).
+ *
+ * TODO (latent bug, adjacent to B3 scope, docs/issues/backlog/notification-audit-consolidated-bugs-2026-04-22.md):
+ * scheduleRegistrationClosing3Days uses a correctly-wide 24h window
+ * (`regiDeadline ∈ [now+72h, now+96h]`), so NOTIF-059 fires reliably for any
+ * regiDeadline — EXCEPT on the exact 10:00 MYT boundary, where it fires on
+ * two consecutive cron runs and sends NOTIF-059 to every user twice. No dedup
+ * below to catch that case. Fix shape identical to the B3 dedup added in
+ * sendRegistrationClosing24hNotifications: add
+ *   skipDuplicateWithinMs: 25 * 60 * 60 * 1000
+ * to the createNotification call below. Deferred — product call on whether
+ * this latent edge case is worth fixing before launch.
  */
 export async function sendRegistrationClosing3DaysNotifications(seasonId: string): Promise<void> {
   try {
@@ -684,7 +701,16 @@ export async function sendRegistrationClosing3DaysNotifications(seasonId: string
 }
 
 /**
- * Send registration closing 24 hours notifications
+ * Send registration closing 24 hours notifications (NOTIF-060).
+ *
+ * Dedup rationale: the B3 fix widened the cron query window in
+ * scheduleRegistrationClosing24h to 24h (from 1h) so that deadlines at any
+ * time of day get caught, not just 10:00-11:00 MYT. As a side-effect, a
+ * regiDeadline exactly at 10:00 MYT falls into two consecutive cron windows
+ * (D-1 and D). Without dedup here, each cron would broadcast NOTIF-060 to all
+ * users — a double push. 25h skipDuplicateWithinMs covers the 24h gap between
+ * consecutive cron catches; per-seasonId scoping means different seasons are
+ * deduped independently.
  */
 export async function sendRegistrationClosing24hNotifications(seasonId: string): Promise<void> {
   try {
@@ -728,7 +754,8 @@ export async function sendRegistrationClosing24hNotifications(seasonId: string):
     await notificationService.createNotification({
       ...notificationData,
       seasonId,
-      userIds
+      userIds,
+      skipDuplicateWithinMs: 25 * 60 * 60 * 1000,
     });
 
     logger.info('Registration closing 24h notifications sent', { seasonId, seasonName: season.name });
