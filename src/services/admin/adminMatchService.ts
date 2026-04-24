@@ -566,6 +566,17 @@ export class AdminMatchService {
     try {
       const participantIds = updatedDispute.match?.participants?.map(p => p.userId).filter((id): id is string => id !== null) || [];
       if (participantIds.length > 0) {
+        // TODO (2026-04-22, docs/issues/backlog/notification-cron-timing-audit-round-4-2026-04-22.md I2):
+        // This hand-rolled payload drifts from the spec + duplicates NOTIF-128
+        // which is properly emitted via specialCircumstancesNotifications.disputeResolutionRequired()
+        // in matchResultController.ts:253. Here we use type='ADMIN_MESSAGE' (wrong —
+        // breaks analytics/filter by type) with generic wording (no opponent
+        // interpolation). Decide with product:
+        //   (a) If this event ("admin started review") is distinct from NOTIF-128
+        //       ("dispute escalated"), define a new template with a distinct
+        //       title, e.g. "Review In Progress" — don't reuse "Dispute Under Review".
+        //   (b) If they're the same event, delete one and use the template:
+        //       specialCircumstancesNotifications.disputeResolutionRequired(opponentName).
         await this.notificationService.createNotification({
           userIds: participantIds,
           type: 'ADMIN_MESSAGE',
