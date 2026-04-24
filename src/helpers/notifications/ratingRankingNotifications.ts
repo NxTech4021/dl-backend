@@ -31,6 +31,16 @@ export const ratingRankingNotifications = {
     leagueName: string,
     categoryName: string
   ): NotificationPayload => ({
+    // TODO (2026-04-22, docs/issues/backlog/notification-cron-timing-audit-round-3-2026-04-22.md F2):
+    // This template has three bugs simultaneously:
+    //   1. Helper name `enteredTop10` contradicts the spec's NOTIF-111 "Top 5"
+    //   2. `type` is ENTERED_TOP_10 but the copy says "Top 5" — analytics/filters will misclassify
+    //   3. Caller at standingsNotificationService.ts:97 fires for positions 4-10, so a user at #9
+    //      receives "You just cracked the top 5" — false message.
+    // Fix: rename helper → enteredTop5, add ENTERED_TOP_5 type, narrow caller range to 2-5
+    // (assuming spec intent is top-5 excluding the top-3 which have their own NOTIF-112).
+    // Also: the spec says "first time" — implement previous-position tracking to avoid
+    // re-firing on every standings recalculation.
     type: NOTIFICATION_TYPES.ENTERED_TOP_10,
     category: getCategoryForNotificationType(NOTIFICATION_TYPES.ENTERED_TOP_10),
     title: "\u2b50 Top 5! Yes, Really.",
