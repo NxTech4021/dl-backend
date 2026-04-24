@@ -59,6 +59,12 @@ prisma
     console.error("❌ Database connection failed:", error);
   });
 
+// TODO (2026-04-20, docs/issues/backlog/docker-logs-hygiene-2026-04-20.md H2):
+// Better Auth logs "Invalid password" at ERROR level. That is a routine failed
+// login, not a system error — it will false-page Sentry/CloudWatch once we
+// wire production error alerting. Configure the `logger` option on this
+// betterAuth({...}) call to downgrade INVALID_PASSWORD / INVALID_CREDENTIALS
+// to WARN. Needs regression test for any alerting we later hook up.
 export const auth = betterAuth({
   appName: "DeuceLeague",
   secret: process.env.BETTER_AUTH_SECRET,
