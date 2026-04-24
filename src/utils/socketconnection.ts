@@ -113,6 +113,15 @@ export function socketHandler(httpServer: HttpServer) {
     );
 
     if (userId) {
+      // TODO (2026-04-22, docs/issues/backlog/notification-cron-timing-audit-round-10-2026-04-22.md M6):
+      // activeUsers and userSockets are two duplicate Map<userId, socketId>
+      // stores. Both get overwritten when the same user connects from a second
+      // device — losing track of the earlier socketId. Room-based emit via
+      // io.to(userId) still reaches all devices (room membership persists per
+      // connection), so actual notification delivery is correct. But any code
+      // that reads these maps to "find the user's socket" sees only the latest.
+      // Fix: pick one pattern and delete the other, OR upgrade to
+      // Map<userId, Set<socketId>> for genuine multi-device tracking if needed.
       socket.join(userId);
       activeUsers.set(userId, socket.id);
       userSockets.set(userId, socket.id);
