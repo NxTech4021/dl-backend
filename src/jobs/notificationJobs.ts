@@ -16,6 +16,18 @@ dayjs.extend(tz);
 const MYT = "Asia/Kuala_Lumpur";
 const CRON_TZ = { timezone: MYT };
 
+/**
+ * Upper bound on Match.duration (hours → ms) when prefiltering matches
+ * whose END time must fall in a given age window. Realistic racquet-sport
+ * matches are ≤4h; 12h gives 3× safety margin. Matches with `duration`
+ * beyond this are data-entry outliers and fall through the per-match precise
+ * check — but the cap keeps the prefilter scan bounded (matchDate is indexed
+ * so range queries are fast regardless). Used by T2 fixes in
+ * scheduleScoreSubmissionReminders (NOTIF-094) and
+ * schedulePendingScoreNotifications (NOTIF-098/099).
+ */
+const MAX_EXPECTED_MATCH_DURATION_MS = 12 * 60 * 60 * 1000;
+
 /** Wrapper that applies Malaysia timezone to every cron schedule */
 function scheduleCron(expression: string, fn: () => void): void {
   cron.schedule(expression, fn, CRON_TZ);
@@ -41,8 +53,6 @@ import {
 } from "../services/notification/standingsNotificationService";
 import { checkAndSendProfileReminders } from "../services/notification/onboardingNotificationService";
 import { notificationService } from "../services/notificationService";
-import { accountNotifications } from "../helpers/notifications/accountNotifications";
-import { MALAYSIA_TIMEZONE } from "../utils/timezone";
 import { accountNotifications } from "../helpers/notifications/accountNotifications";
 import { MALAYSIA_TIMEZONE } from "../utils/timezone";
 
@@ -344,28 +354,46 @@ export function scheduleMatchMorningReminders(): void {
 }
 
 /**
- * Check and send score submission reminders 15 minutes after match
- * Runs every 5 minutes
+ * NOTIF-094: Send score submission reminder 15-20 minutes after match ENDS.
+ * Runs every 5 minutes.
+ *
+ * `matchDate` on the Match model is the START time; actual end = matchDate +
+ * duration (hours). Fallback 2h when duration is null/0 — matches codebase
+ * convention used in matchInvitationService.ts:227, matchController.ts:454,
+ * friendlyMatchController.ts:319, matchInvitationController.ts:765.
+ * Prefilter widens the matchDate window by MAX_EXPECTED_MATCH_DURATION_MS on
+ * the gte side to catch long matches; the per-match age check below fires
+ * precisely only when ageMs = (now - actualEnd) is in the spec 15-20-min window.
  */
 export function scheduleScoreSubmissionReminders(): void {
   scheduleCron("*/5 * * * *", async () => {
     try {
       const now = new Date();
-      const fifteenMinutesAgo = new Date(now.getTime() - 15 * 60 * 1000);
-      const twentyMinutesAgo = new Date(now.getTime() - 20 * 60 * 1000);
+      const fifteenMinAgoMs = now.getTime() - 15 * 60 * 1000;
+      const twentyMinAgoMs  = now.getTime() - 20 * 60 * 1000;
 
+      // Prefilter: matches whose START could plausibly put their END in the
+      // 15-20-min post-end age window. Per-match age check below is precise.
       const matches = await prisma.match.findMany({
         where: {
           matchDate: {
-            gte: twentyMinutesAgo,
-            lte: fifteenMinutesAgo,
+            gte: new Date(twentyMinAgoMs - MAX_EXPECTED_MATCH_DURATION_MS),
+            lte: new Date(fifteenMinAgoMs),
           },
           status: "SCHEDULED", // Still no score submitted
         },
-        select: { id: true },
+        select: { id: true, matchDate: true, duration: true },
       });
 
+      let sent = 0;
       for (const match of matches) {
+        // T2: compute actual end = matchDate + (duration || 2) hours.
+        // || 2 (not ?? 2) matches codebase convention — treats 0 as default.
+        const durationHours = match.duration || 2;
+        const actualEndMs = match.matchDate.getTime() + durationHours * 3600 * 1000;
+        const ageMs = now.getTime() - actualEndMs;
+        if (ageMs < 15 * 60 * 1000 || ageMs > 20 * 60 * 1000) continue;
+
         // F-7: re-check status — the match may have been cancelled or completed
         // between the initial findMany and this iteration.
         // TODO(111-audit-F2): double-query — this findUnique + another one
@@ -379,9 +407,12 @@ export function scheduleScoreSubmissionReminders(): void {
         if (fresh?.status !== "SCHEDULED") continue;
 
         await sendScoreSubmissionReminder(match.id);
+        sent++;
       }
 
-      logger.info("Score submission reminders sent", { count: matches.length });
+      if (sent > 0) {
+        logger.info("NOTIF-094: Score submission reminders sent", { sent, prefiltered: matches.length });
+      }
     } catch (error) {
       logger.error(
         "Failed to send score submission reminders",
@@ -395,20 +426,37 @@ export function scheduleScoreSubmissionReminders(): void {
 }
 
 /**
- * NOTIF-098/099: Send pending score submission/confirmation reminders
- * Runs hourly — checks for matches ~20h after they ended that still need action
+ * NOTIF-098/099: Send pending score submission/confirmation reminders.
+ * Runs hourly — fires 19-21h after the match ENDS (not after it STARTS).
+ *
+ * `matchDate` is the START time; actual end = matchDate + duration (hours).
+ * Prefilter widens by MAX_EXPECTED_MATCH_DURATION_MS on the gte side to catch
+ * long matches; the per-match age check inside each loop is precise.
+ * NOTIF-098 covers SCHEDULED matches (no score submitted); NOTIF-099 covers
+ * ONGOING matches (one submitted, opponent hasn't confirmed).
+ *
+ * TODO(status-drift): unlike scheduleScoreSubmissionReminders (NOTIF-094),
+ * this job does NOT re-check status inside the loop before sending. If a
+ * match transitions SCHEDULED→ONGOING (score submitted) between the findMany
+ * and the createNotification call, we may send a stale NOTIF-098. Same risk
+ * ONGOING→COMPLETED for NOTIF-099. Pre-existing gap; not addressed in T2.
+ * Fix would mirror the F-7 `fresh.status` check in NOTIF-094 above.
  */
 export function schedulePendingScoreNotifications(): void {
   scheduleCron("0 * * * *", async () => {
     try {
       const now = new Date();
-      const twentyOneHoursAgo = new Date(now.getTime() - 21 * 60 * 60 * 1000);
-      const nineteenHoursAgo = new Date(now.getTime() - 19 * 60 * 60 * 1000);
+      const nineteenHoursAgoMs = now.getTime() - 19 * 60 * 60 * 1000;
+      const twentyOneHoursAgoMs = now.getTime() - 21 * 60 * 60 * 1000;
 
-      // NOTIF-098: SCHEDULED matches (no score submitted) ending ~20h ago
+      // NOTIF-098: SCHEDULED matches (no score submitted) whose END was 19-21h ago.
+      // Prefilter widened by MAX_EXPECTED on gte; in-loop age check is precise.
       const unsubmittedMatches = await prisma.match.findMany({
         where: {
-          matchDate: { gte: twentyOneHoursAgo, lte: nineteenHoursAgo },
+          matchDate: {
+            gte: new Date(twentyOneHoursAgoMs - MAX_EXPECTED_MATCH_DURATION_MS),
+            lte: new Date(nineteenHoursAgoMs),
+          },
           status: "SCHEDULED",
           isFriendly: false,
         },
@@ -420,7 +468,16 @@ export function schedulePendingScoreNotifications(): void {
         },
       });
 
+      // Hourly cron with 2h-wide age window means each eligible match otherwise
+      // matches 2-3 consecutive ticks. 23h dedup ensures one-per-match-per-user.
+      let notif098Count = 0;
       for (const match of unsubmittedMatches) {
+        // T2: actual end = matchDate + (duration || 2)h
+        const durationHours = match.duration || 2;
+        const actualEndMs = match.matchDate.getTime() + durationHours * 3600 * 1000;
+        const ageMs = now.getTime() - actualEndMs;
+        if (ageMs < 19 * 60 * 60 * 1000 || ageMs > 21 * 60 * 60 * 1000) continue;
+
         const participants = match.participants.filter((p: any) => p.userId);
         for (const participant of participants) {
           const others = participants.filter((p: any) => p.userId !== participant.userId);
@@ -429,18 +486,23 @@ export function schedulePendingScoreNotifications(): void {
             ...matchManagementNotifications.pendingScoreSubmission(opponentName),
             userIds: [participant.userId],
             matchId: match.id,
+            skipDuplicateWithinMs: 23 * 60 * 60 * 1000,
           });
         }
+        notif098Count++;
       }
 
-      if (unsubmittedMatches.length > 0) {
-        logger.info("NOTIF-098: Pending score submission reminders sent", { count: unsubmittedMatches.length });
+      if (notif098Count > 0) {
+        logger.info("NOTIF-098: Pending score submission reminders sent", { sent: notif098Count, prefiltered: unsubmittedMatches.length });
       }
 
-      // NOTIF-099: ONGOING matches (one submitted, other hasn't confirmed) ending ~20h ago
+      // NOTIF-099: ONGOING matches (one submitted, other hasn't confirmed) whose END was 19-21h ago.
       const unconfirmedMatches = await prisma.match.findMany({
         where: {
-          matchDate: { gte: twentyOneHoursAgo, lte: nineteenHoursAgo },
+          matchDate: {
+            gte: new Date(twentyOneHoursAgoMs - MAX_EXPECTED_MATCH_DURATION_MS),
+            lte: new Date(nineteenHoursAgoMs),
+          },
           status: "ONGOING",
           isFriendly: false,
         },
@@ -452,7 +514,13 @@ export function schedulePendingScoreNotifications(): void {
         },
       });
 
+      let notif099Count = 0;
       for (const match of unconfirmedMatches) {
+        const durationHours = match.duration || 2;
+        const actualEndMs = match.matchDate.getTime() + durationHours * 3600 * 1000;
+        const ageMs = now.getTime() - actualEndMs;
+        if (ageMs < 19 * 60 * 60 * 1000 || ageMs > 21 * 60 * 60 * 1000) continue;
+
         const participants = match.participants.filter((p: any) => p.userId);
         for (const participant of participants) {
           const others = participants.filter((p: any) => p.userId !== participant.userId);
@@ -461,12 +529,14 @@ export function schedulePendingScoreNotifications(): void {
             ...matchManagementNotifications.pendingScoreConfirmation(opponentName),
             userIds: [participant.userId],
             matchId: match.id,
+            skipDuplicateWithinMs: 23 * 60 * 60 * 1000,
           });
         }
+        notif099Count++;
       }
 
-      if (unconfirmedMatches.length > 0) {
-        logger.info("NOTIF-099: Pending score confirmation reminders sent", { count: unconfirmedMatches.length });
+      if (notif099Count > 0) {
+        logger.info("NOTIF-099: Pending score confirmation reminders sent", { sent: notif099Count, prefiltered: unconfirmedMatches.length });
       }
     } catch (error) {
       logger.error("Failed to send pending score notifications", {}, error as Error);
@@ -565,25 +635,56 @@ export function scheduleSeasonStartsTomorrowNotifications(): void {
 }
 
 /**
- * Check and send season started welcome notifications
- * Runs daily at 8:00 AM
+ * NOTIF-063: Send season-started "🟢 Game On!" welcome to ACTIVE members.
+ * Runs daily at 8:00 AM (MYT).
+ *
+ * Before G1 (2026-04-24): this cron required `status='ACTIVE' AND startDate=today`.
+ * If admin didn't flip UPCOMING→ACTIVE before 8am MYT on the startDate day,
+ * the query returned zero seasons — and the next day `startDate=today` no
+ * longer matched, so NOTIF-063 was permanently lost (there is no
+ * scheduleSeasonAutoActivate cron to parallel scheduleSeasonAutoFinish).
+ * Fixed by widening the startDate window to the last 7 days + adding 30-day
+ * dedup in sendSeasonWelcomeNotifications — catches admin late-activations
+ * while preventing multi-day re-firing from the relaxed window.
+ *
+ * Interaction with scheduleSeasonStartsTomorrowNotifications (day-before, 8pm
+ * MYT, requires status=UPCOMING): both paths use the same notification type
+ * (LEAGUE_STARTED_WELCOME). The 30-day dedup on sendSeasonWelcomeNotifications
+ * blocks this day-of firing if the day-before already sent within 30d —
+ * which is also a latent-duplicate side-fix (users previously got 2 identical
+ * "Game On!" pushes when admin activated overnight).
+ *
+ * TODO(startsTomorrow-template): scheduleSeasonStartsTomorrowNotifications
+ * reuses the seasonStartedWelcome template (NOTIF-062 spec intent was a
+ * distinct "Starts Tomorrow" copy). Pre-existing content bug — users get
+ * "officially underway" wording a day early. Separate from G1; see
+ * docs/issues/backlog/notification-audit-consolidated-bugs-2026-04-22.md.
+ *
+ * TODO(marker-column): the most-robust long-term fix is a
+ * `Season.welcomeNotifSentAt` Prisma migration so any retroactive catch-up
+ * is unambiguous. Consistent with T4 precedent, not done here. The 7d window
+ * + 30d dedup covers the realistic admin-delay envelope.
  */
 export function scheduleSeasonStartedNotifications(): void {
   scheduleCron("0 8 * * *", async () => {
     try {
       logger.info("Running season started job");
 
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
+      const endOfToday = new Date();
+      endOfToday.setHours(23, 59, 59, 999);
 
-      const tomorrow = new Date(today);
-      tomorrow.setDate(tomorrow.getDate() + 1);
+      const sevenDaysAgo = new Date();
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+      sevenDaysAgo.setHours(0, 0, 0, 0);
 
+      // G1: relaxed window + status=ACTIVE (unchanged). Catches admin
+      // activations up to 7 days after startDate. Dedup in the service call
+      // prevents re-firing on subsequent cron ticks for the same season.
       const seasons = await prisma.season.findMany({
         where: {
           startDate: {
-            gte: today,
-            lt: tomorrow,
+            gte: sevenDaysAgo,
+            lte: endOfToday,
           },
           status: "ACTIVE",
         },
@@ -610,8 +711,112 @@ export function scheduleSeasonStartedNotifications(): void {
 }
 
 /**
+ * NOTIF-045: "Matches Behind Pace" — nudges players with fewer than 6
+ * COMPLETED matches in active seasons whose endDate is 14-21 days out.
+ * Runs Monday 10am MYT.
+ *
+ * Spec (Round 1 audit): "Start of week 7, Monday 10:00 AM, <6 matches played".
+ * Week 7 interpreted as 2 weeks before endDate (1 week earlier than the
+ * NOTIF-046 final-week alert). Added as M1 on 2026-04-24 — previously no
+ * cron invoked the `matchesRemaining` template.
+ *
+ * Window design: `endDate ∈ [now+14d, now+21d]` is 7 days wide to match the
+ * weekly Monday cron cadence. Every endDate falls in this window on exactly
+ * one Monday — the Monday 15-21 days before endDate. 8-day dedup is
+ * belt-and-suspenders against any accidental re-capture.
+ *
+ * U2 membership filter (`user.seasonMemberships.some(status=ACTIVE)`)
+ * excludes withdrawn/flagged/inactive players. Per-user `match.count` with
+ * `status='COMPLETED'` matches the spec wording "completed matches". Follows
+ * the same N+1 pattern as the activity-nudge crons — flagged in the shared
+ * TODO at scheduleMatchSoonNudges for future groupBy optimization.
+ */
+export function scheduleMatchesRemaining(): void {
+  scheduleCron("0 10 * * 1", async () => {
+    try {
+      logger.info("Running matches-remaining (NOTIF-045) job");
+
+      const now = new Date();
+      const in14Days = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000);
+      const in21Days = new Date(now.getTime() + 21 * 24 * 60 * 60 * 1000);
+
+      const activeSeasons = await prisma.season.findMany({
+        where: {
+          endDate: { gte: in14Days, lte: in21Days },
+          status: "ACTIVE",
+        },
+        include: {
+          divisions: { select: { id: true } },
+          leagues: { select: { name: true } },
+        },
+      });
+
+      if (activeSeasons.length === 0) return;
+
+      let sent = 0;
+      for (const season of activeSeasons) {
+        const leagueName = season.leagues?.[0]?.name ?? '';
+        for (const division of season.divisions) {
+          const members = await prisma.divisionAssignment.findMany({
+            where: {
+              divisionId: division.id,
+              // U2: restrict to ACTIVE members (see scheduleMatchSoonNudges).
+              user: {
+                seasonMemberships: {
+                  some: { seasonId: season.id, status: 'ACTIVE' },
+                },
+              },
+            },
+            select: { userId: true },
+          });
+          for (const member of members) {
+            const played = await prisma.match.count({
+              where: {
+                status: 'COMPLETED',
+                participants: { some: { userId: member.userId } },
+                divisionId: division.id,
+              },
+            });
+            if (played < 6) {
+              try {
+                await notificationService.createNotification({
+                  ...leagueLifecycleNotifications.matchesRemaining(leagueName, played),
+                  userIds: member.userId,
+                  seasonId: season.id,
+                  divisionId: division.id,
+                  skipDuplicateWithinMs: 8 * 24 * 60 * 60 * 1000,
+                });
+                sent++;
+              } catch (innerErr) {
+                logger.error('NOTIF-045: Failed to send for user', { userId: member.userId, seasonId: season.id }, innerErr as Error);
+              }
+            }
+          }
+        }
+      }
+
+      if (sent > 0) {
+        logger.info("NOTIF-045: Matches-remaining notifications sent", { sent, seasons: activeSeasons.length });
+      }
+    } catch (error) {
+      logger.error("Failed to run matches-remaining job", {}, error as Error);
+    }
+  });
+
+  logger.info("Matches-remaining (NOTIF-045) job scheduled (Mon 10:00 MYT)");
+}
+
+/**
  * Check and send final week alerts
  * Runs daily at 10:00 AM on Mondays
+ *
+ * TODO(finalWeek-window-bug): the `endDate ∈ [now+7d, now+8d]` filter below is
+ * only 24h wide but cron runs weekly (Mondays) — same latent-bug pattern as
+ * B2/B3 (NOTIF-047/060) were. Only endDates that happen to fall between
+ * Monday 10am and Tuesday 10am get captured; most endDates silently miss.
+ * Fix would mirror M1's pattern here: widen to `[now+7d, now+14d]` + 8-day
+ * dedup on the send call, so every endDate catches one Monday. Flagged during
+ * M1 dissection (2026-04-24); out of M1 scope. See consolidated bug tracker.
  */
 export function scheduleFinalWeekAlerts(): void {
   scheduleCron("0 10 * * 1", async () => {
@@ -647,8 +852,22 @@ export function scheduleFinalWeekAlerts(): void {
 }
 
 /**
- * Check and send last-match-deadline (48 hours before season end)
- * Runs daily at 10:00 AM
+ * Check and send last-match-deadline (NOTIF-047, ~48 hours before season end).
+ * Runs daily at 10:00 AM MYT.
+ *
+ * Window design: `endDate ∈ [now+48h, now+72h]` — 24h wide to match the daily
+ * cron cadence. Every endDate gets caught by exactly one cron run (or two on
+ * the exact 10:00 MYT boundary, where the `skipDuplicateWithinMs: 25h` on the
+ * send call suppresses the duplicate). Replaces the previous 1-hour window
+ * which only caught endDates in 10:00-11:00 MYT — effectively zero real seasons.
+ *
+ * TODO (add-on, future polish): the template message reads "48 Hours Left" but
+ * the actual remaining time at fire time can be 48-72h depending on endDate
+ * vs cron alignment. Safe direction (user under-estimates time remaining, acts
+ * early, deadline met), but could be improved by computing the real hours-left
+ * and passing to the template. Would require
+ *   lastMatchDeadline48h(seasonName, leagueName, hoursLeft: number)
+ * signature change in leagueLifecycleNotifications.ts.
  */
 export function scheduleLastMatchDeadline48h(): void {
   scheduleCron('0 10 * * *', async () => {
@@ -657,11 +876,11 @@ export function scheduleLastMatchDeadline48h(): void {
 
       const now = new Date();
       const in48Hours = new Date(now.getTime() + 48 * 60 * 60 * 1000);
-      const in49Hours = new Date(now.getTime() + 49 * 60 * 60 * 1000);
+      const in72Hours = new Date(now.getTime() + 72 * 60 * 60 * 1000);
 
       const seasons = await prisma.season.findMany({
         where: {
-          endDate: { gte: in48Hours, lte: in49Hours },
+          endDate: { gte: in48Hours, lte: in72Hours },
           status: 'ACTIVE',
         },
         include: { leagues: { select: { name: true } } },
@@ -739,8 +958,19 @@ export function scheduleRegistrationClosing3Days(): void {
 }
 
 /**
- * Check and send registration closing notifications (24 hours before regiDeadline)
- * Runs daily at 10:00 AM
+ * Check and send registration closing notifications (NOTIF-060, ~24 hours before deadline).
+ * Runs daily at 10:00 AM MYT.
+ *
+ * Window design: `regiDeadline ∈ [now+24h, now+48h]` — 24h wide to match the
+ * daily cron cadence. Every regiDeadline gets caught by exactly one cron run
+ * (or two on the exact 10:00 MYT boundary, where the 25h dedup inside
+ * sendRegistrationClosing24hNotifications suppresses the duplicate). Replaces
+ * the previous 1-hour window which only caught regiDeadlines in 10:00-11:00 MYT.
+ *
+ * TODO (add-on, future polish): template reads "Final call! ... closes tomorrow"
+ * but the actual remaining time can be 24-48h post-fix. Safe direction (user
+ * under-estimates), but could be improved by computing hours-remaining and
+ * passing to the template. Signature change in registrationClosing24Hours.
  */
 export function scheduleRegistrationClosing24h(): void {
   scheduleCron('0 10 * * *', async () => {
@@ -749,11 +979,11 @@ export function scheduleRegistrationClosing24h(): void {
 
       const now = new Date();
       const in24Hours = new Date(now.getTime() + 24 * 60 * 60 * 1000);
-      const in25Hours = new Date(now.getTime() + 25 * 60 * 60 * 1000);
+      const in48Hours = new Date(now.getTime() + 48 * 60 * 60 * 1000);
 
       const seasons = await prisma.season.findMany({
         where: {
-          regiDeadline: { gte: in24Hours, lte: in25Hours },
+          regiDeadline: { gte: in24Hours, lte: in48Hours },
           status: 'UPCOMING',
         },
         select: { id: true, name: true },
@@ -1501,10 +1731,30 @@ export function scheduleMatchStreakReEvaluation(): void {
 }
 
 /**
- * Auto-finish seasons whose endDate has passed but status is still ACTIVE or UPCOMING.
+ * Auto-finish expired seasons + fire NOTIF-048 "🏁 That's a Wrap" to ACTIVE members.
  * Runs daily at midnight (MYT). Daily cadence is sufficient because downstream
  * lifecycle decisions key off `endDate` directly rather than `status`. Switch
  * to '0 * * * *' if product ever wants hourly status flips.
+ *
+ * Before N2 (2026-04-24): this cron flipped Season.status to FINISHED silently.
+ * The only NOTIF-048 send path was the admin manual status flip at
+ * seasonController.ts:504-519 — which this cron pre-empts. Result: for typical
+ * seasons (no admin intervention) NOTIF-048 never fired. Resolved below by
+ * firing NOTIF-048 inline after the updateMany, with 25h dedup.
+ *
+ * Related: NOTIF-051 "Season Complete Banner" fires separately via
+ * scheduleLeagueCompleteBannerNotifications (daily 8pm, triggers on
+ * endDate=yesterday). Different notification type — no conflict with NOTIF-048.
+ *
+ * TODO(admin-race): the admin-manual path at seasonController.ts:514 lacks
+ * `skipDuplicateWithinMs`. If admin's status-flip handler races this cron
+ * (admin reads currentSeason=ACTIVE at T1, cron fires and writes FINISHED at
+ * T2, admin's updateSeasonService completes at T3), the controller check at
+ * line 492 compares the stale currentSeason.status (ACTIVE) to
+ * effectiveNewStatus (FINISHED) → true → admin fires NOTIF-048 without dedup
+ * → user gets 2 pushes. Rare (minute-scale race near midnight MYT), but
+ * closing it means adding `skipDuplicateWithinMs: 25 * 60 * 60 * 1000` to the
+ * controller's createNotification call. Out of N2 scope.
  */
 export function scheduleSeasonAutoFinish(): void {
   scheduleCron('0 0 * * *', async () => {
@@ -1516,7 +1766,16 @@ export function scheduleSeasonAutoFinish(): void {
           endDate: { lt: now },
           status: { in: ['ACTIVE', 'UPCOMING'] },
         },
-        select: { id: true, name: true, status: true },
+        select: {
+          id: true,
+          name: true,
+          status: true,
+          leagues: { select: { name: true } },
+          memberships: {
+            where: { status: 'ACTIVE' },
+            select: { userId: true },
+          },
+        },
       });
 
       if (expiredSeasons.length === 0) return;
@@ -1531,12 +1790,35 @@ export function scheduleSeasonAutoFinish(): void {
       logger.info(`Season auto-finish: marked ${expiredSeasons.length} season(s) as FINISHED`, {
         seasons: expiredSeasons.map(s => ({ id: s.id, name: s.name, previousStatus: s.status })),
       });
+
+      // N2: fire NOTIF-048 to ACTIVE members of each auto-finished season.
+      // 25h dedup covers the admin-manual race described in TODO(admin-race).
+      let notif048Sent = 0;
+      for (const s of expiredSeasons) {
+        const userIds = s.memberships.map(m => m.userId);
+        if (userIds.length === 0) continue;
+        const leagueName = s.leagues?.[0]?.name ?? '';
+        try {
+          await notificationService.createNotification({
+            userIds,
+            ...leagueLifecycleNotifications.leagueEndedFinalResults(s.name, leagueName),
+            seasonId: s.id,
+            skipDuplicateWithinMs: 25 * 60 * 60 * 1000,
+          });
+          notif048Sent++;
+        } catch (innerErr) {
+          logger.error('NOTIF-048: Failed to send for season', { seasonId: s.id }, innerErr as Error);
+        }
+      }
+      if (notif048Sent > 0) {
+        logger.info(`NOTIF-048: Fired for ${notif048Sent} of ${expiredSeasons.length} auto-finished season(s)`);
+      }
     } catch (error) {
       logger.error('Season auto-finish job failed', {}, error instanceof Error ? error : new Error(String(error)));
     }
   });
 
-  logger.info('Season auto-finish job scheduled (every hour)');
+  logger.info('Season auto-finish job scheduled (daily 00:00 MYT)');
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1544,8 +1826,27 @@ export function scheduleSeasonAutoFinish(): void {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * SCHEDULE_MATCH_SOON: Season started 7 days ago; user has 0 completed matches.
+ * SCHEDULE_MATCH_SOON: Season started 7 days ago; user has not engaged with any match.
  * Runs daily at 10:00 AM.
+ *
+ * Spec NOTIF-036: "Player hasn't scheduled match after 1 week in season".
+ * We treat "engaged" as having any match in a non-dead state (i.e. not DRAFT,
+ * CANCELLED, or VOID). SCHEDULED/ONGOING/COMPLETED/UNFINISHED/WALKOVER_PENDING
+ * all count as engagement — the user took meaningful action, no nudge needed.
+ *
+ * TODO (add-on, future refactor): extract a module-level DEAD_MATCH_STATUSES
+ * constant = ['DRAFT', 'CANCELLED', 'VOID'] so NOTIF-036/043/044 all reference
+ * the same list. Prevents drift if MatchStatus enum grows (e.g. adding
+ * 'ABANDONED' would otherwise need 3 places updated).
+ *
+ * TODO (add-on, future optimization): the per-user prisma.match.count() below
+ * is an N+1 pattern — 1 query per division member. A 100-member division does
+ * 100 queries per cron run. At scale, replace with a single
+ * prisma.match.groupBy({ by: ['participants.userId'], where: { ... },
+ * _count: true }) and look up the per-user count in a Map. Same pattern applies
+ * to scheduleEarlySeasonNudges, scheduleInactivePlayer7dWarnings,
+ * scheduleInactivity2WeeksWarnings, scheduleInactivityDeadline7d, and
+ * scheduleInactivityDeadline3d below.
  */
 export function scheduleMatchSoonNudges(): void {
   scheduleCron('0 10 * * *', async () => {
@@ -1563,13 +1864,22 @@ export function scheduleMatchSoonNudges(): void {
       for (const season of activeSeasons) {
         for (const division of season.divisions) {
           const members = await prisma.divisionAssignment.findMany({
-            where: { divisionId: division.id },
+            where: {
+              divisionId: division.id,
+              // U2: restrict to ACTIVE members — excludes withdrawn (REMOVED),
+              // pending, flagged, and admin-deactivated.
+              user: {
+                seasonMemberships: {
+                  some: { seasonId: season.id, status: 'ACTIVE' },
+                },
+              },
+            },
             select: { userId: true },
           });
           for (const member of members) {
             const played = await prisma.match.count({
               where: {
-                status: 'COMPLETED',
+                status: { notIn: ['DRAFT', 'CANCELLED', 'VOID'] },
                 participants: { some: { userId: member.userId } },
                 divisionId: division.id,
               },
@@ -1596,8 +1906,18 @@ export function scheduleMatchSoonNudges(): void {
 }
 
 /**
- * EARLY_SEASON_NUDGE: Season started 14 days ago; user has 0 completed matches.
+ * EARLY_SEASON_NUDGE: Season started 14 days ago; nudge players who haven't
+ * yet built momentum (< 2 completed matches in this division).
  * Runs daily at 10:00 AM.
+ *
+ * Spec NOTIF-037: "Fires to ALL registered players at 2-week mark, including
+ * those who have already played. Consider suppressing for players with 2+
+ * matches already completed to avoid nagging active players."
+ * Threshold implemented as `played < 2` — catches 0-match and 1-match players
+ * (the ones who'd most benefit from a motivational nudge) while suppressing
+ * 2+ per the spec refinement. Keeps `status: 'COMPLETED'` deliberately: the
+ * refinement explicitly says "completed", distinguishing this from
+ * NOTIF-036/043/044 which use the wider engaged-states filter.
  */
 export function scheduleEarlySeasonNudges(): void {
   scheduleCron('0 10 * * *', async () => {
@@ -1615,7 +1935,15 @@ export function scheduleEarlySeasonNudges(): void {
       for (const season of activeSeasons) {
         for (const division of season.divisions) {
           const members = await prisma.divisionAssignment.findMany({
-            where: { divisionId: division.id },
+            where: {
+              divisionId: division.id,
+              // U2: restrict to ACTIVE members (see scheduleMatchSoonNudges above).
+              user: {
+                seasonMemberships: {
+                  some: { seasonId: season.id, status: 'ACTIVE' },
+                },
+              },
+            },
             select: { userId: true },
           });
           for (const member of members) {
@@ -1626,7 +1954,7 @@ export function scheduleEarlySeasonNudges(): void {
                 divisionId: division.id,
               },
             });
-            if (played === 0) {
+            if (played < 2) {
               const notif = leagueLifecycleNotifications.earlySeasonNudge();
               await notificationService.createNotification({
                 ...notif,
@@ -1666,6 +1994,14 @@ export function scheduleLateSeasonNudges(): void {
 
       for (const season of activeSeasons) {
         for (const division of season.divisions) {
+          // TODO(u2-sibling): NOTIF-038 has the same DivisionAssignment-without-
+          // active-membership filter bug as the 6 crons fixed under U2 (036/037/
+          // 040/042/043/044), but was not in the consolidated doc's U2 scope
+          // because it's a broadcast (season ends in 14d) rather than an
+          // inactivity nag. Withdrawn/flagged/inactive members still receive
+          // this push. Fix would be identical: add
+          //   user: { seasonMemberships: { some: { seasonId: season.id, status: 'ACTIVE' } } }
+          // Out of U2 scope — flagged for follow-up. See consolidated bug tracker.
           const members = await prisma.divisionAssignment.findMany({
             where: { divisionId: division.id },
             select: { userId: true },
@@ -1709,7 +2045,15 @@ export function scheduleInactivePlayer7dWarnings(): void {
       for (const season of activeSeasons) {
         for (const division of season.divisions) {
           const members = await prisma.divisionAssignment.findMany({
-            where: { divisionId: division.id },
+            where: {
+              divisionId: division.id,
+              // U2: restrict to ACTIVE members (see scheduleMatchSoonNudges above).
+              user: {
+                seasonMemberships: {
+                  some: { seasonId: season.id, status: 'ACTIVE' },
+                },
+              },
+            },
             select: { userId: true },
           });
           for (const member of members) {
@@ -1762,7 +2106,15 @@ export function scheduleInactivity2WeeksWarnings(): void {
       for (const season of activeSeasons) {
         for (const division of season.divisions) {
           const members = await prisma.divisionAssignment.findMany({
-            where: { divisionId: division.id },
+            where: {
+              divisionId: division.id,
+              // U2: restrict to ACTIVE members (see scheduleMatchSoonNudges above).
+              user: {
+                seasonMemberships: {
+                  some: { seasonId: season.id, status: 'ACTIVE' },
+                },
+              },
+            },
             select: { userId: true },
           });
           for (const member of members) {
@@ -1828,13 +2180,23 @@ export function scheduleInactivityDeadline7d(): void {
 
         for (const division of season.divisions) {
           const members = await prisma.divisionAssignment.findMany({
-            where: { divisionId: division.id },
+            where: {
+              divisionId: division.id,
+              // U2: restrict to ACTIVE members (see scheduleMatchSoonNudges above).
+              user: {
+                seasonMemberships: {
+                  some: { seasonId: season.id, status: 'ACTIVE' },
+                },
+              },
+            },
             select: { userId: true },
           });
           for (const member of members) {
+            // NOTIF-043 spec: "No league match played or scheduled". See the
+            // DEAD_MATCH_STATUSES note in scheduleMatchSoonNudges above.
             const played = await prisma.match.count({
               where: {
-                status: 'COMPLETED',
+                status: { notIn: ['DRAFT', 'CANCELLED', 'VOID'] },
                 participants: { some: { userId: member.userId } },
                 divisionId: division.id,
               },
@@ -1892,13 +2254,23 @@ export function scheduleInactivityDeadline3d(): void {
 
         for (const division of season.divisions) {
           const members = await prisma.divisionAssignment.findMany({
-            where: { divisionId: division.id },
+            where: {
+              divisionId: division.id,
+              // U2: restrict to ACTIVE members (see scheduleMatchSoonNudges above).
+              user: {
+                seasonMemberships: {
+                  some: { seasonId: season.id, status: 'ACTIVE' },
+                },
+              },
+            },
             select: { userId: true },
           });
           for (const member of members) {
+            // NOTIF-044 spec: "No league match played or scheduled". See the
+            // DEAD_MATCH_STATUSES note in scheduleMatchSoonNudges above.
             const played = await prisma.match.count({
               where: {
-                status: 'COMPLETED',
+                status: { notIn: ['DRAFT', 'CANCELLED', 'VOID'] },
                 participants: { some: { userId: member.userId } },
                 divisionId: division.id,
               },
@@ -1988,12 +2360,13 @@ export function scheduleLeagueCompleteBannerNotifications(): void {
  * active weekly match streak but hasn't played in 6 days.
  *
  * Logic:
- *  1. Find all users whose most-recent completed match was between 6 and 7
- *     days ago (the critical "play today or lose your streak" window).
- *  2. For each user, verify they have no completed match within the last 6
+ *  1. Find all users whose most-recent completed match was exactly 6 days
+ *     ago (the "play today or lose your streak" nudge window — gives ~1
+ *     day of runway before the 7-day streak window elapses).
+ *  2. For each user, verify they have no completed match within the last 5
  *     days (confirming 6 days ago is genuinely their most recent).
- *  3. Check they played the week before that match — i.e. streak ≥ 2 — so
- *     we only nudge players who actually have an ongoing streak.
+ *  3. Check they played the 7 days before that match — i.e. streak ≥ 2 —
+ *     so we only nudge players who actually have an ongoing streak.
  *  4. Send a push notification with a 7-day dedup window.
  *
  * Runs daily at 9:00 AM Malaysia time.
@@ -2004,15 +2377,16 @@ export function scheduleStreakAtRiskNotifications(): void {
       logger.info('Running NOTIF-013: streak-at-risk job');
 
       const now = dayjs().tz(MALAYSIA_TIMEZONE);
-      const sixDaysAgo  = now.subtract(6, 'day').startOf('day').toDate();
-      const sevenDaysAgo = now.subtract(7, 'day').startOf('day').toDate();
+      const fiveDaysAgo     = now.subtract(5, 'day').startOf('day').toDate();
+      const sixDaysAgo      = now.subtract(6, 'day').startOf('day').toDate();
+      const thirteenDaysAgo = now.subtract(13, 'day').startOf('day').toDate();
 
-      // Collect userIds from matches completed in the 6-7 day window
+      // Collect userIds from matches completed exactly 6 days ago (MYT calendar day)
       const candidates = await prisma.matchParticipant.findMany({
         where: {
           match: {
             status: 'COMPLETED',
-            matchDate: { gte: sevenDaysAgo, lt: sixDaysAgo },
+            matchDate: { gte: sixDaysAgo, lt: fiveDaysAgo },
           },
           userId: { not: null },
         },
@@ -2031,29 +2405,35 @@ export function scheduleStreakAtRiskNotifications(): void {
         if (!userId) continue;
 
         try {
-          // Guard: make sure they truly haven't played in the last 6 days
+          // Guard: confirm they truly haven't played in the last 5 days
+          // (their day-6 candidate match must be their most recent)
           const recentMatch = await prisma.match.findFirst({
             where: {
               participants: { some: { userId } },
               status: 'COMPLETED',
-              matchDate: { gte: sixDaysAgo },
+              matchDate: { gte: fiveDaysAgo },
             },
             select: { id: true },
           });
           if (recentMatch) continue; // played more recently — not at risk
 
-          // Guard: verify they have a streak ≥ 2 (played in the week before last match)
-          const weekBeforeWindow = now.subtract(14, 'day').startOf('day').toDate();
+          // Guard: verify they have a streak ≥ 2 (played in the 7 days before last match)
           const matchInPriorWeek = await prisma.match.findFirst({
             where: {
               participants: { some: { userId } },
               status: 'COMPLETED',
-              matchDate: { gte: weekBeforeWindow, lt: sevenDaysAgo },
+              matchDate: { gte: thirteenDaysAgo, lt: sixDaysAgo },
             },
             select: { id: true },
           });
           if (!matchInPriorWeek) continue; // no prior-week match → no streak to protect
 
+          // TODO(streak-content): `weeks` is hardcoded to 2 here. The template
+          // (accountNotifications.ts:94) renders "Your 2-week streak is at risk"
+          // regardless of actual streak length. To surface the real streak,
+          // count consecutive 7-day windows backward from the candidate match.
+          // Separate content bug — discovered during B4 dissection, not a cron
+          // timing issue. Flagged in the consolidated bug tracker.
           await notificationService.createNotification({
             ...accountNotifications.streakAtRisk(2, deadline),
             userIds: userId,
@@ -2198,19 +2578,54 @@ export function scheduleLeagueBetweenBreaksNotifications(): void {
 }
 
 /**
- * NOTIF-108: INCOMPLETE_REGISTRATION — Nudge users with pending payments.
- * Targets SeasonMembership with PENDING paymentStatus on paid seasons.
+ * NOTIF-108: INCOMPLETE_REGISTRATION — Nudge users with pending payments, ONCE.
+ * Targets SeasonMembership with PENDING paymentStatus on paid seasons, aged ≥24h.
  * Free seasons (paymentRequired = false) are skipped automatically.
  * Runs daily at 10:00 AM.
+ *
+ * Spec NOTIF-108: "24 hours after abandoned registration" — singular event.
+ * Implemented as one-shot via:
+ *   1. Age filter `joinedAt: { lte: now - 24h }` — only mature PENDING
+ *      memberships match, so no push at hour 1-23 after joining.
+ *   2. skipDuplicateWithinMs: 89 days — once fired, suppressed for 89 days,
+ *      which covers the realistic lifetime of any UPCOMING/ACTIVE season
+ *      (typically 8-12 weeks = 56-84 days).
+ *
+ * NOTE on the 89-day ceiling: scheduleNotificationCleanup (maintenanceJobs.ts)
+ * deletes notifications older than 90 days. Dedup relies on the stored
+ * notification row. Setting skipDuplicateWithinMs > 90 days silently breaks —
+ * after cleanup the dedup query finds nothing and the user is re-notified.
+ * 89 days is the maximum safe value given current retention policy.
+ *
+ * TODO (add-on, future refactor): convert to marker-column semantics for truly
+ * robust one-shot. Add `SeasonMembership.incompleteRegNotifSentAt DateTime?`,
+ * query `{ paymentStatus: 'PENDING', incompleteRegNotifSentAt: null, ... }`,
+ * set marker after fire. Immune to the 90-day retention cleanup and removes
+ * the dedup-ceiling coupling entirely. Requires Prisma migration.
+ *
+ * TODO (add-on, future product option): if product later prefers "bounded nag"
+ * (e.g. 3 nags over 1 week instead of one-shot), swap the 89-day dedup for a
+ * shorter value plus a per-membership counter. The current one-shot matches
+ * the spec's literal "24 hours after abandoned registration" wording —
+ * bounded-nag is a different product policy decision, not a bug.
+ *
+ * TODO (add-on, U2 cross-reference): outer query does not filter by
+ * membership.status, so a user whose membership is REMOVED (withdrawn) with
+ * paymentStatus=PENDING could still match. The U2 fix
+ * (docs/issues/backlog/notification-cron-timing-audit-round-4-2026-04-22.md U2)
+ * addresses this pattern across all inactivity crons; once landed, this site
+ * benefits too. No action needed here.
  */
 export function scheduleIncompleteRegistrationNotifications(): void {
   scheduleCron('0 10 * * *', async () => {
     try {
       logger.info('Running incompleteRegistration job');
 
+      const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
       const pendingMemberships = await prisma.seasonMembership.findMany({
         where: {
           paymentStatus: 'PENDING',
+          joinedAt: { lte: twentyFourHoursAgo },
           season: {
             paymentRequired: true,
             status: { in: ['UPCOMING', 'ACTIVE'] },
@@ -2227,7 +2642,7 @@ export function scheduleIncompleteRegistrationNotifications(): void {
           ...promotionalNotifications.incompleteRegistration(leagueName),
           userIds: membership.userId,
           seasonId: membership.seasonId,
-          skipDuplicateWithinMs: 24 * 60 * 60 * 1000,
+          skipDuplicateWithinMs: 89 * 24 * 60 * 60 * 1000,
         });
       }
       logger.info('incompleteRegistration job complete', { count: pendingMemberships.length });
@@ -2266,6 +2681,7 @@ export function initializeCoreNotificationJobs(): void {
   scheduleRegistrationClosing24h();      // Daily 10am — 24h before deadline
 
   // ── Tier 2: Secondary but useful ──
+  scheduleMatchesRemaining();            // Mon 10am — NOTIF-045: 2 weeks before end, <6 matches played
   scheduleFinalWeekAlerts();             // Mon 10am — last week of season
   scheduleLastMatchDeadline48h();        // Daily 10am — 48h before season end
   scheduleTeamRegistrationReminder2h();      // Every 30min — doubles team deadline (legacy)
