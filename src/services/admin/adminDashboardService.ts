@@ -165,6 +165,16 @@ export async function getDashboardKPIStats(): Promise<DashboardKPIStats> {
 
 /**
  * Get sport-specific metrics
+ *
+ * TODO (2026-04-22, docs/issues/backlog/admin-dashboard-export-issues-2026-04-22.md SPORT-1):
+ * Only returns current-period values. useDashboardExport.ts hardcodes "N/A" in
+ * the Previous Period column for every sport row because this function doesn't
+ * provide previous-period counts. To enable sport-level period comparison, add
+ * previous{Users, PayingMembers, Revenue, Matches} fields with the same
+ * 30/60-day window logic used by getDashboardKPI (see lines 68, 102). Update
+ * SportMetrics type + useDashboardExport.ts consumers accordingly.
+ * Related: CSV-3 (Conversion Rate Previous = N/A) — easier, derives from
+ * existing previousTotalUsers/previousLeagueParticipants at this level.
  */
 export async function getSportMetrics(): Promise<SportMetrics[]> {
   const sportTypes: SportType[] = ['TENNIS', 'PICKLEBALL', 'PADEL'];
