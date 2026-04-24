@@ -584,6 +584,23 @@ export class MatchResultService {
         });
       }
 
+      // TODO (2026-04-22, docs/issues/backlog/notification-cron-timing-audit-round-3-2026-04-22.md M3):
+      // 7 spec notifications are currently dead code — templates and service
+      // functions exist but are never invoked after match completion:
+      //   NOTIF-035 (Winning Streak)   ← spec marks ✅
+      //   NOTIF-110 (Moved Up Standings)
+      //   NOTIF-111 (Top 5)
+      //   NOTIF-112 (Top 3)
+      //   NOTIF-113 (League Leader #1)
+      //   NOTIF-115 (DMR Increased)    ← spec marks ✅
+      //   NOTIF-117 (Personal Best)    ← spec marks ✅
+      // Wire them here (for league matches with a divisionId):
+      //   await checkAndSendStandingsNotifications(match.divisionId, match.seasonId); // 110/111/112/113
+      //   await checkAndSendWinningStreakNotification(userId); // 035 (per participant)
+      //   await sendDMRIncreasedNotification(userId, sport, newRating, oldRating); // 115 + triggers 117 internally
+      // See also F2 (NOTIF-111 has broken copy/type/position range before it's even called).
+      // Requires: rating deltas must be captured BEFORE ratings are applied (step 6 above);
+      // standings must be recalculated AFTER rating updates. Confirm ordering before implementation.
       logger.info(`Match ${matchId} processing completed successfully`);
 
     } catch (error) {
@@ -1520,6 +1537,17 @@ export class MatchResultService {
             });
           }
 
+          // TODO (2026-04-21, docs/issues/backlog/notification-cron-timing-audit-round-2-2026-04-21.md M2):
+          // NOTIF-100 spec wording is:
+          //   title:   "Result Confirmed Automatically"
+          //   message: "Looks like [Opponent Name] missed the confirmation window. The submitted result has been auto-confirmed."
+          // A ready-to-use template exists at matchManagementNotifications.scoreAutoConfirmed()
+          // but is never called. Current send uses custom type/text and
+          // broadcasts to ALL participants; per spec it should go to the
+          // non-confirmer (opponent of the submitter) with the opponent's name
+          // interpolated. Fix: identify submitter/non-confirmer, call
+          // matchManagementNotifications.scoreAutoConfirmed(submitterName),
+          // send to non-confirmer only.
           // Notify all participants
           const participantIds = match.participants.map(p => p.userId).filter((id): id is string => id !== null);
           await this.notificationService.createNotification({
