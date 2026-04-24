@@ -1,6 +1,18 @@
 /**
  * Notification Templates Test Suite
  *
+ * TODO (2026-04-21, docs/issues/backlog/notification-cron-timing-audit-round-2-2026-04-21.md Z1):
+ * This suite validates template SHAPES. It has zero coverage for cron
+ * schedule/window logic. The 10 bugs identified in the Round 1 + Round 2
+ * audits (B1-B4, D1, M1, S1, F1, M2, R1, T1) all slipped through because
+ * there is no regression test that simulates a cron tick with
+ * `jest.useFakeTimers().setSystemTime(...)` and asserts which seeded entities
+ * are selected by the window filter. Add a sibling file cronWindow.test.ts:
+ *   - extract each cron's window filter into a pure function
+ *   - per cron, seed representative entities at boundary timestamps
+ *   - freeze time to the cron's tick moment and assert IN/OUT of window
+ * Start with the 4 critical bugs (B2/B3/B4/F1).
+ *
  * Validates EVERY notification template against the v2 masterlist spec:
  *   - type constant matches NOTIFICATION_TYPES
  *   - title and message correctly interpolate all parameters
