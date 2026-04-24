@@ -567,6 +567,10 @@ export const confirmFriendlyResult = async (req: Request, res: Response) => {
             matchId: match.id,
           });
 
+          // TODO (2026-04-21, docs/issues/backlog/notification-cron-timing-audit-2026-04-21.md D1):
+          // Mirror of matchResultController.ts D1 — NOTIF-122 spec demands a
+          // 5-min delay between confirm and share-prompt. Currently immediate.
+          // Same fix decision needed (setTimeout vs scheduled-notification table).
           // NOTIF-122: Prompt all participants to share their scorecard (fire-and-forget)
           void (async () => {
             try {
