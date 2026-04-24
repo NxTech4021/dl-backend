@@ -29,6 +29,15 @@ const CRON_TZ = { timezone: MYT };
 const MAX_EXPECTED_MATCH_DURATION_MS = 12 * 60 * 60 * 1000;
 
 /** Wrapper that applies Malaysia timezone to every cron schedule */
+// TODO (2026-04-22, docs/issues/backlog/notification-cron-timing-audit-round-3-2026-04-22.md E3):
+// node-cron has NO overlap protection. High-cadence crons (*/5, */15, */30)
+// can have two handlers running simultaneously if the previous tick hasn't
+// finished. Dedup at the notification layer catches most duplicates but has
+// a read-then-write race. Add a lightweight per-cron mutex here:
+//   let running = new Map<string, boolean>();
+//   if (running.get(expression)) { logger.warn('skip, still running', {expression}); return; }
+//   running.set(expression, true); try { await fn(); } finally { running.set(expression, false); }
+// Trivial change, ~10 lines, no behavior risk for crons that always finish in time.
 function scheduleCron(expression: string, fn: () => void): void {
   cron.schedule(expression, fn, CRON_TZ);
 }
@@ -59,6 +68,17 @@ import { MALAYSIA_TIMEZONE } from "../utils/timezone";
 /**
  * Check and send match reminders 24 hours before
  * Runs every hour
+ *
+ * TODO (2026-04-21, docs/issues/backlog/notification-cron-timing-audit-round-2-2026-04-21.md R1):
+ * node-cron does NOT backfill missed ticks when the process was down. Observed:
+ * backend container exited for 23h on 2026-04-20 — every tick in that window
+ * was silently skipped. For time-windowed match reminders, a missed tick means
+ * a permanently missed notification (the match.matchDate moves past the window
+ * before the next tick). Fix: add nullable DateTime columns to Match
+ * (reminder24hSentAt / reminder2hSentAt / morningReminderSentAt). Change each
+ * cron's filter to `matchDate ∈ [now, now+24h] AND reminder24hSentAt IS NULL`.
+ * Set the marker after a successful send. This pattern is already used for
+ * resultSubmittedAt / isAutoApproved elsewhere in the match service.
  */
 export function scheduleMatch24hReminders(): void {
   scheduleCron("0 * * * *", async () => {
@@ -569,6 +589,16 @@ export function scheduleSeasonStartingSoonNotifications(): void {
         select: { id: true },
       });
 
+      // TODO (2026-04-22, docs/issues/backlog/notification-cron-timing-audit-round-3-2026-04-22.md E1):
+      // No inner try/catch — a single failing season throws out of the for-loop
+      // and kills the rest of the batch for this tick. Other crons in this file
+      // already use the pattern below (see scheduleLastMatchDeadline48h:707).
+      // Wrap each iteration:
+      //   for (const s of seasons) {
+      //     try { await sendSeasonStartingSoonNotifications(s.id); }
+      //     catch (err) { logger.error('Failed for season', { seasonId: s.id }, err as Error); }
+      //   }
+      // Apply the same pattern to the 10+ crons flagged in Round 3 E1.
       for (const season of seasons) {
         await sendSeasonStartingSoonNotifications(season.id);
       }
@@ -591,6 +621,18 @@ export function scheduleSeasonStartingSoonNotifications(): void {
 /**
  * Check and send Season starts tomorrow notifications
  * Runs daily at 8:00 PM
+ *
+ * TODO (2026-04-21, docs/issues/backlog/notification-cron-timing-audit-round-2-2026-04-21.md T1):
+ * `setHours(0,0,0,0)` uses the container's LOCAL tz (UTC — no TZ env set in
+ * docker-compose/Dockerfile) while the cron schedule is MYT-aware. This shifts
+ * the "tomorrow" window by 8h relative to MYT; seasons starting 00:00-08:00
+ * MYT fall outside the window. Fix with one of:
+ *   (a) set TZ=Asia/Kuala_Lumpur on the backend service (audit all callers of
+ *       setHours/new Date() for safety first), OR
+ *   (b) replace setHours with dayjs().tz(MYT).startOf('day').toDate() at every
+ *       such site inside jobs/. Option (b) is surgical and lower-risk.
+ * Affects also: scheduleSeasonStartedNotifications, scheduleMatchMorningReminders,
+ * scheduleRegistrationDeadlineCaptain/Partner, scheduleLeagueCompleteBannerNotifications.
  */
 export function scheduleSeasonStartsTomorrowNotifications(): void {
   scheduleCron("0 20 * * *", async () => {
