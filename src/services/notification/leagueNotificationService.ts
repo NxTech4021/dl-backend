@@ -461,6 +461,13 @@ export async function sendLeagueShortenedNotifications(
 
 /**
  * Send emergency league update
+ *
+ * TODO (2026-04-22, docs/issues/backlog/notification-cron-timing-audit-round-7-2026-04-22.md A2):
+ * NOTIF-056 Emergency League Update — this service is defined and re-exported
+ * from notificationTriggers.ts but has ZERO external callers. Consistent with
+ * spec note "Need further clarification - Zawad": product hasn't decided the
+ * trigger mechanism (admin button? custom-message form? rich-text support?).
+ * Placeholder service retained; wire once product call is made.
  */
 export async function sendEmergencyLeagueUpdate(
   seasonId: string,
@@ -733,13 +740,13 @@ export async function sendRegistrationClosing24hNotifications(seasonId: string):
     }
 
     const league = season.leagues[0]; // Use first league
-    
+
     // Check if league data is valid
     if (!league || !league.location || !league.sportType) {
       logger.warn('League missing location or sportType', { seasonId, leagueId: league?.name });
       return;
     }
-    
+
     const leagueName = `${league.location} ${league.sportType} League`;
 
     const notificationData = notificationTemplates.leagueLifecycle.registrationClosing24Hours(
