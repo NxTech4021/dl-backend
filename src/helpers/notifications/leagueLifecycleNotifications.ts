@@ -123,6 +123,16 @@ export const leagueLifecycleNotifications = {
     metadata: {},
   }),
 
+  // TODO (2026-04-22, docs/issues/backlog/notification-cron-timing-audit-round-5-2026-04-22.md C1):
+  // Spec (NOTIF-040 dev notes): "Player (or doubles team) hasn't played in 7 days".
+  // Spec NOTIF-043 dev notes: "For doubles, system can automatically switch
+  // 'You haven't' → 'Your team hasn't'." This template takes no isDoubles param,
+  // so doubles team members read singles-specific copy. Same issue affects
+  // inactivityDuringLeagueSeason2Weeks (line 150), inactivityDeadline7Days (160),
+  // inactivityDeadline3Days (170), midSeasonUpdate (104), seasonStartedWelcome (376).
+  // Fix: accept `isDoubles: boolean` param and return team-based copy for doubles.
+  // Cron call site (e.g. notificationJobs.ts:1812) must pass season.matchType or
+  // Division.gameType to determine isDoubles.
   inactivePlayerWarning7Days: (): NotificationPayload => ({
     type: NOTIFICATION_TYPES.INACTIVE_PLAYER_WARNING_7_DAYS,
     category: getCategoryForNotificationType(
