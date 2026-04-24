@@ -1185,6 +1185,22 @@ export const registerPlayerToSeason = async (req: Request, res: Response) => {
         return { partnership, memberships };
       });
 
+      // TODO (2026-04-22, docs/issues/backlog/notification-cron-timing-audit-round-6-2026-04-22.md I3):
+      // Wrong notification for doubles. Spec:
+      //   NOTIF-064 "Player completes registration - Singles" (singles only)
+      //   NOTIF-031 "Doubles Team Registered - For Captain"
+      //   NOTIF-032 "Doubles Team Registered - For Partner"
+      // Current code fires NOTIF-064 to BOTH captain+partner then NOTIF-032 to
+      // partner below at line 1215. Net result: captain gets singles NOTIF-064
+      // (wrong), partner gets 064 AND 032 (double notification).
+      // Fix: replace this block with:
+      //   const captainNotif = notificationTemplates.doubles.doublesTeamRegisteredCaptain(
+      //     partnership.partner?.name || 'your partner',
+      //     seasonData.name
+      //   );
+      //   await notificationService.createNotification({ userIds: captainId, ...captainNotif, seasonId });
+      // doublesTeamRegisteredCaptain template is defined at doublesNotifications.ts:41 but
+      // is currently dead code with zero callers (see M5).
       // 🆕 Send registration confirmation notifications for both players
       const seasonData = (result.memberships[0] as any)?.season;
       if (seasonData) {
@@ -1399,6 +1415,13 @@ export const updatePaymentStatus = async (req: Request, res: Response) => {
           `$${membershipWithSeason.season.entryFee}`
         );
       } else if (paymentStatus === 'FAILED') {
+        // TODO (2026-04-22, docs/issues/backlog/notification-cron-timing-audit-round-7-2026-04-22.md P1):
+        // NOTIF-066 spec: "Immediate" on "League payment fails". Current path
+        // fires only when admin manually flips paymentStatus to FAILED. No
+        // automatic payment webhook exists — real-world Stripe/PayPal declines
+        // won't auto-notify until admin notices. Once a payment gateway
+        // integration lands, call this template from the webhook failure-event
+        // handler instead of (or in addition to) this admin path.
         notificationData = leagueLifecycleNotifications.paymentFailed(
           membershipWithSeason.season.name,
           `$${membershipWithSeason.season.entryFee}`
