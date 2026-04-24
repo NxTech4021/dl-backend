@@ -175,6 +175,13 @@ export const confirmResult = async (req: Request, res: Response) => {
             matchId: match.id,
           });
 
+          // TODO (2026-04-21, docs/issues/backlog/notification-cron-timing-audit-2026-04-21.md D1):
+          // Spec NOTIF-122: "5 minutes after match result confirmation". Current
+          // implementation fires immediately, double-buzzing the user with the
+          // score-confirmed notification (NOTIF-096) and the share prompt at the
+          // same instant. Options: setTimeout (loses on process death) OR
+          // pending_notification table polled by a 1-min cron (durable). Needs
+          // architecture decision before implementing.
           // NOTIF-122: Prompt all participants to share their scorecard (fire-and-forget)
           void (async () => {
             try {
@@ -325,6 +332,15 @@ export const submitWalkover = async (req: Request, res: Response) => {
         select: { name: true }
       });
 
+      // TODO (2026-04-21, docs/issues/backlog/notification-cron-timing-audit-round-2-2026-04-21.md F1):
+      // NOTIF-089/090 fire here at REPORT time but spec requires "Immediate after
+      // walkover CONFIRMATION" — i.e. only after the 24h dispute window expires
+      // without dispute (see autoCompleteWalkovers in matchResultService.ts).
+      // Today the defaulter receives "You didn't show, this counts as a loss"
+      // (NOTIF-090) simultaneously with "You have 24 hours to respond" (NOTIF-092)
+      // while match.status is still WALKOVER_PENDING. Fix: move these two sends
+      // into processMatchCompletion (or autoCompleteWalkovers after tx update).
+      // Keep NOTIF-092 here (spec: immediate on claim filed).
       // Notify the defaulting player about the walkover loss
       const walkoverLostNotif = matchManagementNotifications.matchWalkoverLost(
         reporter?.name || 'Opponent'
