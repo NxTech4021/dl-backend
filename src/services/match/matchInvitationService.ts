@@ -1232,6 +1232,16 @@ export class MatchInvitationService {
         const responderParticipant = match.participants.find((p) => p.userId === userId);
 
         if (responderParticipant?.role === ParticipantRole.PARTNER) {
+          // TODO (2026-04-22, docs/issues/backlog/notification-cron-timing-audit-round-4-2026-04-22.md I1):
+          // Asymmetric handling. When the JOINING team's partner declines (else
+          // branch below at line ~1264), NOTIF-139 is correctly fired to the
+          // posting team. But when the POSTER's partner declines (the team1
+          // branch immediately below), the joining team (team2) is NOT notified
+          // of the cancellation, even if they had already joined the match.
+          // Spec NOTIF-135 dev notes require: "If opponent had already joined,
+          // trigger NOTIF-139 to opponent team." Fix: inside the `!accepted`
+          // path of the team1 branch, if team2 participants exist, fire
+          // `doublesNotifications.matchCancelledPartnerDeclined(...)` to them.
           if (responderParticipant.team === 'team1') {
             // Creator's partner responded → notify the match creator
             const creatorId = match.createdBy?.id;

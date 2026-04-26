@@ -1,3 +1,25 @@
+// TODO (2026-04-20, docs/issues/backlog/prisma-migration-drift-2026-04-20.md D1):
+// Add `prisma migrate status --exit-code` to CI so drift between on-disk
+// migrations and the target DB is caught on push, not at runtime. Current
+// gap: this repo discovered 6 unrecorded migrations only when admin-reversal
+// code hit missing columns. CI guardrail prevents recurrence.
+//
+// TODO (2026-04-22, docs/issues/backlog/notification-cron-timing-audit-round-4-2026-04-22.md Q1):
+// Missing indexes on cron filter columns — Season.startDate/endDate/regiDeadline
+// and User.lastActivityCheck are hot paths for 10+ daily cron queries but
+// have no index. Acceptable at current scale; adds to table-scan cost as
+// the DB grows. Add when addressing scale:
+//   model Season {
+//     ...
+//     @@index([status, startDate])
+//     @@index([status, endDate])
+//     @@index([status, regiDeadline])
+//   }
+//   model User {
+//     ...
+//     @@index([status, lastActivityCheck])
+//   }
+// Zero-risk additive change + one migration.
 generator client {
   provider      = "prisma-client-js"
   // Include linux-musl for Alpine container builds (ECS Fargate target).
@@ -2209,6 +2231,27 @@ model SeasonInvitation {
   @@map("season_invitation")
 }
 
+// TODO (2026-04-22, docs/issues/backlog/notification-cron-timing-audit-round-6-2026-04-22.md M4):
+// Spec defines per-notification columns not reflected here:
+//   - Action Required  (Yes/No) — e.g. NOTIF-028 requires user action to dismiss
+//   - Badge Type       (Red Dot / Yellow Warning / Info Icon / Green Checkmark / Clock Icon)
+//   - Persistent       (Yes/No) — e.g. NOTIF-030/055/097 should stay pinned until resolved
+// Frontend also has no handling for these. Either (a) add three scalar columns
+// here + template signature update + migration, OR (b) create a static
+// notificationTypeMeta.ts constants map keyed by NotificationType and consume
+// it client-side. Option (b) is minimum-risk and avoids a DB migration.
+// Affects spec rendering of ~40 notification types.
+// TODO (2026-04-22, docs/issues/backlog/notification-cron-timing-audit-round-8-2026-04-22.md D3):
+// No explicit onDelete on any Notification or UserNotification relation.
+// Prisma defaults to NoAction/Restrict → hard-deleting a User/Season/Match/
+// Partnership/Thread/PairRequest/WithdrawalRequest with associated notifications
+// fails with FK constraint violation. Matters for GDPR "right to be forgotten" —
+// account hard-delete currently impossible without explicit cleanup script.
+// Fix (requires migration):
+//   Notification.user         → onDelete: SetNull (keep audit, detach)
+//   Notification.match/season → onDelete: Cascade (delete notif with parent)
+//   UserNotification.user     → onDelete: Cascade (privacy)
+//   UserNotification.notification → onDelete: Cascade (already manually done in deleteOldNotifications)
 model Notification {
   id        String               @id @default(cuid())
   title     String?

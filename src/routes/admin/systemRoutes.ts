@@ -44,6 +44,11 @@ adminSystemRoutes.post('/announcements/:id/archive', archiveAnnouncement);
 adminSystemRoutes.post('/announcements/app-update', sendAppUpdateNotification);
 
 // TOS Routes
+// TODO (2026-04-22, docs/issues/backlog/notification-cron-timing-audit-round-7-2026-04-22.md A1):
+// This endpoint works end-to-end (template → service → controller → route)
+// but DLAdmin/src has no UI button to invoke it — grep confirms zero references.
+// Spec marks NOTIF-018 as ✅ but it's only half-shipped (backend yes, admin UI no).
+// Add a button in the admin System/Announcements screen that POSTs here.
 adminSystemRoutes.post('/tos/notify', notifyTosUpdated);
 
 export default adminSystemRoutes;

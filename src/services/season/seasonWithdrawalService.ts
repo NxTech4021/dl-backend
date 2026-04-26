@@ -229,6 +229,14 @@ export async function processWithdrawalRequest(
 
           console.log(`✅ Transferred division standings to new partnership`);
 
+          // NOTE: DivisionAssignment is intentionally NOT deleted on withdrawal —
+          // the row is kept as audit history (standings, rankings, and admin
+          // views depend on it). The 6 engagement/inactivity crons
+          // (NOTIF-036/037/040/042/043/044) filter via
+          // `user: { seasonMemberships: { some: { seasonId, status: 'ACTIVE' } } }`
+          // so withdrawn members are skipped from nag notifications.
+          // Resolved in U2 (2026-04-24) — see docs/issues/backlog/
+          // notification-audit-consolidated-bugs-2026-04-22.md#13-u2.
           // 5. Only remove withdrawing player's membership
           await tx.seasonMembership.updateMany({
             where: {
