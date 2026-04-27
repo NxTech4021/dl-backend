@@ -895,7 +895,17 @@ export class MatchInvitationService {
     }
 
     if (match.status !== MatchStatus.SCHEDULED) {
-      throw new Error('This match is no longer available to join');
+      const statusMessages: Record<string, string> = {
+        DRAFT: 'This match is not yet open for joining — it is still in draft',
+        ONGOING: 'This match is already in progress and cannot be joined',
+        COMPLETED: 'This match has already been completed',
+        FINISHED: 'This match has already finished',
+        CANCELLED: 'This match has been cancelled',
+        VOID: 'This match has been voided and is no longer active',
+        UNFINISHED: 'This match has been marked as unfinished and cannot be joined',
+        WALKOVER_PENDING: 'This match has a pending walkover and cannot be joined',
+      };
+      throw new Error(statusMessages[match.status] ?? 'This match is no longer available to join');
     }
 
     // Check user is in the division
@@ -931,7 +941,24 @@ export class MatchInvitationService {
       );
       
       if (alreadyPlayedMatch) {
-        throw new Error('You have already played against this opponent in this division. Each team can only play once per season.');
+        // Look up the creator's name for a personalised error message
+        const creator = await prisma.user.findUnique({
+          where: { id: creatorUserId },
+          select: { name: true },
+        });
+        const creatorName = creator?.name ?? 'this opponent';
+
+        if (match.matchType === MatchType.DOUBLES) {
+          throw new Error(
+            `Your team has already played against ${creatorName}'s team in this division. ` +
+            `Each pair can only face each other once per season.`
+          );
+        } else {
+          throw new Error(
+            `You have already played against ${creatorName} in this division. ` +
+            `Each player can only face each other once per season.`
+          );
+        }
       }
     }
 
@@ -1014,7 +1041,17 @@ export class MatchInvitationService {
       // RC-3: Re-check status inside transaction. The outer check at line 862 may
       // be stale if the match was cancelled/started between the outer read and this tx.
       if (freshMatch.status !== MatchStatus.SCHEDULED) {
-        throw new Error('This match is no longer available to join');
+        const statusMessages: Record<string, string> = {
+          DRAFT: 'This match is not yet open for joining — it is still in draft',
+          ONGOING: 'This match is already in progress and cannot be joined',
+          COMPLETED: 'This match has already been completed',
+          FINISHED: 'This match has already finished',
+          CANCELLED: 'This match has been cancelled',
+          VOID: 'This match has been voided and is no longer active',
+          UNFINISHED: 'This match has been marked as unfinished and cannot be joined',
+          WALKOVER_PENDING: 'This match has a pending walkover and cannot be joined',
+        };
+        throw new Error(statusMessages[freshMatch.status] ?? 'This match is no longer available to join');
       }
 
       // Determine role and team using fresh data
@@ -1027,7 +1064,7 @@ export class MatchInvitationService {
           p => p.invitationStatus === InvitationStatus.ACCEPTED
         ).length;
         if (acceptedCount >= 2) {
-          throw new Error('This match is already full');
+          throw new Error('This match is full — both spots have already been taken');
         }
         // For singles: joiner is always team2 (creator is team1)
         team = 'team2';
@@ -1044,7 +1081,7 @@ export class MatchInvitationService {
           team = 'team2';
           role = ParticipantRole.OPPONENT;
         } else {
-          throw new Error('This match is already full. Both teams have players.');
+          throw new Error('This match is full — all 4 player spots have been taken');
         }
       }
 

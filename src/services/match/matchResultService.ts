@@ -179,21 +179,21 @@ export class MatchResultService {
 
       // Check match status INSIDE transaction to prevent race conditions
       if (currentMatch.status === MatchStatus.COMPLETED || currentMatch.status === 'WALKOVER_PENDING') {
-        throw new Error('Match has already been completed or has a pending walkover');
+        throw new Error('This match has already been completed — results cannot be resubmitted');
       }
 
       if (currentMatch.status === MatchStatus.ONGOING) {
-        throw new Error('Match result is pending opponent confirmation');
+        throw new Error('A result has already been submitted and is awaiting confirmation from your opponent');
       }
 
       if (currentMatch.status === MatchStatus.CANCELLED || currentMatch.status === MatchStatus.VOID) {
-        throw new Error('Cannot submit result for a cancelled or void match');
+        throw new Error('Results cannot be submitted for a cancelled or void match');
       }
 
       // SS-5: Prevent duplicate submission — defense-in-depth for READ COMMITTED race window
       // Exception: UNFINISHED matches allow re-submission (user is completing the match)
       if (currentMatch.resultSubmittedById && currentMatch.status !== MatchStatus.UNFINISHED) {
-        throw new Error('A result has already been submitted for this match');
+        throw new Error('A result has already been submitted for this match. Please wait for your opponent to confirm.');
       }
 
       if (currentMatch.sport === 'PICKLEBALL') {
@@ -404,7 +404,18 @@ export class MatchResultService {
 
     // Check match is in correct status
     if (match.status !== MatchStatus.ONGOING) {
-      throw new Error(`Match is not pending confirmation (current status: ${match.status})`);
+      const statusLabels: Record<string, string> = {
+        SCHEDULED: 'scheduled (no result has been submitted yet)',
+        DRAFT: 'still in draft',
+        COMPLETED: 'already completed',
+        FINISHED: 'already finished',
+        CANCELLED: 'cancelled',
+        VOID: 'voided',
+        UNFINISHED: 'marked as unfinished',
+        WALKOVER_PENDING: 'pending a walkover decision',
+      };
+      const label = statusLabels[match.status] ?? `in status ${match.status}`;
+      throw new Error(`There is no result to confirm — this match is ${label}`);
     }
 
     let feedPostId: string | null = null;
@@ -845,7 +856,17 @@ export class MatchResultService {
 
     // SS-4: Status check — prevent walkover on completed/cancelled/void matches
     if (match.status !== MatchStatus.SCHEDULED && match.status !== MatchStatus.ONGOING) {
-      throw new Error('Can only record walkover for scheduled or ongoing matches');
+      const statusLabels: Record<string, string> = {
+        COMPLETED: 'already completed',
+        FINISHED: 'already finished',
+        CANCELLED: 'cancelled',
+        VOID: 'voided',
+        DRAFT: 'still in draft',
+        UNFINISHED: 'marked as unfinished',
+        WALKOVER_PENDING: 'pending a walkover decision',
+      };
+      const label = statusLabels[match.status] ?? `in status ${match.status}`;
+      throw new Error(`Walkover cannot be recorded — this match is ${label}`);
     }
 
     // SS-4: Prevent walkover when result already submitted (conflicting state)

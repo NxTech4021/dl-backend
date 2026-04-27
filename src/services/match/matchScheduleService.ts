@@ -82,7 +82,17 @@ export class MatchScheduleService {
       match.status !== MatchStatus.DRAFT &&
       match.status !== MatchStatus.SCHEDULED
     ) {
-      throw new Error(`Cannot cancel match in status ${match.status}`);
+      const statusLabels: Record<string, string> = {
+        ONGOING: 'already in progress',
+        COMPLETED: 'already completed',
+        FINISHED: 'already finished',
+        CANCELLED: 'already cancelled',
+        VOID: 'voided',
+        UNFINISHED: 'marked as unfinished',
+        WALKOVER_PENDING: 'pending a walkover decision',
+      };
+      const label = statusLabels[match.status] ?? `in status ${match.status}`;
+      throw new Error(`This match cannot be cancelled because it is ${label}. Only scheduled or draft matches can be cancelled.`);
     }
 
     // Check if it's a late cancellation and requires admin review
