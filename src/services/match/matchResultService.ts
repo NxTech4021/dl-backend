@@ -1286,7 +1286,8 @@ export class MatchResultService {
 
       const otherParticipants = match.participants
         .filter(p => p.userId !== submitterId)
-        .map(p => p.userId);
+        .map(p => p.userId)
+        .filter((id): id is string => id !== null);
 
       await this.notificationService.createNotification({
         type: 'MATCH_RESULT_SUBMITTED',
@@ -1320,7 +1321,9 @@ export class MatchResultService {
         select: { name: true }
       });
 
-      const participantIds = match.participants.map(p => p.userId);
+      const participantIds = match.participants
+        .map(p => p.userId)
+        .filter((id): id is string => id !== null);
 
       await this.notificationService.createNotification({
         type: 'MATCH_RESULT_CONFIRMED',
@@ -1359,7 +1362,8 @@ export class MatchResultService {
       // Notify other participants
       const otherParticipants = match.participants
         .filter(p => p.userId !== disputerId)
-        .map(p => p.userId);
+        .map(p => p.userId)
+        .filter((id): id is string => id !== null);
 
       await this.notificationService.createNotification({
         type: 'MATCH_DISPUTED',
@@ -1398,7 +1402,9 @@ export class MatchResultService {
         select: { name: true }
       });
 
-      const participantIds = match.participants.map(p => p.userId);
+      const participantIds = match.participants
+        .map(p => p.userId)
+        .filter((id): id is string => id !== null);
 
       await this.notificationService.createNotification({
         type: 'MATCH_UNFINISHED',
@@ -1432,7 +1438,9 @@ export class MatchResultService {
         select: { name: true }
       });
 
-      const participantIds = match.participants.map(p => p.userId);
+      const participantIds = match.participants
+        .map(p => p.userId)
+        .filter((id): id is string => id !== null);
 
       await this.notificationService.createNotification({
         type: 'MATCH_WALKOVER',
