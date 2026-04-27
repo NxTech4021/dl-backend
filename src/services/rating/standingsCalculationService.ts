@@ -58,9 +58,13 @@ export interface StandingEntry {
   setDifferential: number;
   previousRank: number;
   rankChange: number;
-  partnerId?: string;
-  partnerName?: string;
-  partnerImage?: string;
+  // Doubles partner fields — explicit `| undefined` so callers can pass
+  // `partnership?.partnerId ?? undefined` without violating
+  // exactOptionalPropertyTypes: true (resolves TS-039 from
+  // docs/issues/backlog/tsc-baseline-errors-2026-04-27.md).
+  partnerId?: string | undefined;
+  partnerName?: string | undefined;
+  partnerImage?: string | undefined;
   // Active / disbanded state
   isActive: boolean;
   disbandedAt: Date | null;
