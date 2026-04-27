@@ -1484,8 +1484,14 @@ model DivisionStanding {
   headToHead Json?
 
   // Tracking
-  lastCalculatedAt DateTime @default(now())
-  isLocked         Boolean  @default(false)
+  lastCalculatedAt DateTime  @default(now())
+  isLocked         Boolean   @default(false)
+
+  // Disbanded / inactive state
+  // isActive=false means the team/player has left this division (disbanded or moved away)
+  // disbandedAt is set when a partnership is dissolved; absent when the standing is merely inactive due to admin reassignment
+  isActive    Boolean   @default(true)
+  disbandedAt DateTime?
 
   // DEPRECATED (keep for migration, remove later)
   winPoints       Int @default(0)

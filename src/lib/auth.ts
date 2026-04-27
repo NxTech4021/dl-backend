@@ -129,7 +129,6 @@ export const auth = betterAuth({
         console.log("🔒 [Auth Hook BEFORE] User role:", user?.role);
 
         if (user && (user.role === 'ADMIN' || user.role === 'SUPERADMIN')) {
-          console.log("🔒 [Auth Hook BEFORE] BLOCKING ADMIN LOGIN!");
           throw new APIError("FORBIDDEN", {
             message: "Admin accounts cannot sign in via the mobile app. Please use the web dashboard.",
           });
@@ -188,7 +187,7 @@ export const auth = betterAuth({
           let html = "";
           let title = "";
           let message = "";
-          let buttonColor = "#3B82F6"; // Blue
+          let buttonColor = "#3B82F6";
 
           if (type === "sign-in") {
             console.log("Sending sign-in email to", email);
