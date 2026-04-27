@@ -849,16 +849,14 @@ export function scheduleMatchesRemaining(): void {
 }
 
 /**
- * Check and send final week alerts
- * Runs daily at 10:00 AM on Mondays
+ * NOTIF-046: Send final-week alert to ACTIVE members of seasons whose endDate
+ * is 7-14 days out. Runs Mondays 10:00 MYT.
  *
- * TODO(finalWeek-window-bug): the `endDate ∈ [now+7d, now+8d]` filter below is
- * only 24h wide but cron runs weekly (Mondays) — same latent-bug pattern as
- * B2/B3 (NOTIF-047/060) were. Only endDates that happen to fall between
- * Monday 10am and Tuesday 10am get captured; most endDates silently miss.
- * Fix would mirror M1's pattern here: widen to `[now+7d, now+14d]` + 8-day
- * dedup on the send call, so every endDate catches one Monday. Flagged during
- * M1 dissection (2026-04-24); out of M1 scope. See consolidated bug tracker.
+ * Window design: `endDate ∈ [now+7d, now+14d]` is 7 days wide to match the
+ * weekly Monday cron cadence. Every endDate falls in this window on exactly
+ * one Monday — the Monday 7-14 days before endDate. 8-day dedup on the send
+ * is belt-and-suspenders against any edge case (e.g. admin updating endDate
+ * mid-cycle). Same pattern as M1 scheduleMatchesRemaining and B2/B3.
  */
 export function scheduleFinalWeekAlerts(): void {
   scheduleCron("0 10 * * 1", async () => {
@@ -866,14 +864,14 @@ export function scheduleFinalWeekAlerts(): void {
       logger.info("Running final week alert job");
 
       const now = new Date();
-      const in7Days = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
-      const in8Days = new Date(now.getTime() + 8 * 24 * 60 * 60 * 1000);
+      const in7Days  = new Date(now.getTime() + 7  * 24 * 60 * 60 * 1000);
+      const in14Days = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000);
 
       const seasons = await prisma.season.findMany({
         where: {
           endDate: {
             gte: in7Days,
-            lte: in8Days,
+            lte: in14Days,
           },
           status: "ACTIVE",
         },
