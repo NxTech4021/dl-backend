@@ -98,6 +98,11 @@ export const ratingRankingNotifications = {
     metadata: { sport, newRating },
   }),
 
+  // TS-035 (resolved 2026-04-27, commit 8436f1d): uncommented from a prior
+  // disabled state. Original copy preserved verbatim. Currently dead (only
+  // caller `checkRatingMilestone` is invoked from `sendDMRIncreasedNotification`,
+  // whose only external call site at matchResultService.ts:611 is commented
+  // out). If revived, no copy review needed — already drafted by the team.
   ratingMilestone: (rating: number, sport: string): NotificationPayload => ({
     type: NOTIFICATION_TYPES.RATING_MILESTONE,
     category: getCategoryForNotificationType(
@@ -108,6 +113,13 @@ export const ratingRankingNotifications = {
     metadata: { rating, sport },
   }),
 
+  // TODO (TS-036 follow-up, docs/issues/backlog/tsc-baseline-errors-2026-04-27.md):
+  // NEW template added 2026-04-27 (commit 8436f1d). Fires weekly via the
+  // `scheduleWeeklyRankingUpdates` cron (Mon 8 AM, see jobs/notificationJobs.ts:1130)
+  // for every player in every active division. Copy was modeled on the existing
+  // `movedUpInStandings`/`leagueLeader` patterns; product/Zawad should review
+  // before the next Mon 8 AM cron tick post-deploy. Scale concern noted at
+  // notificationJobs.ts:2796 — "sends per-division ranking updates."
   weeklyRankingUpdate: (
     position: number,
     seasonName: string,
@@ -122,6 +134,16 @@ export const ratingRankingNotifications = {
     metadata: { position, seasonName, weekNumber },
   }),
 
+  // TODO (TS-037 follow-up, docs/issues/backlog/tsc-baseline-errors-2026-04-27.md):
+  // NEW template added 2026-04-27 (commit 8436f1d). Fires monthly via the
+  // `scheduleMonthlyDMRRecaps` cron (last day of month 8 PM, see
+  // jobs/notificationJobs.ts:1167) to ALL users with ratings. Title is new
+  // copy ("Your Monthly DMR Recap"); message is the caller-built summary
+  // string from standingsNotificationService.ts:366-373 (pre-existing format,
+  // unchanged). Note the caller has a known data-accuracy issue — its
+  // `sportMatches` count isn't filtered by sport. Product should review the
+  // monthly cadence + title before the next month-end fire (next: 2026-04-30
+  // 8 PM MYT post-deploy).
   monthlyDmrRecap: (summary: string): NotificationPayload => ({
     type: NOTIFICATION_TYPES.MONTHLY_DMR_RECAP,
     category: getCategoryForNotificationType(
