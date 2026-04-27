@@ -7,7 +7,7 @@
  */
 
 import { prisma } from '../../lib/prisma';
-import { formatMatchDateShort, formatMatchTime } from '../../utils/timezone';
+import { formatMatchTime } from '../../utils/timezone';
 import { NotificationService, notificationService as notificationServiceSingleton } from '../notificationService';
 import { notificationTemplates } from '../../helpers/notifications';
 import { filterUsersByPreference } from './notificationPreferenceService';
@@ -99,7 +99,6 @@ export class MatchReminderService {
 
     // Format match time in venue timezone (Malaysia)
     const timeStr = formatMatchTime(match.matchDate);
-    const dateStr = formatMatchDateShort(match.matchDate);
 
     // Get opponent name for each participant
     for (const recipientId of recipientIds) {
@@ -110,9 +109,10 @@ export class MatchReminderService {
 
       const venue = match.venue || match.location || 'TBD';
 
+      // matchReminder24h template hardcodes "tomorrow" in the message,
+      // so the date is implicit — only opponent/time/venue are used.
       const reminderNotif = notificationTemplates.match.matchReminder24h(
         opponents,
-        dateStr,
         timeStr,
         venue
       );
