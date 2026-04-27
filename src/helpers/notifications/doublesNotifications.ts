@@ -38,12 +38,8 @@ export const doublesNotifications = {
     metadata: { leagueName, captainName },
   }),
 
-  // TODO (2026-04-22, docs/issues/backlog/notification-cron-timing-audit-round-6-2026-04-22.md M5):
-  // This template (NOTIF-031) is defined but has ZERO callers in src/. The
-  // doubles-registration path in seasonController.ts:1188-1208 fires NOTIF-064
-  // (singles) instead. Spec marks NOTIF-031 as ✅ — it is not.
-  // Fix wired via I3: update seasonController.ts to call this template for the
-  // captain in the doubles branch.
+  // NOTIF-031 (M5 + I3 resolved 2026-04-25): wired from seasonController.ts
+  // doubles-registration branch (replaces the prior NOTIF-064 misuse).
   doublesTeamRegisteredCaptain: (
     leagueName: string,
     partnerName: string
