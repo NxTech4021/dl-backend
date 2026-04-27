@@ -1185,41 +1185,25 @@ export const registerPlayerToSeason = async (req: Request, res: Response) => {
         return { partnership, memberships };
       });
 
-      // TODO (2026-04-22, docs/issues/backlog/notification-cron-timing-audit-round-6-2026-04-22.md I3):
-      // Wrong notification for doubles. Spec:
-      //   NOTIF-064 "Player completes registration - Singles" (singles only)
-      //   NOTIF-031 "Doubles Team Registered - For Captain"
-      //   NOTIF-032 "Doubles Team Registered - For Partner"
-      // Current code fires NOTIF-064 to BOTH captain+partner then NOTIF-032 to
-      // partner below at line 1215. Net result: captain gets singles NOTIF-064
-      // (wrong), partner gets 064 AND 032 (double notification).
-      // Fix: replace this block with:
-      //   const captainNotif = notificationTemplates.doubles.doublesTeamRegisteredCaptain(
-      //     partnership.partner?.name || 'your partner',
-      //     seasonData.name
-      //   );
-      //   await notificationService.createNotification({ userIds: captainId, ...captainNotif, seasonId });
-      // doublesTeamRegisteredCaptain template is defined at doublesNotifications.ts:41 but
-      // is currently dead code with zero callers (see M5).
-      // 🆕 Send registration confirmation notifications for both players
+      // NOTIF-031 (I3 + M5): Push to captain — doubles team registered.
+      // Per spec: NOTIF-064 is singles-only; doubles uses NOTIF-031 (captain)
+      // + NOTIF-032 (partner, sent below). This block previously fired NOTIF-064
+      // to both captain+partner, causing the captain to receive singles copy
+      // and the partner to receive a double notification.
       const seasonData = (result.memberships[0] as any)?.season;
       if (seasonData) {
         try {
-          const notificationData = leagueLifecycleNotifications.registrationConfirmed(
+          const captainNotif = notificationTemplates.doubles.doublesTeamRegisteredCaptain(
             seasonData.name,
-            seasonData.leagues?.[0]?.name || '',
-            seasonData.category?.name || '',
-            seasonData.startDate ? new Date(seasonData.startDate).toLocaleDateString() : 'TBD',
-            `$${seasonData.entryFee}`
+            partnership.partner?.name || 'your partner'
           );
-
           await notificationService.createNotification({
-            userIds: [captainId, partnerId],
-            ...notificationData,
-            seasonId: seasonId
+            userIds: captainId,
+            ...captainNotif,
+            seasonId,
           });
         } catch (notificationError) {
-          console.error('Error sending registration notification for doubles:', notificationError);
+          console.error('Error sending NOTIF-031 doubles captain registration:', notificationError);
           // Don't fail the registration if notification fails
         }
       }
