@@ -706,10 +706,20 @@ export const assignPlayerToDivision = async (req: Request, res: Response) => {
           logger.error('Failed to send player assignment notification', { userId, divisionId }, notifError as Error);
         }
 
-        // Notify all OTHER members of this division about the new player/team
+        // Notify all OTHER members of this division about the new player/team.
+        // U2-sibling: restrict to ACTIVE members so withdrawn/flagged/inactive
+        // teammates don't receive NOTIF-033 division-update broadcasts.
         try {
           const otherMembers = await prisma.divisionAssignment.findMany({
-            where: { divisionId, userId: { not: userId } },
+            where: {
+              divisionId,
+              userId: { not: userId },
+              user: {
+                seasonMemberships: {
+                  some: { seasonId, status: 'ACTIVE' },
+                },
+              },
+            },
             select: { userId: true },
           });
           if (otherMembers.length > 0) {
@@ -1112,10 +1122,20 @@ export const transferPlayerBetweenDivisions = async (req: Request, res: Response
       logger.error('Failed to send rebalanced notification', { userId, fromDivisionId, toDivisionId }, notifError as Error);
     }
 
-    // NOTIF-034 – notify other members of the destination division (PUSH)
+    // NOTIF-034 – notify other members of the destination division (PUSH).
+    // U2-sibling: restrict to ACTIVE members so withdrawn/flagged/inactive
+    // teammates don't receive division-transfer broadcasts.
     try {
       const otherMembers = await prisma.divisionAssignment.findMany({
-        where: { divisionId: toDivisionId, userId: { not: userId } },
+        where: {
+          divisionId: toDivisionId,
+          userId: { not: userId },
+          user: {
+            seasonMemberships: {
+              some: { seasonId: toDivisionSeasonId, status: 'ACTIVE' },
+            },
+          },
+        },
         select: { userId: true },
       });
       if (otherMembers.length > 0) {
