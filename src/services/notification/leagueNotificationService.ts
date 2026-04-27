@@ -203,6 +203,10 @@ export async function sendFinalWeekAlertNotifications(seasonId: string): Promise
       ...finalWeekNotif,
       userIds: playerIds,
       seasonId,
+      // NOTIF-046: 8-day dedup. Cron is weekly (Mondays); 7d window catches
+      // each endDate on exactly one Monday. 8d > 7d cadence so any edge-case
+      // re-capture (e.g. admin updating endDate mid-cycle) is suppressed.
+      skipDuplicateWithinMs: 8 * 24 * 60 * 60 * 1000,
     });
 
     logger.info('Final week alert sent', { seasonId, playerCount: playerIds.length });
