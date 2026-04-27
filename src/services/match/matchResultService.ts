@@ -496,6 +496,11 @@ export class MatchResultService {
     }
 
     const matchResult = await this.getMatchWithResults(matchId);
+    // If the match disappeared (deletion mid-flight), surface the null so the
+    // controller's `if (!match)` check narrows properly. Otherwise spreading
+    // null silently produces `{ feedPostId }` and TS sees `match.id` as
+    // possibly undefined downstream (TS-001 in the controller).
+    if (!matchResult) return null;
     return { ...matchResult, feedPostId };
   }
 
