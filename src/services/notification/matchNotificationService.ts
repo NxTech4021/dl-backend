@@ -113,7 +113,6 @@ export async function sendMatchReminder24h(matchId: string): Promise<void> {
 
     if (!match || match.participants.length < 2) return;
 
-    const date = match.matchDate ? formatMatchDate(match.matchDate) : 'TBD';
     const time = match.matchDate ? formatMatchTime(match.matchDate) : 'TBD';
     const venue = match.venue || match.location || 'TBD';
 
@@ -129,15 +128,15 @@ export async function sendMatchReminder24h(matchId: string): Promise<void> {
       await filterUsersByPreference([player1.userId, player2.userId], 'matchReminders')
     );
 
+    // matchReminder24h template hardcodes "tomorrow" in the message,
+    // so the date is implicit — only opponent/time/venue are used.
     const reminderP1 = notificationTemplates.match.matchReminder24h(
       player2.user?.name || 'Opponent',
-      date,
       time,
       venue
     );
     const reminderP2 = notificationTemplates.match.matchReminder24h(
       player1.user?.name || 'Opponent',
-      date,
       time,
       venue
     );
