@@ -596,7 +596,10 @@ export const getAllBugReports = async (req: Request, res: Response) => {
     const where: any = {};
 
     if (appId) where.appId = appId;
-    if (status) where.status = status;
+    if (status) {
+      const statusValues = (status as string).split(',');
+      where.status = statusValues.length > 1 ? { in: statusValues } : statusValues[0];
+    }
     if (priority) where.priority = priority;
     if (severity) where.severity = severity;
     if (moduleId) where.moduleId = moduleId;
@@ -668,7 +671,7 @@ export const getAdminBugReportById = async (req: Request, res: Response) => {
           select: { id: true, name: true, email: true, image: true },
         },
         assignedTo: {
-          select: { id: true, user: { select: { name: true, email: true } } },
+          select: { id: true, userId: true, user: { select: { name: true, email: true } } },
         },
         resolvedBy: { select: { user: { select: { name: true } } } },
         duplicateOf: { select: { id: true, reportNumber: true, title: true } },
@@ -764,9 +767,16 @@ export const updateBugReport = async (req: Request, res: Response) => {
     }
 
     if (assignedToId !== undefined) {
-      updateData.assignedTo = assignedToId
-        ? { connect: { id: assignedToId } }
-        : { disconnect: true };
+      if (assignedToId) {
+        // fetchAllAdmins returns user.id as admin id, so resolve the Admin record
+        const adminRecord = await prisma.admin.findFirst({
+          where: { OR: [{ userId: assignedToId }, { id: assignedToId }] },
+        });
+        if (!adminRecord) return sendError(res, "Admin not found.", 404);
+        updateData.assignedTo = { connect: { id: adminRecord.id } };
+      } else {
+        updateData.assignedTo = { disconnect: true };
+      }
     }
 
     if (resolutionNotes !== undefined)
