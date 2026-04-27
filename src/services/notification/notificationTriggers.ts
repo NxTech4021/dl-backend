@@ -4,8 +4,13 @@
  */
 
 // Onboarding notifications
+// TODO: `sendWelcomeNotification` was previously re-exported here but never
+// implemented in onboardingNotificationService — no spec exists, no caller
+// imports it, and the aspirational `notificationTemplates.account.welcomeToDeuce()`
+// template referenced in helpers/notifications/index.ts JSDoc is also absent.
+// See docs/issues/backlog/tsc-baseline-errors-2026-04-27.md (TS-028). Re-add
+// the export here only after implementing both the service and template.
 export {
-  sendWelcomeNotification,
   checkAndSendProfileReminders,
   sendProfileVerificationNotification,
   sendFirstMatchCompletedNotification,
