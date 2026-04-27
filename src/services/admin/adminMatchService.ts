@@ -1061,8 +1061,9 @@ export class AdminMatchService {
 
     // Trigger rating and standings recalculation for completed matches
     // Uses V2 standings (Best 6 based) + MatchResult refresh for consistency
-    // #043 BUG 3: Also triggers if admin just completed the match (status was changed in transaction)
-    const isNowCompleted = originalStatus === MatchStatus.COMPLETED || (outcome && originalStatus !== MatchStatus.COMPLETED);
+    // #043 BUG 3: Also triggers if admin just completed the match (providing
+    // `outcome` auto-completes the match — see line 1029 above).
+    const isNowCompleted = originalStatus === MatchStatus.COMPLETED || !!outcome;
     if (isNowCompleted && match.divisionId && match.seasonId) {
       try {
         // Step 1: Refresh MatchResult records (V2 standings depends on these)
