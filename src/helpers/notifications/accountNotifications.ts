@@ -142,15 +142,25 @@ export const accountNotifications = {
     metadata: { duration },
   }),
 
-  // maintenanceCancelled: (reason?: string): NotificationPayload => ({
-  //   type: NOTIFICATION_TYPES.MAINTENANCE_CANCELLED,
-  //   category: getCategoryForNotificationType(
-  //     NOTIFICATION_TYPES.MAINTENANCE_CANCELLED
-  //   ),
-  //   title: "Maintenance Cancelled",
-  //   message: `The scheduled maintenance has been cancelled.${reason ? ` Reason: ${reason}` : " No disruption expected."}`,
-  //   metadata: { reason },
-  // }),
+  maintenanceCancelled: (reason?: string): NotificationPayload => ({
+    type: NOTIFICATION_TYPES.MAINTENANCE_CANCELLED,
+    category: getCategoryForNotificationType(
+      NOTIFICATION_TYPES.MAINTENANCE_CANCELLED
+    ),
+    title: "Maintenance Cancelled",
+    message: `The scheduled maintenance has been cancelled.${reason ? ` Reason: ${reason}` : " No disruption expected."}`,
+    metadata: { reason },
+  }),
+
+  achievementUnlocked: (achievementTitle: string): NotificationPayload => ({
+    type: NOTIFICATION_TYPES.ACHIEVEMENT_UNLOCKED,
+    category: getCategoryForNotificationType(
+      NOTIFICATION_TYPES.ACHIEVEMENT_UNLOCKED
+    ),
+    title: "🏆 Achievement Unlocked!",
+    message: `You've unlocked: ${achievementTitle}`,
+    metadata: { achievementTitle },
+  }),
 
   withdrawalRequestSubmitted: (
     playerName: string,
