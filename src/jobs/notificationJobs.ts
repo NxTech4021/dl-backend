@@ -2034,16 +2034,19 @@ export function scheduleLateSeasonNudges(): void {
 
       for (const season of activeSeasons) {
         for (const division of season.divisions) {
-          // TODO(u2-sibling): NOTIF-038 has the same DivisionAssignment-without-
-          // active-membership filter bug as the 6 crons fixed under U2 (036/037/
-          // 040/042/043/044), but was not in the consolidated doc's U2 scope
-          // because it's a broadcast (season ends in 14d) rather than an
-          // inactivity nag. Withdrawn/flagged/inactive members still receive
-          // this push. Fix would be identical: add
-          //   user: { seasonMemberships: { some: { seasonId: season.id, status: 'ACTIVE' } } }
-          // Out of U2 scope — flagged for follow-up. See consolidated bug tracker.
+          // U2-sibling (NOTIF-039): restrict to ACTIVE members. Withdrawn,
+          // pending, flagged, and admin-deactivated members are excluded
+          // from the late-season broadcast — same filter as the 6 inactivity
+          // crons fixed under U2 (036/037/040/042/043/044).
           const members = await prisma.divisionAssignment.findMany({
-            where: { divisionId: division.id },
+            where: {
+              divisionId: division.id,
+              user: {
+                seasonMemberships: {
+                  some: { seasonId: season.id, status: 'ACTIVE' },
+                },
+              },
+            },
             select: { userId: true },
           });
           const userIds = members.map((m) => m.userId);
