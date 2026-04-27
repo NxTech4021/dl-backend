@@ -993,8 +993,76 @@ async function acceptPairRequestIntoIncomplete(
         // Reactivate membership if it was REMOVED or other status
         await tx.seasonMembership.update({
           where: { id: existingMembership.id },
-          data: { status: 'ACTIVE' },
+          data: {
+            status: 'ACTIVE',
+            // Sync divisionId in case the captain moved to a new division while waiting
+            divisionId: incompletePartnership.divisionId ?? existingMembership.divisionId,
+          },
         });
+      }
+
+      // 3b. Ensure new partner has a DivisionAssignment and userId-based DivisionStanding.
+      //     Without these the new partner's per-player stats won't be tracked and the
+      //     standings query won't have live data to pull from.
+      if (incompletePartnership.divisionId) {
+        const divisionId = incompletePartnership.divisionId;
+
+        // Look up the season from the division record
+        const divisionRecord = await tx.division.findUnique({
+          where: { id: divisionId },
+          select: { seasonId: true },
+        });
+        const resolvedSeasonId = divisionRecord?.seasonId ?? pairRequest.seasonId;
+
+        // Create DivisionAssignment if it doesn't exist
+        const existingAssignment = await tx.divisionAssignment.findUnique({
+          where: { divisionId_userId: { divisionId, userId: newPartnerId } },
+        });
+        if (!existingAssignment) {
+          await tx.divisionAssignment.create({
+            data: {
+              divisionId,
+              userId: newPartnerId,
+              notes: 'Auto-assigned when joining partner\'s team',
+            },
+          });
+        }
+
+        // Create userId-based DivisionStanding if it doesn't exist (or if all are inactive)
+        const existingUserStanding = await tx.divisionStanding.findFirst({
+          where: { userId: newPartnerId, divisionId, seasonId: resolvedSeasonId, isActive: true },
+        });
+        if (!existingUserStanding) {
+          await tx.divisionStanding.create({
+            data: {
+              divisionId,
+              seasonId: resolvedSeasonId,
+              userId: newPartnerId,
+              rank: 0,
+              isActive: true,
+              wins: 0,
+              losses: 0,
+              matchesPlayed: 0,
+              matchesScheduled: 9,
+              totalPoints: 0,
+              countedWins: 0,
+              countedLosses: 0,
+              setsWon: 0,
+              setsLost: 0,
+              gamesWon: 0,
+              gamesLost: 0,
+              best6SetsWon: 0,
+              best6SetsTotal: 0,
+              best6GamesWon: 0,
+              best6GamesTotal: 0,
+              winPoints: 0,
+              setPoints: 0,
+              completionBonus: 0,
+              setDifferential: 0,
+              headToHead: {},
+            },
+          });
+        }
       }
 
       // 4. Auto-decline other pending pair requests:
@@ -1590,11 +1658,83 @@ export const dissolvePartnership = async (
         },
       });
 
-      // 3. Transfer divisionStandings from old partnership to new incomplete partnership
-      await tx.divisionStanding.updateMany({
-        where: { partnershipId: partnershipId },
-        data: { partnershipId: incompletePartnership.id },
-      });
+      // 3. Snapshot-and-deactivate old partnership standing(s).
+      //    We read the captain's current userId-based stats for an accurate snapshot,
+      //    then mark the partnership standing inactive so it appears greyed-out in the
+      //    standings table with both player names preserved.
+      //    We do NOT transfer the row to the incomplete partnership; the DISSOLVED
+      //    partnership record still carries both captain and partner names.
+      if (partnership.divisionId) {
+        // Fetch captain's live user standing for the snapshot
+        const captainUserStanding = await tx.divisionStanding.findFirst({
+          where: {
+            userId: remainingPlayerId,
+            divisionId: partnership.divisionId,
+            isActive: true,
+          },
+        });
+
+        // Deactivate the old partnership's standing rows and snapshot live stats
+        await tx.divisionStanding.updateMany({
+          where: { partnershipId: partnershipId },
+          data: {
+            isActive: false,
+            disbandedAt: new Date(),
+            // Snapshot live stats from captain's user standing (source of truth)
+            ...(captainUserStanding ? {
+              wins: captainUserStanding.wins,
+              losses: captainUserStanding.losses,
+              matchesPlayed: captainUserStanding.matchesPlayed,
+              totalPoints: captainUserStanding.totalPoints,
+              countedWins: captainUserStanding.countedWins,
+              countedLosses: captainUserStanding.countedLosses,
+              setsWon: captainUserStanding.setsWon,
+              setsLost: captainUserStanding.setsLost,
+              gamesWon: captainUserStanding.gamesWon,
+              gamesLost: captainUserStanding.gamesLost,
+              best6SetsWon: captainUserStanding.best6SetsWon,
+              best6SetsTotal: captainUserStanding.best6SetsTotal,
+              best6GamesWon: captainUserStanding.best6GamesWon,
+              best6GamesTotal: captainUserStanding.best6GamesTotal,
+              winPoints: captainUserStanding.winPoints,
+              setPoints: captainUserStanding.setPoints,
+              completionBonus: captainUserStanding.completionBonus,
+              setDifferential: captainUserStanding.setDifferential,
+            } : {}),
+          },
+        });
+
+        // Create a fresh active standing for the new incomplete partnership (starts at 0)
+        await tx.divisionStanding.create({
+          data: {
+            divisionId: partnership.divisionId,
+            seasonId: partnership.seasonId,
+            partnershipId: incompletePartnership.id,
+            rank: 0,
+            isActive: true,
+            wins: 0,
+            losses: 0,
+            matchesPlayed: 0,
+            matchesScheduled: 9,
+            totalPoints: 0,
+            countedWins: 0,
+            countedLosses: 0,
+            setsWon: 0,
+            setsLost: 0,
+            gamesWon: 0,
+            gamesLost: 0,
+            best6SetsWon: 0,
+            best6SetsTotal: 0,
+            best6GamesWon: 0,
+            best6GamesTotal: 0,
+            winPoints: 0,
+            setPoints: 0,
+            completionBonus: 0,
+            setDifferential: 0,
+            headToHead: {},
+          },
+        });
+      }
 
       // 4. Only remove the departing player's membership
       await tx.seasonMembership.updateMany({

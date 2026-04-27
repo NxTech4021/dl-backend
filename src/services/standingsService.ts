@@ -197,10 +197,12 @@ export async function updateDivisionStandings(matchId: string) {
 }
 
 async function recalculateRanks(divisionId: string, seasonId: string) {
+  // Only rank active standings — disbanded/moved standings should not occupy rank slots
   const standings = await prisma.divisionStanding.findMany({
     where: {
       divisionId,
       seasonId,
+      isActive: true,
     },
     orderBy: [
       { totalPoints: 'desc' },
@@ -222,42 +224,193 @@ async function recalculateRanks(divisionId: string, seasonId: string) {
   );
 }
 
-export async function getDivisionStandings(divisionId: string, seasonId: string) {
-  return await prisma.divisionStanding.findMany({
+/**
+ * Get formatted standings for a division.
+ *
+ * For DOUBLES divisions the response is one row per partnership (team),
+ * with both player names/images embedded.  Active standings come first,
+ * inactive (disbanded or moved) standings come last.
+ *
+ * For SINGLES divisions the response is one row per player, ordered the
+ * same way (active first, inactive last).
+ *
+ * The `seasonId` parameter is optional.  When omitted the function looks it
+ * up from the division record.
+ */
+export async function getDivisionStandings(divisionId: string, seasonId?: string) {
+  // Resolve seasonId from the division if not provided (fixes missing-seasonId bug in handler)
+  const division = await prisma.division.findUnique({
+    where: { id: divisionId },
+    select: { seasonId: true, gameType: true },
+  });
+
+  if (!division) return [];
+
+  const resolvedSeasonId = seasonId ?? division.seasonId;
+  const isDoubles = division.gameType?.includes('DOUBLES');
+
+  if (isDoubles) {
+    return getDoublesStandings(divisionId, resolvedSeasonId);
+  }
+
+  return getSinglesStandings(divisionId, resolvedSeasonId);
+}
+
+/**
+ * Doubles standings — one row per partnership.
+ *
+ * Live stats come from the captain's userId-based DivisionStanding (both
+ * partners earn equal stats in doubles).  Disbanded partnership standings
+ * use the snapshot stored at dissolution time.
+ *
+ * Ordering: active rows by rank ASC, then inactive rows by rank ASC.
+ */
+async function getDoublesStandings(divisionId: string, seasonId: string) {
+  // 1. Fetch all partnership-based standings for this division/season
+  const partnershipStandings = await prisma.divisionStanding.findMany({
     where: {
       divisionId,
       seasonId,
+      partnershipId: { not: null },
+      userId: null,
     },
     include: {
-      user: {
-        select: {
-          id: true,
-          name: true,
-          username: true,
-          image: true,
-        },
-      },
       partnership: {
         include: {
           captain: {
-            select: {
-              id: true,
-              name: true,
-              username: true,
-            },
+            select: { id: true, name: true, username: true, image: true },
           },
           partner: {
-            select: {
-              id: true,
-              name: true,
-              username: true,
-            },
+            select: { id: true, name: true, username: true, image: true },
           },
         },
       },
     },
-    orderBy: [
-      { rank: 'asc' },
-    ],
+    orderBy: [{ isActive: 'desc' }, { rank: 'asc' }],
+  });
+
+  if (partnershipStandings.length === 0) return [];
+
+  // 2. For active standings, fetch captain's userId-based stats (live)
+  const activeStandings = partnershipStandings.filter((s) => s.isActive);
+  const captainIds = activeStandings
+    .map((s) => s.partnership?.captainId)
+    .filter(Boolean) as string[];
+
+  const captainStandings = captainIds.length > 0
+    ? await prisma.divisionStanding.findMany({
+        where: {
+          divisionId,
+          seasonId,
+          userId: { in: captainIds },
+          isActive: true,
+        },
+        select: {
+          userId: true,
+          matchesPlayed: true,
+          wins: true,
+          losses: true,
+          totalPoints: true,
+          rank: true,
+        },
+      })
+    : [];
+
+  const captainStatsMap = new Map(captainStandings.map((s) => [s.userId!, s]));
+
+  // 3. Build the flattened response rows
+  const rows = partnershipStandings.map((standing) => {
+    const p = standing.partnership;
+    const captain = p?.captain;
+    const partner = p?.partner;
+
+    // For active standings: use live captain stats; for inactive: use snapshot stats
+    const liveStats = standing.isActive && captain
+      ? captainStatsMap.get(captain.id)
+      : null;
+
+    const stats = liveStats ?? standing;
+
+    return {
+      id: standing.id,
+      partnershipId: standing.partnershipId,
+      partnershipStatus: p?.status ?? null,
+      rank: standing.isActive ? (liveStats?.rank ?? standing.rank) : standing.rank,
+      isActive: standing.isActive,
+      disbandedAt: standing.disbandedAt,
+
+      // Captain = primary player
+      playerId: captain?.id ?? null,
+      name: captain?.name ?? captain?.username ?? 'Unknown',
+      image: captain?.image ?? null,
+
+      // Partner
+      partnerId: partner?.id ?? null,
+      partnerName: partner?.name ?? partner?.username ?? null,
+      partnerImage: partner?.image ?? null,
+
+      played: stats.matchesPlayed,
+      wins: stats.wins,
+      losses: stats.losses,
+      points: stats.totalPoints,
+    };
+  });
+
+  return rows;
+}
+
+/**
+ * Singles standings — one row per player.
+ * Active rows first (by rank), inactive rows last (by rank).
+ */
+async function getSinglesStandings(divisionId: string, seasonId: string) {
+  const standings = await prisma.divisionStanding.findMany({
+    where: {
+      divisionId,
+      seasonId,
+      userId: { not: null },
+      partnershipId: null,
+    },
+    include: {
+      user: {
+        select: { id: true, name: true, username: true, image: true },
+      },
+    },
+    orderBy: [{ isActive: 'desc' }, { rank: 'asc' }],
+  });
+
+  return standings.map((standing) => ({
+    id: standing.id,
+    rank: standing.rank,
+    isActive: standing.isActive,
+    disbandedAt: standing.disbandedAt,
+
+    playerId: standing.user?.id ?? null,
+    name: standing.user?.name ?? standing.user?.username ?? 'Unknown',
+    image: standing.user?.image ?? null,
+
+    partnerId: null,
+    partnerName: null,
+    partnerImage: null,
+
+    played: standing.matchesPlayed,
+    wins: standing.wins,
+    losses: standing.losses,
+    points: standing.totalPoints,
+  }));
+}
+
+export async function getPlayerStanding(userId: string, divisionId: string) {
+  const division = await prisma.division.findUnique({
+    where: { id: divisionId },
+    select: { seasonId: true },
+  });
+  if (!division) return null;
+
+  return prisma.divisionStanding.findFirst({
+    where: { userId, divisionId, seasonId: division.seasonId, isActive: true },
+    include: {
+      user: { select: { id: true, name: true, username: true, image: true } },
+    },
   });
 }

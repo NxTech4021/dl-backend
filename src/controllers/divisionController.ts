@@ -185,11 +185,6 @@ export const createDivision = async (req: Request, res: Response) => {
     };
     const result = await createDivisionWithThread(divisionData, adminId);
 
-   
-    const season = await prisma.season.findUnique({
-      where: { id: seasonId },
-      select: { id: true, name: true },
-    });
 
     logger.divisionCreated(result.division.id, result.division.name, seasonId, { 
       adminId: adminRecord.id,
@@ -208,13 +203,6 @@ export const createDivision = async (req: Request, res: Response) => {
       select: { userId: true },
     });
 
-    console.log("✅ Season Members (excluding admin):", seasonMembers.length);
-      console.log("🔍 Admin details:", {
-      adminUserId: adminId,
-      adminName: user.name,
-      adminTableId: adminRecord.id,
-      userRole: user.role
-    });
     const recipientUserIds = seasonMembers.map((m) => m.userId);
 
   
@@ -569,18 +557,42 @@ export const assignPlayerToDivision = async (req: Request, res: Response) => {
             logger.info('Added user to division group chat', { userId, threadId: divisionThread.id });
           }
 
-          // Create or update division standing
+          // Create or update division standing for this user
+          // On reassignment: deactivate old division's standing, then reactivate or create in new division
+          if (isReassignment && previousDivisionId) {
+            // Deactivate the player's standing in the old division (moved, not disbanded)
+            await tx.divisionStanding.updateMany({
+              where: { userId, divisionId: previousDivisionId },
+              data: { isActive: false },
+            });
+            logger.info('Deactivated user standing in previous division for reassignment', {
+              userId,
+              previousDivisionId,
+            });
+          }
+
           const existingStanding = await tx.divisionStanding.findFirst({
-            where: { userId, divisionId }
+            where: { userId, divisionId },
           });
 
-          if (!existingStanding) {
+          if (existingStanding) {
+            if (!existingStanding.isActive) {
+              // Reactivate: player is returning to this division; continue from prior accumulated points
+              await tx.divisionStanding.update({
+                where: { id: existingStanding.id },
+                data: { isActive: true, disbandedAt: null },
+              });
+              logger.info('Reactivated user standing in division', { userId, divisionId });
+            }
+            // If already active, leave it as-is
+          } else {
             await tx.divisionStanding.create({
               data: {
                 divisionId,
                 seasonId,
                 userId,
                 rank: 0,
+                isActive: true,
                 wins: 0,
                 losses: 0,
                 matchesPlayed: 0,
@@ -606,7 +618,7 @@ export const assignPlayerToDivision = async (req: Request, res: Response) => {
             logger.info('Created initial standing for user in division', { userId, divisionId });
           }
 
-          // For doubles: Also update Partnership.divisionId and create partnership standing
+          // For doubles: Also update Partnership.divisionId and manage partnership standings
           const activePartnership = await tx.partnership.findFirst({
             where: {
               seasonId,
@@ -629,17 +641,45 @@ export const assignPlayerToDivision = async (req: Request, res: Response) => {
               divisionId,
             });
 
+            // --- Reassignment: deactivate standing in old division ---
+            if (isReassignment && previousDivisionId) {
+              await tx.divisionStanding.updateMany({
+                where: { partnershipId: activePartnership.id, divisionId: previousDivisionId },
+                data: { isActive: false },
+                // Note: disbandedAt is intentionally NOT set — this is a move, not a disbanding.
+              });
+              logger.info('Deactivated partnership standing in previous division', {
+                partnershipId: activePartnership.id,
+                previousDivisionId,
+              });
+            }
+
+            // --- New division: reactivate existing inactive standing OR create fresh ---
             const existingPartnershipStanding = await tx.divisionStanding.findFirst({
-              where: { partnershipId: activePartnership.id, divisionId }
+              where: { partnershipId: activePartnership.id, divisionId },
             });
 
-            if (!existingPartnershipStanding) {
+            if (existingPartnershipStanding) {
+              if (!existingPartnershipStanding.isActive) {
+                // Reactivate: the team is returning to this division; restore previous accumulated points
+                await tx.divisionStanding.update({
+                  where: { id: existingPartnershipStanding.id },
+                  data: { isActive: true, disbandedAt: null },
+                });
+                logger.info('Reactivated existing partnership standing in division', {
+                  partnershipId: activePartnership.id,
+                  divisionId,
+                });
+              }
+              // If already active, leave it as-is (same-division refresh)
+            } else {
               await tx.divisionStanding.create({
                 data: {
                   divisionId,
                   seasonId,
                   partnershipId: activePartnership.id,
                   rank: 0,
+                  isActive: true,
                   wins: 0,
                   losses: 0,
                   matchesPlayed: 0,
@@ -660,7 +700,7 @@ export const assignPlayerToDivision = async (req: Request, res: Response) => {
                   completionBonus: 0,
                   setDifferential: 0,
                   headToHead: {},
-                }
+                },
               });
               logger.info('Created initial standing for partnership in division', {
                 partnershipId: activePartnership.id,

@@ -61,6 +61,9 @@ export interface StandingEntry {
   partnerId?: string;
   partnerName?: string;
   partnerImage?: string;
+  // Active / disbanded state
+  isActive: boolean;
+  disbandedAt: Date | null;
 }
 
 /**
@@ -289,11 +292,12 @@ export async function updateMatchStandings(matchId: string): Promise<void> {
 }
 
 /**
- * Recalculate ranks for all players in a division
+ * Recalculate ranks for all players in a division.
+ * Only active standings participate in ranking — disbanded/moved entries are excluded.
  */
 export async function recalculateDivisionRanks(divisionId: string): Promise<void> {
   const standings = await prisma.divisionStanding.findMany({
-    where: { divisionId },
+    where: { divisionId, isActive: true },
     orderBy: [
       { totalPoints: 'desc' },
       { setsWon: 'desc' },
@@ -359,14 +363,18 @@ function resolveTieBreakers(standings: any[]): any[] {
 }
 
 /**
- * Get division standings (leaderboard)
+ * Get division standings (leaderboard).
+ *
+ * For DOUBLES divisions: one row per partnership team.
+ *   - ACTIVE partnerships: live stats are read from the captain's userId-based standing.
+ *   - INACTIVE partnerships (disbanded / moved out): snapshot stats stored at dissolution time.
+ *   - Both player names are included even for DISSOLVED partnerships.
+ *   - Active rows are returned first (sorted by rank), then inactive rows.
+ *
+ * For SINGLES divisions: one row per player, active first then inactive.
  */
 export async function getDivisionStandings(divisionId: string): Promise<StandingEntry[]> {
-  // Check whether this division uses partnership-based standings (doubles).
-  // When a player is assigned to a doubles division the system creates BOTH a user row
-  // (userId != null) AND a partnership row (partnershipId != null, userId = null).
-  // The partnership row is the canonical team entry for display; the user rows hold the
-  // actual stats (wins/losses/etc) because that's where the standings engine writes them.
+  // Fetch ALL partnership-based standings (both active and inactive)
   const partnershipRows = await prisma.divisionStanding.findMany({
     where: {
       divisionId,
@@ -376,86 +384,116 @@ export async function getDivisionStandings(divisionId: string): Promise<Standing
     include: {
       partnership: {
         select: {
+          status: true,
           captainId: true,
           partnerId: true,
           captain: { select: { id: true, name: true, image: true } },
+          // partner is nullable (INCOMPLETE) but always has a name for DISSOLVED partnerships
           partner: { select: { id: true, name: true, image: true } },
         },
       },
     },
-    orderBy: { rank: 'asc' },
+    // Active rows first, then inactive; within each group by stored rank
+    orderBy: [{ isActive: 'desc' }, { rank: 'asc' }],
   });
 
   if (partnershipRows.length > 0) {
-    // Doubles division — fetch user-level stats for accurate wins/losses/points
-    const userRows = await prisma.divisionStanding.findMany({
-      where: { divisionId, userId: { not: null } },
-    });
-    const userStats = new Map(userRows.map(r => [r.userId!, r]));
+    // Treat a row as active only if the DB flag is set AND the partnership isn't dissolved.
+    // This handles pre-migration data where isActive defaults to true for old dissolved partnerships.
+    const isRowActive = (s: typeof partnershipRows[0]) =>
+      s.isActive && s.partnership?.status !== 'DISSOLVED';
 
-    const entries = partnershipRows.map(s => {
-      const captainId = s.partnership?.captainId || '';
-      const cs = userStats.get(captainId);
+    // Fetch live user-level stats only for active captain rows
+    const activeCaptainIds = partnershipRows
+      .filter(s => isRowActive(s))
+      .map(s => s.partnership?.captainId)
+      .filter(Boolean) as string[];
+
+    const userStats = new Map<string, typeof partnershipRows[0] & { totalPoints: number }>(); 
+    if (activeCaptainIds.length > 0) {
+      const captainRows = await prisma.divisionStanding.findMany({
+        where: { divisionId, userId: { in: activeCaptainIds }, isActive: true },
+      });
+      captainRows.forEach(r => { if (r.userId) userStats.set(r.userId, r as any); });
+    }
+
+    // Assign sequential ranks separately for active vs inactive groups
+    let activeRank = 0;
+
+    // Sort active rows by live totalPoints (partnership rows may have stale rank=0)
+    const activeRows = partnershipRows.filter(s => isRowActive(s));
+    activeRows.sort((a, b) => {
+      const aStats = userStats.get(a.partnership?.captainId ?? '');
+      const bStats = userStats.get(b.partnership?.captainId ?? '');
+      const aPts = aStats?.totalPoints ?? a.totalPoints;
+      const bPts = bStats?.totalPoints ?? b.totalPoints;
+      if (bPts !== aPts) return bPts - aPts;
+      const aSets = aStats?.setsWon ?? a.setsWon;
+      const bSets = bStats?.setsWon ?? b.setsWon;
+      if (bSets !== aSets) return bSets - aSets;
+      return (bStats?.setDifferential ?? b.setDifferential) - (aStats?.setDifferential ?? a.setDifferential);
+    });
+
+    const inactiveRows = partnershipRows.filter(s => !isRowActive(s));
+
+    const mapRow = (s: typeof partnershipRows[0], rankOverride?: number): StandingEntry => {
+      const captainId = s.partnership?.captainId ?? '';
+      const effectivelyActive = isRowActive(s);
+      // For active standings use live captain stats; for inactive use snapshot
+      const cs = effectivelyActive ? userStats.get(captainId) : null;
+      const stats = cs ?? s;
+      // disbandedAt: use stored value, or fall back to now for pre-migration DISSOLVED partnerships
+      const disbandedAtValue = s.disbandedAt ?? (s.partnership?.status === 'DISSOLVED' ? new Date() : null);
       return {
         odlayerId: captainId,
-        odlayerName: s.partnership?.captain?.name || 'Unknown',
-        odlayerImage: s.partnership?.captain?.image || null,
+        odlayerName: s.partnership?.captain?.name ?? 'Unknown',
+        odlayerImage: s.partnership?.captain?.image ?? null,
         partnerId: s.partnership?.partnerId ?? undefined,
         partnerName: s.partnership?.partner?.name ?? undefined,
         partnerImage: s.partnership?.partner?.image ?? undefined,
-        rank: s.rank,
-        wins: cs?.wins ?? s.wins,
-        losses: cs?.losses ?? s.losses,
-        matchesPlayed: cs?.matchesPlayed ?? s.matchesPlayed,
-        matchesRemaining: (cs?.matchesScheduled ?? s.matchesScheduled) - (cs?.matchesPlayed ?? s.matchesPlayed),
-        winPoints: cs?.winPoints ?? s.winPoints,
-        setPoints: cs?.setPoints ?? s.setPoints,
-        completionBonus: cs?.completionBonus ?? s.completionBonus,
-        totalPoints: cs?.totalPoints ?? s.totalPoints,
-        setsWon: cs?.setsWon ?? s.setsWon,
-        setsLost: cs?.setsLost ?? s.setsLost,
-        setDifferential: cs?.setDifferential ?? s.setDifferential,
+        rank: rankOverride ?? s.rank,
+        isActive: effectivelyActive,
+        disbandedAt: disbandedAtValue,
+        wins: stats.wins,
+        losses: stats.losses,
+        matchesPlayed: stats.matchesPlayed,
+        matchesRemaining: (stats.matchesScheduled) - (stats.matchesPlayed),
+        winPoints: stats.winPoints,
+        setPoints: stats.setPoints,
+        completionBonus: stats.completionBonus,
+        totalPoints: stats.totalPoints,
+        setsWon: stats.setsWon,
+        setsLost: stats.setsLost,
+        setDifferential: stats.setDifferential,
         previousRank: s.rank,
         rankChange: 0,
       };
-    });
+    };
 
-    // Partnership rows have rank=0 by default (recalculateDivisionRanks only writes
-    // user rows). Sort by totalPoints DESC so 1st place = highest points.
-    entries.sort((a, b) => {
-      if (b.totalPoints !== a.totalPoints) return b.totalPoints - a.totalPoints;
-      if (b.setsWon !== a.setsWon) return b.setsWon - a.setsWon;
-      return b.setDifferential - a.setDifferential;
-    });
+    const activeEntries = activeRows.map((s) => mapRow(s, ++activeRank));
+    const inactiveEntries = inactiveRows.map((s) => mapRow(s));
 
-    // Assign display ranks after sorting
-    entries.forEach((e, i) => { e.rank = i + 1; });
-
-    return entries;
+    return [...activeEntries, ...inactiveEntries];
   }
 
   // Singles division — one entry per user.
-  // Order by stored rank (set by recalculateDivisionRanks). Fall back to totalPoints DESC
-  // in case some rows still have rank=0 (e.g. season just started, no matches played yet).
   const userStandings = await prisma.divisionStanding.findMany({
     where: { divisionId, userId: { not: null } },
     include: {
-      user: {
-        select: { id: true, name: true, image: true },
-      },
+      user: { select: { id: true, name: true, image: true } },
     },
-    orderBy: [
-      { totalPoints: 'desc' },
-      { setsWon: 'desc' },
-      { setDifferential: 'desc' },
-    ],
+    // Active rows first ordered by rank; inactive rows after
+    orderBy: [{ isActive: 'desc' }, { totalPoints: 'desc' }, { setsWon: 'desc' }, { setDifferential: 'desc' }],
   });
 
-  return userStandings.map((s, i) => ({
-    odlayerId: s.userId || '',
-    odlayerName: s.user?.name || 'Unknown',
-    odlayerImage: s.user?.image || null,
-    rank: s.rank > 0 ? s.rank : i + 1,
+  let singlesRank = 0;
+  return userStandings.map((s) => ({
+    odlayerId: s.userId ?? '',
+    odlayerName: s.user?.name ?? 'Unknown',
+    odlayerImage: s.user?.image ?? null,
+    rank: s.isActive ? (s.rank > 0 ? s.rank : ++singlesRank) : s.rank,
+    isActive: s.isActive,
+    disbandedAt: s.disbandedAt,
     wins: s.wins,
     losses: s.losses,
     matchesPlayed: s.matchesPlayed,
@@ -467,7 +505,7 @@ export async function getDivisionStandings(divisionId: string): Promise<Standing
     setsWon: s.setsWon,
     setsLost: s.setsLost,
     setDifferential: s.setDifferential,
-    previousRank: s.rank > 0 ? s.rank : i + 1,
+    previousRank: s.rank > 0 ? s.rank : 0,
     rankChange: 0,
   }));
 }
@@ -501,6 +539,8 @@ export async function getPlayerStanding(
     odlayerName: standing.user?.name || 'Unknown',
     odlayerImage: standing.user?.image || null,
     rank: standing.rank,
+    isActive: standing.isActive,
+    disbandedAt: standing.disbandedAt,
     wins: standing.wins,
     losses: standing.losses,
     matchesPlayed: standing.matchesPlayed,
