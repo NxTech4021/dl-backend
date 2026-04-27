@@ -70,8 +70,9 @@ export async function checkAndSendProfileReminders(userId: string): Promise<void
  * Function shell preserved (it is re-exported via notificationTriggers.ts).
  * Implement the template (and wire a caller) before re-enabling.
  */
-export async function sendProfileVerificationNotification(userId: string): Promise<void> {
+export function sendProfileVerificationNotification(userId: string): Promise<void> {
   logger.info('sendProfileVerificationNotification skipped — template not implemented', { userId });
+  return Promise.resolve();
 }
 
 /**
@@ -83,8 +84,9 @@ export async function sendProfileVerificationNotification(userId: string): Promi
  * shell preserved (it is re-exported via notificationTriggers.ts).
  * Implement the template (and wire a caller) before re-enabling.
  */
-export async function sendFirstMatchCompletedNotification(userId: string): Promise<void> {
+export function sendFirstMatchCompletedNotification(userId: string): Promise<void> {
   logger.info('sendFirstMatchCompletedNotification skipped — template not implemented', { userId });
+  return Promise.resolve();
 }
 
 /**
@@ -97,8 +99,9 @@ export async function sendFirstMatchCompletedNotification(userId: string): Promi
  * preserved (it is re-exported via notificationTriggers.ts). Uncomment
  * the template (and wire a caller) before re-enabling.
  */
-export async function checkMatchesMilestone(userId: string): Promise<void> {
+export function checkMatchesMilestone(userId: string): Promise<void> {
   logger.info('checkMatchesMilestone skipped — template not implemented', { userId });
+  return Promise.resolve();
 }
 
 /**
@@ -111,11 +114,12 @@ export async function checkMatchesMilestone(userId: string): Promise<void> {
  * preserved (it is re-exported via notificationTriggers.ts). Uncomment
  * the template (and wire a caller) before re-enabling.
  */
-export async function sendFirstLeagueCompletedNotification(
+export function sendFirstLeagueCompletedNotification(
   userId: string,
   seasonName: string
 ): Promise<void> {
   logger.info('sendFirstLeagueCompletedNotification skipped — template not implemented', { userId, seasonName });
+  return Promise.resolve();
 }
 
 /**
@@ -128,8 +132,9 @@ export async function sendFirstLeagueCompletedNotification(
  * preserved (it is re-exported via notificationTriggers.ts). Uncomment
  * the template (and wire a caller) before re-enabling.
  */
-export async function checkLeaguesMilestone(userId: string): Promise<void> {
+export function checkLeaguesMilestone(userId: string): Promise<void> {
   logger.info('checkLeaguesMilestone skipped — template not implemented', { userId });
+  return Promise.resolve();
 }
 
 /**
