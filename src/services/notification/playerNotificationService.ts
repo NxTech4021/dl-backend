@@ -177,10 +177,13 @@ export async function notifySeasonRegistrationOpen(
       return;
     }
 
+    // TODO (TS-034): The 2nd arg should be leagueName; this function's data
+    // shape doesn't include it, so we pass a placeholder. notifySeasonRegistrationOpen
+    // has zero callers today (see services/notification/index.ts re-export only).
+    // Wire a leagueName field into `data` if/when this function is revived.
     const registrationNotif = notificationTemplates.league.newSeasonAnnouncement(
       data.seasonName,
-      'Location TBD', // location - would need to be passed in data
-      'Tennis' // sport - would need to be passed in data
+      'your league'
     );
 
     await notificationService.createNotification({
