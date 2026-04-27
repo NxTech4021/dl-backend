@@ -98,15 +98,39 @@ export const ratingRankingNotifications = {
     metadata: { sport, newRating },
   }),
 
-  // ratingMilestone: (rating: number, sport: string): NotificationPayload => ({
-  //   type: NOTIFICATION_TYPES.RATING_MILESTONE,
-  //   category: getCategoryForNotificationType(
-  //     NOTIFICATION_TYPES.RATING_MILESTONE
-  //   ),
-  //   title: "Milestone Achieved!",
-  //   message: `You've reached ${rating} DMR in ${sport}`,
-  //   metadata: { rating, sport },
-  // }),
+  ratingMilestone: (rating: number, sport: string): NotificationPayload => ({
+    type: NOTIFICATION_TYPES.RATING_MILESTONE,
+    category: getCategoryForNotificationType(
+      NOTIFICATION_TYPES.RATING_MILESTONE
+    ),
+    title: "Milestone Achieved!",
+    message: `You've reached ${rating} DMR in ${sport}`,
+    metadata: { rating, sport },
+  }),
+
+  weeklyRankingUpdate: (
+    position: number,
+    seasonName: string,
+    weekNumber: number
+  ): NotificationPayload => ({
+    type: NOTIFICATION_TYPES.WEEKLY_RANKING_UPDATE,
+    category: getCategoryForNotificationType(
+      NOTIFICATION_TYPES.WEEKLY_RANKING_UPDATE
+    ),
+    title: `📊 Week ${weekNumber} Rankings`,
+    message: `You're #${position} in ${seasonName} going into Week ${weekNumber}. Keep climbing!`,
+    metadata: { position, seasonName, weekNumber },
+  }),
+
+  monthlyDmrRecap: (summary: string): NotificationPayload => ({
+    type: NOTIFICATION_TYPES.MONTHLY_DMR_RECAP,
+    category: getCategoryForNotificationType(
+      NOTIFICATION_TYPES.MONTHLY_DMR_RECAP
+    ),
+    title: "Your Monthly DMR Recap",
+    message: summary,
+    metadata: { summary },
+  }),
 
   ratingUpdate: (
     oldRating: number,
