@@ -587,7 +587,7 @@ export class AdminMatchService {
         });
       }
     } catch (notifError) {
-      logger.warn('Failed to notify parties about dispute review start', { disputeId, error: notifError });
+      logger.warn('Failed to notify parties about dispute review start', { disputeId }, notifError as Error);
     }
 
     return updatedDispute;
@@ -1438,7 +1438,7 @@ export class AdminMatchService {
         matchId,
       });
     } catch (notifError) {
-      logger.warn('Failed to notify player about cancellation review', { matchId, error: notifError });
+      logger.warn('Failed to notify player about cancellation review', { matchId }, notifError as Error);
     }
 
     return { success: true, approved, penaltyApplied: !approved && applyPenalty };
