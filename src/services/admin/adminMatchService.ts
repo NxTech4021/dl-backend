@@ -1718,14 +1718,14 @@ export class AdminMatchService {
               },
             },
           },
-          submittedByUser: { select: { id: true, name: true } },
+          raisedByUser: { select: { id: true, name: true } },
         },
       });
 
       if (!dispute) return;
 
       const recipientIds = dispute.match.participants.map(p => p.userId).filter((id): id is string => id !== null);
-      const disputerName = (dispute as any).submittedByUser?.name || 'Your opponent';
+      const disputerName = dispute.raisedByUser?.name || 'Your opponent';
 
       // Send individual notifications so each recipient sees the correct opponent name
       for (const recipientId of recipientIds) {
