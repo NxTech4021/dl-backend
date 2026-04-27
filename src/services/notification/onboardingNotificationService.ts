@@ -7,7 +7,6 @@ import { notificationService } from '../notificationService';
 import { notificationTemplates } from '../../helpers/notifications';
 import { prisma } from '../../lib/prisma';
 import { logger } from '../../utils/logger';
-import { MatchStatus, SeasonStatus } from '@prisma/client';
 
 /**
  * Check if profile is incomplete and send reminder
@@ -64,148 +63,73 @@ export async function checkAndSendProfileReminders(userId: string): Promise<void
 
 /**
  * Send profile verification needed notification
+ *
+ * TODO (TS-029, docs/issues/backlog/tsc-baseline-errors-2026-04-27.md):
+ * `notificationTemplates.account.profileVerificationNeeded` is not
+ * implemented and this trigger has zero callers anywhere in the codebase.
+ * Function shell preserved (it is re-exported via notificationTriggers.ts).
+ * Implement the template (and wire a caller) before re-enabling.
  */
 export async function sendProfileVerificationNotification(userId: string): Promise<void> {
-  try {
-    const verificationNotif = notificationTemplates.account.profileVerificationNeeded();
-
-    await notificationService.createNotification({
-      ...verificationNotif,
-      userIds: userId,
-    });
-
-    logger.info('Profile verification notification sent', { userId });
-  } catch (error) {
-    logger.error('Failed to send profile verification notification', { userId }, error as Error);
-  }
+  logger.info('sendProfileVerificationNotification skipped — template not implemented', { userId });
 }
 
 /**
  * Send first match completed notification
+ *
+ * TODO (TS-030, docs/issues/backlog/tsc-baseline-errors-2026-04-27.md):
+ * `notificationTemplates.account.firstMatchCompleted` is not implemented
+ * and this trigger has zero callers anywhere in the codebase. Function
+ * shell preserved (it is re-exported via notificationTriggers.ts).
+ * Implement the template (and wire a caller) before re-enabling.
  */
 export async function sendFirstMatchCompletedNotification(userId: string): Promise<void> {
-  try {
-    // Check if this is actually the first match
-    const matchCount = await prisma.match.count({
-      where: {
-        participants: {
-          some: { userId: userId },
-        },
-        status: MatchStatus.COMPLETED,
-      },
-    });
-
-    // Only send if this is the first match
-    if (matchCount === 1) {
-      const firstMatchNotif = notificationTemplates.account.firstMatchCompleted();
-
-      await notificationService.createNotification({
-        ...firstMatchNotif,
-        userIds: userId,
-      });
-
-      logger.info('First match completed notification sent', { userId });
-    }
-  } catch (error) {
-    logger.error('Failed to send first match completed notification', { userId }, error as Error);
-  }
+  logger.info('sendFirstMatchCompletedNotification skipped — template not implemented', { userId });
 }
 
 /**
  * Check and send matches played milestone notification
+ *
+ * TODO (TS-031, docs/issues/backlog/tsc-baseline-errors-2026-04-27.md):
+ * `notificationTemplates.account.matchesPlayedMilestone` is intentionally
+ * commented out in accountNotifications.ts (with the body preserved) and
+ * this trigger has zero callers anywhere in the codebase. Function shell
+ * preserved (it is re-exported via notificationTriggers.ts). Uncomment
+ * the template (and wire a caller) before re-enabling.
  */
 export async function checkMatchesMilestone(userId: string): Promise<void> {
-  try {
-    const matchCount = await prisma.match.count({
-      where: {
-        participants: {
-          some: { userId: userId },
-        },
-        status: MatchStatus.COMPLETED,
-      },
-    });
-
-    // Milestone thresholds: 5, 10, 25, 50, 100
-    const milestones = [5, 10, 25, 50, 100];
-
-    if (milestones.includes(matchCount)) {
-      const milestoneNotif = notificationTemplates.account.matchesPlayedMilestone(matchCount);
-
-      await notificationService.createNotification({
-        ...milestoneNotif,
-        userIds: userId,
-      });
-
-      logger.info('Matches played milestone notification sent', { userId, matchCount });
-    }
-  } catch (error) {
-    logger.error('Failed to check matches milestone', { userId }, error as Error);
-  }
+  logger.info('checkMatchesMilestone skipped — template not implemented', { userId });
 }
 
 /**
  * Send first league completed notification
+ *
+ * TODO (TS-032, docs/issues/backlog/tsc-baseline-errors-2026-04-27.md):
+ * `notificationTemplates.account.firstLeagueCompleted` is intentionally
+ * commented out in accountNotifications.ts (with the body preserved) and
+ * this trigger has zero callers anywhere in the codebase. Function shell
+ * preserved (it is re-exported via notificationTriggers.ts). Uncomment
+ * the template (and wire a caller) before re-enabling.
  */
 export async function sendFirstLeagueCompletedNotification(
   userId: string,
   seasonName: string
 ): Promise<void> {
-  try {
-    // Check if this is the first completed league
-    const completedSeasons = await prisma.seasonMembership.count({
-      where: {
-        userId: userId,
-        season: {
-          status: SeasonStatus.FINISHED,
-        },
-      },
-    });
-
-    // Only send if this is the first completed league
-    if (completedSeasons === 1) {
-      const firstLeagueNotif = notificationTemplates.account.firstLeagueCompleted(seasonName);
-
-      await notificationService.createNotification({
-        ...firstLeagueNotif,
-        userIds: userId,
-        seasonId: undefined, // We don't have seasonId here, but could pass it
-      });
-
-      logger.info('First league completed notification sent', { userId, seasonName });
-    }
-  } catch (error) {
-    logger.error('Failed to send first league completed notification', { userId }, error as Error);
-  }
+  logger.info('sendFirstLeagueCompletedNotification skipped — template not implemented', { userId, seasonName });
 }
 
 /**
  * Check and send leagues completed milestone notification
+ *
+ * TODO (TS-033, docs/issues/backlog/tsc-baseline-errors-2026-04-27.md):
+ * `notificationTemplates.account.leaguesCompletedMilestone` is intentionally
+ * commented out in accountNotifications.ts (with the body preserved) and
+ * this trigger has zero callers anywhere in the codebase. Function shell
+ * preserved (it is re-exported via notificationTriggers.ts). Uncomment
+ * the template (and wire a caller) before re-enabling.
  */
 export async function checkLeaguesMilestone(userId: string): Promise<void> {
-  try {
-    const completedSeasons = await prisma.seasonMembership.count({
-      where: {
-        userId: userId,
-        season: {
-          status: SeasonStatus.FINISHED,
-        },
-      },
-    });
-
-    // Milestone: 3 leagues completed
-    if (completedSeasons === 3) {
-      const milestoneNotif = notificationTemplates.account.leaguesCompletedMilestone(3);
-
-      await notificationService.createNotification({
-        ...milestoneNotif,
-        userIds: userId,
-      });
-
-      logger.info('Leagues completed milestone notification sent', { userId, count: 3 });
-    }
-  } catch (error) {
-    logger.error('Failed to check leagues milestone', { userId }, error as Error);
-  }
+  logger.info('checkLeaguesMilestone skipped — template not implemented', { userId });
 }
 
 /**
