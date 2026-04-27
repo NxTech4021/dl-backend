@@ -647,9 +647,12 @@ export const signInWithGoogleToken = async (
       });
 
       console.log("✅ New user created:", user.id);
-      // Fire profile-reminder notifications (non-blocking)
-      initializeUserOnboarding(user.id).catch((err) =>
-        console.error("Failed to initialize onboarding notifications (Google)", user.id, err)
+      // Fire profile-reminder notifications (non-blocking).
+      // Capture id in a const so the closured reference is non-null
+      // (TS can't keep the `let user` narrowing alive across an async closure).
+      const newUserId = user.id;
+      initializeUserOnboarding(newUserId).catch((err) =>
+        console.error("Failed to initialize onboarding notifications (Google)", newUserId, err)
       );
     } else {
       console.log("👤 Existing user found:", user.id);
@@ -864,9 +867,12 @@ export const signInWithAppleToken = async (
       });
 
       console.log("✅ New user created:", user.id);
-      // Fire profile-reminder notifications (non-blocking)
-      initializeUserOnboarding(user.id).catch((err) =>
-        console.error("Failed to initialize onboarding notifications (Apple)", user.id, err)
+      // Fire profile-reminder notifications (non-blocking).
+      // Capture id in a const so the closured reference is non-null
+      // (TS can't keep the `let user` narrowing alive across an async closure).
+      const newUserId = user.id;
+      initializeUserOnboarding(newUserId).catch((err) =>
+        console.error("Failed to initialize onboarding notifications (Apple)", newUserId, err)
       );
     } else if (!account) {
       // User exists but Apple account not linked - link it
