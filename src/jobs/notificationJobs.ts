@@ -522,9 +522,12 @@ export function schedulePendingScoreNotifications(): void {
         const ageMs = now.getTime() - actualEndMs;
         if (ageMs < 19 * 60 * 60 * 1000 || ageMs > 21 * 60 * 60 * 1000) continue;
 
-        const participants = match.participants.filter((p: any) => p.userId);
+        const participants = match.participants.filter(
+          (p): p is (typeof match.participants)[number] & { userId: string } =>
+            p.userId !== null
+        );
         for (const participant of participants) {
-          const others = participants.filter((p: any) => p.userId !== participant.userId);
+          const others = participants.filter((p) => p.userId !== participant.userId);
           const opponentName = others[0]?.user?.name || "Opponent";
           await notificationService.createNotification({
             ...matchManagementNotifications.pendingScoreSubmission(opponentName),
@@ -565,9 +568,12 @@ export function schedulePendingScoreNotifications(): void {
         const ageMs = now.getTime() - actualEndMs;
         if (ageMs < 19 * 60 * 60 * 1000 || ageMs > 21 * 60 * 60 * 1000) continue;
 
-        const participants = match.participants.filter((p: any) => p.userId);
+        const participants = match.participants.filter(
+          (p): p is (typeof match.participants)[number] & { userId: string } =>
+            p.userId !== null
+        );
         for (const participant of participants) {
-          const others = participants.filter((p: any) => p.userId !== participant.userId);
+          const others = participants.filter((p) => p.userId !== participant.userId);
           const opponentName = others[0]?.user?.name || "Opponent";
           await notificationService.createNotification({
             ...matchManagementNotifications.pendingScoreConfirmation(opponentName),
