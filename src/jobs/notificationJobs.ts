@@ -28,18 +28,42 @@ const CRON_TZ = { timezone: MYT };
  */
 const MAX_EXPECTED_MATCH_DURATION_MS = 12 * 60 * 60 * 1000;
 
-/** Wrapper that applies Malaysia timezone to every cron schedule */
-// TODO (2026-04-22, docs/issues/backlog/notification-cron-timing-audit-round-3-2026-04-22.md E3):
-// node-cron has NO overlap protection. High-cadence crons (*/5, */15, */30)
-// can have two handlers running simultaneously if the previous tick hasn't
-// finished. Dedup at the notification layer catches most duplicates but has
-// a read-then-write race. Add a lightweight per-cron mutex here:
-//   let running = new Map<string, boolean>();
-//   if (running.get(expression)) { logger.warn('skip, still running', {expression}); return; }
-//   running.set(expression, true); try { await fn(); } finally { running.set(expression, false); }
-// Trivial change, ~10 lines, no behavior risk for crons that always finish in time.
+/**
+ * Wrapper that applies Malaysia timezone to every cron schedule + a per-cron
+ * in-memory mutex so a long-running tick doesn't overlap with the next one.
+ *
+ * E3: node-cron has no native overlap protection. High-cadence crons (every
+ * 5/15/30 min) can fire a second handler before the first finishes if the
+ * payload runs slow. The notification layer dedups identical sends, but a
+ * read-then-write race could still slip a duplicate through, and the wasted
+ * work is real. A simple per-expression boolean lock here prevents concurrent
+ * execution in single-instance deployments.
+ *
+ * Multi-instance deployments would need a distributed lock (Redis SETNX or
+ * Postgres advisory lock); deferred until that scaling event.
+ *
+ * Scope: the 30 crons routed through this helper. The 5 inline
+ * cron.schedule() calls in server.ts and maintenanceJobs.ts use weekly/hourly
+ * cadences where overlap is inherently impossible (handlers complete in <1m).
+ */
+const cronRunning = new Map<string, boolean>();
 function scheduleCron(expression: string, fn: () => void): void {
-  cron.schedule(expression, fn, CRON_TZ);
+  cron.schedule(
+    expression,
+    async () => {
+      if (cronRunning.get(expression)) {
+        logger.warn('Cron tick skipped — previous run still in flight', { expression });
+        return;
+      }
+      cronRunning.set(expression, true);
+      try {
+        await fn();
+      } finally {
+        cronRunning.set(expression, false);
+      }
+    },
+    CRON_TZ,
+  );
 }
 import {
   sendMatchReminder24h,
