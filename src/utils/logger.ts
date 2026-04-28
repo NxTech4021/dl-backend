@@ -6,6 +6,8 @@ import path from 'path';
 // Winston Configuration
 // ============================================================================
 
+const isProduction = process.env.NODE_ENV === 'production';
+
 const logFormat = winston.format.combine(
   winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
   winston.format.errors({ stack: true }),
@@ -25,68 +27,70 @@ const consoleFormat = winston.format.combine(
   })
 );
 
-// Create logs directory if it doesn't exist
 const logsDir = path.join(process.cwd(), 'logs');
-if (!fs.existsSync(logsDir)) {
+if (!isProduction && !fs.existsSync(logsDir)) {
   fs.mkdirSync(logsDir, { recursive: true });
 }
 
-// Winston instance for file and console logging
+const consoleTransport = new winston.transports.Console({
+  format: isProduction ? logFormat : consoleFormat,
+  level: isProduction ? (process.env.LOG_LEVEL || 'info') : 'debug',
+});
+
+const fileTransports = isProduction
+  ? []
+  : [
+      new winston.transports.File({
+        filename: path.join(logsDir, 'error.log'),
+        level: 'error',
+        maxsize: 5242880,
+        maxFiles: 5,
+      }),
+      new winston.transports.File({
+        filename: path.join(logsDir, 'combined.log'),
+        maxsize: 5242880,
+        maxFiles: 10,
+      }),
+      new winston.transports.File({
+        filename: path.join(logsDir, 'database.log'),
+        level: 'debug',
+        maxsize: 5242880,
+        maxFiles: 5,
+        format: winston.format.combine(
+          winston.format((info) => {
+            return info.operation_type === 'database' ? info : false;
+          })(),
+          logFormat
+        ),
+      }),
+    ];
+
+const exceptionHandlers = isProduction
+  ? [new winston.transports.Console({ format: logFormat })]
+  : [
+      new winston.transports.File({
+        filename: path.join(logsDir, 'exceptions.log'),
+        maxsize: 5242880,
+        maxFiles: 5,
+      }),
+    ];
+
+const rejectionHandlers = isProduction
+  ? [new winston.transports.Console({ format: logFormat })]
+  : [
+      new winston.transports.File({
+        filename: path.join(logsDir, 'rejections.log'),
+        maxsize: 5242880,
+        maxFiles: 5,
+      }),
+    ];
+
 export const winstonLogger = winston.createLogger({
   level: process.env.LOG_LEVEL || 'info',
   format: logFormat,
-  transports: [
-    // Console transport (development)
-    new winston.transports.Console({
-      format: consoleFormat,
-      level: process.env.NODE_ENV === 'production' ? 'warn' : 'debug',
-    }),
-    
-    // Error log file (errors only)
-    new winston.transports.File({
-      filename: path.join(logsDir, 'error.log'),
-      level: 'error',
-      maxsize: 5242880, // 5MB
-      maxFiles: 5,
-    }),
-    
-    // Combined log file (all levels)
-    new winston.transports.File({
-      filename: path.join(logsDir, 'combined.log'),
-      maxsize: 5242880, // 5MB
-      maxFiles: 10,
-    }),
-    
-    // Separate file for specific operations
-    new winston.transports.File({
-      filename: path.join(logsDir, 'database.log'),
-      level: 'debug',
-      maxsize: 5242880, // 5MB
-      maxFiles: 5,
-      format: winston.format.combine(
-        winston.format((info) => {
-          return info.operation_type === 'database' ? info : false;
-        })(),
-        logFormat
-      ),
-    }),
-  ],
-  
-  // Handle uncaught exceptions and rejections
-  exceptionHandlers: [
-    new winston.transports.File({ 
-      filename: path.join(logsDir, 'exceptions.log'),
-      maxsize: 5242880,
-      maxFiles: 5,
-    })
-  ],
-  rejectionHandlers: [
-    new winston.transports.File({ 
-      filename: path.join(logsDir, 'rejections.log'),
-      maxsize: 5242880,
-      maxFiles: 5,
-    })
-  ],
+  transports: [consoleTransport, ...fileTransports],
+  exceptionHandlers,
+  rejectionHandlers,
 });
 
 // ============================================================================
