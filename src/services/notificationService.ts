@@ -165,21 +165,18 @@ export class NotificationService {
         }
       }
 
-      // TODO (2026-04-22, docs/issues/backlog/notification-cron-timing-audit-round-4-2026-04-22.md U1):
-      // Only validates user EXISTS, not status. Banned/deleted/suspended users
-      // still receive notifications (in-app AND, if token is active, push).
-      // Only 2 of 30 crons (scheduleInactivePlayer14d/30d) filter status at
-      // the query layer. Fix once at this centralized choke-point covers ALL
-      // crons + event-driven callers:
-      //   where: {
-      //     id: { in: userIdArray },
-      //     status: { notIn: ['BANNED', 'DELETED', 'SUSPENDED'] },
-      //   }
-      // Zero-risk: can only drop notifications, never add. Verify enum values
-      // in schema.prisma (UserStatus) before using — current enum is 'Statuses'.
-      // Validate users exist
+      // U1: validate users EXIST and have a deliverable status. Excluding
+      // BANNED, DELETED, and SUSPENDED prevents pushes to users who shouldn't
+      // receive any (privacy/legal posture). INACTIVE is still notified — they
+      // may be re-engagement targets. Centralized at this single choke-point
+      // so it covers all 30+ crons + every event-driven caller.
+      // UserStatus enum verified at schema.prisma:2520 (ACTIVE, INACTIVE,
+      // SUSPENDED, BANNED, DELETED).
       const users = await this.prisma.user.findMany({
-        where: { id: { in: userIdArray } },
+        where: {
+          id: { in: userIdArray },
+          status: { notIn: ['BANNED', 'DELETED', 'SUSPENDED'] },
+        },
         select: { id: true },
       });
       if (users.length !== userIdArray.length) {

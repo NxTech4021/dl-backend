@@ -28,18 +28,42 @@ const CRON_TZ = { timezone: MYT };
  */
 const MAX_EXPECTED_MATCH_DURATION_MS = 12 * 60 * 60 * 1000;
 
-/** Wrapper that applies Malaysia timezone to every cron schedule */
-// TODO (2026-04-22, docs/issues/backlog/notification-cron-timing-audit-round-3-2026-04-22.md E3):
-// node-cron has NO overlap protection. High-cadence crons (*/5, */15, */30)
-// can have two handlers running simultaneously if the previous tick hasn't
-// finished. Dedup at the notification layer catches most duplicates but has
-// a read-then-write race. Add a lightweight per-cron mutex here:
-//   let running = new Map<string, boolean>();
-//   if (running.get(expression)) { logger.warn('skip, still running', {expression}); return; }
-//   running.set(expression, true); try { await fn(); } finally { running.set(expression, false); }
-// Trivial change, ~10 lines, no behavior risk for crons that always finish in time.
+/**
+ * Wrapper that applies Malaysia timezone to every cron schedule + a per-cron
+ * in-memory mutex so a long-running tick doesn't overlap with the next one.
+ *
+ * E3: node-cron has no native overlap protection. High-cadence crons (every
+ * 5/15/30 min) can fire a second handler before the first finishes if the
+ * payload runs slow. The notification layer dedups identical sends, but a
+ * read-then-write race could still slip a duplicate through, and the wasted
+ * work is real. A simple per-expression boolean lock here prevents concurrent
+ * execution in single-instance deployments.
+ *
+ * Multi-instance deployments would need a distributed lock (Redis SETNX or
+ * Postgres advisory lock); deferred until that scaling event.
+ *
+ * Scope: the 30 crons routed through this helper. The 5 inline
+ * cron.schedule() calls in server.ts and maintenanceJobs.ts use weekly/hourly
+ * cadences where overlap is inherently impossible (handlers complete in <1m).
+ */
+const cronRunning = new Map<string, boolean>();
 function scheduleCron(expression: string, fn: () => void): void {
-  cron.schedule(expression, fn, CRON_TZ);
+  cron.schedule(
+    expression,
+    async () => {
+      if (cronRunning.get(expression)) {
+        logger.warn('Cron tick skipped — previous run still in flight', { expression });
+        return;
+      }
+      cronRunning.set(expression, true);
+      try {
+        await fn();
+      } finally {
+        cronRunning.set(expression, false);
+      }
+    },
+    CRON_TZ,
+  );
 }
 import {
   sendMatchReminder24h,
@@ -498,9 +522,12 @@ export function schedulePendingScoreNotifications(): void {
         const ageMs = now.getTime() - actualEndMs;
         if (ageMs < 19 * 60 * 60 * 1000 || ageMs > 21 * 60 * 60 * 1000) continue;
 
-        const participants = match.participants.filter((p: any) => p.userId);
+        const participants = match.participants.filter(
+          (p): p is (typeof match.participants)[number] & { userId: string } =>
+            p.userId !== null
+        );
         for (const participant of participants) {
-          const others = participants.filter((p: any) => p.userId !== participant.userId);
+          const others = participants.filter((p) => p.userId !== participant.userId);
           const opponentName = others[0]?.user?.name || "Opponent";
           await notificationService.createNotification({
             ...matchManagementNotifications.pendingScoreSubmission(opponentName),
@@ -541,9 +568,12 @@ export function schedulePendingScoreNotifications(): void {
         const ageMs = now.getTime() - actualEndMs;
         if (ageMs < 19 * 60 * 60 * 1000 || ageMs > 21 * 60 * 60 * 1000) continue;
 
-        const participants = match.participants.filter((p: any) => p.userId);
+        const participants = match.participants.filter(
+          (p): p is (typeof match.participants)[number] & { userId: string } =>
+            p.userId !== null
+        );
         for (const participant of participants) {
-          const others = participants.filter((p: any) => p.userId !== participant.userId);
+          const others = participants.filter((p) => p.userId !== participant.userId);
           const opponentName = others[0]?.user?.name || "Opponent";
           await notificationService.createNotification({
             ...matchManagementNotifications.pendingScoreConfirmation(opponentName),
@@ -849,16 +879,14 @@ export function scheduleMatchesRemaining(): void {
 }
 
 /**
- * Check and send final week alerts
- * Runs daily at 10:00 AM on Mondays
+ * NOTIF-046: Send final-week alert to ACTIVE members of seasons whose endDate
+ * is 7-14 days out. Runs Mondays 10:00 MYT.
  *
- * TODO(finalWeek-window-bug): the `endDate ∈ [now+7d, now+8d]` filter below is
- * only 24h wide but cron runs weekly (Mondays) — same latent-bug pattern as
- * B2/B3 (NOTIF-047/060) were. Only endDates that happen to fall between
- * Monday 10am and Tuesday 10am get captured; most endDates silently miss.
- * Fix would mirror M1's pattern here: widen to `[now+7d, now+14d]` + 8-day
- * dedup on the send call, so every endDate catches one Monday. Flagged during
- * M1 dissection (2026-04-24); out of M1 scope. See consolidated bug tracker.
+ * Window design: `endDate ∈ [now+7d, now+14d]` is 7 days wide to match the
+ * weekly Monday cron cadence. Every endDate falls in this window on exactly
+ * one Monday — the Monday 7-14 days before endDate. 8-day dedup on the send
+ * is belt-and-suspenders against any edge case (e.g. admin updating endDate
+ * mid-cycle). Same pattern as M1 scheduleMatchesRemaining and B2/B3.
  */
 export function scheduleFinalWeekAlerts(): void {
   scheduleCron("0 10 * * 1", async () => {
@@ -866,14 +894,14 @@ export function scheduleFinalWeekAlerts(): void {
       logger.info("Running final week alert job");
 
       const now = new Date();
-      const in7Days = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
-      const in8Days = new Date(now.getTime() + 8 * 24 * 60 * 60 * 1000);
+      const in7Days  = new Date(now.getTime() + 7  * 24 * 60 * 60 * 1000);
+      const in14Days = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000);
 
       const seasons = await prisma.season.findMany({
         where: {
           endDate: {
             gte: in7Days,
-            lte: in8Days,
+            lte: in14Days,
           },
           status: "ACTIVE",
         },
@@ -2036,16 +2064,19 @@ export function scheduleLateSeasonNudges(): void {
 
       for (const season of activeSeasons) {
         for (const division of season.divisions) {
-          // TODO(u2-sibling): NOTIF-038 has the same DivisionAssignment-without-
-          // active-membership filter bug as the 6 crons fixed under U2 (036/037/
-          // 040/042/043/044), but was not in the consolidated doc's U2 scope
-          // because it's a broadcast (season ends in 14d) rather than an
-          // inactivity nag. Withdrawn/flagged/inactive members still receive
-          // this push. Fix would be identical: add
-          //   user: { seasonMemberships: { some: { seasonId: season.id, status: 'ACTIVE' } } }
-          // Out of U2 scope — flagged for follow-up. See consolidated bug tracker.
+          // U2-sibling (NOTIF-039): restrict to ACTIVE members. Withdrawn,
+          // pending, flagged, and admin-deactivated members are excluded
+          // from the late-season broadcast — same filter as the 6 inactivity
+          // crons fixed under U2 (036/037/040/042/043/044).
           const members = await prisma.divisionAssignment.findMany({
-            where: { divisionId: division.id },
+            where: {
+              divisionId: division.id,
+              user: {
+                seasonMemberships: {
+                  some: { seasonId: season.id, status: 'ACTIVE' },
+                },
+              },
+            },
             select: { userId: true },
           });
           const userIds = members.map((m) => m.userId);

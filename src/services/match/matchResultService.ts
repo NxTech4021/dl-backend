@@ -496,6 +496,11 @@ export class MatchResultService {
     }
 
     const matchResult = await this.getMatchWithResults(matchId);
+    // If the match disappeared (deletion mid-flight), surface the null so the
+    // controller's `if (!match)` check narrows properly. Otherwise spreading
+    // null silently produces `{ feedPostId }` and TS sees `match.id` as
+    // possibly undefined downstream (TS-001 in the controller).
+    if (!matchResult) return null;
     return { ...matchResult, feedPostId };
   }
 
@@ -1286,7 +1291,8 @@ export class MatchResultService {
 
       const otherParticipants = match.participants
         .filter(p => p.userId !== submitterId)
-        .map(p => p.userId);
+        .map(p => p.userId)
+        .filter((id): id is string => id !== null);
 
       await this.notificationService.createNotification({
         type: 'MATCH_RESULT_SUBMITTED',
@@ -1320,7 +1326,9 @@ export class MatchResultService {
         select: { name: true }
       });
 
-      const participantIds = match.participants.map(p => p.userId);
+      const participantIds = match.participants
+        .map(p => p.userId)
+        .filter((id): id is string => id !== null);
 
       await this.notificationService.createNotification({
         type: 'MATCH_RESULT_CONFIRMED',
@@ -1359,7 +1367,8 @@ export class MatchResultService {
       // Notify other participants
       const otherParticipants = match.participants
         .filter(p => p.userId !== disputerId)
-        .map(p => p.userId);
+        .map(p => p.userId)
+        .filter((id): id is string => id !== null);
 
       await this.notificationService.createNotification({
         type: 'MATCH_DISPUTED',
@@ -1398,7 +1407,9 @@ export class MatchResultService {
         select: { name: true }
       });
 
-      const participantIds = match.participants.map(p => p.userId);
+      const participantIds = match.participants
+        .map(p => p.userId)
+        .filter((id): id is string => id !== null);
 
       await this.notificationService.createNotification({
         type: 'MATCH_UNFINISHED',
@@ -1432,7 +1443,9 @@ export class MatchResultService {
         select: { name: true }
       });
 
-      const participantIds = match.participants.map(p => p.userId);
+      const participantIds = match.participants
+        .map(p => p.userId)
+        .filter((id): id is string => id !== null);
 
       await this.notificationService.createNotification({
         type: 'MATCH_WALKOVER',

@@ -365,8 +365,9 @@ export async function previewRecalculation(
       });
       if (match) {
         affectedMatches = 1;
-        affectedPlayers = match.participants.length;
         for (const p of match.participants) {
+          // Skip orphaned participants (userId nullable per Prisma onDelete:SetNull)
+          if (!p.userId) continue;
           const whereClause: any = { userId: p.userId };
           if (match.seasonId) whereClause.seasonId = match.seasonId;
           const rating = await prisma.playerRating.findFirst({
@@ -380,6 +381,7 @@ export async function previewRecalculation(
             delta: 0
           });
         }
+        affectedPlayers = changes.length;
       }
       break;
     }

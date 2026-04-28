@@ -203,6 +203,10 @@ export async function sendFinalWeekAlertNotifications(seasonId: string): Promise
       ...finalWeekNotif,
       userIds: playerIds,
       seasonId,
+      // NOTIF-046: 8-day dedup. Cron is weekly (Mondays); 7d window catches
+      // each endDate on exactly one Monday. 8d > 7d cadence so any edge-case
+      // re-capture (e.g. admin updating endDate mid-cycle) is suppressed.
+      skipDuplicateWithinMs: 8 * 24 * 60 * 60 * 1000,
     });
 
     logger.info('Final week alert sent', { seasonId, playerCount: playerIds.length });
@@ -644,16 +648,11 @@ export async function sendMidSeasonUpdateNotifications(
 /**
  * Send registration closing 3 days notifications (NOTIF-059).
  *
- * TODO (latent bug, adjacent to B3 scope, docs/issues/backlog/notification-audit-consolidated-bugs-2026-04-22.md):
- * scheduleRegistrationClosing3Days uses a correctly-wide 24h window
- * (`regiDeadline ∈ [now+72h, now+96h]`), so NOTIF-059 fires reliably for any
- * regiDeadline — EXCEPT on the exact 10:00 MYT boundary, where it fires on
- * two consecutive cron runs and sends NOTIF-059 to every user twice. No dedup
- * below to catch that case. Fix shape identical to the B3 dedup added in
- * sendRegistrationClosing24hNotifications: add
- *   skipDuplicateWithinMs: 25 * 60 * 60 * 1000
- * to the createNotification call below. Deferred — product call on whether
- * this latent edge case is worth fixing before launch.
+ * Dedup rationale: scheduleRegistrationClosing3Days uses a 24h-wide window
+ * (`regiDeadline ∈ [now+72h, now+96h]`). On the exact 10:00 MYT boundary, the
+ * same regiDeadline can fall into two consecutive daily cron windows. The 25h
+ * dedup here closes that latent double-broadcast. Mirror of the dedup applied
+ * to NOTIF-060 (sendRegistrationClosing24hNotifications) for B3.
  */
 export async function sendRegistrationClosing3DaysNotifications(seasonId: string): Promise<void> {
   try {
@@ -698,7 +697,8 @@ export async function sendRegistrationClosing3DaysNotifications(seasonId: string
     await notificationService.createNotification({
       ...notificationData,
       seasonId,
-      userIds
+      userIds,
+      skipDuplicateWithinMs: 25 * 60 * 60 * 1000,
     });
 
     logger.info('Registration closing 3 days notifications sent', { seasonId, seasonName: season.name });

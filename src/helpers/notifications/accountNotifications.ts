@@ -142,15 +142,45 @@ export const accountNotifications = {
     metadata: { duration },
   }),
 
-  // maintenanceCancelled: (reason?: string): NotificationPayload => ({
-  //   type: NOTIFICATION_TYPES.MAINTENANCE_CANCELLED,
-  //   category: getCategoryForNotificationType(
-  //     NOTIFICATION_TYPES.MAINTENANCE_CANCELLED
-  //   ),
-  //   title: "Maintenance Cancelled",
-  //   message: `The scheduled maintenance has been cancelled.${reason ? ` Reason: ${reason}` : " No disruption expected."}`,
-  //   metadata: { reason },
-  // }),
+  // TODO (TS-040 follow-up, docs/issues/backlog/tsc-baseline-errors-2026-04-27.md):
+  // Template re-enabled 2026-04-27 (commit 19b7c95) to fix the runtime
+  // TypeError at systemMaintenanceService.ts:354. However the delivery-type
+  // mapping for MAINTENANCE_CANCELLED is still commented out in
+  // src/types/notificationDeliveryTypes.ts:38 (commented by Zawad's commit
+  // b29c84f, "Updated Notif templates", 2026-04-17). Result: notifications
+  // currently dispatch as IN_APP-only (the default for unmapped types) instead
+  // of the originally-intended BOTH (push + in-app). 3 maintenance-related
+  // tests in tests/unit/notifications/maintenanceNotification.test.ts still
+  // fail because of this. Restore `MAINTENANCE_CANCELLED: NotificationDeliveryType.BOTH`
+  // in notificationDeliveryTypes.ts after product confirms push is desired
+  // when admin cancels a previously-announced maintenance window.
+  maintenanceCancelled: (reason?: string): NotificationPayload => ({
+    type: NOTIFICATION_TYPES.MAINTENANCE_CANCELLED,
+    category: getCategoryForNotificationType(
+      NOTIFICATION_TYPES.MAINTENANCE_CANCELLED
+    ),
+    title: "Maintenance Cancelled",
+    message: `The scheduled maintenance has been cancelled.${reason ? ` Reason: ${reason}` : " No disruption expected."}`,
+    metadata: { reason },
+  }),
+
+  // TODO (TS-004 follow-up, docs/issues/backlog/tsc-baseline-errors-2026-04-27.md):
+  // Template added 2026-04-27 (commit 19b7c95) to fix the runtime TypeError at
+  // achievementEvaluationService.ts:170. Copy below was modeled on the existing
+  // test mock (tests/unit/achievement/achievementEvaluation.test.ts:55-59,
+  // title "Achievement Unlocked") and the codebase's emoji-heavy notification
+  // style. Product/Zawad should review the user-facing copy before launch —
+  // these notifications fire on every match-completion that newly unlocks an
+  // achievement, so word choice has high visibility.
+  achievementUnlocked: (achievementTitle: string): NotificationPayload => ({
+    type: NOTIFICATION_TYPES.ACHIEVEMENT_UNLOCKED,
+    category: getCategoryForNotificationType(
+      NOTIFICATION_TYPES.ACHIEVEMENT_UNLOCKED
+    ),
+    title: "🏆 Achievement Unlocked!",
+    message: `You've unlocked: ${achievementTitle}`,
+    metadata: { achievementTitle },
+  }),
 
   withdrawalRequestSubmitted: (
     playerName: string,

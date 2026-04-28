@@ -93,8 +93,11 @@ export async function checkAndSendStandingsNotifications(
         });
       }
 
-      // Check if player entered top 10 (actually top 5 based on template)
-      if (position >= 4 && position <= 10) {
+      // F2 narrow-scope: NOTIF-111 spec is "Top 5", template message says
+      // "you cracked the top 5". Narrow caller range to positions 4-5 so a
+      // user at #9 no longer receives a misleading "Top 5" push. Type-rename
+      // (`ENTERED_TOP_10` → `ENTERED_TOP_5`) deferred to post-launch refactor.
+      if (position >= 4 && position <= 5) {
         const top10Notif = notificationTemplates.rating.enteredTop10(
           division.name,
           season.name,

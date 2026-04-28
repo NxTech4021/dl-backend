@@ -31,16 +31,16 @@ export const ratingRankingNotifications = {
     leagueName: string,
     categoryName: string
   ): NotificationPayload => ({
-    // TODO (2026-04-22, docs/issues/backlog/notification-cron-timing-audit-round-3-2026-04-22.md F2):
-    // This template has three bugs simultaneously:
-    //   1. Helper name `enteredTop10` contradicts the spec's NOTIF-111 "Top 5"
-    //   2. `type` is ENTERED_TOP_10 but the copy says "Top 5" — analytics/filters will misclassify
-    //   3. Caller at standingsNotificationService.ts:97 fires for positions 4-10, so a user at #9
-    //      receives "You just cracked the top 5" — false message.
-    // Fix: rename helper → enteredTop5, add ENTERED_TOP_5 type, narrow caller range to 2-5
-    // (assuming spec intent is top-5 excluding the top-3 which have their own NOTIF-112).
-    // Also: the spec says "first time" — implement previous-position tracking to avoid
-    // re-firing on every standings recalculation.
+    // TODO(F2-rename, partial resolution 2026-04-25): caller-range narrowed to
+    // positions 4-5 at standingsNotificationService.ts:97 — user-visible bug
+    // ("Top 5!" pushed to user at #9) is fixed. Two remaining items deferred
+    // post-launch as a 4-file rename ripple:
+    //   1. Helper name `enteredTop10` → `enteredTop5`
+    //   2. Type constant `ENTERED_TOP_10` → `ENTERED_TOP_5` (touches
+    //      notificationTypes.ts category map + notificationDeliveryTypes.ts;
+    //      DB has existing rows with old type string — needs migration plan).
+    // Also still TODO: spec says "first time" — implement previous-position
+    // tracking to avoid re-firing on every standings recalculation.
     type: NOTIFICATION_TYPES.ENTERED_TOP_10,
     category: getCategoryForNotificationType(NOTIFICATION_TYPES.ENTERED_TOP_10),
     title: "\u2b50 Top 5! Yes, Really.",
@@ -98,15 +98,61 @@ export const ratingRankingNotifications = {
     metadata: { sport, newRating },
   }),
 
-  // ratingMilestone: (rating: number, sport: string): NotificationPayload => ({
-  //   type: NOTIFICATION_TYPES.RATING_MILESTONE,
-  //   category: getCategoryForNotificationType(
-  //     NOTIFICATION_TYPES.RATING_MILESTONE
-  //   ),
-  //   title: "Milestone Achieved!",
-  //   message: `You've reached ${rating} DMR in ${sport}`,
-  //   metadata: { rating, sport },
-  // }),
+  // TS-035 (resolved 2026-04-27, commit 8436f1d): uncommented from a prior
+  // disabled state. Original copy preserved verbatim. Currently dead (only
+  // caller `checkRatingMilestone` is invoked from `sendDMRIncreasedNotification`,
+  // whose only external call site at matchResultService.ts:611 is commented
+  // out). If revived, no copy review needed — already drafted by the team.
+  ratingMilestone: (rating: number, sport: string): NotificationPayload => ({
+    type: NOTIFICATION_TYPES.RATING_MILESTONE,
+    category: getCategoryForNotificationType(
+      NOTIFICATION_TYPES.RATING_MILESTONE
+    ),
+    title: "Milestone Achieved!",
+    message: `You've reached ${rating} DMR in ${sport}`,
+    metadata: { rating, sport },
+  }),
+
+  // TODO (TS-036 follow-up, docs/issues/backlog/tsc-baseline-errors-2026-04-27.md):
+  // NEW template added 2026-04-27 (commit 8436f1d). Fires weekly via the
+  // `scheduleWeeklyRankingUpdates` cron (Mon 8 AM, see jobs/notificationJobs.ts:1130)
+  // for every player in every active division. Copy was modeled on the existing
+  // `movedUpInStandings`/`leagueLeader` patterns; product/Zawad should review
+  // before the next Mon 8 AM cron tick post-deploy. Scale concern noted at
+  // notificationJobs.ts:2796 — "sends per-division ranking updates."
+  weeklyRankingUpdate: (
+    position: number,
+    seasonName: string,
+    weekNumber: number
+  ): NotificationPayload => ({
+    type: NOTIFICATION_TYPES.WEEKLY_RANKING_UPDATE,
+    category: getCategoryForNotificationType(
+      NOTIFICATION_TYPES.WEEKLY_RANKING_UPDATE
+    ),
+    title: `📊 Week ${weekNumber} Rankings`,
+    message: `You're #${position} in ${seasonName} going into Week ${weekNumber}. Keep climbing!`,
+    metadata: { position, seasonName, weekNumber },
+  }),
+
+  // TODO (TS-037 follow-up, docs/issues/backlog/tsc-baseline-errors-2026-04-27.md):
+  // NEW template added 2026-04-27 (commit 8436f1d). Fires monthly via the
+  // `scheduleMonthlyDMRRecaps` cron (last day of month 8 PM, see
+  // jobs/notificationJobs.ts:1167) to ALL users with ratings. Title is new
+  // copy ("Your Monthly DMR Recap"); message is the caller-built summary
+  // string from standingsNotificationService.ts:366-373 (pre-existing format,
+  // unchanged). Note the caller has a known data-accuracy issue — its
+  // `sportMatches` count isn't filtered by sport. Product should review the
+  // monthly cadence + title before the next month-end fire (next: 2026-04-30
+  // 8 PM MYT post-deploy).
+  monthlyDmrRecap: (summary: string): NotificationPayload => ({
+    type: NOTIFICATION_TYPES.MONTHLY_DMR_RECAP,
+    category: getCategoryForNotificationType(
+      NOTIFICATION_TYPES.MONTHLY_DMR_RECAP
+    ),
+    title: "Your Monthly DMR Recap",
+    message: summary,
+    metadata: { summary },
+  }),
 
   ratingUpdate: (
     oldRating: number,

@@ -587,7 +587,7 @@ export class AdminMatchService {
         });
       }
     } catch (notifError) {
-      logger.warn('Failed to notify parties about dispute review start', { disputeId, error: notifError });
+      logger.warn('Failed to notify parties about dispute review start', { disputeId }, notifError as Error);
     }
 
     return updatedDispute;
@@ -1061,8 +1061,9 @@ export class AdminMatchService {
 
     // Trigger rating and standings recalculation for completed matches
     // Uses V2 standings (Best 6 based) + MatchResult refresh for consistency
-    // #043 BUG 3: Also triggers if admin just completed the match (status was changed in transaction)
-    const isNowCompleted = originalStatus === MatchStatus.COMPLETED || (outcome && originalStatus !== MatchStatus.COMPLETED);
+    // #043 BUG 3: Also triggers if admin just completed the match (providing
+    // `outcome` auto-completes the match — see line 1029 above).
+    const isNowCompleted = originalStatus === MatchStatus.COMPLETED || !!outcome;
     if (isNowCompleted && match.divisionId && match.seasonId) {
       try {
         // Step 1: Refresh MatchResult records (V2 standings depends on these)
@@ -1437,7 +1438,7 @@ export class AdminMatchService {
         matchId,
       });
     } catch (notifError) {
-      logger.warn('Failed to notify player about cancellation review', { matchId, error: notifError });
+      logger.warn('Failed to notify player about cancellation review', { matchId }, notifError as Error);
     }
 
     return { success: true, approved, penaltyApplied: !approved && applyPenalty };
@@ -1718,14 +1719,14 @@ export class AdminMatchService {
               },
             },
           },
-          submittedByUser: { select: { id: true, name: true } },
+          raisedByUser: { select: { id: true, name: true } },
         },
       });
 
       if (!dispute) return;
 
       const recipientIds = dispute.match.participants.map(p => p.userId).filter((id): id is string => id !== null);
-      const disputerName = (dispute as any).submittedByUser?.name || 'Your opponent';
+      const disputerName = dispute.raisedByUser?.name || 'Your opponent';
 
       // Send individual notifications so each recipient sees the correct opponent name
       for (const recipientId of recipientIds) {

@@ -185,7 +185,8 @@ export class MatchScheduleService {
 
       const otherParticipants = match.participants
         .filter(p => p.userId !== cancelledById)
-        .map(p => p.userId);
+        .map(p => p.userId)
+        .filter((id): id is string => id !== null);
 
       if (otherParticipants.length === 0) return;
 
@@ -252,7 +253,8 @@ export class MatchScheduleService {
 
       const otherParticipants = match.participants
         .filter(p => p.userId !== requesterId)
-        .map(p => p.userId);
+        .map(p => p.userId)
+        .filter((id): id is string => id !== null);
 
       await this.notificationService.createNotification({
         type: 'MATCH_RESCHEDULED',
@@ -279,7 +281,9 @@ export class MatchScheduleService {
 
       if (!newMatch) return;
 
-      const participantIds = newMatch.participants.map(p => p.userId);
+      const participantIds = newMatch.participants
+        .map(p => p.userId)
+        .filter((id): id is string => id !== null);
 
       await this.notificationService.createNotification({
         type: 'MATCH_RESCHEDULED',
