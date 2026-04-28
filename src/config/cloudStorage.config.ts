@@ -1,23 +1,58 @@
-import { Storage } from '@google-cloud/storage';
+import {
+  S3Client,
+  PutObjectCommand,
+  DeleteObjectCommand,
+  HeadObjectCommand,
+} from '@aws-sdk/client-s3';
 import dayjs from 'dayjs';
 import path from 'path';
-import { fileURLToPath } from 'url';
 
-// ESM equivalent of __dirname
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const SPACES_REGION = process.env.SPACES_REGION || 'sgp1';
+const SPACES_ENDPOINT = process.env.SPACES_ENDPOINT || `https://${SPACES_REGION}.digitaloceanspaces.com`;
+const SPACES_KEY = process.env.SPACES_KEY;
+const SPACES_SECRET = process.env.SPACES_SECRET;
 
-const pathToJSONKey = path.join(__dirname, 'test-cs.json');
+if (!SPACES_KEY || !SPACES_SECRET) {
+  throw new Error('SPACES_KEY and SPACES_SECRET environment variables are required');
+}
 
-export const storage = new Storage({
-  keyFilename: pathToJSONKey,
+export const storage = new S3Client({
+  region: SPACES_REGION,
+  endpoint: SPACES_ENDPOINT,
+  credentials: {
+    accessKeyId: SPACES_KEY,
+    secretAccessKey: SPACES_SECRET,
+  },
+  forcePathStyle: false,
 });
+
+const getPublicUrl = (bucketName: string, key: string): string => {
+  return `https://${bucketName}.${SPACES_REGION}.cdn.digitaloceanspaces.com/${key}`;
+};
+
+export interface UploadMetadata {
+  username?: string;
+  email?: string;
+  [key: string]: string | undefined;
+}
+
+const sanitizeMetadata = (metadata: UploadMetadata = {}, baseFields: Record<string, string>): Record<string, string> => {
+  const result: Record<string, string> = { ...baseFields };
+  for (const [key, value] of Object.entries(metadata)) {
+    if (value === undefined || value === null) continue;
+    const cleanKey = key.toLowerCase().replace(/[^a-z0-9-]/g, '-');
+    const cleanValue = String(value).replace(/[\r\n]/g, ' ').trim().substring(0, 256);
+    if (cleanKey && cleanValue) result[cleanKey] = cleanValue;
+  }
+  return result;
+};
 
 export const uploadProfileImage = async (
   buffer: Buffer,
   userId: string,
   originalName: string,
-  mimetype: string
+  mimetype: string,
+  metadata?: UploadMetadata
 ): Promise<string> => {
   try {
     const bucketName = process.env.BUCKET_NAME as string;
@@ -25,13 +60,11 @@ export const uploadProfileImage = async (
       throw new Error('BUCKET_NAME environment variable is not set');
     }
 
-    // Generate unique filename with timestamp
     const timestamp = dayjs().format('YYYY-MM-DD-HH-mm-ss');
     const fileExtension = path.extname(originalName) || '.jpg';
     const fileName = `profile-${userId}-${timestamp}${fileExtension}`;
     const destination = `profile-pictures/${fileName}`;
 
-    // Determine content type from mimetype or file extension
     const contentTypeMap: { [key: string]: string } = {
       '.jpg': 'image/jpeg',
       '.jpeg': 'image/jpeg',
@@ -41,23 +74,23 @@ export const uploadProfileImage = async (
     };
     const contentType = mimetype || contentTypeMap[fileExtension.toLowerCase()] || 'image/jpeg';
 
-    const bucket = storage.bucket(bucketName);
-    const file = bucket.file(destination);
+    await storage.send(
+      new PutObjectCommand({
+        Bucket: bucketName,
+        Key: destination,
+        Body: buffer,
+        ContentType: contentType,
+        ACL: 'public-read',
+        CacheControl: 'public, max-age=31536000',
+        Metadata: sanitizeMetadata(metadata, {
+          userid: userId,
+          uploadedat: timestamp,
+          uploadtype: 'profile-picture',
+        }),
+      })
+    );
 
-    // Upload the buffer directly to Google Cloud Storage
-    await file.save(buffer, {
-      metadata: {
-        cacheControl: 'public, max-age=31536000',
-        contentType: contentType,
-      },
-    });
-
-    // Make the file public
-    await file.makePublic();
-
-    // Return the public URL
-    const publicUrl = `https://storage.googleapis.com/${bucketName}/${destination}`;
-    return publicUrl;
+    return getPublicUrl(bucketName, destination);
   } catch (err: unknown) {
     console.error('Error uploading profile image:', err);
     const errorMessage = err instanceof Error ? err.message : 'Unknown error';
@@ -65,7 +98,6 @@ export const uploadProfileImage = async (
   }
 };
 
-// Mapping from mimetype to safe file extension
 const MIME_TO_EXTENSION: { [key: string]: string } = {
   'image/jpeg': '.jpg',
   'image/png': '.png',
@@ -76,8 +108,9 @@ const MIME_TO_EXTENSION: { [key: string]: string } = {
 export const uploadBugScreenshot = async (
   buffer: Buffer,
   bugReportId: string,
-  _originalName: string, // Kept for API compatibility, but we use mimetype for safe extension
-  mimetype: string
+  _originalName: string,
+  mimetype: string,
+  metadata?: UploadMetadata
 ): Promise<{ imageUrl: string; thumbnailUrl: string }> => {
   try {
     const bucketName = process.env.BUCKET_NAME as string;
@@ -85,36 +118,34 @@ export const uploadBugScreenshot = async (
       throw new Error('BUCKET_NAME environment variable is not set');
     }
 
-    // Security: Use extension based on validated mimetype, not user-provided filename
     const safeExtension = MIME_TO_EXTENSION[mimetype] || '.png';
 
-    // Generate unique filename with timestamp
     const timestamp = dayjs().format('YYYY-MM-DD-HH-mm-ss');
     const fileName = `bug-${bugReportId}-${timestamp}-${Math.random().toString(36).substring(7)}${safeExtension}`;
     const destination = `bug-screenshots/${fileName}`;
 
-    // Use the provided mimetype directly (already validated by controller)
     const contentType = mimetype || 'image/png';
 
-    const bucket = storage.bucket(bucketName);
-    const file = bucket.file(destination);
+    await storage.send(
+      new PutObjectCommand({
+        Bucket: bucketName,
+        Key: destination,
+        Body: buffer,
+        ContentType: contentType,
+        ACL: 'public-read',
+        CacheControl: 'public, max-age=31536000',
+        Metadata: sanitizeMetadata(metadata, {
+          bugreportid: bugReportId,
+          uploadedat: timestamp,
+          uploadtype: 'bug-screenshot',
+        }),
+      })
+    );
 
-    // Upload the buffer directly to Google Cloud Storage
-    await file.save(buffer, {
-      metadata: {
-        cacheControl: 'public, max-age=31536000',
-        contentType: contentType,
-      },
-    });
-
-    // Make the file public
-    await file.makePublic();
-
-    // Return the public URL (same URL for both, no thumbnail generation)
-    const publicUrl = `https://storage.googleapis.com/${bucketName}/${destination}`;
+    const publicUrl = getPublicUrl(bucketName, destination);
     return {
       imageUrl: publicUrl,
-      thumbnailUrl: publicUrl, // Could generate a thumbnail later if needed
+      thumbnailUrl: publicUrl,
     };
   } catch (err: unknown) {
     console.error('Error uploading bug screenshot:', err);
@@ -130,23 +161,39 @@ export const deleteProfileImage = async (imageUrl: string): Promise<void> => {
       throw new Error('BUCKET_NAME environment variable is not set');
     }
 
-    // Extract the file path from the URL
-    const urlPattern = new RegExp(`https://storage\\.googleapis\\.com/${bucketName}/(.+)`);
-    const match = imageUrl.match(urlPattern);
-    
-    if (!match || !match[1]) {
+    const cdnPattern = new RegExp(`https://${bucketName}\\.${SPACES_REGION}\\.(cdn\\.)?digitaloceanspaces\\.com/(.+)`);
+    const gcsPattern = new RegExp(`https://storage\\.googleapis\\.com/[^/]+/(.+)`);
+
+    let filePath: string | undefined;
+    const cdnMatch = imageUrl.match(cdnPattern);
+    if (cdnMatch) {
+      filePath = cdnMatch[2];
+    } else {
+      const gcsMatch = imageUrl.match(gcsPattern);
+      if (gcsMatch) {
+        filePath = gcsMatch[1];
+      }
+    }
+
+    if (!filePath) {
       throw new Error('Invalid image URL format');
     }
 
-    const filePath = match[1];
-    const file = storage.bucket(bucketName).file(filePath);
-    
-    // Check if file exists before deleting
-    const [exists] = await file.exists();
-    if (exists) {
-      await file.delete();
-      console.log(`Profile image deleted: ${filePath}`);
+    try {
+      await storage.send(
+        new HeadObjectCommand({ Bucket: bucketName, Key: filePath })
+      );
+    } catch (err: any) {
+      if (err?.$metadata?.httpStatusCode === 404 || err?.name === 'NotFound') {
+        return;
+      }
+      throw err;
     }
+
+    await storage.send(
+      new DeleteObjectCommand({ Bucket: bucketName, Key: filePath })
+    );
+    console.log(`Profile image deleted: ${filePath}`);
   } catch (err: unknown) {
     console.error('Error deleting profile image:', err);
     const errorMessage = err instanceof Error ? err.message : 'Unknown error';

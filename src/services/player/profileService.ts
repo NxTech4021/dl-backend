@@ -779,28 +779,28 @@ export async function updatePlayerProfile(
  * Uses memory storage and uploads directly to Google Cloud Storage
  */
 export async function uploadProfileImage(userId: string, file: { buffer: Buffer; originalname: string; mimetype: string }) {
-  // Get current user to check for existing image
   const currentUser = await prisma.user.findUnique({
     where: { id: userId },
-    select: { image: true }
+    select: { image: true, name: true, email: true }
   });
 
-  // Delete old profile image if it exists
   if (currentUser?.image) {
     try {
       await deleteProfileImage(currentUser.image);
     } catch (error) {
       console.log('Could not delete old profile image:', error);
-      // Continue with upload even if deletion fails
     }
   }
 
-  // Upload new image to cloud storage directly from buffer
   const imageUrl = await uploadToStorage(
     file.buffer,
     userId,
     file.originalname,
-    file.mimetype
+    file.mimetype,
+    {
+      username: currentUser?.name,
+      email: currentUser?.email,
+    }
   );
 
   // Update user's image URL in database
